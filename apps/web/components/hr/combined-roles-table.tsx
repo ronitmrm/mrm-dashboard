@@ -38,7 +38,6 @@ import {
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Pencil, Trash2 } from "lucide-react"
-import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import {
@@ -47,6 +46,7 @@ import {
 } from "@/app/hr/actions"
 import { CombinedPostPicker } from "@/components/hr/combined-post-picker"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 function CombinedStatusBadge({ status }: { status: string }) {
   return (
@@ -166,7 +166,7 @@ export function CombinedRolesTable({
     ["name", "Name"],
     ["posts", "Post Codes"],
     ["primary", "Primary Post"],
-    ["templates", "Job templates"],
+    ["templates", "Job description templates"],
     ["status", "Status"],
   ] as const
   const table = useExcelTable({
@@ -216,7 +216,7 @@ export function CombinedRolesTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Post Codes</TableHead>
                 <TableHead>Primary Post</TableHead>
-                <TableHead>Job Template</TableHead>
+                <TableHead>Job Description Template</TableHead>
                 <TableHead>Status</TableHead>
                 {showActions ? (
                   <TableHead className="text-right">Actions</TableHead>
@@ -252,18 +252,7 @@ export function CombinedRolesTable({
                       <div className="flex flex-wrap gap-2">
                         {templateCodes.length
                           ? templateCodes.map((code) => (
-                              <Button
-                                asChild
-                                className="h-auto p-0 font-mono"
-                                key={code}
-                                variant="link"
-                              >
-                                <Link
-                                  href={`/hr?panel=postMasterPanel&template=${encodeURIComponent(code)}`}
-                                >
-                                  {code}
-                                </Link>
-                              </Button>
+                              <JobTemplatePreviewLink code={code} key={code} />
                             ))
                           : "—"}
                       </div>
@@ -375,7 +364,7 @@ export function CombinedRolesTable({
             <SheetHeader>
               <SheetTitle>Edit Combined Role</SheetTitle>
               <SheetDescription>
-                Select Its Job Template And Maintain The Combined Post Codes.
+                Select Its Job Description Template And Maintain The Combined Post Codes.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
@@ -405,7 +394,7 @@ export function CombinedRolesTable({
               </div>
               <Field>
                 <FieldLabel htmlFor="edit-combined-template">
-                  Job Template
+                  Job Description Template
                 </FieldLabel>
                 <NativeSelect
                   className="w-full"

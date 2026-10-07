@@ -12,17 +12,19 @@ test("shows the saved finish and changing current forecast for the matching Job 
       routeRows={[]} productionRows={[]}
       rows={[{ jcNo: "P2132", partCode: "R131", poDate: "2026-09-12" }]}
       finishDateRows={[
-        { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate },
-        { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26" },
+        { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate, actualFinishDate: "24-Sept-26" },
+        { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26", actualFinishDate: "4-Nov-26" },
       ]} />
   )
   const initial = render("28-Sept-26")
   expect(initial).toContain("Planned Finish Date")
   expect(initial).toContain("Current Estimated Finish")
+  expect(initial).toContain("Actual Finish Date")
   expect(initial).toContain("FG PO Date")
   expect(initial).toContain("2026-09-12")
   expect(initial).toContain("25-Sept-26")
   expect(initial).toContain("28-Sept-26")
+  expect(initial).toContain("24-Sept-26")
   const refreshed = render("30-Sept-26")
   expect(refreshed).toContain("25-Sept-26")
   expect(refreshed).toContain("30-Sept-26")
@@ -43,6 +45,7 @@ test("does not invent an RM-receipt finish for a legacy Job Card", () => {
   expect(markup).toContain("Not recorded")
   expect(markup).toContain("29-Sept-26")
   expect(markup).toContain("Progress unavailable")
+  expect(markup).toContain("<span class=\"text-muted-foreground\">-</span>")
 })
 
 test("shows setup-weighted progress from existing snapshots without new cached progress fields", () => {
@@ -69,4 +72,46 @@ test("shows setup-weighted progress from existing snapshots without new cached p
   expect(markup).toContain('aria-valuenow="50"')
   expect(markup).toContain('width:50%')
   expect(render(250)).toContain('aria-valuenow="75"')
+})
+
+test("shows dispatched finished good and order shortfall instead of active progress", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "JC-DISPATCHED", partCode: "PART-1", optionNumber: "1", orderPcs: 1100,
+        finalSetupGoodPieces: 1046, dispatchStatus: "Shifted to dispatch" }]}
+      routeRows={[
+        { partNo: "PART-1", optionNumber: "1", setupNo: "1" },
+        { partNo: "PART-1", optionNumber: "1", setupNo: "2" },
+      ]}
+      productionRows={[
+        { jobCard: "JC-DISPATCHED", partCode: "PART-1", setupNo: "1", actualQty: 1046 },
+        { jobCard: "JC-DISPATCHED", partCode: "PART-1", setupNo: "2", actualQty: 1046 },
+      ]}
+      finishDateRows={[]} />
+  )
+
+  expect(markup).toContain("Dispatched")
+  expect(markup).toContain("1,046 / 1,100 pcs")
+  expect(markup).toContain("54 pcs short of order")
+  expect(markup).toContain("Not recorded")
+  expect(markup).not.toContain("95.1%")
+  expect(markup).not.toContain('role="progressbar"')
+})
+
+test("keeps production progress visible after a partial dispatch", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      rows={[{ jcNo: "JC-PARTIAL", partCode: "PART-1", optionNumber: "1", orderPcs: 100,
+        finalSetupNumber: "1", finalSetupGoodPieces: 40,
+        dispatchStatus: "Partially dispatched", dispatchedPieces: 25, dispatchAvailablePieces: 15 }]}
+      routeRows={[{ partNo: "PART-1", optionNumber: "1", setupNo: "1" }]}
+      productionRows={[{ jobCard: "JC-PARTIAL", partCode: "PART-1", setupNo: "3", actualQty: 40 }]}
+      finishDateRows={[]} />
+  )
+
+  expect(markup).toContain("Partially dispatched")
+  expect(markup).toContain("25 pcs dispatched")
+  expect(markup).toContain("15 ready to dispatch")
+  expect(markup).toContain('role="progressbar"')
+  expect(markup).toContain('aria-valuenow="40"')
 })

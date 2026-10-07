@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   Boxes,
   BookOpenCheck,
   BriefcaseBusiness,
@@ -12,6 +13,7 @@ import {
   FileClock,
   Gauge,
   Globe2,
+  IdCard,
   KeyRound,
   LayoutDashboard,
   ListChecks,
@@ -130,6 +132,10 @@ export const isoDocumentNavigation = [
 
 export const qualityControlNavigation = [
   { href: "/quality-control", icon: ShieldCheck, label: "Rejection Entry" },
+  { href: "/quality-control/calibration", icon: Gauge, label: "Calibration" },
+  { href: "/quality-control/store", icon: Boxes, label: "Quality Store" },
+  { href: "/quality-control/store/movement", icon: ArrowRightLeft, label: "Store Movement" },
+  { href: "/quality-control/store/repairs", icon: Wrench, label: "Store Repairs" },
 ] as const
 
 export function dashboardTabHref(
@@ -224,6 +230,13 @@ export function navigationHrefMatches(
     pathname.startsWith("/hr/candidates/") &&
     destination.pathname === "/hr" &&
     destination.searchParams.get("panel") === "candidatesPanel"
+  ) {
+    return true
+  }
+  if (
+    pathname.startsWith("/hr/employees/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "employeeDataPanel"
   ) {
     return true
   }
@@ -598,6 +611,11 @@ export const storeNavigation = [
     label: "Store Overview",
   },
   {
+    href: "/store/requests/new",
+    icon: ClipboardList,
+    label: "Request Item",
+  },
+  {
     href: "/store/requests",
     icon: ClipboardList,
     label: "Requests & Issues",
@@ -684,7 +702,7 @@ export const hrMasterNavigation = [
   {
     href: "/hr?panel=postMasterPanel",
     icon: ClipboardList,
-    label: "Job Templates",
+    label: "Job Description Templates",
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },
@@ -719,6 +737,13 @@ export const hrNavigation = [
     label: "Job Posts",
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
+  },
+  {
+    href: "/hr?panel=employeeDataPanel",
+    icon: IdCard,
+    label: "Employee Data",
+    panelId: "employeeDataPanel",
+    requiredCapability: "hr.employees.read",
   },
   {
     href: "/hr?panel=probationRemindersPanel",

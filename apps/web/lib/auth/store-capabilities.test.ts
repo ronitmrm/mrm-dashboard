@@ -66,6 +66,7 @@ describe("store page capability contract", () => {
     )
     expect(storeNavigationAccess).toEqual([
       ["/store", "store.overview.read"],
+      ["/store/requests/new", "store.requests.submit"],
       ["/store/requests", "store.requests.read"],
       ["/store/new-item-requests", "store.new_item_requests.read"],
       ["/store/orders", "store.purchase_register.read"],

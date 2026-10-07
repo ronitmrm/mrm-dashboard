@@ -32,6 +32,7 @@ Departments. Trade reads exclude Pending Approval, Returned, Rejected, and Close
 ## UI
 
 Maintenance navigation contains Manager Approval, All Requests, Electrical, Plumbing, and Mechanical. Electrical and Plumbing are server-rendered request work lists. Mechanical retains the existing company-wide scheduled workspace and merges approved Mechanical requests through the unified work-list projection.
+All Requests opens its submission form from the page header's New Request dialog. The shared request table counts urgent work only for active request statuses; All Requests adds a Pending Approval card.
 Mechanical reads only maintenance and machine context from the dashboard read model across all floors. `maintenance.workspace.read` opens it without granting production dashboard data for those floors.
 Generated legacy history backing rows without a machine or Maintenance Code are
 filtered from the planned schedule projection in
@@ -39,18 +40,49 @@ filtered from the planned schedule projection in
 Scheduled rows open the full maintenance checklist in `MaintenancePanel`. The company-wide projection is deduplicated by checklist code and sequence. Draft and completed answers use the existing `maintenance.tasks` and `maintenance.task_results` tables; only completion updates `machine_schedules.last_completed_on` and `next_due_on`.
 Assigning or updating a machine maintenance schedule queues a durable dashboard refresh in the same transaction so Machine Master and Mechanical read the saved schedule.
 Planned tasks persist `startedAt`, optional draft `endedAt`, the signed-in performer's name and active linked Employee ID when available, calculated `actualMinutes`, and `changedItems[]` in the task source payload. An authorized user without an active Employee link is recorded by account name with no Employee ID. The repository writes `maintenance.tasks.started_at` from the form and leaves `completed_at` empty for drafts. Empty checklist points are omitted from task-result writes. Machine Maintenance History filters each changed part separately.
+Mechanical's work-photo tab lets users discard selected files before saving and remove saved photos. The photo DELETE route checks `maintenance.tasks.write` and the photo's link to the requested job before using the artifact service to delete the file and retire its link. Completed reports show only current links; the register links to those reports without listing photos.
 Resaving a draft clears its old answer rows through `maintenance.clear_draft_task_results` (migration `0175`), which accepts only a matching organization and In Progress task. The web role has function execute access and no table-wide DELETE privilege.
 
 ## Invariants
 
-ISO Document exposes read-only Machine Maintenance Register and Machine
-Maintenance Plan routes under `/iso-document/machine-maintenance-*`. Both require
+ISO Document exposes read-only Maintenance Register and Maintenance Plan routes
+under `/iso-document/machine-maintenance-*`. Both require
 `maintenance.workspace.read` and use organization-scoped queries in
 `packages/db/src/maintenance.ts`. The register reads completed physical tasks;
-the monthly plan combines saved task due dates with active schedule due dates,
-deduplicating the same schedule/date. It excludes breakdowns and retains completed
-planned tasks after next-due advancement. These views do not create tasks or copy
-records. Facility requests remain in their existing request work lists.
+the date-range plan combines saved task due dates with active schedule due dates,
+deduplicating the same schedule/date. Asset rows use the physical Unit ID as
+Asset Code. The asset projection reads Store schedules, planned tasks, and
+completed Store maintenance records; calibration stays separate. It excludes
+breakdowns from the plan and retains completed planned tasks after next-due
+advancement. These views do not create tasks or copy records. Facility requests
+remain in their existing request work lists.
+
+Completed rows in both ISO tables link to the organization-scoped
+`/iso-document/machine-maintenance-report/[kind]/[id]` detail. Machine reports
+read `maintenance.tasks` and `maintenance.task_results`; physical Unit ID reports
+read `store.asset_maintenance_records` with their planned task or breakdown.
+The detail shows saved start/end times, work, changed items, checklist answers,
+and existing work photos. New physical Unit ID task writes snapshot checklist
+prompts with answers; older records fall back to the current checklist master
+prompt or show the details actually retained. The register and plan tables show
+completion dates without times.
+Workers with `maintenance.tasks.write` may correct a completed report from its
+detail page. The correction route updates the physical machine task and answer
+rows, or the physical Unit ID task/breakdown and its completed Store record.
+Each save writes before/after details and the required reason to `audit.events`;
+completion and schedule dates stay unchanged. The machine task update queues a
+dashboard refresh for maintenance history. Completed-report photo additions
+require the same reason and append a report audit event; photo removals use the
+artifact deletion audit. The report page shows those reasons in Correction History.
+Legacy Unit ID records without a physical task remain read-only.
+
+Mechanical loads active Store Unit ID maintenance schedules through
+`/api/maintenance/assets` alongside machine schedules. The same checklist view
+saves asset drafts and completions to `store.asset_maintenance_tasks` (migration
+0193), retaining one task per schedule/due date. Completion also writes the
+existing `store.asset_maintenance_records` history and advances only that
+schedule. The Unit ID Store workspace still assigns timetables and reads
+history, but completion is performed in Mechanical.
 
 - One request row equals one task.
 - Final Category and Priority are required before Approved or later statuses.

@@ -56,6 +56,9 @@ export function dashboardCanonicalRequestUrl(
   if (request.knownVersion !== null) {
     query.set("knownVersion", String(request.knownVersion))
   }
+  if (request.knownLiveVersion) {
+    query.set("knownLiveVersion", request.knownLiveVersion)
+  }
   return `/api/dashboard-state?${query.toString()}`
 }
 

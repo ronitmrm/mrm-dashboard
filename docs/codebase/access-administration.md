@@ -92,9 +92,10 @@ two existing Universal pages, Enquiries and Purchase Orders, and all 21 existing
 task rows remain: 14 pages plus 21 tasks = 35 Operational Entry capabilities.
 
 Each production row owns four keys, `entries.<unit>.<entry>.<action>`: `read`,
-`save`, `import` and `export` (48 keys). The same View grant opens the form and
+`save`, `import` and `export` (48 keys). RM Inward also has a separate `delete`
+key in each unit (four more keys), initially granted to Administrator. The same View grant opens the form and
 table; blank CSV templates require View. Stored-record exports require Export.
-There are no invented edit/delete actions. Presets operate only on that row's
+There is no general edit action or delete action for other entries. Presets operate only on that row's
 keys, and Custom action selection retains View as its dependency.
 
 Unified navigation and both selectors use scoped read grants without falling

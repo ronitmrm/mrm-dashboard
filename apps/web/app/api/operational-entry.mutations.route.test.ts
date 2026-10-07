@@ -8,6 +8,7 @@ const dependencies = vi.hoisted(() => ({
   organizationIdForCode: vi.fn(),
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
+  reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+    reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
@@ -106,7 +108,7 @@ import { POST } from "./[...path]/route"
 import { ShopFloorConflictError } from "@workspace/db"
 
 function post(
-  path: "data-entry" | "data-import" | "dispatch-approval",
+  path: "data-entry" | "data-import" | "dispatch-approval" | "rm-inward-delete",
   body: Record<string, unknown>
 ) {
   return POST(
@@ -120,7 +122,7 @@ function post(
 }
 
 function importBody(
-  csv = "rmPoNo,rmInwardKg,rmInwardDate\nRM-1,12,2026-09-09\n"
+  csv = "rmPoNo,rmInwardKg,rmInwardDate\nRM-1,12,09-09-2026\n"
 ) {
   return {
     entryType: "rm_inward",
@@ -139,6 +141,7 @@ describe("production entry mutation API authorization", () => {
     dependencies.organizationIdForCode.mockResolvedValue("organization-1")
     dependencies.upsertRawMaterialReceipt.mockResolvedValue({ ok: true })
     dependencies.upsertRawMaterialReceipts.mockResolvedValue({ ok: true })
+    dependencies.reverseRawMaterialReceipt.mockResolvedValue({ id: "receipt-1" })
     dependencies.isPostgresOperationalEntryType.mockReturnValue(false)
     dependencies.signedInEmployee.mockResolvedValue({ code: "42", name: "CNC Programmer" })
     dependencies.signedInPerformer.mockResolvedValue({ code: "42", name: "CNC Programmer" })
@@ -175,10 +178,11 @@ describe("production entry mutation API authorization", () => {
 
     const response = await post("dispatch-approval", {
       jcNo: "P2046", productionFloorCode: "cnc", approvedBy: "Another Employee",
+      quantity: 24,
     })
     expect(response.status).toBe(200)
     expect(dependencies.recordDispatchApproval).toHaveBeenCalledWith(
-      expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer" })
+      expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer", quantity: 24 })
     )
   })
 
@@ -480,5 +484,29 @@ describe("production entry mutation API authorization", () => {
     expect(imported.status).toBe(400)
     expect(dependencies.upsertRawMaterialReceipt).not.toHaveBeenCalled()
     expect(dependencies.upsertRawMaterialReceipts).not.toHaveBeenCalled()
+  })
+
+  it("requires RM Inward delete access for the selected unit", async () => {
+    const body = {
+      productionFloorCode: "cnc", sourceId: "receipt-source-1", reason: "Entered by mistake",
+    }
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "entries.cnc.rm_inward.save", "entries.cnc.rm_inward.read",
+    ])
+    expect((await post("rm-inward-delete", body)).status).toBe(403)
+    expect(dependencies.reverseRawMaterialReceipt).not.toHaveBeenCalled()
+
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "entries.cnc.rm_inward.delete",
+    ])
+    const deleted = await post("rm-inward-delete", body)
+    expect(deleted.status).toBe(200)
+    expect(await deleted.json()).toMatchObject({ planningRefresh: { mode: "queued" } })
+    expect(dependencies.reverseRawMaterialReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "organization-1", productionFloorCode: "cnc",
+        sourceId: "receipt-source-1", reason: "Entered By Mistake",
+      })
+    )
   })
 })

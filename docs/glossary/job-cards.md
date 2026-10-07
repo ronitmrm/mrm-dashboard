@@ -13,6 +13,12 @@ setups with no output as 0%. For two setups, completing the first contributes
 on one setup cannot fill another setup's share. Without a selected route or a
 positive order quantity, progress is unavailable. Finished pieces remain the
 good output of the final setup; intermediate output is still WIP.
+After a final dispatch, the register shows finished good against the ordered
+quantity and any remaining order shortfall instead of an in-progress percentage.
+A partial dispatch leaves production open and shows both ongoing setup progress
+and the quantity already dispatched. A final dispatch closes the Job Card
+lifecycle even when finished good is below the order quantity; the shortfall
+remains visible and is not counted as unfinished production.
 
 Planned Finish Date shows the immutable first valid completion forecast created
 from a Job Card's first Raw Material receipt event. The receipt creates a durable
@@ -29,15 +35,38 @@ recalculates production progress and machine constraints. Both values are
 matched by Job Card and part within the selected floor. An unavailable current
 forecast displays `-`.
 
+Actual Finish Date is the plant-local calendar date of the recorded Item Complete
+timestamp for the final setup in the selected route. Where that setup runs on
+multiple machines, use the latest completion date only after every planned
+machine stream is Item Complete.
+If approved route changes carry completed work with zero remaining quantity on
+the final setup, follow the chain of uniquely equivalent setup operations back
+to its recorded completion for the same Job Card and part, after every recorded
+machine stream is Item Complete. Work started on the selected route must use its
+own completion.
+Unfinished Job Cards show `-`. A completed or dispatched Job Card without a
+recorded final-setup completion shows `Not recorded`; neither the forecast nor
+the dispatch date is treated as its actual production finish.
+
 Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Job Card Dispatch remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
 
 Setup Completion can be recorded by a user with the task permission for the
 selected Production Unit. Completed By is the signed-in performer's active
 Employee ID and name when linked, or the signed-in account name otherwise.
-Job Card Dispatch lists only undispatched Job Cards for which every planned
-setup/operation is Item Complete. Dispatching records the signed-in performer
-and marks the Job Card as dispatched in the register and dispatch overview.
-The Job Card leaves the ready-to-dispatch picker after dispatch.
+Job Card Dispatch may send recorded good pieces from the selected route's final
+setup while that setup or an earlier setup is still in production. The performer
+enters a positive whole-piece quantity no greater than final-setup good pieces
+already recorded minus pieces previously dispatched for that Job Card. More
+pieces may be dispatched later as production is recorded. Unsaved output and
+rejected pieces are never available to dispatch. Approved equivalent final work
+carried with zero remaining quantity through one or more route changes also
+counts once per saved production entry. Each
+dispatch records its quantity, time, and signed-in performer. Dispatch does not
+record an Actual Finish Date. A partial dispatch leaves the Job Card in production and in
+the dispatch picker whenever more finished good is available. Once the final
+setup is Item Complete and all its recorded good pieces have been dispatched,
+the Job Card is Dispatched. Historical dispatch approvals without a recorded
+quantity remain terminal, with their shipped quantity unknown.
 
 ## Job Card Workspace
 
@@ -50,6 +79,9 @@ Every Job Card has one dedicated workspace URL. The workspace reads, but does no
 - durable Planner Movement Records for machine shifts, machine constraints, priority interruptions, and queue changes, including their Production Session settlement evidence;
 - Production Sessions, downtime and rejection;
 - setup-progress, historical Production Card and dispatch events.
+
+The workspace's selected Route follows the latest unreversed Route Change for
+that Job Card; otherwise it uses the current Route Selection.
 
 The workspace separates Overview, Masters, Setup, Setup Production, Production,
 Inprocess Quality Control, Downtime, Delivery, and Complete Log. Setup Production
@@ -102,8 +134,22 @@ holidays are excluded, and material and WIP availability constraints still apply
 Shop Floor Status shows the recorded lifecycle of each setup on its assigned
 machine. Job Card Current Estimated Finish includes all remaining route setups,
 using the same cycle-based supply and remaining-work calculation. Forecast-only
-downstream work does not reserve a machine or bypass actual-WIP readiness, and
-the whole-job finish cannot precede the upstream supply needed by that setup.
+downstream work does not reserve a machine or bypass actual-WIP readiness without
+the Planner's early Setup 2 decision. The whole-job finish cannot precede the
+upstream supply needed by that setup.
+An approved route change sets the selected route and the remaining setup
+quantities for future planning. If any selected setup lacks required masters,
+Part Readiness lists the gaps and the changed Job Card receives no new machine
+plan until the selected route is ready. A Move Setup decision uses the target
+machine from its decision date onward; an outage that ended before that decision
+does not block the move.
+Subsequent Planner Actions, Setup Checklists, Production Sessions, production
+entries, and dispatch resolve setup identity from the latest active Change Route
+before any earlier route choice. Interruption checks must inspect the session on
+that current setup before releasing its machine.
+Change Route may be found by Job Card or by Part Code. Part Code narrows the
+available Job Cards; the Planner must select one Job Card because multiple Job
+Cards can share a part and a route change applies to one Job Card.
 The immutable RM-receipt Planned Finish Date remains historical.
 
 A machine-unavailable action affects unfinished work only. A setup already
@@ -120,6 +166,15 @@ input for the next setup. The remaining customer shortfall does not block that
 available input. Shop Floor readiness checks this quantity even after the next
 setup has a recorded workflow stage; that stage retains its machine assignment
 but cannot bypass a genuine WIP shortage.
+
+The Planner may approve **Plan Setup 2 Early** for one Job Card with a selected
+route containing Setup 1 and Setup 2, on a separate idle, compatible machine. This reserves Setup 2
+before the normal two/three-day WIP buffer is recorded and retains the decision
+and reason in Planner history. Setup preparation may proceed. Machine start
+requires recorded Setup 1 good pieces, and Setup 2's cumulative good plus
+rejected output may not exceed that recorded supply. If WIP runs out, further
+output waits for more Setup 1 good pieces. Other Job Cards retain the normal
+buffer rule. The early plan's forecast is provisional until output is recorded.
 
 ## Setup Time
 
@@ -147,7 +202,8 @@ Useful overlap means a feasible separate-machine start before the preceding
 setup finishes that improves completion by at least one working day, the
 planner's date resolution. Existing material, pooled actual-WIP, tooling and
 machine-availability gates still apply. Forecast-only downstream work does not
-reserve a physical machine before its actual-WIP gate is satisfied.
+reserve a physical machine before its actual-WIP gate is satisfied unless the
+Planner records the Job Card's early Setup 2 exception above.
 
 Where feasible, the next setup follows its predecessor immediately. Other
 unstarted automatic assignments may rebalance to compatible machines. Actual
@@ -191,6 +247,15 @@ Blank Piece Weight and remain estimates until remaining RM is maintained accurat
 Each RM inward entry is append-only for normal receiving; later inward entries add
 to the Job Card total instead of replacing the previous receipt. An exact import
 retry reuses its receipt identity so the tally is not duplicated.
+RM Inward CSV uploads require a valid `DD-MM-YYYY` date on every row. A file with
+an invalid date is rejected before any receipt is saved, with the failed row
+number and required format shown to the uploader. Saved RM Inward dates display
+in that same format, including earlier entries stored in other formats.
+A mistaken receipt can be deleted with a reason, even after production starts.
+Deletion reverses that receipt for current RM totals, availability and unlocked
+planning while preserving the receipt, audit trail and recorded production
+history. A forecast baseline tied to a reversed receipt is excluded from the
+current dashboard; its historical record remains immutable.
 
 ## Work Order Line Cancellation
 

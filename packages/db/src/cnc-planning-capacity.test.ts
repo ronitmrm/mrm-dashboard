@@ -260,6 +260,31 @@ test("move setup honors first position when its source interruption has no outpu
   )[0]?.jcNo).toBe("P2262")
 })
 
+test("move setup honors a target machine after its past outage", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-10-03T11:27:00Z"))
+  const createdAt = "2026-10-03T09:25:56Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const rows = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1447", partCode: "M2066B", orderPcs: 1000, rmInwardDate: "2026-09-28", rmInwardKg: 1 }),
+      entry("route", { partNo: "M2066B", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }),
+      entry("cycle", { partNo: "M2066B", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      ...["CNC-3", "CNC-14"].map((machineNo) => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "JT", status: "Active" })),
+    ],
+    previousMachinePlanDetailRows: [{ jcNo: "P1447", partCode: "M2066B", optionNumber: "1", setupNo: "1", machine: "CNC-3", routeMachine: "JT" }],
+    machineConstraints: [{ machineNo: "CNC-14", unavailableFrom: "2026-09-28", unavailableTo: "2026-10-03", availableOn: "2026-09-29", rescheduleAction: "shift_all", status: "Available" }],
+    planOverrides: [{ jobCardNumber: "P1447", setupNumber: 1, fromMachineNumber: "CNC-3", toMachineNumber: "CNC-14", assignmentMode: "move", createdAt,
+      interruptedSetups: [{ jobCardNumber: "P1447", setupNumber: 1, machineNumber: "CNC-3", finishedQuantity: 0 }],
+      queuePlacements: [{ targetJobCardNumber: "P1447", targetPartCode: "M2066B", targetSetupNumber: 1, targetSourceMachineNumber: "CNC-3", targetMachineNumber: "CNC-14" }],
+    }],
+  }).productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "P1447")
+
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({ machine: "CNC-14", optionNumber: "1", setupNo: "1" })
+})
+
 test("revised cycle time forecasts only the remaining quantity after recorded production", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-09-07T05:00:00.000Z"))
@@ -341,7 +366,7 @@ test("revised cycle time forecasts only the remaining quantity after recorded pr
     }),
     expect.objectContaining({
       setupNo: "2",
-      plannedProductionStartDate: "8-Sept-26",
+      plannedProductionStartDate: "7-Sept-26",
     }),
   ]))
 })

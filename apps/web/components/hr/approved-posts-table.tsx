@@ -65,6 +65,7 @@ import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { employeeHandoverRows } from "@/lib/employee-handover-rows"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -302,7 +303,7 @@ export function ApprovedPostsTable({
                         <TableCell>{row.department}</TableCell>
                         <TableCell>{row.designation}</TableCell>
                         <TableCell className="font-mono">
-                          {row.requirementTemplateCode ?? "—"}
+                          <JobTemplatePreviewLink code={row.requirementTemplateCode} />
                         </TableCell>
                         <TableCell>
                           {row.employeeName ?? "—"}
@@ -465,7 +466,7 @@ export function ApprovedPostsTable({
               <SheetHeader>
                 <SheetTitle>Edit Approved Post</SheetTitle>
                 <SheetDescription>
-                  Update The Job Template Linked To {editingPost.postCode}.
+                  Update The Job Description Template Linked To {editingPost.postCode}.
                   Department And Designation Remain Locked Because They Form The
                   Software-Generated Post Code.
                 </SheetDescription>
@@ -501,7 +502,7 @@ export function ApprovedPostsTable({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-post-template">
-                    Job Template
+                    Job Description Template
                   </FieldLabel>
                   <NativeSelect
                     className="w-full"
@@ -552,7 +553,7 @@ export function ApprovedPostsTable({
               <input name="post_id" type="hidden" value={creatingJobPost.id} />
               <Field>
                 <FieldLabel htmlFor="create-job-template">Attach a Template (optional)</FieldLabel>
-                <NativeSelect id="create-job-template" name="requirement_template_code" className="w-full" defaultValue="">
+                <NativeSelect id="create-job-template" name="requirement_template_code" className="w-full" defaultValue={creatingJobPost.requirementTemplateCode ?? ""}>
                   <NativeSelectOption value="">No Template</NativeSelectOption>
                   {templates.filter((template) => !template.combinedRoleId || template.combinedRoleId === creatingJobPost.combinedRoleId).map((template) => (
                     <NativeSelectOption key={template.id} value={template.templateCode}>

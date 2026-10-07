@@ -1,6 +1,8 @@
 import { cache } from "react"
 import { brandingPageAccess } from "./branding-capabilities"
 import { qualityControlPageAccess } from "./quality-control-capabilities"
+import { departmentStoreCapability } from "./department-store-capabilities"
+import { isoCalibrationPlanPageAccess } from "./iso-calibration-plan-capabilities"
 import {
   hrMasterForPanel,
   masterCapability,
@@ -20,7 +22,7 @@ import {
   productionFloorPageCapabilities,
 } from "./production-floor-capabilities"
 import type { DashboardTabId } from "../unified-navigation"
-import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { productionFloors, type ProductionFloorCode } from "@workspace/db/production-floors"
 
 const operationsCapability = "operations.dashboard.read"
 const administrationCapability = "administration.access.read"
@@ -28,6 +30,8 @@ const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
   qualityControlHrefs?: string[]
+  isoCalibrationPlan?: boolean
+  productionStoreFloorCodes?: ProductionFloorCode[]
   brandingHrefs?: string[]
   masterReadKeys?: string[]
   operationalEntryReadKeys?: string[]
@@ -48,6 +52,7 @@ async function readUnifiedNavigationAccess(
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
     ...qualityControlPageAccess.map(({ readPermissionKey }) => readPermissionKey),
+    isoCalibrationPlanPageAccess.readPermissionKey,
     ...brandingPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...masterPermissionOptions
       .filter(({ key }) => key.endsWith(".read"))
@@ -61,6 +66,7 @@ async function readUnifiedNavigationAccess(
     artifactCapability,
     ...Object.values(productionPageCapabilities),
     ...Object.values(productionFloorPageCapabilities).flatMap(Object.values),
+    ...productionFloors.map((floor) => departmentStoreCapability(floor.code, "read")),
     ...storeNavigationAccess.map(([, capability]) => capability),
     ...[...hrMasterNavigation, ...hrNavigation].map(
       ({ requiredCapability }) => requiredCapability
@@ -88,6 +94,9 @@ async function readUnifiedNavigationAccess(
       }
     )
   ) as Partial<Record<ProductionFloorCode, DashboardTabId[]>>
+  const productionStoreFloorCodes = productionFloors
+    .filter((floor) => grantedCapabilities.has(departmentStoreCapability(floor.code, "read")))
+    .map((floor) => floor.code)
   const productionTabIds = [
     ...new Set([
       ...universalProductionTabIds,
@@ -107,6 +116,11 @@ async function readUnifiedNavigationAccess(
 
   return {
     qualityControlHrefs: qualityControlPageAccess.filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey)).map(({ href }) => href),
+    isoCalibrationPlan:
+      grantedCapabilities.has(isoCalibrationPlanPageAccess.readPermissionKey) ||
+      grantedCapabilities.has("store.stock.read") ||
+      grantedCapabilities.has("quality.control.calibration.read"),
+    productionStoreFloorCodes,
     brandingHrefs: brandingPageAccess
       .filter(({ readPermissionKey }) =>
         grantedCapabilities.has(readPermissionKey)
@@ -142,7 +156,7 @@ async function readUnifiedNavigationAccess(
         .filter(([, capability]) => grantedCapabilities.has(capability))
         .map(([href]) => href),
     ],
-    operations: productionModuleIsEnabled() && productionTabIds.length > 0,
+    operations: productionModuleIsEnabled() && (productionTabIds.length > 0 || productionStoreFloorCodes.length > 0),
     productionFloorTabIds,
     productionTabIds,
     store: storeNavigationAccess.some(([, capability]) =>

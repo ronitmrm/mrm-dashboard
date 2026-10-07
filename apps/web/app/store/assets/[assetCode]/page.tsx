@@ -26,9 +26,9 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Textarea } from "@workspace/ui/components/textarea"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import { StoreUnitDetailsForm } from "@/components/store/store-unit-details-form"
 import {
   StoreAssetWorkspacePane,
   StoreAssetWorkspaceTabs,
@@ -41,7 +41,7 @@ import {
   StoreAssetMaintenanceSection,
 } from "@/components/store-item-schedule-section"
 import { StoreItemMaintenanceMasterForm } from "@/components/store-item-maintenance-master-form"
-import { StoreAssetCalibration } from "@/components/store-asset-calibration"
+import { StoreAssetCalibrationHistory } from "@/components/store-asset-calibration-history"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
@@ -54,18 +54,10 @@ import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { masterCapability } from "@/lib/auth/master-capabilities"
 
 import {
-  completeStoreAssetMaintenanceAction,
   recordStoreAssetAcquisitionAction,
-  scheduleStoreAssetMaintenanceAction,
   scheduleStoreAssetMaintenanceMasterAction,
-  openStoreCalibrationVisitAction,
-  addStoreCalibrationOfferAction,
-  cancelStoreCalibrationVisitAction,
-  dispatchStoreCalibrationVisitAction,
-  returnStoreCalibrationVisitAction,
-  uploadStoreCalibrationCertificateAction,
-  completeStoreCalibrationVisitAction,
   setStoreAssetLifecycleAction,
+  updateStoreAssetEquipmentDetailsAction,
   uploadStoreItemDrawingAction,
   uploadStoreSupplierQuoteAction,
 } from "../../actions"
@@ -113,7 +105,7 @@ export default async function StoreAssetWorkspacePage({
         }),
       }
     }
-    const [suppliers, performer] = await Promise.all([
+    const [suppliers, performer, equipmentUnits] = await Promise.all([
       repository.listSuppliers(organizationId),
       canMove || canMaintain || canManageLifecycle
         ? signedInPerformer({
@@ -123,9 +115,13 @@ export default async function StoreAssetWorkspacePage({
             userName: session.user.name,
           })
         : Promise.resolve(null),
+      canRecordAcquisition
+        ? repository.listConnectedEquipmentUnits(organizationId)
+        : Promise.resolve([]),
     ])
     return {
       kind: "asset" as const,
+      equipmentUnits,
       performer,
       suppliers,
       workspace,
@@ -135,6 +131,7 @@ export default async function StoreAssetWorkspacePage({
   if (data.kind === "item") {
     return (
       <StoreItemWorkspace
+        canEditUnitDetails={canRecordAcquisition}
         canUploadDrawing={grants.includes(masterCapability("ITEM_TYPE", "save"))}
         canUploadQuote={grants.includes(masterCapability("SUPPLIER_PRICE", "save"))}
         workspace={data.workspace}
@@ -143,6 +140,7 @@ export default async function StoreAssetWorkspacePage({
   }
   const {
     asset,
+    accountabilityTransfers,
     calibrationSuppliers,
     calibrationVisits,
     documents,
@@ -153,6 +151,7 @@ export default async function StoreAssetWorkspacePage({
     schedules,
     supplierPrices,
   } = data.workspace
+  const isMainAccountable = asset.accountableStoreCode === "MAIN"
   const performerDisplay = data.performer
     ? [data.performer.code, data.performer.name].filter(Boolean).join(" - ")
     : "Signed-in account name required"
@@ -167,45 +166,6 @@ export default async function StoreAssetWorkspacePage({
       )}
     />
   ) : null
-  const calibrationForm = canMaintain ? (
-    <form action={scheduleStoreAssetMaintenanceAction} className="grid gap-4">
-      <input name="asset_code" type="hidden" value={asset.assetCode} />
-      <input name="schedule_type" type="hidden" value="CALIBRATION" />
-      <TextField label="Schedule Name" name="schedule_name" required />
-      <TextField label="Frequency (days)" min="1" name="frequency_days" required step="1" type="number" />
-      <TextField label="First Due Date" name="first_due_on" required type="date" />
-      <Button className="w-fit" type="submit">Assign Schedule</Button>
-    </form>
-  ) : null
-  const completionForm = canMaintain ? (
-    <form action={completeStoreAssetMaintenanceAction} className="grid gap-4">
-      <input name="asset_code" type="hidden" value={asset.assetCode} />
-      <input name="maintenance_type" type="hidden" value="MAINTENANCE" />
-      <Field>
-        <FieldLabel htmlFor="schedule-id">Timetable</FieldLabel>
-        <NativeSelect id="schedule-id" name="schedule_id">
-          <NativeSelectOption value="">Unscheduled Maintenance</NativeSelectOption>
-          {maintenanceSchedules.filter((schedule) => schedule.active).map((schedule) => (
-            <NativeSelectOption key={schedule.id} value={schedule.id}>
-              {schedule.name} — due {schedule.nextDueOn}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <TextField defaultValue={istDateValue()} label="Completed On" name="completed_on" required type="date" />
-      <TextField label="Completed By" name="completed_by" readOnly required value={performerDisplay} />
-      <TextField label="Supplier / Lab" name="supplier_name" />
-      <TextField label="Certificate Number" name="certificate_number" />
-      <TextField label="Cost" name="cost" step="0.01" type="number" />
-      <TextField label="Result" name="result" />
-      <Field>
-        <FieldLabel htmlFor="work-done">Work Done</FieldLabel>
-        <Textarea id="work-done" name="work_done" />
-      </Field>
-      <Button className="w-fit" type="submit">Complete & Calculate Next Due</Button>
-    </form>
-  ) : null
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -232,7 +192,7 @@ export default async function StoreAssetWorkspacePage({
 
       <StoreAssetWorkspaceTabs
         initialTab={tab === "calibration" ? "calibration" : "overview"}
-        showLifecycle={canManageLifecycle}
+        showLifecycle={canManageLifecycle && isMainAccountable}
       >
         <StoreAssetWorkspacePane tab="overview">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -247,11 +207,36 @@ export default async function StoreAssetWorkspacePage({
               value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
             />
             <Info label="Asset Name" value={asset.assetName} />
+            <Info label="Make/Model" value={asset.makeModel} />
+            <Info label="Make" value={asset.manufacturerMake || "Not recorded"} />
+            <Info label="Rated Load / Capacity" value={asset.ratedLoad || "Not recorded"} />
+            <Info label="Accountable Store" value={asset.accountableStoreName} />
             <Info
               label="Current Assignment"
               value={asset.holderName || asset.locationName || asset.holderType}
             />
+            <Info label="Installed On" value={asset.installedOn || "Not recorded"} />
+            <Info label="Connected Stabiliser Unit ID" value={asset.stabilizerUnitId || "Not recorded"} />
+            <Info label="Connected MCB Unit ID" value={asset.mcbNumber || "Not recorded"} />
           </div>
+          {canRecordAcquisition ? (
+            <SectionCard id="unit-details" width="wide">
+              <CardHeader>
+                <CardTitle>Unit Details</CardTitle>
+                <CardDescription>
+                  Record the actual installation date and connected equipment when known.
+                  Asset Code {asset.typeCode} · Unit ID {asset.assetCode}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StoreUnitDetailsForm
+                  action={updateStoreAssetEquipmentDetailsAction}
+                  asset={asset}
+                  equipmentUnits={data.equipmentUnits}
+                />
+              </CardContent>
+            </SectionCard>
+          ) : null}
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="suppliers">
@@ -314,21 +299,29 @@ export default async function StoreAssetWorkspacePage({
               label="Warranty Until"
               value={asset.warrantyUntil || "Not recorded"}
             />
+            <Info label="Warranty Period" value={asset.warrantyPeriod
+              ? /^\d+$/.test(asset.warrantyPeriod)
+                ? `${asset.warrantyPeriod} days`
+                : asset.warrantyPeriod
+              : "Not recorded"} />
           </div>
         </StoreAssetWorkspacePane>
 
-        {canManageLifecycle ? (
+        {canManageLifecycle && isMainAccountable ? (
           <StoreAssetWorkspacePane tab="lifecycle">
  <SectionCard width="standard">
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
-                  A broken or scrapped physical asset keeps its history. A
+                  A broken, scrapped, or lost physical asset keeps its history. A
                   purchased replacement receives a new Unit ID. Use Store Return
                   above to make an asset available again.
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {asset.status === "LOST" ? <p className="text-sm text-muted-foreground">
+              This Unit ID is recorded as lost and cannot change lifecycle status.
+            </p> :
             <form
               action={setStoreAssetLifecycleAction}
               className="grid gap-4 sm:grid-cols-2"
@@ -357,7 +350,7 @@ export default async function StoreAssetWorkspacePage({
               <div className="flex items-end">
                 <Button type="submit">Update Status</Button>
               </div>
-            </form>
+            </form>}
           </CardContent>
  </SectionCard>
           </StoreAssetWorkspacePane>
@@ -368,31 +361,37 @@ export default async function StoreAssetWorkspacePage({
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
           <CardDescription>
-            Complete each repair line in{" "}
-            {canOpenPurchaseRegister ? (
-              <Link
-                className="font-medium text-primary underline-offset-4 hover:underline"
-                href="/store/orders"
-              >
-                Purchase Register
-              </Link>
+            {isMainAccountable ? (
+              <>
+                Complete each repair line in{" "}
+                {canOpenPurchaseRegister ? (
+                  <Link
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    href="/store/orders"
+                  >
+                    Purchase Register
+                  </Link>
+                ) : (
+                  "Purchase Register"
+                )}{" "}
+                when this Unit ID returns to Store. A Department request for the
+                same Asset Code can use any available Unit ID through Requests &amp;
+                Issues. To assign this returned unit directly, use{" "}
+                {canMove ? (
+                  <Link
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    href={`/store/movement?unitId=${encodeURIComponent(asset.assetCode)}`}
+                  >
+                    Store Movement
+                  </Link>
+                ) : (
+                  "Store Movement"
+                )}{" "}
+                to assign it to a Department.
+              </>
             ) : (
-              "Purchase Register"
-            )}{" "}
-            when this Unit ID returns to Store. A Department request for the
-            same Asset Code can use any available Unit ID through Requests &amp;
-            Issues. To assign this returned unit directly, use{" "}
-            {canMove ? (
-              <Link
-                className="font-medium text-primary underline-offset-4 hover:underline"
-                href={`/store/movement?unitId=${encodeURIComponent(asset.assetCode)}`}
-              >
-                Store Movement
-              </Link>
-            ) : (
-              "Store Movement"
-            )}{" "}
-            to assign it to a Department.
+              <>This Unit ID is accountable to {asset.accountableStoreName}. That Store records its repair return and movements.</>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
@@ -453,7 +452,6 @@ export default async function StoreAssetWorkspacePage({
         <StoreAssetWorkspacePane tab="maintenance">
           <StoreAssetMaintenanceSection
             maintenanceForm={maintenanceForm}
-            completionForm={completionForm}
           >
  <OperationalTable>
             <TableHeader>
@@ -508,7 +506,7 @@ export default async function StoreAssetWorkspacePage({
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="calibration">
-          <StoreAssetCalibrationScheduleSection canAssign={canMaintain} form={calibrationForm}>
+          <StoreAssetCalibrationScheduleSection canAssign={false} form={null}>
             <OperationalTable>
               <TableHeader>
                 <TableRow>
@@ -548,25 +546,43 @@ export default async function StoreAssetWorkspacePage({
               </TableBody>
             </OperationalTable>
           </StoreAssetCalibrationScheduleSection>
-          <StoreAssetCalibration
-            actions={{
-              openVisit: openStoreCalibrationVisitAction,
-              addOffer: addStoreCalibrationOfferAction,
-              cancelVisit: cancelStoreCalibrationVisitAction,
-              dispatchVisit: dispatchStoreCalibrationVisitAction,
-              returnVisit: returnStoreCalibrationVisitAction,
-              uploadCertificate: uploadStoreCalibrationCertificateAction,
-              completeVisit: completeStoreCalibrationVisitAction,
-            }}
-            assetCode={asset.assetCode}
-            canManage={canMaintain && canMove && canRepair}
-            schedules={calibrationSchedules}
-            suppliers={calibrationSuppliers}
-            visits={calibrationVisits}
-          />
+          <StoreAssetCalibrationHistory unitId={asset.assetCode} visits={calibrationVisits} />
         </StoreAssetWorkspacePane>
 
         <StoreAssetWorkspacePane tab="movement">
+          <SectionCard>
+            <CardHeader>
+              <CardTitle>Accountability Transfers</CardTitle>
+              <CardDescription>Formal handovers between accountable stores. Physical holder changes appear in Movement Record.</CardDescription>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              <OperationalTable filterStorageKey={`store-accountability-${asset.assetCode}`}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Transferred</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>By</TableHead>
+                    <TableHead>Remark</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accountabilityTransfers.map((transfer, index) => (
+                    <TableRow key={`${transfer.transferredAt.toISOString()}-${index}`}>
+                      <TableCell>{formatIstDateTime(transfer.transferredAt)}</TableCell>
+                      <TableCell>{transfer.fromStore}</TableCell>
+                      <TableCell>{transfer.toStore}</TableCell>
+                      <TableCell>{transfer.transferredBy || "—"}</TableCell>
+                      <TableCell>{transfer.remark || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!accountabilityTransfers.length ? (
+                    <TableRow><TableCell colSpan={5}>No accountability transfers.</TableCell></TableRow>
+                  ) : null}
+                </TableBody>
+              </OperationalTable>
+            </CardContent>
+          </SectionCard>
  <SectionCard>
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>
@@ -769,10 +785,12 @@ type StoreItemWorkspaceData = NonNullable<
 >
 
 function StoreItemWorkspace({
+  canEditUnitDetails,
   canUploadDrawing,
   canUploadQuote,
   workspace,
 }: {
+  canEditUnitDetails: boolean
   canUploadDrawing: boolean
   canUploadQuote: boolean
   workspace: StoreItemWorkspaceData
@@ -806,6 +824,8 @@ function StoreItemWorkspace({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
+        <Info label="Make/Model" value={item.makeModel} />
+        <Info label="Rated Load / Capacity" value={item.ratedLoad || "Not recorded"} />
         <Info
           label="Classification"
           value={`${item.assetCategory} / ${item.assetSubcategory}`}
@@ -830,6 +850,7 @@ function StoreItemWorkspace({
             <TableHeader>
               <TableRow>
                 <TableHead>Unit ID</TableHead>
+                <TableHead>Make</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Current Assignment</TableHead>
                 <TableHead>Acquired On</TableHead>
@@ -846,7 +867,16 @@ function StoreItemWorkspace({
                     >
                       {asset.assetCode}
                     </Link>
+                    {canEditUnitDetails ? (
+                      <Link
+                        className="block w-fit text-xs font-normal text-primary underline underline-offset-4"
+                        href={`${storeAssetWorkspaceHref(asset.assetCode)}#unit-details`}
+                      >
+                        Edit Unit Details
+                      </Link>
+                    ) : null}
                   </TableCell>
+                  <TableCell>{asset.manufacturerMake || "—"}</TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -875,7 +905,7 @@ function StoreItemWorkspace({
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={5}
+                    colSpan={6}
                   >
                     {isNonConsumable
                       ? `No physical unit received yet. The first Unit ID will be ${storeUnitId(item.typeCode, 1)}.`

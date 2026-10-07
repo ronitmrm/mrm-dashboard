@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
+import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
  SectionCard,
@@ -25,7 +26,10 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
+import { StoreRequestPurposeFields } from "@/components/store/store-request-purpose-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
+import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
@@ -34,13 +38,19 @@ import { createStoreRequisitionBatchAction } from "../../actions"
 export default async function NewStoreRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ itemTypeId?: string | string[] }>
+  searchParams: Promise<{
+    fulfillmentKind?: string
+    itemTypeId?: string | string[]
+    saved?: string
+    storeCode?: string
+  }>
 }) {
   const session = await requireStoreAction(
     "store.requests.submit",
     "/store/requests/new"
   )
-  const rawIds = (await searchParams).itemTypeId
+  const params = await searchParams
+  const rawIds = params.itemTypeId
   const selectedIds = Array.from(
     new Set(
       (Array.isArray(rawIds) ? rawIds : rawIds ? [rawIds] : []).filter(Boolean)
@@ -51,25 +61,45 @@ export default async function NewStoreRequestPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, physicalUnits, requestContext] = await Promise.all([
+    const [items, physicalUnits, requestContext, stores, myRequests] = await Promise.all([
       repository.listItemTypes(organizationId),
-      repository.listStockPhysicalUnits(organizationId),
+      repository.listStockPhysicalUnits(organizationId, "COMPANY"),
       repository.requisitionRequestContext({
         organizationId,
         userId: session.user.id,
       }),
+      repository.listRequestableStores(organizationId),
+      repository.listRequisitions({ organizationId, requesterUserId: session.user.id }),
     ])
     const itemById = new Map(items.map((item) => [item.id, item]))
     return {
+      allItems: items,
       items: selectedIds.flatMap((id) => {
         const item = itemById.get(id)
         return item ? [item] : []
       }),
       physicalUnits,
       requestContext,
+      stores,
+      myRequests: myRequests.rows.slice(0, 30),
     }
   })().finally(() => repository.close())
   const requestPolicy = storeRequestFormPolicy(data.requestContext)
+  const requestedCapabilities = [
+    ...data.stores.map((store) => accountableStorePermission(store.code, "request")),
+  ]
+  const granted = new Set(await listGrantedCapabilities(session.user.id, requestedCapabilities))
+  const requestableStores = data.stores.filter((store) =>
+    granted.has(accountableStorePermission(store.code, "request"))
+  )
+  const initialStoreCode = requestableStores.some((store) => store.code === params.storeCode)
+    ? params.storeCode! : ""
+  const initialKind = params.fulfillmentKind === "STORE_TRANSFER" && requestableStores.length
+    ? "STORE_TRANSFER" as const
+    : !requestPolicy.departmentOptions.length && requestableStores.length
+      ? "STORE_TRANSFER" as const
+      : params.fulfillmentKind === "PERSON_USE"
+      ? "PERSON_USE" as const : "DEPARTMENT_USE" as const
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,18 +112,36 @@ export default async function NewStoreRequestPage({
         </p>
       </div>
 
+      {params.saved ? (
+        <SectionCard role="status">
+          <CardContent className="py-4 text-sm">
+            Request {params.saved} was sent to Main Store.
+          </CardContent>
+        </SectionCard>
+      ) : null}
+
       {!data.items.length ? (
  <SectionCard>
           <CardHeader>
-            <CardTitle>No items selected</CardTitle>
+            <CardTitle>Choose an Asset Code</CardTitle>
             <CardDescription>
-              Search Current Stock and tick one or more coded items first.
+              Select an item to request from Main Store.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild>
-              <Link href="/store/stock">Go to Current Stock</Link>
-            </Button>
+            <form className="flex max-w-lg flex-wrap gap-3" method="get">
+              <input name="fulfillmentKind" type="hidden" value={initialKind} />
+              <input name="storeCode" type="hidden" value={initialStoreCode} />
+              <NativeSelect aria-label="Asset Code" name="itemTypeId" required>
+                <NativeSelectOption value="">Select Asset Code</NativeSelectOption>
+                {data.allItems.map((item) => (
+                  <NativeSelectOption key={item.id} value={item.id}>
+                    {item.typeCode} — {item.assetName} · {item.makeModel}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <Button type="submit">Continue</Button>
+            </form>
           </CardContent>
  </SectionCard>
       ) : (
@@ -101,14 +149,23 @@ export default async function NewStoreRequestPage({
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
             <CardDescription>
-              Request an Asset Code and let Store choose a unit, or name one
-              exact Unit ID. An exact Unit ID request has quantity one.
+              A responsibility request names one exact Unit ID, or a consumable
+              Asset Code and quantity. For use, Main Store can choose a Unit ID.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={createStoreRequisitionBatchAction}>
               <FieldGroup className="grid gap-4 md:grid-cols-2">
-                <StoreRequestIdentityFields policy={requestPolicy} />
+                <StoreRequestIdentityFields
+                  allowStoreRequest={requestableStores.length > 0}
+                  policy={requestPolicy}
+                />
+                <StoreRequestPurposeFields
+                  canUse={requestPolicy.departmentOptions.length > 0}
+                  initialKind={initialKind}
+                  initialStoreCode={initialStoreCode}
+                  stores={requestableStores}
+                />
                 <Field>
                   <FieldLabel htmlFor="request-location">
                     Requested From Store
@@ -175,7 +232,7 @@ export default async function NewStoreRequestPage({
                                 .filter(
                                   (unit) =>
                                     unit.itemTypeId === item.id &&
-                                    unit.status !== "SCRAPPED"
+                                    unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
                                 )
                                 .map((unit) => (
                                   <NativeSelectOption key={unit.id} value={unit.id}>
@@ -211,17 +268,60 @@ export default async function NewStoreRequestPage({
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <Button disabled={requestPolicy.submitDisabled} type="submit">
+                <Button disabled={requestPolicy.submitDisabled && !requestableStores.length} type="submit">
                   Release Request to Store
                 </Button>
                 <Button asChild variant="outline">
-                  <Link href="/store/stock">Back to Stock</Link>
+                  <Link href="/store/requests/new">Choose another item</Link>
                 </Button>
               </div>
             </form>
           </CardContent>
  </SectionCard>
       )}
+
+      <SectionCard>
+        <CardHeader>
+          <CardTitle>My Requests</CardTitle>
+          <CardDescription>Requests submitted from your account.</CardDescription>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          <OperationalTable filterStorageKey="store-my-requests">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Request</TableHead>
+                <TableHead>Asset Code / Unit ID</TableHead>
+                <TableHead>For</TableHead>
+                <TableHead>Requested</TableHead>
+                <TableHead>Fulfilled</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.myRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell>{request.requestNumber}</TableCell>
+                  <TableCell>{request.requestedUnitCode ?? request.typeCode}</TableCell>
+                  <TableCell>
+                    {request.fulfillmentKind === "STORE_TRANSFER"
+                      ? request.receivingStoreName
+                      : request.fulfillmentKind === "PERSON_USE"
+                        ? request.recipientName : request.department}
+                  </TableCell>
+                  <TableCell>{request.requestedQuantity} {request.unit}</TableCell>
+                  <TableCell>{request.issuedQuantity} {request.unit}</TableCell>
+                  <TableCell><StatusBadge value={request.status} /></TableCell>
+                </TableRow>
+              ))}
+              {!data.myRequests.length ? (
+                <TableRow>
+                  <TableCell colSpan={6}>No requests submitted yet.</TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </OperationalTable>
+        </CardContent>
+      </SectionCard>
     </div>
   )
 }

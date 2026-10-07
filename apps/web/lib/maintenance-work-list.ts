@@ -1,4 +1,7 @@
+import { istDateValue } from "./date-time"
+
 type ScheduledWork = Record<string, unknown> & {
+  assetCode?: unknown
   machineNo?: unknown
   maintenanceTitle?: unknown
   nextDueDate?: unknown
@@ -69,7 +72,7 @@ export function unifiedMechanicalWorkRows(
     assignee: null,
     date: text(row.nextDueDate),
     description: text(row.maintenanceTitle),
-    machineOrLocation: text(row.machineNo),
+    machineOrLocation: text(row.assetCode || row.machineNo),
     priority: "Scheduled",
     scheduled: row,
     status: text(row.status),
@@ -91,4 +94,11 @@ export function unifiedMechanicalWorkRows(
       priorityRank[left.priority] - priorityRank[right.priority] ||
       left.date.localeCompare(right.date)
   )
+}
+
+export function mechanicalWorkRowsForDate(
+  rows: UnifiedMechanicalWorkRow[],
+  date: string
+): UnifiedMechanicalWorkRow[] {
+  return date ? rows.filter((row) => istDateValue(row.date) === date) : rows
 }

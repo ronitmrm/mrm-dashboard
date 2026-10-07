@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
@@ -47,7 +47,7 @@ import {
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { Trash2 } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 import {
   deleteRecruitmentMasterAction,
@@ -63,14 +63,18 @@ type FilterKey =
   | "education"
   | "experience"
   | "name"
+  | "shiftType"
+  | "shiftTiming"
 
-function JobTemplateEditor({
+export function JobTemplateEditor({
+  canWrite,
   combinedRoles,
   masterView,
   masters,
   panelId = "postMasterPanel",
   template,
 }: {
+  canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
@@ -78,19 +82,22 @@ function JobTemplateEditor({
   template: RecruitmentTemplateRow
 }) {
   return (
-    <form action={saveTemplateAction} className="flex min-h-full flex-col">
+    <form action={canWrite ? saveTemplateAction : undefined} className="flex min-h-full flex-col">
       <input name="panel" type="hidden" value={panelId} />
       {masterView ? (
         <input name="master_view" type="hidden" value={masterView} />
       ) : null}
       <input name="template_code" type="hidden" value={template.templateCode} />
+      <input name="template_id" type="hidden" value={template.id} />
       <SheetHeader>
-        <SheetTitle>Edit {template.templateCode}</SheetTitle>
+        <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
         <SheetDescription>
-          Update The Full Job Requirement Form. The Template Code Remains Fixed.
+          {canWrite
+            ? "Update The Job Description Template. The Template Code Remains Fixed."
+            : "Job Description Template."}
         </SheetDescription>
       </SheetHeader>
-      <div className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
+      <fieldset disabled={!canWrite} className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
         <Field>
           <FieldLabel>Template Code</FieldLabel>
           <Input readOnly value={template.templateCode} />
@@ -162,6 +169,40 @@ function JobTemplateEditor({
             type="number"
           />
         </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-type">Shift Type</FieldLabel>
+          <NativeSelect
+            defaultValue={template.shiftType ?? ""}
+            id="edit-template-shift-type"
+            name="shift_type"
+            required
+          >
+            <NativeSelectOption disabled value="">Select Shift Type</NativeSelectOption>
+            <NativeSelectOption value="Day">Day</NativeSelectOption>
+            <NativeSelectOption value="Night">Night</NativeSelectOption>
+            <NativeSelectOption value="Rotation">Rotation</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-start">Shift Start Time</FieldLabel>
+          <Input
+            defaultValue={template.shiftStartTime ?? ""}
+            id="edit-template-shift-start"
+            name="shift_start_time"
+            required
+            type="time"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="edit-template-shift-end">Shift End Time</FieldLabel>
+          <Input
+            defaultValue={template.shiftEndTime ?? ""}
+            id="edit-template-shift-end"
+            name="shift_end_time"
+            required
+            type="time"
+          />
+        </Field>
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="edit-template-responsibilities">
             Role Responsibilities
@@ -173,10 +214,40 @@ function JobTemplateEditor({
             rows={8}
           />
         </Field>
-      </div>
-      <SheetFooter>
-        <Button type="submit">Save Template Changes</Button>
-      </SheetFooter>
+        {canWrite ? (
+          <Field className="sm:col-span-2">
+            <FieldLabel htmlFor="edit-template-apply-to-posts">
+              Apply Requirement Changes To Approved Posts?
+            </FieldLabel>
+            <NativeSelect
+              defaultValue=""
+              id="edit-template-apply-to-posts"
+              name="apply_to_approved_posts"
+              required
+            >
+              <NativeSelectOption disabled value="">
+                Choose Where To Apply Changes
+              </NativeSelectOption>
+              <NativeSelectOption value="no">
+                Template Only
+              </NativeSelectOption>
+              <NativeSelectOption value="yes">
+                Also Update Matching Approved Posts
+              </NativeSelectOption>
+            </NativeSelect>
+            <FieldDescription>
+              Includes occupied and vacant posts. Unlinked matching posts will
+              use this template. Department, designation, employee assignments,
+              and existing Job Posts stay as they are.
+            </FieldDescription>
+          </Field>
+        ) : null}
+      </fieldset>
+      {canWrite ? (
+        <SheetFooter>
+          <Button type="submit">Save Template Changes</Button>
+        </SheetFooter>
+      ) : null}
     </form>
   )
 }
@@ -200,10 +271,7 @@ export function JobTemplatesTable({
 }) {
   const [editingTemplate, setEditingTemplate] =
     useState<RecruitmentTemplateRow | null>(() =>
-      canWrite
-        ? (templates.find((row) => row.templateCode === initialTemplateCode) ??
-          null)
-        : null
+      templates.find((row) => row.templateCode === initialTemplateCode) ?? null
     )
   const [deletingTemplate, setDeletingTemplate] =
     useState<RecruitmentTemplateRow | null>(null)
@@ -214,6 +282,8 @@ export function JobTemplatesTable({
     { key: "designation", label: "Designation" },
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
+    { key: "shiftType", label: "Shift Type" },
+    { key: "shiftTiming", label: "Shift Timing" },
   ]
   const table = useExcelTable({
     rows: templates,
@@ -227,7 +297,11 @@ export function JobTemplatesTable({
             ? (row.combinedRoleName ?? row.department)
             : key === "experience"
               ? row.experienceRequirement
-              : String(row[key]),
+              : key === "shiftType"
+                ? row.shiftType
+                : key === "shiftTiming"
+                  ? [row.shiftStartTime, row.shiftEndTime].filter(Boolean).join("–")
+                  : String(row[key]),
       ],
     })),
   })
@@ -236,13 +310,15 @@ export function JobTemplatesTable({
   return (
     <Sheet
       onOpenChange={(open) => {
-        if (!open) setEditingTemplate(null)
+        if (!open) {
+          setEditingTemplate(null)
+        }
       }}
       open={editingTemplate !== null}
     >
  <SectionCard>
         <CardHeader>
-          <CardTitle>Job Templates</CardTitle>
+          <CardTitle>Job Description Templates</CardTitle>
           <CardDescription>
             Showing {visibleTemplates.length} Of {templates.length} Reusable
             Profiles
@@ -266,7 +342,7 @@ export function JobTemplatesTable({
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
-                {canDelete ? (
+                {canWrite || canDelete ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
               </TableRow>
@@ -279,25 +355,21 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
-                {canDelete ? <TableHead /> : null}
+                {canWrite || canDelete ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleTemplates.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-mono">
-                    {canWrite ? (
-                      <Button
-                        className="h-auto p-0 font-mono"
-                        onClick={() => setEditingTemplate(row)}
-                        type="button"
-                        variant="link"
-                      >
-                        {row.templateCode}
-                      </Button>
-                    ) : (
-                      row.templateCode
-                    )}
+                    <Button
+                      className="h-auto p-0 font-mono"
+                      onClick={() => setEditingTemplate(row)}
+                      type="button"
+                      variant="link"
+                    >
+                      {row.templateCode}
+                    </Button>
                   </TableCell>
                   <TableCell>{row.name}</TableCell>
                   <TableCell>
@@ -308,16 +380,34 @@ export function JobTemplatesTable({
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
-                  {canDelete ? (
-                    <TableCell className="text-right">
-                      <Button
-                        onClick={() => setDeletingTemplate(row)}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Trash2 className="size-3.5" /> Delete
-                      </Button>
+                  <TableCell>{row.shiftType ?? "—"}</TableCell>
+                  <TableCell>
+                    {row.shiftStartTime && row.shiftEndTime
+                      ? `${row.shiftStartTime}–${row.shiftEndTime}`
+                      : "—"}
+                  </TableCell>
+                  {canWrite || canDelete ? (
+                    <TableCell className="space-x-2 text-right">
+                      {canWrite ? (
+                        <Button
+                          onClick={() => setEditingTemplate(row)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil className="size-3.5" /> Edit
+                        </Button>
+                      ) : null}
+                      {canDelete ? (
+                        <Button
+                          onClick={() => setDeletingTemplate(row)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Trash2 className="size-3.5" /> Delete
+                        </Button>
+                      ) : null}
                     </TableCell>
                   ) : null}
                 </TableRow>
@@ -326,9 +416,9 @@ export function JobTemplatesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canDelete ? 7 : 6}
+                    colSpan={canWrite || canDelete ? 9 : 8}
                   >
-                    No Job Templates Match The Selected Filters.
+                    No Job Description Templates Match The Selected Filters.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -339,6 +429,7 @@ export function JobTemplatesTable({
       {editingTemplate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <JobTemplateEditor
+            canWrite={canWrite}
             combinedRoles={combinedRoles}
             masterView={masterView}
             masters={masters}
@@ -355,7 +446,7 @@ export function JobTemplatesTable({
         {deletingTemplate ? (
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete Job Template</DialogTitle>
+              <DialogTitle>Delete Job Description Template</DialogTitle>
               <DialogDescription>
                 Unused templates delete immediately. If used, choose a
                 replacement first.

@@ -75,6 +75,29 @@ type WorkOrderContext = {
   status: string
 }
 
+type DispatchSetup = {
+  id: string
+  operation_name: string | null
+  route_option_id: string
+  setup_number: number
+  source_payload: Record<string, unknown> | null
+}
+
+function dispatchSetupSignature(setup: DispatchSetup) {
+  const nested = setup.source_payload?.payload
+  const source = nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : setup.source_payload ?? {}
+  const key = (value: unknown) => String(value ?? "").replace(/\s+/g, "").toLowerCase()
+  const name = key(source.setupName ?? source["SETUP NAME"] ?? setup.operation_name)
+  const family = key(source.machineFamily ?? source["MACHINE FAMILY"]
+    ?? source["Machine Family"] ?? source["MACHINE USED"] ?? source.machineUsed)
+  const weight = Number(String(source.stageWeight ?? source["STAGE WEIGHT"]
+    ?? source["STAGE WEIGHT GRAM"] ?? source["STAGE WEIGHT (GRAM)"] ?? "").replace(/,/g, "").trim())
+  return name && family && weight > 0 && Number.isFinite(weight)
+    ? `${name}|${family}|${weight}` : null
+}
+
 type ProductionSessionEndReason =
   | "operator_change"
   | "shift_end"
@@ -376,10 +399,11 @@ async function writeRawMaterialReceipt(
     id: string
     job_card_number: string
     receipt_number: string
+    reversed_at: Date | null
     source_payload: unknown
   }>(
     `
-      SELECT id, job_card_number, receipt_number, source_payload
+      SELECT id, job_card_number, receipt_number, reversed_at, source_payload
       FROM manufacturing.raw_material_receipts
       WHERE organization_id = $1 AND source_system = 'mrm-dashboard'
         AND source_table = 'rm_inward' AND source_id = $2
@@ -396,6 +420,9 @@ async function writeRawMaterialReceipt(
   }
   if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
+  }
+  if (existing.rows[0]?.reversed_at) {
+    throw new Error("This RM Inward row was deleted. Correct the row before uploading it again.")
   }
   return existing.rows[0] ?? (
     await client.query<{ id: string }>(
@@ -435,12 +462,41 @@ async function workOrderContext(
     `
       SELECT work_order.id AS work_order_id, work_order.item_id,
         work_order.source_payload, work_order.status,
-        COALESCE(selection.route_option_id, automatic_route.route_option_id)
-          AS route_option_id
+        COALESCE(route_change.to_route_option_id,
+          CASE WHEN imported.route_code IS NOT NULL THEN imported_route.id
+            ELSE COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          END) AS route_option_id
       FROM manufacturing.work_orders work_order
-      LEFT JOIN manufacturing.route_selections selection
-        ON selection.work_order_id = work_order.id
-        AND selection.reversed_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT to_route_option_id
+        FROM manufacturing.route_change_events
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY occurred_at DESC, id DESC LIMIT 1
+      ) route_change ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          NULLIF(btrim(work_order.source_payload->>'OPTION NUMBER'), ''),
+          NULLIF(btrim(work_order.source_payload->>'optionNumber'), '')
+        ) AS route_code
+      ) imported ON true
+      LEFT JOIN LATERAL (
+        SELECT route.id
+        FROM manufacturing.route_options route
+        JOIN manufacturing.production_floors floor
+          ON floor.id = route.production_floor_id
+        WHERE route.organization_id = work_order.organization_id
+          AND route.item_id = work_order.item_id AND route.active
+          AND floor.code = $3
+          AND (lower(route.route_code) = lower(imported.route_code)
+            OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
+        ORDER BY route.revision DESC LIMIT 1
+      ) imported_route ON imported.route_code IS NOT NULL
+      LEFT JOIN LATERAL (
+        SELECT route_option_id
+        FROM manufacturing.route_selections
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY selected_at DESC, id DESC LIMIT 1
+      ) selection ON true
       LEFT JOIN LATERAL (
         SELECT CASE WHEN count(*) = 1
           THEN (array_agg(route.id))[1]
@@ -454,6 +510,8 @@ async function workOrderContext(
           AND route.active
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
+        AND imported.route_code IS NULL
+        AND route_change.to_route_option_id IS NULL
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
       FOR UPDATE OF work_order
@@ -734,6 +792,59 @@ async function plannerAssignmentMode(
   return result.rows[0].assignment_mode === "add_parallel_machine" ? "add_parallel_machine" : "move"
 }
 
+async function assertEarlyDownstreamWip(
+  client: PoolClient,
+  input: {
+    workOrderId: string
+    operationSetupId: string
+    machineId: string
+    requestedTotalPieces?: number
+    excludeProductionEntryId?: string
+  }
+) {
+  const exception = await client.query<{ upstream_setup_id: string; target_machine_id: string }>(
+    `SELECT prior.id AS upstream_setup_id, decision.target_machine_id
+     FROM manufacturing.operation_setups setup
+     JOIN LATERAL (
+       SELECT id FROM manufacturing.operation_setups
+       WHERE route_option_id = setup.route_option_id AND active
+         AND sequence < setup.sequence
+       ORDER BY sequence DESC LIMIT 1
+     ) prior ON true
+     JOIN LATERAL (
+       SELECT target_machine_id FROM manufacturing.plan_override_events
+       WHERE work_order_id = $1 AND operation_setup_id = setup.id
+         AND source_payload->>'assignmentMode' = 'early_downstream'
+         AND reversed_at IS NULL
+       ORDER BY occurred_at DESC LIMIT 1
+     ) decision ON true
+     WHERE setup.id = $2`,
+    [input.workOrderId, input.operationSetupId]
+  )
+  const upstreamSetupId = exception.rows[0]?.upstream_setup_id
+  if (!upstreamSetupId) return
+  if (exception.rows[0]?.target_machine_id !== input.machineId) {
+    throw new ShopFloorConflictError("Use the machine reserved by the Planner's early Setup 2 decision.")
+  }
+  await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 FOR UPDATE", [input.workOrderId])
+  const stock = await client.query<{ upstream_good: string; downstream_processed: string }>(
+    `SELECT COALESCE(sum(quantity_good) FILTER (WHERE operation_setup_id = $2), 0)::text AS upstream_good,
+            COALESCE(sum(quantity_good + quantity_rejected) FILTER (
+              WHERE operation_setup_id = $3 AND id IS DISTINCT FROM $4::uuid), 0)::text AS downstream_processed
+     FROM manufacturing.production_entries
+     WHERE work_order_id = $1 AND reversed_at IS NULL
+       AND operation_setup_id IN ($2, $3)`,
+    [input.workOrderId, upstreamSetupId, input.operationSetupId, input.excludeProductionEntryId ?? null]
+  )
+  const available = Number(stock.rows[0]?.upstream_good ?? 0) - Number(stock.rows[0]?.downstream_processed ?? 0)
+  const required = input.requestedTotalPieces ?? 1
+  if (available < required) {
+    throw new ShopFloorConflictError(
+      `Setup 2 has ${Math.max(0, available)} recorded WIP pieces available; ${required} pieces are required. Record more Setup 1 good output first.`
+    )
+  }
+}
+
 async function restoreParallelShopFloorState(
   client: PoolClient,
   input: {
@@ -882,12 +993,12 @@ async function completeProductionSessionSetup(
        jsonb_build_object('jcNo', session.job_card_number_snapshot,
          'partCode', session.part_code_snapshot, 'optionNumber', session.option_number_snapshot,
          'setupNo', session.setup_number_snapshot, 'machine', session.machine_number_snapshot) AS context,
-       (state.updated_at > session.created_at OR EXISTS (
+       EXISTS (
          SELECT 1 FROM manufacturing.production_sessions later
          WHERE later.machine_id = session.machine_id AND later.reversed_at IS NULL
            AND (later.started_at, later.created_at, later.id)
              > (session.started_at, session.created_at, session.id)
-       )) AS superseded
+       ) AS superseded
      FROM manufacturing.production_sessions session
      JOIN manufacturing.shop_floor_setup_state state
        ON state.work_order_id = session.work_order_id
@@ -1046,6 +1157,68 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     upsertRawMaterialReceipts,
 
+    async reverseRawMaterialReceipt(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      reason: string
+      sourceId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const reason = requiredText(input.reason, "Deletion reason")
+        const sourceId = requiredText(input.sourceId, "RM Inward entry")
+        const found = await client.query<{
+          id: string
+          job_card_number: string
+          reversed_at: Date | null
+          source_payload: unknown
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT id, job_card_number, reversed_at, source_payload,
+             to_jsonb(receipt) AS snapshot
+           FROM manufacturing.raw_material_receipts receipt
+           WHERE organization_id = $1 AND source_id = $2
+             AND source_payload IS NOT NULL
+             AND (source_table = 'dataEntries'
+               OR (source_system = 'mrm-dashboard' AND source_table = 'rm_inward'))
+           FOR UPDATE`,
+          [input.organizationId, sourceId]
+        )
+        if (found.rows.length !== 1) {
+          throw new Error(found.rows.length
+            ? "This RM Inward entry is ambiguous; contact an administrator."
+            : "RM Inward entry was not found.")
+        }
+        const receipt = found.rows[0]!
+        if (receipt.reversed_at) throw new Error("This RM Inward entry was already deleted.")
+        if (productionFloorCodeForRecord({ sourcePayload: receipt.source_payload }) !== input.productionFloorCode) {
+          throw new ProductionUnitAccessError("This RM Inward entry belongs to another Production Unit.")
+        }
+        const reversed = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE manufacturing.raw_material_receipts receipt
+           SET reversed_at = now(), reversed_by_user_id = $1,
+             reversal_reason = $2, updated_at = now(),
+             updated_by_user_id = $1, row_version = row_version + 1
+           WHERE id = $3
+           RETURNING to_jsonb(receipt) AS snapshot`,
+          [input.actorUserId ?? null, reason, receipt.id]
+        )
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table,
+             target_id, actor_user_id, reason, before_state, after_state,
+             source_system, source_table, source_id
+           ) VALUES ($1, 'rm_inward.deleted', 'manufacturing',
+             'raw_material_receipts', $2, $3, $4, $5, $6,
+             'mrm-dashboard', 'rm_inward_reversals', $7)`,
+          [input.organizationId, receipt.id, input.actorUserId ?? null,
+            reason, receipt.snapshot, reversed.rows[0]!.snapshot, randomUUID()]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: receipt.id, jobCardNumber: receipt.job_card_number }
+      })
+    },
+
     async startProductionSession(input: {
       actorUserId?: string | null
       cycleTimeSeconds?: number
@@ -1181,6 +1354,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             "The machinist must finish setup and start the machine before a production session can begin."
           )
         }
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: workOrder.work_order_id,
+          operationSetupId: setupId,
+          machineId,
+        })
         const open = await client.query<{ id: string }>(
           `
             SELECT id FROM manufacturing.production_sessions
@@ -2269,6 +2447,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               pieceWeightGrams: Number(current.piece_weight_grams),
               rejectedPieces,
             })
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: current.work_order_id,
+          operationSetupId: current.operation_setup_id,
+          machineId: current.machine_id,
+          excludeProductionEntryId: current.production_entry_id,
+          requestedTotalPieces: output.totalPieces,
+        })
         const sourcePayload = {
           ...current.source_payload,
           ...input,
@@ -2389,6 +2574,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         await lockProductionSessionMachine(client, input)
         const session = await client.query<{
+          work_order_id: string
+          operation_setup_id: string
           crate_weight_kg: string | null
           cycle_time_seconds: string
           end_count: string | null
@@ -2406,7 +2593,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           status: "open" | "closed"
         }>(
           `
-            SELECT session.machine_id, session.measurement_method,
+            SELECT session.work_order_id, session.operation_setup_id,
+              session.machine_id, session.measurement_method,
               session.started_at, session.start_count, session.end_count,
               session.piece_weight_grams, session.gross_weight_kg, session.crate_weight_kg,
               session.cycle_time_seconds, session.production_entry_id,
@@ -2611,6 +2799,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               pieceWeightGrams: Number(current.piece_weight_grams),
               rejectedPieces,
             })
+        await assertEarlyDownstreamWip(client, {
+          workOrderId: current.work_order_id,
+          operationSetupId: current.operation_setup_id,
+          machineId: current.machine_id,
+          excludeProductionEntryId: current.production_entry_id,
+          requestedTotalPieces: output.totalPieces,
+        })
         const timing = productionSessionTiming({
           breaks: savedBreaks(current.source_payload) ?? [],
           cycleTimeSeconds: Number(current.cycle_time_seconds),
@@ -2805,6 +3000,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             item.casting,
             material.name AS "materialGrade", rod.name AS "rodType",
             item.rod_size AS "rodSize", item.source_payload AS "itemSource",
+            route_change.to_route_option_id AS "changedRouteOptionId",
             selection.route_option_id AS "selectedRouteOptionId",
             selection.selected_at AS "routeSelectedAt",
             selection.reason AS "routeSelectionReason"
@@ -2812,6 +3008,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           JOIN catalog.items item ON item.id = work_order.item_id
           LEFT JOIN catalog.material_grades material ON material.id = item.material_grade_id
           LEFT JOIN catalog.rod_types rod ON rod.id = item.rod_type_id
+          LEFT JOIN LATERAL (
+            SELECT to_route_option_id
+            FROM manufacturing.route_change_events
+            WHERE work_order_id = work_order.id AND reversed_at IS NULL
+            ORDER BY occurred_at DESC, id DESC LIMIT 1
+          ) route_change ON true
           LEFT JOIN LATERAL (
             SELECT route_option_id, selected_at, reason
             FROM manufacturing.route_selections
@@ -2847,7 +3049,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         [input.organizationId, jobCard.itemId, floorCode]
       )
       const activeRoutes = routesResult.rows.filter((route) => route.active === true)
-      const explicitRouteId = String(jobCard.selectedRouteOptionId ?? "")
+      const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
+      const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
@@ -3020,7 +3223,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               UNION ALL
               SELECT 'dispatch_' || event.decision, event.occurred_at,
                 NULL::text, NULL::text, actor.name,
-                COALESCE(event.reason, 'Dispatch decision')
+                CASE WHEN event.quantity IS NULL
+                  THEN COALESCE(event.reason, 'Dispatch decision')
+                  ELSE concat_ws(' · ',
+                    trim(trailing '.' from trim(trailing '0' from event.quantity::text)) || ' pcs',
+                    NULLIF(event.reason, ''))
+                END
               FROM manufacturing.dispatch_approval_events event
               LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
               WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
@@ -3201,6 +3409,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               source_payload AS "sourcePayload"
            FROM manufacturing.raw_material_receipts
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+             AND reversed_at IS NULL
            ORDER BY received_on, created_at`,
           [input.organizationId, jobCardNumber]
         ),
@@ -3555,8 +3764,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ...jobCard,
           id: String(jobCard.id),
           casting: casting > 0 ? String(casting) : null,
-          effectiveRouteSource: explicitRouteId && selectedRoute?.id === explicitRouteId
-            ? "planner_selected"
+          effectiveRouteSource: changedRouteId && selectedRoute?.id === changedRouteId
+            ? "route_change"
+            : explicitRouteId && selectedRoute?.id === explicitRouteId
+              ? "planner_selected"
             : selectedRoute
               ? "single_active_route"
               : "planner_required",
@@ -4090,6 +4301,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        if (setupId && machineId) {
+          await assertEarlyDownstreamWip(client, {
+            workOrderId: workOrder.work_order_id,
+            operationSetupId: setupId,
+            machineId,
+            requestedTotalPieces: input.quantityGood + input.quantityRejected,
+          })
+        }
         const employeeId = await employeeIdFor(
           client,
           input.organizationId,
@@ -4169,6 +4388,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
+        if (stage === "operator_started") {
+          await assertEarlyDownstreamWip(client, {
+            workOrderId: workOrder.work_order_id,
+            operationSetupId: setupId,
+            machineId,
+          })
+        }
         if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
           throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
         }
@@ -4240,7 +4466,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const stateToUpdate = existingOnMachine
           ?? (assignmentMode === "move" ? otherMachineState : undefined)
-        if (active) {
+        const earlierStageOnSameMachine = Boolean(existingOnMachine &&
+          (stageRanks.get(existingOnMachine.stage) ?? -1) > (stageRanks.get(stage) ?? -1))
+        if (active && !earlierStageOnSameMachine) {
           const occupied = await client.query<{
             id: string
             job_card_number: string
@@ -4270,7 +4498,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operationSetupCode: input.operationSetupCode,
           stage,
         }
-        const state = stateToUpdate
+        // Keep later setup progress while retaining this earlier task as an event.
+        const state = earlierStageOnSameMachine && existingOnMachine
+          ? { rows: [{ id: existingOnMachine.id }] }
+          : stateToUpdate
           ? await client.query<{ id: string }>(
               `
                 UPDATE manufacturing.shop_floor_setup_state
@@ -4352,38 +4583,132 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       jobCardNumber: string
       organizationId: string
       productionFloorCode?: string
+      quantity: number
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
+        if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
+          throw new Error("Dispatch quantity must be a positive whole number of pieces.")
+        }
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
           input.jobCardNumber,
           input.productionFloorCode
         )
-        const existing = await client.query<{ id: string }>(
-          `SELECT id FROM manufacturing.dispatch_approval_events
-           WHERE work_order_id = $1 AND decision = 'approved'
-             AND reversed_at IS NULL
+        const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+        const finalSetup = await client.query<DispatchSetup>(
+          `SELECT setup.id, setup.route_option_id, setup.setup_number,
+             setup.operation_name, setup.source_payload
+           FROM manufacturing.route_options route
+           JOIN manufacturing.production_floors floor
+             ON floor.id = route.production_floor_id
+           JOIN manufacturing.operation_setups setup
+             ON setup.route_option_id = route.id AND setup.active
+           WHERE route.id = $1 AND route.organization_id = $2
+             AND route.active AND floor.code = $3
+           ORDER BY setup.sequence DESC, setup.setup_number DESC
            LIMIT 1`,
+          [workOrder.route_option_id, input.organizationId, floorCode]
+        )
+        if (!finalSetup.rows[0]) {
+          throw new Error("Select a route with a final setup before dispatching finished good.")
+        }
+        const produced = await client.query<{ good_pieces: string }>(
+          `SELECT COALESCE(sum(entry.quantity_good), 0)::text AS good_pieces
+           FROM manufacturing.production_entries entry
+           WHERE entry.organization_id = $1 AND entry.work_order_id = $2
+             AND entry.operation_setup_id = $3 AND entry.reversed_at IS NULL`,
+          [input.organizationId, workOrder.work_order_id, finalSetup.rows[0].id]
+        )
+        let goodPieces = Number(produced.rows[0]?.good_pieces ?? 0)
+        const routeChanges = await client.query<{
+          from_route_option_id: string | null
+          to_route_option_id: string
+          source_payload: Record<string, unknown> | null
+        }>(
+          `SELECT from_route_option_id, to_route_option_id, source_payload
+           FROM manufacturing.route_change_events
+           WHERE work_order_id = $1 AND reversed_at IS NULL
+           ORDER BY occurred_at DESC, id DESC`,
           [workOrder.work_order_id]
         )
-        if (existing.rows[0]) throw new Error("This Job Card is already dispatched.")
+        const countedSetups = new Set([finalSetup.rows[0].id])
+        let carriedSetup = finalSetup.rows[0]
+        for (const change of routeChanges.rows) {
+          const previousRouteId = change.from_route_option_id
+          const remaining = change.source_payload?.remainingSetups
+          const remainingSetups = Array.isArray(remaining)
+            ? remaining.filter((row): row is Record<string, unknown> =>
+              typeof row === "object" && row !== null && !Array.isArray(row))
+            : []
+          const zeroRemaining = remainingSetups.length > 0 && remainingSetups.every((row) =>
+            Number(row.quantity ?? row.qty ?? row.remainingQty) === 0)
+          const finalCarried = remainingSetups.some((row) =>
+            Number(row.setupNumber ?? row.setupNo) === carriedSetup.setup_number)
+          if (!previousRouteId || previousRouteId === carriedSetup.route_option_id
+            || change.to_route_option_id !== carriedSetup.route_option_id
+            || !zeroRemaining || !finalCarried) break
+          const previousSetups = await client.query<DispatchSetup>(
+            `SELECT id, route_option_id, setup_number, operation_name, source_payload
+             FROM manufacturing.operation_setups
+             WHERE route_option_id = $1 AND active`,
+            [previousRouteId]
+          )
+          const signature = dispatchSetupSignature(carriedSetup)
+          const matching = signature
+            ? previousSetups.rows.filter((setup) => dispatchSetupSignature(setup) === signature)
+            : []
+          if (matching.length !== 1 || countedSetups.has(matching[0]!.id)) break
+          carriedSetup = matching[0]!
+          countedSetups.add(carriedSetup.id)
+          const priorProduction = await client.query<{ good_pieces: string }>(
+            `SELECT COALESCE(sum(quantity_good), 0)::text AS good_pieces
+             FROM manufacturing.production_entries
+             WHERE organization_id = $1 AND work_order_id = $2
+               AND operation_setup_id = $3 AND reversed_at IS NULL`,
+            [input.organizationId, workOrder.work_order_id, carriedSetup.id]
+          )
+          goodPieces += Number(priorProduction.rows[0]?.good_pieces ?? 0)
+        }
+        const dispatched = await client.query<{
+          legacy_dispatch: boolean
+          shipped_pieces: string
+        }>(
+          `SELECT COALESCE(bool_or(quantity IS NULL), false) AS legacy_dispatch,
+             COALESCE(sum(quantity), 0)::text AS shipped_pieces
+           FROM manufacturing.dispatch_approval_events
+           WHERE organization_id = $1 AND work_order_id = $2
+             AND decision = 'approved' AND reversed_at IS NULL`,
+          [input.organizationId, workOrder.work_order_id]
+        )
+        if (dispatched.rows[0]?.legacy_dispatch) {
+          throw new Error("This Job Card is already dispatched.")
+        }
+        const shippedPieces = Number(dispatched.rows[0]?.shipped_pieces ?? 0)
+        const availablePieces = goodPieces - shippedPieces
+        if (availablePieces < 0) {
+          throw new Error("Recorded finished good is below the quantity already dispatched. Correct the production or dispatch history before dispatching more.")
+        }
+        if (input.quantity > availablePieces) {
+          throw new Error(`Only ${availablePieces} recorded finished good pieces remain available for dispatch.`)
+        }
         const sourcePayload = { ...input, decision: "approved" }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.dispatch_approval_events (
-              organization_id, work_order_id, decision, reason,
+              organization_id, work_order_id, decision, quantity, reason,
               actor_user_id, legacy_actor, source_system, source_table,
               source_id, source_payload
             )
-            VALUES ($1, $2, 'approved', $3, $4, $5,
-              'mrm-dashboard', 'dispatchApprovals', $6, $7)
+            VALUES ($1, $2, 'approved', $3, $4, $5, $6,
+              'mrm-dashboard', 'dispatchApprovals', $7, $8)
             RETURNING id
           `,
           [
             input.organizationId,
             workOrder.work_order_id,
+            input.quantity,
             input.remark?.trim() || null,
             input.actorUserId ?? null,
             requiredText(input.approvedBy, "Approved by"),
@@ -4392,7 +4717,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ]
         )
         await queueDashboardRefresh(client, input.organizationId)
-        return { id: result.rows[0]!.id, ok: true }
+        return { id: result.rows[0]!.id, ok: true, remainingAvailablePieces: availablePieces - input.quantity }
       })
     },
 

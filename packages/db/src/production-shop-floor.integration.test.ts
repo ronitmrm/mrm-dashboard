@@ -37,7 +37,6 @@ const secondOperator = `FLOOR-OP-${suffix}-2`
 const hrOperator = `FLOOR-HR-OP-${suffix}`
 const rmPoNumber = `RM-${suffix}`
 let organizationId: string
-let productionEntryId: string
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
@@ -446,6 +445,57 @@ describe("production and shop-floor workflows", () => {
     }])
   })
 
+  test("reverses one mistaken RM receipt without removing its audit history", async () => {
+    const sourceId = `test:rm-delete:${suffix}`
+    const receipt = await repository.upsertRawMaterialReceipt({
+      organizationId,
+      payload: { jcNo: cncJobCard, rmPoNo: rmPoNumber, productionFloorCode: "cnc" },
+      productionFloorCode: "cnc",
+      requiredProductionFloorCode: "cnc",
+      quantityKg: 25,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-30",
+      sourceId,
+    })
+    await repository.reverseRawMaterialReceipt({
+      organizationId,
+      productionFloorCode: "cnc",
+      sourceId,
+      reason: "Entered by mistake",
+    })
+    const state = await pool.query<{
+      active_receipts: string
+      audit_events: string
+      baseline_rows: string
+      projected_rows: string
+    }>(
+      `SELECT
+         (SELECT count(*) FROM manufacturing.raw_material_receipts
+          WHERE id = $1 AND reversed_at IS NULL) AS active_receipts,
+         (SELECT count(*) FROM audit.events
+          WHERE target_id = $1 AND event_type = 'rm_inward.deleted') AS audit_events,
+         (SELECT count(*) FROM manufacturing.job_card_finish_baselines
+          WHERE raw_material_receipt_id = $1) AS baseline_rows,
+         (SELECT count(*) FROM derived.dashboard_source_records
+          WHERE source_schema = 'manufacturing' AND source_table = 'raw_material_receipts'
+            AND source_id = $2) AS projected_rows`,
+      [receipt.id, sourceId]
+    )
+    expect(state.rows[0]).toEqual({
+      active_receipts: "0", audit_events: "1", baseline_rows: "1", projected_rows: "0",
+    })
+    await expect(repository.upsertRawMaterialReceipt({
+      organizationId,
+      payload: { jcNo: cncJobCard, rmPoNo: rmPoNumber, productionFloorCode: "cnc" },
+      productionFloorCode: "cnc",
+      requiredProductionFloorCode: "cnc",
+      quantityKg: 25,
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-09-30",
+      sourceId,
+    })).rejects.toThrow(/was deleted/)
+  })
+
   test("records append-only production", async () => {
     const card = await repository.upsertProductionCard({
       cardNumber: `CARD-${suffix}`,
@@ -515,8 +565,6 @@ describe("production and shop-floor workflows", () => {
       sourceId: `csv:test:${suffix}`,
     })
     expect(repeatedProduction.id).toBe(production.id)
-    productionEntryId = production.id
-
     const result = await pool.query<{
       card_events: string
       cards: string
@@ -556,7 +604,7 @@ describe("production and shop-floor workflows", () => {
       [
         organizationId,
         `CARD-${suffix}`,
-        productionEntryId,
+        production.id,
         rmPoNumber,
         firstJobCard,
       ]
@@ -571,6 +619,45 @@ describe("production and shop-floor workflows", () => {
       raw_material_receipts: "1",
       remarks: "Updated card",
     })
+  })
+
+  test("saves a Setting checklist on the latest route change", async () => {
+    const jobCardNumber = `FLOOR-JC-${suffix}-ROUTE`
+    await planning.upsertRouteOption({
+      itemUid, organizationId, productionFloorCode: "cnc", routeCode: "CNC-2",
+      setups: [{ operationCode: "TURN", sequence: 1, setupNumber: 1 }],
+    })
+    await planning.upsertWorkOrder({
+      itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+      sourcePayload: { optionNumber: "CNC-1" },
+      workOrderNumber: jobCardNumber,
+    })
+    await planning.selectRoute({
+      jobCardNumber, organizationId, productionFloorCode: "cnc", routeCode: "CNC-1",
+    })
+    await planning.recordRouteChange({
+      jobCardNumber, newRouteCode: "CNC-2", organizationId,
+      productionFloorCode: "cnc", reason: "Use the revised route",
+    })
+    const template = await quality.upsertSetupChecklistTemplate({
+      code: `CNC-ROUTE-${suffix}`, name: "Setting route check", organizationId,
+      productionFloorCode: "cnc", payload: {}, revision: 1,
+      items: [{ itemKey: "program", prompt: "Program checked", inputType: "checkbox", sequence: 1, required: true }],
+    })
+    const session = await quality.saveSetupChecklistSession({
+      organizationId, productionFloorCode: "cnc", jobCardNumber,
+      operationSetupCode: "1", machineNumber: cncMachine, templateCode: template.code,
+      sessionKey: `CNC-ROUTE-${suffix}`, phase: "end", status: "Completed",
+      payload: { optionNumber: "CNC-2" }, results: [{ itemKey: "program", value: true }],
+    })
+    const saved = await pool.query<{ route_code: string }>(
+      `SELECT route.route_code FROM quality.setup_checklist_sessions checklist
+       JOIN manufacturing.operation_setups setup ON setup.id = checklist.operation_setup_id
+       JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+       WHERE checklist.id = $1`,
+      [session.id]
+    )
+    expect(saved.rows[0]?.route_code).toBe("CNC-2")
   })
 
   test("keeps CNC count continuity across shift sessions and stores linked events", async () => {
@@ -1018,6 +1105,25 @@ describe("production and shop-floor workflows", () => {
     })
     expect(pending).toMatchObject({ outputPending: true, totalPieces: 0 })
 
+    await repository.recordShopFloorStage({
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { doneBy: "Quality", partCode: itemUid },
+      stage: "quality_approval",
+    })
+    const continuedSetup = await pool.query<{ stage: string; active: boolean }>(
+      `SELECT state.stage, state.active
+       FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.production_sessions session
+         ON session.work_order_id = state.work_order_id
+         AND session.operation_setup_id = state.operation_setup_id
+         AND session.machine_id = state.machine_id
+       WHERE session.id = $1`, [session.id]
+    )
+    expect(continuedSetup.rows[0]).toEqual({ stage: "operator_started", active: true })
+
     await repository.recordProductionSessionDowntime({
       correctionReason: "Operator recorded the stoppage after the shift.",
       endedAt: "2026-08-15T08:55:00+05:30",
@@ -1363,27 +1469,145 @@ describe("production and shop-floor workflows", () => {
     expect(restored.rows.map((row) => row.machine_number)).toEqual(machines)
   })
 
-  test("records dispatch and reverses production without deleting evidence", async () => {
+  test("dispatches saved final-setup good in parts without overdraw", async () => {
+    const jobCardNumber = `DISPATCH-${suffix}`
+    const dispatchItemUid = `DISPATCH-ITEM-${suffix}`
+    for (const routeCode of ["OLD", "NEW", "THIRD"]) {
+      await planning.upsertRouteOption({
+        itemUid: dispatchItemUid,
+        organizationId,
+        routeCode,
+        setups: [{ operationCode: "FINISH", operationName: "Finished part", sequence: 1, setupNumber: 1 }],
+        sourcePayload: { setupName: "Finished part", machineFamily: "FINISH-FAMILY", stageWeight: 42 },
+      })
+    }
+    await planning.upsertWorkOrder({
+      itemUid: dispatchItemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+      sourcePayload: { optionNumber: "OLD" },
+      workOrderNumber: jobCardNumber,
+    })
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "OLD" })
+    const production = await repository.recordProductionEntry({
+      jobCardNumber,
+      machineNumber: secondMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { jcNo: jobCardNumber, partCode: dispatchItemUid, setupNo: "1" },
+      productionDate: "2026-09-29",
+      quantityGood: 10,
+      quantityRejected: 0,
+      sourceId: `dispatch-production:${suffix}`,
+    })
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "NEW" })
     await repository.recordDispatchApproval({
       approvedBy: "Dispatch lead",
-      jobCardNumber: firstJobCard,
+      jobCardNumber,
       organizationId,
-      remark: "Approved after completion",
+      quantity: 4,
+      remark: "First partial shipment",
     })
-    await expect(repository.recordDispatchApproval({
-      approvedBy: "Dispatch lead",
-      jobCardNumber: firstJobCard,
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "OLD" })
+    await planning.recordRouteChange({
+      jobCardNumber,
+      newRouteCode: "NEW",
       organizationId,
-    })).rejects.toThrow("already dispatched")
+      reason: "Carry completed final operation to equivalent route",
+      remainingSetups: [{ plan: false, quantity: 0, setupNumber: 1 }],
+    })
+    const selectedStateSourceId = `dispatch-new-state:${suffix}`
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, stage, active, source_system, source_table, source_id
+       )
+       SELECT $1, work_order.id, route.id, setup.id, machine.id,
+         'item_complete', false, 'test', 'dispatch-state', $2
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'NEW'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 1
+       JOIN catalog.machines machine
+         ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
+      [organizationId, selectedStateSourceId, secondMachine, jobCardNumber]
+    )
+    await repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead",
+      jobCardNumber,
+      organizationId,
+      quantity: 6,
+    })
+    await pool.query(
+      `DELETE FROM manufacturing.shop_floor_setup_state
+       WHERE source_system = 'test' AND source_table = 'dispatch-state' AND source_id = $1`,
+      [selectedStateSourceId]
+    )
+    await repository.recordProductionEntry({
+      jobCardNumber,
+      machineNumber: secondMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { jcNo: jobCardNumber, partCode: dispatchItemUid, setupNo: "1" },
+      productionDate: "2026-09-30",
+      quantityGood: 2,
+      quantityRejected: 0,
+      sourceId: `dispatch-new-production:${suffix}`,
+    })
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.productionEntries.find((row) => row._id === `dispatch-production:${suffix}`))
+      .toMatchObject({ optionNumber: "OLD" })
+    expect(source.productionEntries.find((row) => row._id === `dispatch-new-production:${suffix}`))
+      .toMatchObject({ optionNumber: "NEW" })
+    await repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 2,
+    })
+    await repository.recordProductionEntry({
+      jobCardNumber,
+      machineNumber: secondMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { jcNo: jobCardNumber, partCode: dispatchItemUid, setupNo: "1" },
+      productionDate: "2026-10-01",
+      quantityGood: 3,
+      quantityRejected: 0,
+      sourceId: `dispatch-more-new-production:${suffix}`,
+    })
+    await planning.recordRouteChange({
+      jobCardNumber,
+      newRouteCode: "THIRD",
+      organizationId,
+      reason: "Carry finished good through a second equivalent route change",
+      remainingSetups: [{ plan: false, quantity: 0, setupNumber: 1 }],
+    })
+    await repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 3,
+    })
+    const workspace = await repository.readJobCardWorkspace({ jobCardNumber, organizationId })
+    expect(workspace.events.filter((event) => event.eventType === "dispatch_approved"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ detail: "4 pcs · First partial shipment" }),
+        expect.objectContaining({ detail: "6 pcs" }),
+        expect.objectContaining({ detail: "2 pcs" }),
+        expect.objectContaining({ detail: "3 pcs" }),
+      ]))
+    await expect(repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 1,
+    })).rejects.toThrow("remain available for dispatch")
     await repository.reverseProductionEntry({
       actorUserId: null,
-      productionEntryId,
+      productionEntryId: production.id,
       reason: "Incorrect operator quantity",
     })
+    await expect(repository.recordDispatchApproval({
+      approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 1,
+    })).rejects.toThrow("below the quantity already dispatched")
 
     const result = await pool.query<{
       dispatch_events: string
+      dispatched_pieces: string
       outbox_events: string
+      payload_quantity_matches: string
       refresh_jobs: string
       reversal_reason: string
       reversed: boolean
@@ -1392,6 +1616,12 @@ describe("production and shop-floor workflows", () => {
         SELECT
           (SELECT count(*) FROM manufacturing.dispatch_approval_events
             WHERE source_payload->>'jobCardNumber' = $1) AS dispatch_events,
+          (SELECT COALESCE(sum(quantity), 0)::text
+           FROM manufacturing.dispatch_approval_events
+           WHERE source_payload->>'jobCardNumber' = $1) AS dispatched_pieces,
+          (SELECT count(*) FROM manufacturing.dispatch_approval_events
+           WHERE source_payload->>'jobCardNumber' = $1
+             AND (source_payload->>'quantity')::numeric = quantity) AS payload_quantity_matches,
           (SELECT reversed_at IS NOT NULL FROM manufacturing.production_entries
             WHERE id = $2) AS reversed,
           (SELECT reversal_reason FROM manufacturing.production_entries
@@ -1403,11 +1633,13 @@ describe("production and shop-floor workflows", () => {
             WHERE organization_id = $3
               AND topic = 'dashboard.refresh.requested') AS outbox_events
       `,
-      [firstJobCard, productionEntryId, organizationId]
+      [jobCardNumber, production.id, organizationId]
     )
-    expect(result.rows[0]).toEqual({
-      dispatch_events: "1",
+    expect({ ...result.rows[0], dispatched_pieces: Number(result.rows[0]?.dispatched_pieces) }).toEqual({
+      dispatch_events: "4",
+      dispatched_pieces: 15,
       outbox_events: "1",
+      payload_quantity_matches: "4",
       refresh_jobs: "1",
       reversal_reason: "Incorrect operator quantity",
       reversed: true,
@@ -1466,10 +1698,12 @@ describe("production and shop-floor workflows", () => {
       assetCategoryId: category.id, assetSubcategoryId: subcategory.id, assetNameId: name.id })
     await store.close()
     const code = item.typeCode
-    await pool.query(`INSERT INTO store.assets (organization_id,item_type_id,asset_code,identification_name,status,current_holder_type,current_holder_reference,current_holder_name)
+    await pool.query(`INSERT INTO store.assets (organization_id,item_type_id,asset_code,identification_name,status,current_holder_type,current_holder_reference,current_holder_name,accountable_store_id)
       SELECT $1,$2,$3||n::text,'Tool unit',CASE WHEN n=1 THEN 'ASSIGNED' ELSE 'AVAILABLE' END,
-        CASE WHEN n=1 THEN 'DEPARTMENT' ELSE 'STORE' END,'PPAC Conventional-01','PPAC Conventional-01'
-      FROM generate_series(1,5) n`, [organizationId,item.id,code])
+        CASE WHEN n=1 THEN 'DEPARTMENT' ELSE 'STORE' END,'PPAC Conventional-01','PPAC Conventional-01',accountable.id
+      FROM generate_series(1,5) n
+      JOIN store.accountable_stores accountable
+        ON accountable.organization_id = $1 AND accountable.kind = 'MAIN'`, [organizationId,item.id,code])
     await pool.query(`INSERT INTO manufacturing.operation_tooling (organization_id,operation_setup_id,tool_code,source_system,source_table,source_id)
       SELECT $1,setup.id,$2,'test','tooling',setup.id::text FROM manufacturing.operation_setups setup
       JOIN manufacturing.route_options route ON route.id=setup.route_option_id

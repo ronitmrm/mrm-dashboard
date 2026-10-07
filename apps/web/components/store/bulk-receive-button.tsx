@@ -115,6 +115,7 @@ export function BulkReceiveButton({
             {selection.orderNumber ? ` from ${selection.orderNumber}` : ""} will
             be received at their full remaining quantities into Main Store.
             Receipt details below apply to every selected line.
+            Add serial and installation details to each Unit ID after receiving.
           </>
         }
         title="Receive selected Purchase Order lines"
@@ -144,6 +145,9 @@ export function BulkReceiveButton({
             value={selection.purchaseOrderId}
           />
           <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              Each Unit ID warranty end is calculated after its Installation Date is recorded.
+            </p>
             <Field>
               <FieldLabel htmlFor="bulk-receipt-received-by">Received By</FieldLabel>
               <Input id="bulk-receipt-received-by" readOnly value={receivedBy} />
@@ -161,8 +165,20 @@ export function BulkReceiveButton({
               <Input id="bulk-receipt-bill-date" name="bill_date" type="date" />
             </Field>
             <Field>
+              <FieldLabel htmlFor="bulk-receipt-warranty-period">
+                Warranty Period in days (optional)
+              </FieldLabel>
+              <Input
+                id="bulk-receipt-warranty-period"
+                min="1"
+                name="warranty_period"
+                step="1"
+                type="number"
+              />
+            </Field>
+            <Field>
               <FieldLabel htmlFor="bulk-receipt-warranty">
-                Warranty / Guarantee Until (optional)
+                Supplier Guarantee Until (optional)
               </FieldLabel>
               <Input
                 id="bulk-receipt-warranty"

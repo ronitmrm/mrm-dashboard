@@ -43,6 +43,7 @@
     "./production-floors": "./src/production-floors.ts",
     "./production-breaks": "./src/production-breaks.ts",
     "./production-session-domain": "./src/production-session-domain.ts",
+    "./store-warranty": "./src/store-warranty.ts",
     "./recruitment-codes": "./src/recruitment-codes.ts",
     "./recruitment-domain": "./src/recruitment-domain.ts",
     "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",

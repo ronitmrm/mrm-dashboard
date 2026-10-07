@@ -73,6 +73,7 @@ import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { EmployeeDataRegister } from "@/components/hr/employee-data-register"
 import { EmployeeAssignmentHistory, ProbationEndReminders } from "@/components/hr/employee-lifecycle-registers"
 import {
   InterviewResultsWorkspace,
@@ -81,6 +82,7 @@ import {
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { OfferJoiningRegister } from "@/components/hr/offer-joining-register"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
+import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   MasterDataCsvDownloadButton,
@@ -90,7 +92,6 @@ import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
-import { recruitmentInterviewerOptions } from "@/lib/shared-employee-master"
 import {
   recruitmentMasterHref,
   type RecruitmentMasterKind,
@@ -100,6 +101,7 @@ type RecruitmentPanelProps = {
   masterControls: ReturnType<typeof hrMasterControls>
   canCreateJob: boolean
   canLogCandidateEvent: boolean
+  canEditTemplate: boolean
   canManageEmployees: boolean
   canViewOfferLetters: boolean
   canWrite: boolean
@@ -351,9 +353,12 @@ function TemplatePanel({
               "gender",
               "minimum_salary",
               "maximum_salary",
+              "shift_type",
+              "shift_start_time",
+              "shift_end_time",
               "role_responsibilities",
             ]}
-            fileName="job-template-master-template.csv"
+            fileName="job-description-template-master-template.csv"
           />
         }
         csvImportAction={
@@ -373,10 +378,10 @@ function TemplatePanel({
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
-          description="Create The Reusable Qualification And Salary Profile Used By Recruitment Openings."
+          description="Create The Reusable Job Description, Shift, Qualification, And Salary Profile Used By Recruitment Openings."
           panelId="postMasterPanel"
           masterView={activeView}
-          title="Job Requirement Template"
+          title="Job Description Template"
         >
           <CompanyWideMasterScope />
           <TextField
@@ -408,6 +413,17 @@ function TemplatePanel({
             name="maximum_salary"
             type="number"
           />
+          <Field>
+            <FieldLabel htmlFor="template-shift-type">Shift Type</FieldLabel>
+            <NativeSelect id="template-shift-type" name="shift_type" required>
+              <NativeSelectOption disabled value="">Select Shift Type</NativeSelectOption>
+              <NativeSelectOption value="Day">Day</NativeSelectOption>
+              <NativeSelectOption value="Night">Night</NativeSelectOption>
+              <NativeSelectOption value="Rotation">Rotation</NativeSelectOption>
+            </NativeSelect>
+          </Field>
+          <TextField label="Shift Start Time" name="shift_start_time" required type="time" />
+          <TextField label="Shift End Time" name="shift_end_time" required type="time" />
           <Field className="md:col-span-2 xl:col-span-3">
             <FieldLabel htmlFor="template-responsibilities">
               Role Responsibilities
@@ -779,6 +795,8 @@ function JobsPanel({
                 <TableHead>Job</TableHead>
                 <TableHead>Vacancy</TableHead>
                 <TableHead>Post</TableHead>
+                <TableHead>Job Description Template</TableHead>
+                <TableHead>Shift</TableHead>
                 <TableHead>Posted</TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Applicants</TableHead>
@@ -802,6 +820,14 @@ function JobsPanel({
                     <TableCell className="font-mono">
                       {row.postCode ?? "—"}
                     </TableCell>
+                    <TableCell className="font-mono" data-filter-value={row.requirementTemplateCode ?? "—"}>
+                      <JobTemplatePreviewLink code={row.requirementTemplateCode} />
+                    </TableCell>
+                    <TableCell>
+                      {row.shiftType
+                        ? `${row.shiftType}${row.shiftStartTime && row.shiftEndTime ? ` · ${row.shiftStartTime}–${row.shiftEndTime}` : ""}`
+                        : "—"}
+                    </TableCell>
                     <TableCell>{row.postDate}</TableCell>
                     <TableCell>{row.targetDate ?? "—"}</TableCell>
                     <TableCell>{row.applicantCount}</TableCell>
@@ -816,7 +842,7 @@ function JobsPanel({
                   </TableRow>
                 ))
               ) : (
-                <EmptyRow columns={8} label="No Job Posts Found." />
+                <EmptyRow columns={10} label="No Job Posts Found." />
               )}
             </TableBody>
  </OperationalTable>
@@ -1016,27 +1042,24 @@ function CandidateSearchPanel({
 function InterviewsPanel({
   canWrite,
   interviews,
-  posts,
   selectedAppointmentApplicationId,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "interviews" | "posts" | "selectedAppointmentApplicationId"
+  "canWrite" | "interviews" | "selectedAppointmentApplicationId"
 >) {
-  const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
     <>
       <InterviewScheduleBoard
         appointmentApplicationId={selectedAppointmentApplicationId}
         canWrite={canWrite}
         interviews={interviews}
-        interviewerOptions={interviewerOptions}
       />
       {canWrite ? <InterviewScheduleForm interviews={interviews} /> : null}
     </>
   )
 }
 
-export function RecruitmentPanel(props: RecruitmentPanelProps) {
+function RecruitmentPanelContent(props: RecruitmentPanelProps) {
   switch (props.panelId) {
     case "postMasterPanel":
       return (
@@ -1088,6 +1111,8 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           templates={props.templates}
         />
       )
+    case "employeeDataPanel":
+      return <EmployeeDataRegister assignments={props.employeeAssignments} canManage={props.canManageEmployees} />
     case "jobsPanel":
       return (
         <JobsPanel
@@ -1122,7 +1147,6 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         <InterviewsPanel
           canWrite={props.canWrite}
           interviews={props.interviews}
-          posts={props.posts}
           selectedAppointmentApplicationId={
             props.selectedAppointmentApplicationId
           }
@@ -1160,4 +1184,29 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
   }
+}
+
+export function RecruitmentPanel(props: RecruitmentPanelProps) {
+  const linkedCodes = new Set(
+    props.panelId === "jobsPanel"
+      ? props.jobs.map((row) => row.requirementTemplateCode)
+      : props.panelId === "interviewsPanel"
+        ? props.interviews.map((row) => row.requirementTemplateCode)
+        : props.posts.map((row) => row.requirementTemplateCode)
+  )
+  return (
+    <JobTemplatePreviewProvider
+      edit={props.canEditTemplate && props.panelId !== "interviewsPanel"
+        ? {
+            combinedRoles: props.combinedRoles,
+            masterView: props.masterView,
+            masters: props.masters,
+            panelId: props.panelId,
+          }
+        : undefined}
+      templates={props.templates.filter((row) => linkedCodes.has(row.templateCode))}
+    >
+      <RecruitmentPanelContent {...props} />
+    </JobTemplatePreviewProvider>
+  )
 }

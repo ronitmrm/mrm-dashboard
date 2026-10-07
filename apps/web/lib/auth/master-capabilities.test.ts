@@ -120,15 +120,32 @@ describe("independent master permissions", () => {
       { machineFamily: "D5", machineType: "Drilling" },
     ])
   })
-  it("keeps supplier contact details out of a category page and a price form's reference list", () => {
+  it("keeps supplier price references useful without exposing private item or supplier details", () => {
     const data = {
-      items: [],
+      items: [{
+        id: "item",
+        typeCode: "C002",
+        assetType: "CONSUMABLE",
+        assetCategory: "Cutting Insert",
+        assetCategoryId: "category",
+        assetSubcategory: "Turning Insert",
+        assetSubcategoryId: "subcategory",
+        assetName: "VCGT-16 0.8",
+        assetNameId: "asset-name",
+        makeModel: "Non Specific",
+        makeModelId: "make-model",
+        identificationName: "",
+        modelNumber: "private",
+        ratedLoad: "private",
+        unit: "No.",
+      }],
       itemDrawings: [],
       locations: [],
       masters: {
         categories: [{ id: "category", name: "Tools" }],
         subcategories: [],
         assetNames: [],
+        makeModels: [],
       },
       portfolioProducts: [],
       suppliers: [
@@ -167,9 +184,19 @@ describe("independent master permissions", () => {
     expect(
       selectedStoreMasterData(data, "SUPPLIER_PRICE", false).suppliers
     ).toEqual([])
+    const itemReferences = selectedStoreMasterData(data, "SUPPLIER_PRICE", true).items
+    expect(itemReferences[0]).toMatchObject({
+      assetCategory: "Cutting Insert",
+      assetSubcategory: "Turning Insert",
+      assetName: "VCGT-16 0.8",
+      makeModel: "Non Specific",
+    })
+    expect(itemReferences[0]?.modelNumber).toBeNull()
+    expect(itemReferences[0]?.ratedLoad).toBeNull()
+    expect(selectedStoreMasterData(data, "SUPPLIER_PRICE", false).items).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(80)
+    expect(scopedMasters).toHaveLength(81)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")

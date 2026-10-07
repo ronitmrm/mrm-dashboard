@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import type { MaintenanceWorkPhotoTarget } from "./maintenance-work-photos"
 
 import {
   repositoryPool,
@@ -64,6 +65,43 @@ export type MachineBreakdownRow = {
   status: string
   taskKey: string
   workDone: string | null
+}
+
+export type CompletedMaintenanceReport = {
+  id: string
+  equipmentCode: string
+  equipmentName: string | null
+  productionUnit: string
+  maintenance: string
+  taskType: string
+  dueOn: string | null
+  startedAt: string | null
+  completedAt: string
+  completedBy: string | null
+  completedByEmployeeCode: string | null
+  workDone: string | null
+  remark: string | null
+  changedItems: string[]
+  checklistSteps: Array<{
+    id: string | null
+    sequence: number
+    prompt: string
+    inputType: string
+    value: string
+    remark: string | null
+    result: string | null
+  }>
+  legacyHistory: boolean
+  breakdownReason: string | null
+  nextDueOn: string | null
+  result: string | null
+  photoTarget: MaintenanceWorkPhotoTarget | null
+}
+
+function savedChangedItems(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : []
 }
 
 function requiredText(value: unknown, label: string) {
@@ -516,6 +554,204 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
   return {
     close,
 
+    async getCompletedMachineMaintenanceReport(
+      organizationId: string,
+      taskId: string
+    ): Promise<CompletedMaintenanceReport | null> {
+      const record = await pool.query<{
+        id: string
+        taskKey: string
+        equipmentCode: string
+        productionUnit: string
+        maintenance: string
+        taskType: string
+        dueOn: string
+        startedAt: string | null
+        completedAt: string
+        completedBy: string | null
+        completedByEmployeeCode: string | null
+        workDone: string | null
+        remark: string | null
+        changedItems: unknown
+        legacyHistory: boolean
+        breakdownReason: string | null
+        nextDueOn: string | null
+        result: string | null
+      }>(
+        `SELECT task.id, task.task_key AS "taskKey",
+            machine.machine_number AS "equipmentCode", floor.name AS "productionUnit",
+            definition.name AS maintenance, task.task_type AS "taskType",
+            task.due_on::text AS "dueOn", task.started_at::text AS "startedAt",
+            task.completed_at::text AS "completedAt",
+            COALESCE(NULLIF(task.legacy_completer, ''), technician.name,
+              task.source_payload->>'completedBy') AS "completedBy",
+            task.source_payload->>'completedByEmployeeCode' AS "completedByEmployeeCode",
+            task.source_payload->>'workDone' AS "workDone",
+            task.source_payload->>'remark' AS remark,
+            COALESCE(task.source_payload->'changedItems', '[]'::jsonb) AS "changedItems",
+            COALESCE(task.source_payload->>'legacyHistory' = 'true', false) AS "legacyHistory",
+            task.source_payload->>'breakdownReason' AS "breakdownReason",
+            task.source_payload->>'nextDueDate' AS "nextDueOn",
+            task.source_payload->>'result' AS result
+          FROM maintenance.tasks task
+          JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
+            AND schedule.organization_id = task.organization_id
+          JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+            AND definition.organization_id = task.organization_id
+          JOIN catalog.machines machine ON machine.id = schedule.machine_id
+            AND machine.organization_id = task.organization_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          LEFT JOIN identity.users technician ON technician.id = task.completed_by_user_id
+          WHERE task.organization_id = $1 AND task.id = $2::uuid
+            AND task.status = 'Completed'`,
+        [organizationId, taskId]
+      )
+      const row = record.rows[0]
+      if (!row) return null
+      const answers = await pool.query<CompletedMaintenanceReport["checklistSteps"][number]>(
+        `SELECT answer.id, item.sequence, lower(item.response_type) AS "inputType",
+            COALESCE(NULLIF(answer.source_payload->>'itemPrompt', ''), item.prompt) AS prompt,
+            CASE WHEN lower(item.response_type) = 'checkbox' THEN
+              CASE lower(COALESCE(answer.source_payload->>'value', answer.response_text,
+                answer.response_boolean::text, ''))
+                WHEN 'true' THEN 'Yes' WHEN 'yes' THEN 'Yes'
+                WHEN 'false' THEN 'No' WHEN 'no' THEN 'No'
+                ELSE COALESCE(answer.source_payload->>'value', answer.response_text, '') END
+              ELSE COALESCE(answer.source_payload->>'value', answer.response_text,
+                answer.response_numeric::text, '') END AS value,
+            COALESCE(answer.notes, answer.source_payload->>'notes') AS remark,
+            CASE WHEN answer.passed THEN 'Passed'
+              WHEN answer.passed = false THEN 'Failed' ELSE NULL END AS result
+          FROM maintenance.task_results answer
+          JOIN maintenance.checklist_items item ON item.id = answer.checklist_item_id
+            AND item.organization_id = answer.organization_id
+          WHERE answer.organization_id = $1 AND answer.task_id = $2::uuid
+          ORDER BY item.sequence, answer.id`,
+        [organizationId, taskId]
+      )
+      return {
+        ...row,
+        equipmentName: null,
+        changedItems: savedChangedItems(row.changedItems),
+        checklistSteps: answers.rows,
+        photoTarget: { kind: "machine", taskKey: row.taskKey },
+      }
+    },
+
+    async getCompletedAssetMaintenanceReport(
+      organizationId: string,
+      recordId: string
+    ): Promise<CompletedMaintenanceReport | null> {
+      const record = await pool.query<{
+        id: string
+        equipmentCode: string
+        equipmentName: string
+        productionUnit: string
+        maintenance: string
+        taskType: string
+        dueOn: string | null
+        startedAt: string | null
+        completedAt: string
+        completedBy: string | null
+        completedByEmployeeCode: string | null
+        workDone: string | null
+        remark: string | null
+        changedItems: unknown
+        savedSteps: unknown
+        definitionId: string | null
+        scheduleId: string | null
+        breakdownId: string | null
+        legacyHistory: boolean
+        breakdownReason: string | null
+        nextDueOn: string | null
+        result: string | null
+      }>(
+        `SELECT record.id, asset.asset_code AS "equipmentCode",
+            item.asset_name AS "equipmentName",
+            COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
+            COALESCE(definition.name, schedule.name,
+              CASE WHEN record.maintenance_type = 'BREAKDOWN'
+                THEN 'Breakdown maintenance' ELSE 'Asset maintenance' END) AS maintenance,
+            CASE WHEN record.maintenance_type = 'BREAKDOWN'
+              THEN 'Breakdown' ELSE 'Planned' END AS "taskType",
+            task.due_on::text AS "dueOn",
+            COALESCE(task.started_at, breakdown.started_at)::text AS "startedAt",
+            COALESCE(task.completed_at, breakdown.completed_at,
+              record.completed_on::timestamptz)::text AS "completedAt",
+            record.completed_by AS "completedBy",
+            COALESCE(task.completed_by_employee_code,
+              breakdown.completed_by_employee_code) AS "completedByEmployeeCode",
+            COALESCE(task.work_done, breakdown.work_done, record.work_done) AS "workDone",
+            breakdown.remark,
+            COALESCE(task.changed_items, breakdown.changed_items, '[]'::jsonb) AS "changedItems",
+            COALESCE(task.checklist_steps, '[]'::jsonb) AS "savedSteps",
+            schedule.definition_id AS "definitionId", task.schedule_id AS "scheduleId",
+            breakdown.id AS "breakdownId",
+            (task.id IS NULL AND breakdown.id IS NULL) AS "legacyHistory",
+            breakdown.reason_name AS "breakdownReason",
+            record.next_due_on::text AS "nextDueOn", record.result
+          FROM store.asset_maintenance_records record
+          JOIN store.assets asset ON asset.id = record.asset_id
+            AND asset.organization_id = record.organization_id
+          JOIN store.item_types item ON item.id = asset.item_type_id
+          LEFT JOIN store.locations location ON location.id = asset.current_location_id
+          LEFT JOIN store.asset_maintenance_schedules schedule ON schedule.id = record.schedule_id
+          LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          LEFT JOIN store.asset_maintenance_tasks task ON task.maintenance_record_id = record.id
+          LEFT JOIN store.asset_breakdowns breakdown ON breakdown.maintenance_record_id = record.id
+          WHERE record.organization_id = $1 AND record.id = $2::uuid
+            AND record.maintenance_type IN ('MAINTENANCE', 'BREAKDOWN')`,
+        [organizationId, recordId]
+      )
+      const row = record.rows[0]
+      if (!row) return null
+      const savedSteps = Array.isArray(row.savedSteps) ? row.savedSteps as Array<{
+        sequence?: unknown
+        prompt?: unknown
+        value?: unknown
+        remark?: unknown
+      }> : []
+      const prompts = row.definitionId && savedSteps.length
+        ? await pool.query<{ sequence: number; prompt: string; inputType: string }>(
+          `SELECT item.sequence, item.prompt, lower(item.response_type) AS "inputType"
+            FROM maintenance.checklist_items item
+            JOIN maintenance.definitions checklist ON checklist.id = item.definition_id
+            JOIN maintenance.definitions definition ON definition.id = $1::uuid
+              AND definition.organization_id = checklist.organization_id
+            WHERE lower(checklist.code) = lower(COALESCE(definition.checklist_code,
+              definition.code))`,
+          [row.definitionId]
+        )
+        : null
+      const promptBySequence = new Map(prompts?.rows.map((item) => [item.sequence, item]))
+      const checklistSteps = savedSteps.flatMap((step) => {
+        const sequence = Number(step.sequence)
+        if (!Number.isInteger(sequence)) return []
+        const value = typeof step.value === "string" ? step.value : ""
+        return [{
+          id: null,
+          sequence,
+          prompt: typeof step.prompt === "string" && step.prompt.trim()
+            ? step.prompt : promptBySequence.get(sequence)?.prompt ?? `Checklist point ${sequence}`,
+          inputType: promptBySequence.get(sequence)?.inputType ?? (value === "Yes" || value === "No" ? "checkbox" : "text"),
+          value,
+          remark: typeof step.remark === "string" ? step.remark : null,
+          result: value === "Yes" ? "Passed" : value === "No" ? "Failed" : null,
+        }]
+      }).sort((left, right) => left.sequence - right.sequence)
+      const photoTarget: MaintenanceWorkPhotoTarget | null = row.breakdownId
+        ? { kind: "asset-breakdown", breakdownId: row.breakdownId }
+        : row.scheduleId && row.dueOn
+          ? { kind: "asset-planned", scheduleId: row.scheduleId, dueOn: row.dueOn }
+          : null
+      return {
+        ...row,
+        changedItems: savedChangedItems(row.changedItems),
+        checklistSteps,
+        photoTarget,
+      }
+    },
+
     async listCompletedMachineMaintenance(organizationId: string) {
       const result = await pool.query<{
         id: string
@@ -551,6 +787,105 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         ORDER BY task.completed_at DESC, machine.machine_number, task.id
       `,
         [organizationId]
+      )
+      return result.rows
+    },
+
+    async listCompletedAssetMaintenance(organizationId: string) {
+      const result = await pool.query<{
+        assetCode: string
+        assetName: string
+        completedAt: string
+        completedBy: string
+        dueOn: string | null
+        id: string
+        legacyHistory: boolean
+        maintenance: string
+        productionUnit: string
+        taskType: string
+        workDone: string | null
+      }>(
+        `SELECT record.id, asset.asset_code AS "assetCode",
+            item.asset_name AS "assetName",
+            COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
+            COALESCE(definition.name, schedule.name,
+              CASE WHEN record.maintenance_type = 'BREAKDOWN'
+                THEN 'Breakdown maintenance' ELSE 'Asset maintenance' END) AS maintenance,
+            CASE WHEN record.maintenance_type = 'BREAKDOWN'
+              THEN 'Breakdown' ELSE 'Planned' END AS "taskType",
+            task.due_on::text AS "dueOn",
+            COALESCE(task.completed_at, breakdown.completed_at,
+              record.completed_on::timestamptz)::text AS "completedAt",
+            record.completed_by AS "completedBy", record.work_done AS "workDone",
+            (task.id IS NULL AND breakdown.id IS NULL) AS "legacyHistory"
+          FROM store.asset_maintenance_records record
+          JOIN store.assets asset ON asset.id = record.asset_id
+          JOIN store.item_types item ON item.id = asset.item_type_id
+          LEFT JOIN store.locations location ON location.id = asset.current_location_id
+          LEFT JOIN store.asset_maintenance_schedules schedule ON schedule.id = record.schedule_id
+          LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+          LEFT JOIN store.asset_maintenance_tasks task ON task.maintenance_record_id = record.id
+          LEFT JOIN store.asset_breakdowns breakdown ON breakdown.maintenance_record_id = record.id
+          WHERE record.organization_id = $1
+            AND record.maintenance_type IN ('MAINTENANCE', 'BREAKDOWN')
+          ORDER BY record.completed_on DESC, record.id`,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async listAssetMaintenancePlan(organizationId: string, from: string, to: string) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+        throw new Error("Select a valid date range.")
+      const result = await pool.query<{
+        assetCode: string
+        assetName: string
+        completedAt: string | null
+        dueOn: string
+        id: string
+        reportId: string | null
+        maintenance: string
+        productionUnit: string
+        status: string
+      }>(
+        `WITH planned AS (
+          SELECT task.id::text, task.schedule_id, task.due_on,
+            task.status, task.completed_at, task.maintenance_record_id
+          FROM store.asset_maintenance_tasks task
+          WHERE task.organization_id = $1
+            AND task.due_on >= $2::date
+            AND task.due_on <= $3::date
+          UNION ALL
+          SELECT 'schedule-' || schedule.id::text, schedule.id,
+            schedule.next_due_on, 'Planned', NULL::timestamptz, NULL::uuid
+          FROM store.asset_maintenance_schedules schedule
+          JOIN store.assets active_asset ON active_asset.id = schedule.asset_id
+          WHERE schedule.organization_id = $1 AND schedule.active
+            AND schedule.schedule_type = 'MAINTENANCE'
+            AND active_asset.status NOT IN ('SCRAPPED', 'LOST')
+            AND schedule.next_due_on >= $2::date
+            AND schedule.next_due_on <= $3::date
+            AND NOT EXISTS (
+              SELECT 1 FROM store.asset_maintenance_tasks task
+              WHERE task.schedule_id = schedule.id
+                AND task.due_on = schedule.next_due_on
+            )
+        )
+        SELECT planned.id, asset.asset_code AS "assetCode",
+          planned.maintenance_record_id AS "reportId",
+          item.asset_name AS "assetName",
+          COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
+          COALESCE(definition.name, schedule.name) AS maintenance,
+          planned.due_on::text AS "dueOn", planned.status,
+          planned.completed_at::text AS "completedAt"
+        FROM planned
+        JOIN store.asset_maintenance_schedules schedule ON schedule.id = planned.schedule_id
+        JOIN store.assets asset ON asset.id = schedule.asset_id
+        JOIN store.item_types item ON item.id = asset.item_type_id
+        LEFT JOIN store.locations location ON location.id = asset.current_location_id
+        LEFT JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+        ORDER BY planned.due_on, asset.asset_code, planned.id`,
+        [organizationId, from, to]
       )
       return result.rows
     },
@@ -607,9 +942,9 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async listMachineMaintenancePlan(organizationId: string, month: string) {
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
-        throw new Error("Select a valid month.")
+    async listMachineMaintenancePlan(organizationId: string, from: string, to: string) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
+        throw new Error("Select a valid date range.")
       const result = await pool.query<{
         id: string
         machineId: string
@@ -626,7 +961,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
             task.due_on, task.status, task.completed_at
           FROM maintenance.tasks task
           WHERE task.organization_id = $1 AND lower(task.task_type) = 'planned'
-            AND task.due_on >= $2::date AND task.due_on < $2::date + interval '1 month'
+            AND task.due_on >= $2::date AND task.due_on <= $3::date
             AND task.status <> 'Cancelled'
             AND task.source_payload->>'legacyHistory' IS DISTINCT FROM 'true'
           UNION ALL
@@ -638,7 +973,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           WHERE schedule.organization_id = $1 AND schedule.active AND definition.active
             AND lower(definition.code) <> 'breakdown'
             AND schedule.next_due_on >= $2::date
-            AND schedule.next_due_on < $2::date + interval '1 month'
+            AND schedule.next_due_on <= $3::date
             AND NOT EXISTS (
               SELECT 1 FROM maintenance.tasks task
               WHERE task.organization_id = $1 AND task.machine_schedule_id = schedule.id
@@ -659,7 +994,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
         ORDER BY planned.due_on, machine.machine_number, planned.id
       `,
-        [organizationId, `${month}-01`]
+        [organizationId, from, to]
       )
       return result.rows
     },

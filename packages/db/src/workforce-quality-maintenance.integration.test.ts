@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createMaintenanceRepository } from "./maintenance"
+import { createMaintenanceReportCorrectionRepository } from "./maintenance-report-corrections"
 import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
 import { migrateDatabase } from "./migrate"
 import { createQualityRepository } from "./quality"
@@ -19,6 +20,7 @@ const planning = createDashboardPlanningRepository({ connectionString })
 const workforce = createWorkforceRepository({ connectionString })
 const quality = createQualityRepository({ connectionString })
 const maintenance = createMaintenanceRepository({ connectionString })
+const corrections = createMaintenanceReportCorrectionRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 const employeeCode = `EMP-${suffix}`
 const trainerCode = `TRN-${suffix}`
@@ -99,6 +101,7 @@ afterAll(async () => {
   await workforce.close()
   await quality.close()
   await maintenance.close()
+  await corrections.close()
   await planning.close()
   await pool.end()
 })
@@ -896,7 +899,7 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
     expect((await maintenance.listCompletedMachineMaintenance(organizationId))
       .filter((row) => row.machineNumber === machineNumber)).toHaveLength(0)
-    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-07-01", "2026-07-31"))
       .filter((row) => row.machineNumber === machineNumber)).toHaveLength(1)
     const draft = await maintenance.completeTask({
       startedAt: "2026-07-21T09:30:00.000Z",
@@ -999,11 +1002,11 @@ describe("workforce, quality, and maintenance workflows", () => {
       .filter((row) => row.machineNumber === machineNumber)
     expect(completed.map((row) => row.taskType).sort()).toEqual(["Breakdown", "Planned"])
     expect(completed.find((row) => row.id === task.id)?.workDone).toBe("Serviced")
-    const julyPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-07"))
+    const julyPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-07-01", "2026-07-31"))
       .filter((row) => row.machineNumber === machineNumber)
     expect(julyPlan).toHaveLength(1)
     expect(julyPlan[0]).toMatchObject({ dueOn: "2026-07-21", status: "Completed" })
-    const augustPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-08"))
+    const augustPlan = (await maintenance.listMachineMaintenancePlan(organizationId, "2026-08-01", "2026-08-31"))
       .filter((row) => row.machineNumber === machineNumber)
     expect(augustPlan).toHaveLength(1)
     expect(augustPlan[0]).toMatchObject({ dueOn: "2026-08-20", status: "Planned" })
@@ -1052,5 +1055,38 @@ describe("workforce, quality, and maintenance workflows", () => {
       planned_tasks: "1",
       schedule_id: schedule.id,
     })
+    const actor = await pool.query<{ id: string }>(
+      "INSERT INTO identity.users (name, email) VALUES ('Maintenance editor', $1) RETURNING id",
+      [`maintenance-editor-${suffix}@example.test`]
+    )
+    const report = await maintenance.getCompletedMachineMaintenanceReport(organizationId, task.id)
+    expect(report?.checklistSteps[0]?.value).toBe("Yes")
+    await corrections.correct({
+      actorUserId: actor.rows[0]!.id,
+      changedItems: ["Bearing"],
+      checklistSteps: report!.checklistSteps.map((step, index) => ({
+        id: step.id, sequence: step.sequence,
+        value: index === 0 ? "No" : step.value,
+        remark: index === 0 ? "Rechecked" : step.remark ?? "",
+      })),
+      kind: "machine",
+      organizationId,
+      reason: "Corrected after review",
+      remark: "",
+      reportId: task.id,
+      workDone: "Serviced and bearing replaced",
+    })
+    const corrected = await maintenance.getCompletedMachineMaintenanceReport(organizationId, task.id)
+    expect(corrected).toMatchObject({
+      changedItems: ["Bearing"],
+      workDone: "Serviced and bearing replaced",
+      checklistSteps: [{ value: "No", remark: "Rechecked", result: "Failed" }, { value: "Good" }],
+    })
+    expect((await corrections.listHistory({
+      completedAt: corrected!.completedAt, kind: "machine", organizationId,
+      photoTarget: null, reportId: task.id,
+    }))[0]).toMatchObject({ reason: "Corrected after review", actor: "Maintenance editor" })
+    expect((await maintenance.listMachineMaintenancePlan(organizationId, "2026-08-01", "2026-08-31"))
+      .find((row) => row.machineNumber === machineNumber)?.dueOn).toBe("2026-08-20")
   })
 })

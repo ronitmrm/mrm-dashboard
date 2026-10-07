@@ -35,6 +35,65 @@ function payloadRecord(value: unknown): JsonRecord {
     : {}
 }
 
+type LiveSetupStage = {
+  machine: string
+  stage: string
+  active: boolean
+  payload: JsonRecord
+  completedAt: string | null
+}
+
+function setupKey(row: JsonRecord, machine: string) {
+  return [
+    row.jcNo ?? row.jobCardNumber,
+    row.partCode,
+    row.optionNumber,
+    row.setupNo,
+    machine,
+  ].map((value) => text(value).toLowerCase()).join("|")
+}
+
+function withLiveSetupStages(
+  dashboard: JsonRecord,
+  states: LiveSetupStage[] | null
+) {
+  if (!states?.length) return dashboard
+  const control = payloadRecord(dashboard.productionControl)
+  if (!Array.isArray(control.machinePlanDetailRows)) return dashboard
+  const byKey = new Map(states.map((state) => [
+    setupKey(state.payload, state.machine), state,
+  ]))
+  const rows = control.machinePlanDetailRows.map((value) => {
+    const row = payloadRecord(value)
+    const state = byKey.get(setupKey(row, text(row.machine)))
+    if (!state) return value
+    const runningStatus = state.stage === "item_complete"
+      ? "Complete"
+      : state.stage === "operator_started"
+        ? "Running"
+        : state.stage === "setting" || state.stage === "quality_approval"
+          ? "Setup complete"
+          : row.runningStatus
+    return {
+      ...row,
+      shopFloorStage: state.stage,
+      shopFloorStageLabel: text(state.payload.stageLabel) || state.stage,
+      shopFloorDoneBy: text(state.payload.doneBy),
+      shopFloorWorker: text(state.payload.worker),
+      shopFloorRemark: text(state.payload.remark),
+      shopFloorUpdatedAt: text(state.completedAt ?? state.payload.completedAt),
+      runningStatus,
+      ...(state.active && state.stage !== "item_complete"
+        ? { shopFloorTaskReady: true, shopFloorTaskBlocker: "" }
+        : {}),
+    }
+  })
+  return {
+    ...dashboard,
+    productionControl: { ...control, machinePlanDetailRows: rows },
+  }
+}
+
 function correctionKeyFor(table: string, row: JsonRecord, payload: JsonRecord) {
   const values =
     table === "dataEntries"
@@ -138,6 +197,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               sum(receipt.quantity_kg) AS received_kg
             FROM manufacturing.raw_material_receipts receipt
             WHERE receipt.organization_id = $1
+              AND receipt.reversed_at IS NULL
             GROUP BY lower(receipt.job_card_number)
           ), rejection_totals AS (
             SELECT rejection.work_order_id,
@@ -266,13 +326,16 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       organizationId: string,
       filters: JsonRecord = {},
       productionFloorCode: ProductionFloorCode = defaultProductionFloorCode,
-      knownVersion?: number
+      knownVersion?: number,
+      knownLiveVersion?: string
     ) {
       const result = await pool.query<{
         attempts: number | null
         completed_at: Date | null
         job_status: string | null
         last_error: string | null
+        live_setup_stages: LiveSetupStage[] | null
+        live_version: string | null
         model_created_at: Date | null
         model_payload: JsonRecord | null
         model_source_watermark: JsonRecord | null
@@ -282,57 +345,66 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       }>(
         `
           SELECT model.version::text AS model_version,
-            model.payload AS model_payload,
-            model.source_watermark AS model_source_watermark,
+            CASE
+              WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
+                AND (live.version IS NULL OR live.version = $4::text)
+                THEN NULL
+              ELSE COALESCE(
+                model.payload #> ARRAY['productionFloorSnapshots', $2::text],
+                CASE WHEN $2 = 'conventional'
+                  THEN model.payload - 'productionFloorSnapshots'
+                  ELSE '{}'::jsonb END
+              )
+            END AS model_payload,
+            CASE
+              WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
+                AND (live.version IS NULL OR live.version = $4::text)
+                THEN NULL
+              ELSE jsonb_build_object(
+                'changedAt', model.source_watermark -> 'changedAt',
+                'sourceCoverage', COALESCE(
+                  model.payload #> ARRAY[
+                    'productionFloorSnapshots', $2::text, 'sourceCoverage'
+                  ],
+                  CASE WHEN $2 = 'conventional'
+                    THEN model.payload -> 'sourceCoverage'
+                    ELSE NULL END,
+                  '{}'::jsonb
+                )
+              )
+            END AS model_source_watermark,
             model.created_at AS model_created_at,
+            live.stages AS live_setup_stages,
+            live.version AS live_version,
             job.status AS job_status, job.attempts,
             job.created_at AS requested_at, job.started_at,
             job.completed_at, job.last_error
           FROM (SELECT $1::uuid AS organization_id) requested
           LEFT JOIN LATERAL (
-            SELECT version,
-              CASE
-                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
-                  THEN NULL
-                ELSE COALESCE(
-                  jsonb_extract_path(
-                    payload,
-                    'productionFloorSnapshots',
-                    $2::text
-                  ),
-                  CASE
-                    WHEN $2 = 'conventional'
-                      THEN payload - 'productionFloorSnapshots'
-                    ELSE '{}'::jsonb
-                  END
-                )
-              END AS payload,
-              CASE
-                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
-                  THEN NULL
-                ELSE jsonb_build_object(
-                  'changedAt', source_watermark -> 'changedAt',
-                  'sourceCoverage', COALESCE(
-                    payload #> ARRAY[
-                      'productionFloorSnapshots',
-                      $2::text,
-                      'sourceCoverage'
-                    ],
-                    CASE
-                      WHEN $2 = 'conventional'
-                        THEN payload -> 'sourceCoverage'
-                      ELSE NULL
-                    END,
-                    '{}'::jsonb
-                  )
-                )
-              END AS source_watermark,
-              created_at
+            SELECT version, payload, source_watermark, created_at
             FROM derived.dashboard_read_models
             WHERE organization_id = requested.organization_id
             ORDER BY version DESC
             LIMIT 1
           ) model ON true
+          LEFT JOIN LATERAL (
+            SELECT max(state.updated_at)::text AS version,
+              jsonb_agg(jsonb_build_object(
+                'machine', machine.machine_number,
+                'stage', state.stage,
+                'active', state.active,
+                'payload', state.source_payload,
+                'completedAt', state.completed_at
+              )) AS stages
+            FROM manufacturing.shop_floor_setup_state state
+            JOIN catalog.machines machine ON machine.id = state.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            WHERE state.organization_id = requested.organization_id
+              AND floor.code = $2
+              AND state.updated_at > model.created_at
+              AND state.source_payload IS NOT NULL
+          ) live ON true
           LEFT JOIN LATERAL (
             SELECT status, attempts, created_at, started_at,
               completed_at, last_error
@@ -344,7 +416,8 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             LIMIT 1
           ) job ON true
         `,
-        [organizationId, productionFloorCode, knownVersion ?? null]
+        [organizationId, productionFloorCode, knownVersion ?? null,
+          knownLiveVersion ?? null]
       )
       const row = result.rows[0]!
       const version = row.model_version ? Number(row.model_version) : null
@@ -356,7 +429,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         dashboard:
           row.model_version && row.model_payload && row.model_created_at
             ? {
-                ...row.model_payload,
+                ...withLiveSetupStages(row.model_payload, row.live_setup_stages),
                 filters,
                 productionFloorCode,
                 readModelVersion: version,
@@ -372,6 +445,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           knownVersion !== undefined &&
           row.model_version === String(knownVersion) &&
           row.model_payload === null,
+        liveVersion: row.live_version,
         productionFloorCode,
         status: row.job_status
           ? {

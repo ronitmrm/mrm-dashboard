@@ -27,6 +27,14 @@ export function machineMasterImportPayload(
   return {
     ...row,
     machineName: importedField(row, ["machineSize", "machineName"]),
+    machineModelNo: importedField(row, ["machineModelNo"]),
+    machineMake: importedField(row, ["machineMake"]),
+    machineLoad: importedField(row, ["machineLoad"]),
+    machineSerialNo: importedField(row, ["machineSerialNo"]),
+    machineInstallationDate: importedField(row, ["machineInstallationDate"]),
+    machineStabiliserNo: importedField(row, ["machineStabiliserNo"]),
+    machineMcbNo: importedField(row, ["machineMcbNo"]),
+    machineWarranty: importedField(row, ["machineWarranty"]),
     productionFloorCode:
       parseProductionFloorCode(requestedProductionFloor) ??
       text(requestedProductionFloor),

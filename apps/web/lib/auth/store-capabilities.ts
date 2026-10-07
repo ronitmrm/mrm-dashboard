@@ -42,6 +42,12 @@ export const storePageAccess = [
     storeCapabilities.overview
   ),
   page(
+    "store.request_item",
+    "Request Item",
+    "/store/requests/new",
+    { read: "store.requests.submit" }
+  ),
+  page(
     "store.requests",
     "Requests & Issues",
     "/store/requests",

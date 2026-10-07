@@ -1,16 +1,22 @@
 type StoreStockItem = {
   availableStock: string
+  companyOnHand: string
   id: string
+  storageLocations: string
   trackingMode: "CONSUMABLE" | "SERIALIZED"
   typeCode: string
   unit: string
 }
 
 type StoreStockPhysicalUnit = {
+  accountableStoreName: string
   assetCode: string
   holderName: string | null
+  holderReference: string | null
   holderType: string
   id: string
+  isAvailableToIssueHere: boolean
+  isMainAccountable: boolean
   itemTypeId: string
   locationName: string | null
   status: string
@@ -36,7 +42,10 @@ export function storeStockRows<T extends StoreStockItem>(
           actionItem: true,
           assignedQuantity: "—",
           availableQuantity: `${item.availableStock} ${item.unit}`,
+          companyQuantity: `${item.companyOnHand} ${item.unit}`,
           displayedCode: item.typeCode,
+          locationHolder:
+            Number(item.availableStock) > 0 ? item.storageLocations : "—",
           physicalUnit: null,
           rowKey: item.id,
           unitId: null,
@@ -52,8 +61,10 @@ export function storeStockRows<T extends StoreStockItem>(
         assignedQuantity: String(
           units.filter((unit) => unit.status === "ASSIGNED").length
         ),
-        availableQuantity: "—",
+        availableQuantity: item.availableStock,
+        companyQuantity: item.companyOnHand,
         displayedCode: item.typeCode,
+        locationHolder: "—",
         physicalUnit: null,
         rowKey: item.id,
         unitId: null,
@@ -62,12 +73,14 @@ export function storeStockRows<T extends StoreStockItem>(
         ...item,
         actionItem: false,
         assignedQuantity: physicalUnit.status === "ASSIGNED" ? "1" : "0",
-        availableQuantity:
-          physicalUnit.status === "AVAILABLE" &&
-          physicalUnit.holderType === "STORE"
-            ? "1"
-            : "0",
+        availableQuantity: physicalUnit.isAvailableToIssueHere ? "1" : "0",
+        companyQuantity: ["SCRAPPED", "LOST"].includes(physicalUnit.status) ? "0" : "1",
         displayedCode: physicalUnit.assetCode,
+        locationHolder:
+          physicalUnit.locationName ??
+          physicalUnit.holderName ??
+          physicalUnit.holderReference ??
+          "—",
         physicalUnit,
         rowKey: physicalUnit.id,
         unitId: physicalUnit.assetCode,

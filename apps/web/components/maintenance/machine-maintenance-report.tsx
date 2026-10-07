@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { createMaintenanceRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -16,70 +18,93 @@ import { StandardState } from "@workspace/ui/components/standard-state"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { formatIstDate, formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { formatIstDate, istDateValue } from "@/lib/date-time"
 import {
   machineMaintenancePlan,
   machineMaintenanceRegister,
 } from "@/lib/iso-documents"
+import { planDateRange } from "@/lib/plan-date-range"
 
-async function readReportRows(isPlan: boolean, month: string) {
+async function readReportRows(isPlan: boolean, from: string, to: string) {
   const repository = createMaintenanceRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   return (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     if (isPlan) {
-      return (
-        await repository.listMachineMaintenancePlan(organizationId, month)
-      ).map((row) => ({
-        ...row,
-        taskType: "Planned",
-        completedBy: null,
-        workDone: null,
-        legacyHistory: false,
-      }))
+      const [machines, assets] = await Promise.all([
+        repository.listMachineMaintenancePlan(organizationId, from, to),
+        repository.listAssetMaintenancePlan(organizationId, from, to),
+      ])
+      return [
+        ...machines.map((row) => ({ ...row, assetCode: null as string | null,
+          assetName: null as string | null, taskType: "Planned",
+          reportKind: "machine" as const,
+          reportId: row.status === "Completed" ? row.id : null,
+          completedBy: null, workDone: null, legacyHistory: false })),
+        ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
+          assetCode: row.assetCode, taskType: "Planned",
+          reportKind: "asset" as const, reportId: row.reportId,
+          completedBy: null, workDone: null, legacyHistory: false })),
+      ].sort((left, right) => left.dueOn.localeCompare(right.dueOn) ||
+        (left.machineNumber ?? left.assetCode ?? "").localeCompare(right.machineNumber ?? right.assetCode ?? ""))
     }
-    return (
-      await repository.listCompletedMachineMaintenance(organizationId)
-    ).map((row) => ({
-      ...row,
-      status: "Completed",
-    }))
+    const [machines, assets] = await Promise.all([
+      repository.listCompletedMachineMaintenance(organizationId),
+      repository.listCompletedAssetMaintenance(organizationId),
+    ])
+    return [
+      ...machines.map((row) => ({ ...row, assetCode: null as string | null,
+        assetName: null as string | null, status: "Completed",
+        reportKind: "machine" as const, reportId: row.id })),
+      ...assets.map((row) => ({ ...row, machineNumber: null as string | null,
+        status: "Completed",
+        reportKind: "asset" as const, reportId: row.id })),
+    ].sort((left, right) => right.completedAt.localeCompare(left.completedAt))
   })().finally(() => repository.close())
 }
 
 export async function MachineMaintenanceReport({
   mode,
+  from: requestedFrom,
+  to: requestedTo,
   month: requestedMonth,
 }: {
   mode: "completed" | "plan"
+  from?: string
+  to?: string
   month?: string
 }) {
   const document =
     mode === "plan" ? machineMaintenancePlan : machineMaintenanceRegister
   await requireCapability("maintenance.workspace.read", document.href)
-  const month =
-    requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)
-      ? requestedMonth
-      : istDateValue().slice(0, 7)
-  const rows = await readReportRows(mode === "plan", month)
-  return <MachineMaintenanceReportView mode={mode} month={month} rows={rows} />
+  const { from, to } = planDateRange(requestedFrom, requestedTo, requestedMonth)
+  const rows = await readReportRows(mode === "plan", from, to)
+  return <MachineMaintenanceReportView mode={mode} from={from} to={to} rows={rows} />
 }
 
 export function MachineMaintenanceReportView({
   mode,
-  month,
+  from,
+  to,
   rows,
 }: {
   mode: "completed" | "plan"
-  month: string
+  from: string
+  to: string
   rows: Awaited<ReturnType<typeof readReportRows>>
 }) {
   const isPlan = mode === "plan"
   const document = isPlan ? machineMaintenancePlan : machineMaintenanceRegister
-  const machines = new Set(
-    rows.map((row) => `${row.productionUnit}|${row.machineNumber}`)
+  const equipment = new Set(
+    rows.map((row) => row.machineNumber ?? row.assetCode)
   ).size
+  const today = istDateValue()
+  const pending = rows.filter((row) => row.status !== "Completed").length
+  const overdue = rows.filter((row) =>
+    row.status !== "Completed" && row.dueOn !== null && row.dueOn < today
+  ).length
+  const completed = rows.filter((row) => row.status === "Completed").length
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -87,19 +112,30 @@ export function MachineMaintenanceReportView({
         title={document.title}
         description={
           isPlan
-            ? "Saved maintenance due dates for the whole month, across all production units. Completed planned work stays in its due month."
-            : "Completed planned maintenance and breakdown repairs across all production units. One row per completed job."
+            ? "Saved machine and asset maintenance due dates. Completed planned work stays on its original due date."
+            : "Completed machine and asset planned maintenance and breakdown repairs. One row per completed job."
         }
       />
       {isPlan ? (
         <form action={document.href} className="flex flex-wrap items-end gap-3">
           <div className="grid gap-2">
-            <Label htmlFor="maintenance-month">Plan month</Label>
+            <Label htmlFor="maintenance-from">From</Label>
             <Input
-              id="maintenance-month"
-              name="month"
-              type="month"
-              defaultValue={month}
+              id="maintenance-from"
+              name="from"
+              type="date"
+              defaultValue={from}
+              required
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="maintenance-to">To</Label>
+            <Input
+              id="maintenance-to"
+              name="to"
+              type="date"
+              min={from}
+              defaultValue={to}
               required
             />
           </div>
@@ -107,35 +143,40 @@ export function MachineMaintenanceReportView({
         </form>
       ) : null}
       <MetricSummary
-        scope={`${isPlan ? month : "All completed work"} · before table filters`}
-        items={[
+        scope={`${isPlan ? `${formatIstDate(from)} – ${formatIstDate(to)}` : "All completed work"} · before table filters`}
+        items={isPlan ? [
+          { label: "Scheduled Jobs", value: rows.length, tone: "information" },
+          { label: "Awaiting Maintenance", value: pending, tone: "warning" },
+          { label: "Overdue", value: overdue, tone: "danger" },
+          { label: "Completed", value: completed, tone: "positive" },
+        ] : [
           {
-            label: isPlan ? "Planned Jobs" : "Completed Jobs",
+            label: "Completed Jobs",
             value: rows.length,
             tone: "information",
           },
-          { label: "Machines", value: machines, tone: "information" },
+          { label: "Machines / Assets", value: equipment, tone: "information" },
         ]}
       />
       <OperationalTable
-        filterStorageKey={`iso-machine-maintenance-${mode}`}
+        filterStorageKey={`iso-maintenance-${mode}`}
         containerClassName="rounded-md border"
         toolbarStart={
           <span className="font-medium">
-            {isPlan ? "Monthly Plan" : "Completed Maintenance"}
+            {isPlan ? "Maintenance Plan" : "Completed Maintenance"}
           </span>
         }
       >
         <TableHeader>
           <TableRow>
-            <TableHead>{isPlan ? "Planned Date" : "Completed At"}</TableHead>
-            <TableHead>Machine</TableHead>
-            <TableHead>Production Unit</TableHead>
+            <TableHead>{isPlan ? "Planned Date" : "Completed On"}</TableHead>
+            <TableHead>Machine No. / Asset Code</TableHead>
+            <TableHead>Production Unit / Location</TableHead>
             <TableHead>Maintenance</TableHead>
             {isPlan ? (
               <>
                 <TableHead>Status</TableHead>
-                <TableHead>Completed At</TableHead>
+                <TableHead>Completed On</TableHead>
               </>
             ) : (
               <>
@@ -144,19 +185,16 @@ export function MachineMaintenanceReportView({
                 <TableHead>Work Done</TableHead>
               </>
             )}
+            <TableHead>Report / Checklist</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow key={`${row.reportKind}-${row.id}`}>
               <TableCell className="whitespace-nowrap">
-                {isPlan
-                  ? formatIstDate(row.dueOn)
-                  : row.legacyHistory
-                    ? formatIstDate(row.completedAt)
-                    : formatIstDateTime(row.completedAt)}
+                {formatIstDate(isPlan ? row.dueOn : row.completedAt)}
               </TableCell>
-              <TableCell>{row.machineNumber}</TableCell>
+              <TableCell>{row.machineNumber ?? row.assetCode}</TableCell>
               <TableCell>{row.productionUnit}</TableCell>
               <TableCell>{row.maintenance}</TableCell>
               {isPlan ? (
@@ -164,7 +202,7 @@ export function MachineMaintenanceReportView({
                   <TableCell>
                     <StatusBadge value={row.status} />
                   </TableCell>
-                  <TableCell>{formatIstDateTime(row.completedAt)}</TableCell>
+                  <TableCell>{formatIstDate(row.completedAt)}</TableCell>
                 </>
               ) : (
                 <>
@@ -175,20 +213,27 @@ export function MachineMaintenanceReportView({
                   </TableCell>
                 </>
               )}
+              <TableCell>
+                {row.reportId ? (
+                  <Link className="text-primary underline underline-offset-4" href={`/iso-document/machine-maintenance-report/${row.reportKind}/${row.reportId}`}>
+                    Open report
+                  </Link>
+                ) : "-"}
+              </TableCell>
             </TableRow>
           ))}
           {!rows.length ? (
             <TableRow>
-              <TableCell colSpan={isPlan ? 6 : 7}>
+              <TableCell colSpan={isPlan ? 7 : 8}>
                 <StandardState
                   title={
                     isPlan
-                      ? "No maintenance planned for this month"
-                      : "No completed machine maintenance"
+                      ? "No maintenance planned for this date range"
+                      : "No completed maintenance"
                   }
                   description={
                     isPlan
-                      ? "Saved maintenance due dates in the selected month will appear here."
+                      ? "Saved maintenance due dates in the selected date range will appear here."
                       : "Completed planned jobs and breakdown repairs will appear here automatically."
                   }
                 />

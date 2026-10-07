@@ -34,8 +34,11 @@ export async function GET(request: Request) {
           "Minimum Salary": row.minimumSalary,
           "Maximum Salary": row.maximumSalary,
           "Role Responsibilities": row.roleResponsibilities,
+          "Shift Type": row.shiftType,
+          "Shift Start Time": row.shiftStartTime,
+          "Shift End Time": row.shiftEndTime,
         })),
-        "job-template-master.csv"
+        "job-description-template-master.csv"
       )
     }
     const masters = await repository.listMasters(organizationId)

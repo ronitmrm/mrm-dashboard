@@ -21,6 +21,7 @@ import {
   Activity,
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Ban,
   CalendarDays,
@@ -47,6 +48,7 @@ import {
 
 import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import type { MaintenanceRequestRow } from "@workspace/db"
+import type { MaintenanceWorkPhotoTarget } from "@workspace/db"
 import { rawMaterialRejectionBalance } from "@workspace/db/rejection-domain"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -61,6 +63,7 @@ import {
 import { Empty } from "@workspace/ui/components/empty"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import {
   Dialog,
   DialogContent,
@@ -170,6 +173,8 @@ import {
   type ExternalOperationalEntryOption,
 } from "@/lib/operational-entry-navigation"
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
+import { formatRmInwardDate } from "@/lib/rm-inward-date"
+import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -203,7 +208,7 @@ import {
   maintenanceDowntimeReasonRows,
   maintenanceMasterRowsForMachineAssignment,
 } from "@/lib/maintenance-schedule-options"
-import { plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
+import { mechanicalWorkRowsForDate, plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "@/lib/maintenance-work-list"
 import { MachineStoreAssets } from "@/components/machine-store-assets"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -261,8 +266,13 @@ import {
 import { useTheme } from "@/components/theme-provider"
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
 import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
+import {
+  MaintenanceWorkPhotos,
+  type MaintenanceWorkPhotosHandle,
+} from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
+import { RouteChangeTargetPicker, type RouteChangeTargetMode } from "@/components/route-change-target-picker"
 import {
   PlannerDecisionWorkspace,
   type PlannerDecisionAction,
@@ -441,10 +451,14 @@ const storeMasterCsvColumns = {
     "asset_subcategory",
     "asset_type",
     "identification_name",
+    "make_model",
     "minimum_stock",
+    "model_number",
+    "rated_load",
     "unit",
   ],
   LOCATION: ["location_code", "location_name", "location_type"],
+  MAKE_MODEL: ["make_model"],
   SUBCATEGORY: ["asset_category", "asset_subcategory_name"],
   SUPPLIER: [
     "supplier_name",
@@ -661,6 +675,22 @@ const dataEntrySpecs: DataEntrySpec[] = [
         name: "location",
         label: "Machine Location Within Unit",
         required: true,
+      },
+      { name: "machineModelNo", label: "Machine Model No." },
+      { name: "machineMake", label: "Machine Make" },
+      { name: "machineLoad", label: "Machine Load", placeholder: "e.g. 12 kW" },
+      { name: "machineSerialNo", label: "Machine Serial No." },
+      {
+        name: "machineInstallationDate",
+        label: "Machine Installation Date",
+        type: "date",
+      },
+      { name: "machineStabiliserNo", label: "Machine Stabiliser No." },
+      { name: "machineMcbNo", label: "Machine MCB No." },
+      {
+        name: "machineWarranty",
+        label: "Machine Warranty",
+        placeholder: "e.g. 12 months or 2027-09-20",
       },
       {
         name: "status",
@@ -3772,7 +3802,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
     [floorPayloads]
   )
   const pending = rows.filter(
-    (row) => displayValue(row.status) === "Pending"
+    (row) => displayValue(row.status) !== "Dispatched"
   ).length
   const dispatched = rows.filter(
     (row) => displayValue(row.status) === "Dispatched"
@@ -3868,7 +3898,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                       Current Probable Dispatch Date
                     </TableHead>
                     <TableHead className="min-w-28">Status</TableHead>
-                    <TableHead className="min-w-36">Dispatched Date</TableHead>
+                    <TableHead className="min-w-36">Latest Dispatch Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3922,7 +3952,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                           )}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge value={row.status} />
+                          <StatusBadge value={row.status} tone={row.status === "Partially dispatched" ? "information" : undefined} />
                         </TableCell>
                         <TableCell>
                           {displayValue(row.dispatchedDate)}
@@ -4020,6 +4050,12 @@ function PlannerDecisionConsole({
         ),
         parallelMachine: (
           <ParallelMachinePlannerForm
+            productionControl={productionControl}
+            submitAction={submitAction}
+          />
+        ),
+        earlyDownstream: (
+          <EarlyDownstreamPlannerForm
             productionControl={productionControl}
             submitAction={submitAction}
           />
@@ -4764,6 +4800,8 @@ function ParallelMachinePlannerForm({
   const [reason, setReason] = useState("")
   const [reviewReady, setReviewReady] = useState(false)
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
+  const [selectedTargetInterruptions, setSelectedTargetInterruptions] =
+    useState<Record<string, boolean>>({})
   const [queueAfterByRow, setQueueAfterByRow] = useState<
     Record<string, string>
   >({})
@@ -4820,13 +4858,6 @@ function ParallelMachinePlannerForm({
   )
   const targetMachineOptions = useMemo(() => {
     const assigned = new Set(assignedMachines.map(machineKey))
-    const occupied = new Set(
-      plannedRows
-        .filter(
-          (row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row)
-        )
-        .map((row) => machineKey(machineValue(row, "machine")))
-    )
     const unavailable = new Set(
       openMachineIssues(asArray(productionControl.machineConstraintRows)).map(
         (row) => machineKey(displayValue(row.machineNo || row.machine))
@@ -4838,15 +4869,32 @@ function ParallelMachinePlannerForm({
       sourceMachine: "",
     }).filter((machine) => {
       const key = machineKey(machine)
-      return !assigned.has(key) && !occupied.has(key) && !unavailable.has(key)
+      return !assigned.has(key) && !unavailable.has(key)
     })
   }, [
     assignedMachines,
     machineRows,
-    plannedRows,
     productionControl.machineConstraintRows,
     selectedRows,
   ])
+  const occupiedMachineKeys = useMemo(
+    () =>
+      new Set(
+        plannedRows
+          .filter(parallelTargetRowIsActive)
+          .map((row) => machineKey(machineValue(row, "machine")))
+      ),
+    [plannedRows]
+  )
+  const targetOccupiedRows = useMemo(
+    () =>
+      plannedRows.filter(
+        (row) =>
+          machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
+          parallelTargetRowIsActive(row)
+      ),
+    [plannedRows, toMachine]
+  )
   const queueReviewGroups = useMemo(
     () =>
       machineConstraintQueueReview({
@@ -4881,11 +4929,15 @@ function ParallelMachinePlannerForm({
     )
   )
   const canSave =
-    canReview && reviewReady && queueReviewConfirmed && Boolean(reason.trim())
+    canReview && reviewReady && queueReviewConfirmed && Boolean(reason.trim()) &&
+    targetOccupiedRows.every(
+      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+    )
 
   function resetReview() {
     setReviewReady(false)
     setQueueReviewConfirmed(false)
+    setSelectedTargetInterruptions({})
     setQueueAfterByRow({})
   }
 
@@ -4903,6 +4955,11 @@ function ParallelMachinePlannerForm({
         target,
         setupNo,
         toMachine,
+        interruptedSetups: targetOccupiedRows.map((row) => ({
+          jcNo: jobCardNumber(row),
+          setupNo: displayValue(row.setupNo),
+          machine: machineValue(row, "machine"),
+        })),
         queuePlacements: proposedQueuePlacements,
         reason,
       })
@@ -4925,9 +4982,9 @@ function ParallelMachinePlannerForm({
       <div>
         <div className="text-sm font-medium">Add Parallel Machine Details</div>
         <div className="text-xs text-muted-foreground">
-          Keep the current machines running and add one idle compatible machine.
-          Planning will redistribute the setup quantity and recalculate later
-          dates.
+          Add a compatible machine. If it is running another setup, close that
+          production session and approve the stop first. Current setup machines
+          keep running while planning redistributes the remaining quantity.
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -4991,7 +5048,7 @@ function ParallelMachinePlannerForm({
             ))}
           </SearchableSelect>
         </Field>
-        <Field label="Idle Machine To Add">
+        <Field label="Machine To Add">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={toMachine}
@@ -5001,10 +5058,10 @@ function ParallelMachinePlannerForm({
               resetReview()
             }}
           >
-            <option value="">Select Idle Compatible Machine</option>
+            <option value="">Select Compatible Machine</option>
             {targetMachineOptions.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {option} {occupiedMachineKeys.has(machineKey(option)) ? "(active setup)" : "(idle)"}
               </option>
             ))}
           </SearchableSelect>
@@ -5012,7 +5069,7 @@ function ParallelMachinePlannerForm({
         <Field label="Reason">
           <Input
             value={reason}
-            placeholder="Planner approved use of idle capacity"
+            placeholder="Planner approved parallel capacity"
             required
             onChange={(event) => setReason(event.target.value)}
           />
@@ -5020,7 +5077,7 @@ function ParallelMachinePlannerForm({
       </div>
       {target && setupNo && !targetMachineOptions.length ? (
         <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          No idle compatible machine is currently available for this setup.
+          No compatible machine is currently available for this setup.
         </div>
       ) : null}
       {reviewReady ? (
@@ -5039,6 +5096,39 @@ function ParallelMachinePlannerForm({
             normal RM at Machine, Setting, Quality Approval, and Machine Start
             workflow.
           </div>
+          {targetOccupiedRows.length ? (
+            <div className="grid gap-2 rounded-md border bg-background p-3">
+              <div className="text-sm font-medium">Target Machine Active Setup</div>
+              <div className="text-xs text-muted-foreground">
+                Approve the stop. Close its Production Session first if one is open.
+              </div>
+              {targetOccupiedRows.map((row) => {
+                const rowKey = machineIssueRowKey(row)
+                return (
+                  <label key={rowKey} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedTargetInterruptions[rowKey])}
+                      onChange={(event) =>
+                        setSelectedTargetInterruptions((current) => ({
+                          ...current,
+                          [rowKey]: event.target.checked,
+                        }))
+                      }
+                    />
+                    Stop {itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)} on {toMachine}
+                  </label>
+                )
+              })}
+              {targetOccupiedRows.some(machineIssueRowNeedsProducedQty) ? (
+                <PlannerSessionSettlementNotice
+                  mode="close"
+                  rows={targetOccupiedRows.filter(machineIssueRowNeedsProducedQty)}
+                  sessionRows={asArray(productionControl.productionCardRows)}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <MachineConstraintQueueReviewPanel
             groups={queueReviewGroups}
             movableRows={selectedRows.slice(0, 1)}
@@ -5062,8 +5152,8 @@ function ParallelMachinePlannerForm({
               }
             />
             <span>
-              Queue reviewed; add this machine and recalculate the shared setup
-              quantity.
+              Queue reviewed; stop any approved target setup, add this machine,
+              and recalculate the shared setup quantity.
             </span>
           </label>
         </div>
@@ -5091,6 +5181,139 @@ function ParallelMachinePlannerForm({
     </form>
   )
 }
+function EarlyDownstreamPlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const machineRows = asArray(productionControl.machinePlanningRows)
+  const routeRows = asArray(productionControl.routeMasterRows)
+  const setupNumber = (value: unknown) => Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
+  const setupOneRows = plannedRows.filter((row) =>
+    setupNumber(row.setupNo) === 1 && !shopFloorItemIsFinished(row) &&
+    !plannedRows.some((other) => jobCardNumber(other) === jobCardNumber(row) && setupNumber(other.setupNo) === 2)
+  )
+  const [target, setTarget] = useState("")
+  const [toMachine, setToMachine] = useState("")
+  const [reason, setReason] = useState("")
+  const [reviewReady, setReviewReady] = useState(false)
+  const [queueReviewed, setQueueReviewed] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const selected = setupOneRows.find((row) => jobCardNumber(row) === target)
+  const setupTwo = routeRows.find((row) =>
+    machineKey(str(row.partNo)) === machineKey(itemCode(selected ?? {})) &&
+    str(row.optionNumber) === str(selected?.optionNumber) &&
+    setupNumber(row.setupNo) === 2
+  )
+  const upstreamMachines = new Set(setupOneRows
+    .filter((row) => jobCardNumber(row) === target)
+    .map((row) => machineKey(machineValue(row, "machine"))))
+  const occupied = new Set(plannedRows
+    .filter((row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row))
+    .map((row) => machineKey(machineValue(row, "machine"))))
+  const unavailable = new Set(openMachineIssues(asArray(productionControl.machineConstraintRows))
+    .map((row) => machineKey(displayValue(row.machineNo || row.machine))))
+  const machineOptions = setupTwo ? compatibleDestinationMachineOptions({
+    affectedRows: [{ routeMachine: setupTwo.machineUsed || setupTwo.machineFamily, machineType: setupTwo.machineType }],
+    machineRows,
+    sourceMachine: "",
+  }).filter((machine) => !upstreamMachines.has(machineKey(machine)) && !occupied.has(machineKey(machine)) && !unavailable.has(machineKey(machine))) : []
+  const targetQueue = plannedRows
+    .filter((row) => machineKey(machineValue(row, "machine")) === machineKey(toMachine) && !shopFloorItemIsFinished(row))
+    .sort(machinePlanDisplaySort)
+  const canReview = Boolean(target && setupTwo && machineOptions.includes(toMachine))
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!reviewReady) {
+      setReviewReady(true)
+      return
+    }
+    if (!canReview || !queueReviewed || !reason.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await submitAction("plan-override", {
+        assignmentMode: "early_downstream",
+        target,
+        setupNo: "2",
+        toMachine,
+        reason,
+      })
+      setTarget("")
+      setToMachine("")
+      setReason("")
+      setReviewReady(false)
+      setQueueReviewed(false)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+      <div>
+        <div className="text-sm font-medium">Plan Setup 2 Early</div>
+        <div className="text-xs text-muted-foreground">
+          Reserve a separate compatible machine while Setup 1 is planned. Setup 2 may produce before the normal WIP buffer, limited by recorded Setup 1 good pieces.
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+        <Field label="Job Card">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={target} required onChange={(event) => {
+            setTarget(event.target.value)
+            setToMachine("")
+            setReviewReady(false)
+            setQueueReviewed(false)
+          }}>
+            <option value="">Select Job Card</option>
+            {uniqueValues(setupOneRows.map(jobCardNumber)).map((jobCard) => <option key={jobCard} value={jobCard}>{jobCard}</option>)}
+          </SearchableSelect>
+        </Field>
+        <Field label="Setup 2 Machine">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={toMachine} required onChange={(event) => {
+            setToMachine(event.target.value)
+            setReviewReady(false)
+            setQueueReviewed(false)
+          }}>
+            <option value="">Select Compatible Machine</option>
+            {machineOptions.map((machine) => <option key={machine} value={machine}>{machine}</option>)}
+          </SearchableSelect>
+        </Field>
+        <Field label="Reason">
+          <Input value={reason} required placeholder="Why this Job Card needs early overlap" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      {target && !setupTwo ? <div className="text-sm text-muted-foreground">This Job Card has no selected Setup 2 route.</div> : null}
+      {target && setupTwo && !machineOptions.length ? <div className="text-sm text-muted-foreground">No idle compatible machine is available.</div> : null}
+      {reviewReady && canReview ? (
+        <div className="grid gap-3 rounded-md border bg-muted/15 p-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge value={`${target} · ${itemCode(selected ?? {})} · Setup 2`} />
+            <StatusBadge value={`Reserve ${toMachine}`} tone="information" />
+            <StatusBadge value="WIP pending" tone="warning" />
+          </div>
+          <div>Current {toMachine} queue: {targetQueue.length ? targetQueue.map((row) => `${jobCardNumber(row)} Setup ${displayValue(row.setupNo)} (${displayValue(row.setupPlannedDate || row.plannedDate)})`).join("; ") : "empty"}.</div>
+          <div>Setup preparation may proceed. Machine start waits for recorded Setup 1 WIP; output cannot exceed the remaining WIP.</div>
+          <label className="flex items-start gap-2 rounded-md border bg-background p-2">
+            <input className="mt-1" type="checkbox" checked={queueReviewed} onChange={(event) => setQueueReviewed(event.target.checked)} />
+            <span>I reviewed this machine queue and the early WIP condition.</span>
+          </label>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && (!queueReviewed || !reason.trim()))}>
+          <ArrowRight className="size-4" />
+          {reviewReady ? "Reserve Setup 2" : "Review Early Plan"}
+        </Button>
+        {reviewReady ? <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewed(false) }}>Recheck Inputs</Button> : null}
+      </div>
+    </form>
+  )
+}
+
 function PartMachineSwitchPlannerForm({
   productionControl,
   submitAction,
@@ -7503,6 +7726,8 @@ function RouteChangePlannerForm({
   const workOrders = asArray(productionControl.workOrders)
   const routeRows = asArray(productionControl.routeMasterRows)
   const [target, setTarget] = useState("")
+  const [targetMode, setTargetMode] = useState<RouteChangeTargetMode>("jobCard")
+  const [lookupPartCode, setLookupPartCode] = useState("")
   const [newOption, setNewOption] = useState("")
   const [reason, setReason] = useState("")
   const [setupPlan, setSetupPlan] = useState<
@@ -7510,12 +7735,10 @@ function RouteChangePlannerForm({
   >({})
 
   const selectedWorkOrder = useMemo(() => {
-    const targetKey = target.toLowerCase()
-    return workOrders.find(
-      (row) =>
-        str(row.jcNo).toLowerCase() === targetKey ||
-        str(row.partCode).toLowerCase() === targetKey
-    )
+    const targetKey = target.trim().toLowerCase()
+    return targetKey
+      ? workOrders.find((row) => str(row.jcNo).toLowerCase() === targetKey)
+      : undefined
   }, [target, workOrders])
   const partCode = str(selectedWorkOrder?.partCode)
   const defaultOrderQty = str(selectedWorkOrder?.orderPcs)
@@ -7575,6 +7798,12 @@ function RouteChangePlannerForm({
     }))
   }
 
+  function changeTarget(jobCard: string) {
+    setTarget(jobCard)
+    setNewOption("")
+    setSetupPlan({})
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const remainingSetups = selectedSetups.map((setup) => {
@@ -7592,7 +7821,7 @@ function RouteChangePlannerForm({
       }
     })
     await submitAction("route-change", {
-      target,
+      target: str(selectedWorkOrder?.jcNo),
       newOption: selectedOption,
       remainingSetups,
       reason,
@@ -7613,25 +7842,22 @@ function RouteChangePlannerForm({
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Job Card / Part">
-          <Input
-            list="route-change-targets"
-            value={target}
-            placeholder="Jc-003 Or M6"
-            required
-            onChange={(event) => setTarget(event.target.value)}
-          />
-          <datalist id="route-change-targets">
-            {workOrders.map((row) => (
-              <option
-                key={`${str(row.jcNo)}-${str(row.partCode)}`}
-                value={str(row.jcNo)}
-              >
-                {str(row.partCode)}
-              </option>
-            ))}
-          </datalist>
-        </Field>
+        <RouteChangeTargetPicker
+          mode={targetMode}
+          target={target}
+          partCode={lookupPartCode}
+          workOrders={workOrders}
+          onModeChange={(mode) => {
+            setTargetMode(mode)
+            setLookupPartCode("")
+            changeTarget("")
+          }}
+          onPartCodeChange={(code) => {
+            setLookupPartCode(code)
+            changeTarget("")
+          }}
+          onTargetChange={changeTarget}
+        />
         <Field label="New Route Option">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -7745,7 +7971,7 @@ function RouteChangePlannerForm({
       <Button
         className="w-fit"
         type="submit"
-        disabled={!target || !selectedOption || !selectedSetups.length}
+        disabled={!selectedWorkOrder || !selectedOption || !selectedSetups.length}
       >
         <Route className="size-4" />
         Save Route Change Plan
@@ -7761,11 +7987,14 @@ function JobCardDispatchActionForm({
   productionFloorCode,
 }: {
   approver?: EmployeeOption
-  jobCards: string[]
+  jobCards: ReturnType<typeof dispatchReadyJobCards>
   onSubmit: (body: Record<string, unknown>) => void | Promise<void>
   productionFloorCode: ProductionFloorCode
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedJobCard, setSelectedJobCard] = useState("")
+  const [quantity, setQuantity] = useState("")
+  const selected = jobCards.find((card) => card.jobCard === selectedJobCard)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -7775,11 +8004,14 @@ function JobCardDispatchActionForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        jcNo: String(formData.get("jcNo") ?? "").trim(),
+        jcNo: selectedJobCard,
         productionFloorCode,
+        quantity: Number(quantity),
         remark: String(formData.get("remark") ?? "").trim(),
       })
       form.reset()
+      setSelectedJobCard("")
+      setQuantity("")
     } catch {
       // submitAction already displays the error; preserve the selected Job Card.
     } finally {
@@ -7797,8 +8029,8 @@ function JobCardDispatchActionForm({
         <div>
           <div className="text-sm font-medium">Job Card Dispatch</div>
           <div className="text-xs text-muted-foreground">
-            Only Job Cards With Every Planned Setup Completed Are Ready For
-            Dispatch.
+            Dispatch recorded good pieces from the final setup. Production can
+            continue after a partial dispatch.
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -7807,18 +8039,36 @@ function JobCardDispatchActionForm({
               className="h-9 rounded-md border bg-background px-3 text-sm"
               name="jcNo"
               required
+              value={selectedJobCard}
+              onChange={(event) => {
+                const jobCard = event.target.value
+                setSelectedJobCard(jobCard)
+                setQuantity(String(jobCards.find((card) => card.jobCard === jobCard)?.availablePieces ?? ""))
+              }}
             >
               <option value="">
                 {jobCards.length
                   ? "Select Ready Job Card"
                   : "No Job Cards Ready For Dispatch"}
               </option>
-              {jobCards.map((jobCard) => (
-                <option key={jobCard} value={jobCard}>
-                  {jobCard}
+              {jobCards.map((card) => (
+                <option key={card.jobCard} value={card.jobCard}>
+                  {card.jobCard} · {card.availablePieces.toLocaleString("en-IN")} pcs available
                 </option>
               ))}
             </SearchableSelect>
+          </Field>
+          <Field label="Dispatch Quantity (pcs)">
+            <Input
+              type="number"
+              min="1"
+              max={selected?.availablePieces}
+              step="1"
+              required
+              disabled={!selected}
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+            />
           </Field>
           <Field label="Dispatched By">
             <Input
@@ -7832,6 +8082,9 @@ function JobCardDispatchActionForm({
             <Input name="remark" placeholder="Optional" />
           </Field>
         </div>
+        {selected ? <div className="text-xs text-muted-foreground">
+          {selected.finishedGoodPieces.toLocaleString("en-IN")} finished good · {selected.dispatchedPieces.toLocaleString("en-IN")} already dispatched · {selected.availablePieces.toLocaleString("en-IN")} available now
+        </div> : null}
         <Button
           className="w-fit"
           type="submit"
@@ -7863,17 +8116,13 @@ function JobCardsPanel({
 }) {
   const { signedInDispatchApprover } =
     useProductionEmployeeDirectory(productionFloorCode)
-  const plannedRows = useMemo(
-    () => asArray(productionControl.machinePlanDetailRows),
-    [productionControl.machinePlanDetailRows]
-  )
   const jobCardRows = useMemo(
     () => asArray(productionControl.jobCardStatusTiles),
     [productionControl.jobCardStatusTiles]
   )
   const readyJobCards = useMemo(
-    () => dispatchReadyJobCards(jobCardRows, plannedRows),
-    [jobCardRows, plannedRows]
+    () => dispatchReadyJobCards(jobCardRows),
+    [jobCardRows]
   )
 
   return (
@@ -10860,6 +11109,11 @@ function DataEntryPanel({
           />
         )
       ) : null}
+      {operationalTabs && bulkEntryType === "rm_inward" ? (
+        <p className="text-xs text-muted-foreground">
+          RM Inward CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
+        </p>
+      ) : null}
       {!selectionLocked || isImporting ? (
         <SectionCard width="wide">
           <CardHeader>
@@ -11034,6 +11288,9 @@ function OperationalTablesPanel({
     useState<DashboardPayload | null>(null)
   const [cancellationReason, setCancellationReason] = useState("")
   const [isCancelling, setIsCancelling] = useState(false)
+  const [receiptToDelete, setReceiptToDelete] = useState<DashboardPayload | null>(null)
+  const [receiptDeleteReason, setReceiptDeleteReason] = useState("")
+  const [isDeletingReceipt, setIsDeletingReceipt] = useState(false)
   const selectedSpec =
     specs.find((spec) => spec.entryType === entryType) ?? specs[0]
   const dataEntry = asRecord(payload.dataEntry)
@@ -11060,6 +11317,26 @@ function OperationalTablesPanel({
   const canCancelWorkOrders =
     selectedSpec?.entryType === "work_order" &&
     canUseOperationalEntry("work_order", "save", productionFloorCode)
+  const canDeleteReceipts =
+    selectedSpec?.entryType === "rm_inward" &&
+    canUseOperationalEntry("rm_inward", "delete", productionFloorCode)
+
+  async function deleteReceipt() {
+    const sourceId = receiptToDelete && masterTableRecordId(receiptToDelete)
+    if (!sourceId || !receiptDeleteReason.trim() || isDeletingReceipt) return
+    setIsDeletingReceipt(true)
+    try {
+      await submitAction(
+        "rm-inward-delete",
+        { productionFloorCode, sourceId, reason: receiptDeleteReason.trim() },
+        { throwOnError: true }
+      )
+      setReceiptToDelete(null)
+      setReceiptDeleteReason("")
+    } finally {
+      setIsDeletingReceipt(false)
+    }
+  }
 
   async function cancelWorkOrderLine() {
     if (!cancellationRow || !cancellationReason.trim() || isCancelling) return
@@ -11264,7 +11541,7 @@ function OperationalTablesPanel({
                         {column.label}
                       </TableHead>
                     ))}
-                    {canCancelWorkOrders ? (
+                    {canCancelWorkOrders || canDeleteReceipts ? (
                       <TableHead className="h-10 w-28 px-2 py-1 text-right text-xs">
                         Actions
                       </TableHead>
@@ -11309,6 +11586,23 @@ function OperationalTablesPanel({
                           >
                             <Ban className="size-3.5" />
                             Cancel Line
+                          </Button>
+                        </TableCell>
+                      ) : null}
+                      {canDeleteReceipts ? (
+                        <TableCell className="px-2 py-1.5 text-right align-top">
+                          <Button
+                            disabled={!masterTableRecordId(row)}
+                            onClick={() => {
+                              setReceiptToDelete(row)
+                              setReceiptDeleteReason("")
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
                           </Button>
                         </TableCell>
                       ) : null}
@@ -11383,6 +11677,55 @@ function OperationalTablesPanel({
             </Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+      <Dialog
+        open={canDeleteReceipts && Boolean(receiptToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingReceipt) {
+            setReceiptToDelete(null)
+            setReceiptDeleteReason("")
+          }
+        }}
+      >
+        <StandardDialogContent
+          title="Delete RM Inward Entry"
+          description="This receipt will leave active records and RM totals. Production history remains, and the deletion is recorded for audit."
+        >
+          <div className="grid gap-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              {receiptToDelete
+                ? `${displayValue(receiptToDelete.jcNo)} · ${formatRmInwardDate(receiptToDelete.rmInwardDate)} · ${displayValue(receiptToDelete.rmInwardKg)} kg`
+                : ""}
+            </div>
+            <Field label="Deletion Reason">
+              <Input
+                disabled={isDeletingReceipt}
+                onChange={(event) => setReceiptDeleteReason(event.target.value)}
+                placeholder="Entered by mistake"
+                required
+                value={receiptDeleteReason}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={isDeletingReceipt}
+              onClick={() => setReceiptToDelete(null)}
+              type="button"
+              variant="outline"
+            >
+              Keep Entry
+            </Button>
+            <Button
+              disabled={!receiptDeleteReason.trim() || isDeletingReceipt}
+              onClick={() => void deleteReceipt()}
+              type="button"
+              variant="destructive"
+            >
+              {isDeletingReceipt ? "Deleting..." : "Delete Entry"}
+            </Button>
+          </DialogFooter>
+        </StandardDialogContent>
       </Dialog>
     </section>
   )
@@ -11795,6 +12138,7 @@ function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {
+  if (key === "rmInwardDate") return formatRmInwardDate(row[key]) || "-"
   return displayValue(row[key])
 }
 
@@ -12311,6 +12655,29 @@ function MachineMasterPanel({
               value={selectedMachine.machineName}
             />
             <TileField
+              label="Machine Model No."
+              value={selectedMachine.machineModelNo}
+            />
+            <TileField label="Machine Make" value={selectedMachine.machineMake} />
+            <TileField label="Machine Load" value={selectedMachine.machineLoad} />
+            <TileField
+              label="Machine Serial No."
+              value={selectedMachine.machineSerialNo}
+            />
+            <TileField
+              label="Machine Installation Date"
+              value={selectedMachine.machineInstallationDate}
+            />
+            <TileField
+              label="Machine Stabiliser No."
+              value={selectedMachine.machineStabiliserNo}
+            />
+            <TileField label="Machine MCB No." value={selectedMachine.machineMcbNo} />
+            <TileField
+              label="Machine Warranty"
+              value={selectedMachine.machineWarranty}
+            />
+            <TileField
               label="Production Unit"
               value={machineProductionUnitLabel(selectedMachine)}
             />
@@ -12696,6 +13063,7 @@ function MaintenancePanel({
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
+  const [taskDate, setTaskDate] = useState(() => todayIsoDate())
   const [requestRows, setRequestRows] = useState<MaintenanceRequestRow[]>([])
   const [requestReloadKey, setRequestReloadKey] = useState(0)
   const [selectedBreakdownTaskKey, setSelectedBreakdownTaskKey] = useState("")
@@ -12703,10 +13071,29 @@ function MaintenancePanel({
   const [selectedAssetBreakdownId, setSelectedAssetBreakdownId] = useState("")
   const [assetBreakdownReloadKey, setAssetBreakdownReloadKey] = useState(0)
   const [assetBreakdownStatus, setAssetBreakdownStatus] = useState<ActionStatus>(null)
+  const [assetLoadError, setAssetLoadError] = useState("")
   const [assetBreakdownData, setAssetBreakdownData] = useState<{
     assets: Array<{ assetCode: string; assetName: string; holderName: string | null; itemCode: string; status: string }>
     breakdowns: Array<{ assetCode: string; id: string; reasonName: string; startedAt: string }>
-  }>({ assets: [], breakdowns: [] })
+    schedules: Array<{
+      assetCode: string
+      assetName: string
+      changedItems: string[]
+      checklistCode: string | null
+      checklistSteps: Array<{ sequence: number; value: string; remark: string }>
+      endedAt: string | null
+      frequencyDays: number
+      holderName: string | null
+      itemCode: string
+      maintenanceCode: string
+      maintenanceTitle: string
+      nextDueOn: string
+      scheduleId: string
+      startedAt: string | null
+      taskStatus: string | null
+      workDone: string | null
+    }>
+  }>({ assets: [], breakdowns: [], schedules: [] })
   const [changedItems, setChangedItems] = useState([""])
   const [selectedSchedule, setSelectedSchedule] =
     useState<DashboardPayload | null>(null)
@@ -12719,6 +13106,9 @@ function MaintenancePanel({
   const [workDone, setWorkDone] = useState("")
   const [checklistStatus, setChecklistStatus] = useState<ActionStatus>(null)
   const [isSavingChecklist, setIsSavingChecklist] = useState(false)
+  const [isCompletingBreakdown, setIsCompletingBreakdown] = useState(false)
+  const [breakdownCompletionStatus, setBreakdownCompletionStatus] = useState<ActionStatus>(null)
+  const workPhotosRef = useRef<MaintenanceWorkPhotosHandle>(null)
   const [savedProgress, setSavedProgress] = useState<
     Record<string, DashboardPayload>
   >({})
@@ -12772,10 +13162,35 @@ function MaintenancePanel({
       productionRunRows,
     ]
   )
-  const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming")
+  const assetDueRows = useMemo(() => assetBreakdownData.schedules.map((schedule) => ({
+    assetCode: schedule.assetCode,
+    assetScheduleId: schedule.scheduleId,
+    machineType: schedule.assetName,
+    location: schedule.holderName,
+    maintenanceCode: schedule.maintenanceCode,
+    maintenanceTitle: schedule.maintenanceTitle,
+    checklistCode: schedule.checklistCode,
+    checklistTitle: maintenanceChecklistTitle(activeChecklistRows, schedule.checklistCode),
+    checklistSteps: maintenanceChecklistRowsForCode(activeChecklistRows, schedule.checklistCode),
+    savedChecklistSteps: schedule.checklistSteps,
+    changedItems: schedule.changedItems,
+    startedAt: schedule.startedAt,
+    endedAt: schedule.endedAt,
+    workDone: schedule.workDone,
+    taskStatus: schedule.taskStatus,
+    frequencyDays: schedule.frequencyDays,
+    nextDueDate: schedule.nextDueOn,
+    status: schedule.nextDueOn < todayIsoDate() ? "Overdue"
+      : schedule.nextDueOn === todayIsoDate() ? "Due" : "Upcoming",
+  } as DashboardPayload)), [assetBreakdownData.schedules, activeChecklistRows])
+  const dueNowRows = [...dueRows, ...assetDueRows].filter((row) => row.status !== "Upcoming")
   const workRows = useMemo(
-    () => unifiedMechanicalWorkRows(dueRows, requestRows),
-    [dueRows, requestRows]
+    () => unifiedMechanicalWorkRows([...dueRows, ...assetDueRows], requestRows),
+    [dueRows, assetDueRows, requestRows]
+  )
+  const visibleWorkRows = useMemo(
+    () => mechanicalWorkRowsForDate(workRows, taskDate),
+    [workRows, taskDate]
   )
   const breakdownRows = completionRows.filter(
     (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
@@ -12826,27 +13241,27 @@ function MaintenancePanel({
     let active = true
     void fetch("/api/maintenance/assets", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Asset breakdowns could not be loaded.")
+        if (!response.ok) throw new Error("Asset maintenance could not be loaded.")
         return (await response.json()) as typeof assetBreakdownData
       })
-      .then((data) => { if (active) setAssetBreakdownData(data) })
+      .then((data) => { if (active) { setAssetBreakdownData(data); setAssetLoadError("") } })
       .catch((error: unknown) => {
-        if (active) setAssetBreakdownStatus({
-          tone: "destructive",
-          message: error instanceof Error ? error.message : "Asset breakdowns could not be loaded.",
-        })
+        if (active) {
+          const message = error instanceof Error ? error.message : "Asset maintenance could not be loaded."
+          setAssetLoadError(message)
+        }
       })
     return () => { active = false }
   }, [assetBreakdownReloadKey])
 
-  async function submitAssetBreakdown(body: Record<string, unknown>) {
+  async function submitAssetMaintenance(body: Record<string, unknown>) {
     const response = await fetch("/api/maintenance/assets", {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     })
     const result = (await response.json()) as { error?: string }
-    if (!response.ok) throw new Error(result.error || "Asset breakdown update failed.")
+    if (!response.ok) throw new Error(result.error || "Asset maintenance update failed.")
     setAssetBreakdownReloadKey((current) => current + 1)
   }
 
@@ -12864,6 +13279,7 @@ function MaintenancePanel({
   }
 
   function taskKeyForSchedule(row: DashboardPayload) {
+    if (row.assetScheduleId) return `asset|${row.assetScheduleId}|${row.nextDueDate}`
     const occurrence =
       maintenanceFrequencyBasis(row) === "running"
         ? isoDateValue(row.lastCompletedDate || row.firstDueDate) || "initial"
@@ -12871,11 +13287,16 @@ function MaintenancePanel({
     return maintenanceTaskId(row, occurrence)
   }
 
+  function photoTargetForSchedule(row: DashboardPayload): MaintenanceWorkPhotoTarget {
+    return row.assetScheduleId
+      ? { kind: "asset-planned", scheduleId: str(row.assetScheduleId), dueOn: str(row.nextDueDate) }
+      : { kind: "machine", taskKey: taskKeyForSchedule(row) }
+  }
+
   function openMaintenanceChecklist(row: DashboardPayload) {
     const taskKey = taskKeyForSchedule(row)
-    const draft =
-      savedProgress[taskKey] ??
-      completionRows.find(
+    const draft = row.assetScheduleId ? row :
+      savedProgress[taskKey] ?? completionRows.find(
         (task) =>
           str(task.taskId) === taskKey && str(task.status) === "In Progress"
       )
@@ -12883,7 +13304,7 @@ function MaintenancePanel({
       maintenanceChecklistStepsForSchedule(
         activeChecklistRows,
         str(row.checklistCode),
-        draft?.checklistSteps
+        row.assetScheduleId ? row.savedChecklistSteps : draft?.checklistSteps
       )
     )
     setStartedAt(
@@ -12957,7 +13378,7 @@ function MaintenancePanel({
     }
     if (
       complete &&
-      (!checklistSteps.length ||
+      ((!row.assetScheduleId && !checklistSteps.length) ||
         checklistSteps.some((step) => step.required && !step.value.trim()))
     ) {
       setChecklistStatus({
@@ -13017,12 +13438,39 @@ function MaintenancePanel({
     setIsSavingChecklist(true)
     setChecklistStatus(null)
     try {
-      await submitAction("data-entry", {
-        entryType: "maintenance_task",
-        key: dataEntryKey("maintenance_task", payload),
-        payload,
-      })
-      setSavedProgress((current) => ({ ...current, [payload.taskId]: payload }))
+      const save = async (finish: boolean) => {
+        if (row.assetScheduleId) {
+          await submitAssetMaintenance({
+            action: "save-planned",
+            scheduleId: row.assetScheduleId,
+            dueOn: row.nextDueDate,
+            startedAt: startIso,
+            endedAt: endIso || null,
+            status: finish ? "Completed" : "In Progress",
+            checklistSteps: checklistSteps.map(({ sequence, value, remark }) => ({ sequence, value, remark })),
+            changedItems,
+            workDone,
+          })
+          return
+        }
+        const savedPayload = finish ? payload : {
+          ...payload,
+          completedAt: "",
+          completedDate: "",
+          nextDueDate: "",
+          result: "In Progress",
+          status: "In Progress",
+        }
+        await submitAction("data-entry", {
+          entryType: "maintenance_task",
+          key: dataEntryKey("maintenance_task", savedPayload),
+          payload: savedPayload,
+        })
+        setSavedProgress((current) => ({ ...current, [payload.taskId]: savedPayload }))
+      }
+      if (!complete || workPhotosRef.current?.hasPending()) await save(false)
+      await workPhotosRef.current?.uploadPending()
+      if (complete) await save(true)
       setChecklistStatus({
         tone: "default",
         message: complete
@@ -13051,7 +13499,7 @@ function MaintenancePanel({
       const reason = downtimeReasons.find((candidate) => candidate.code === reasonCode)
       try {
         if (!startedAt || !reason) throw new Error("Select a valid start time and reason.")
-        await submitAssetBreakdown({
+        await submitAssetMaintenance({
           action: "start",
           assetCode: str(formData.get("assetCode")),
           reasonCode,
@@ -13119,42 +13567,57 @@ function MaintenancePanel({
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault()
+    if (isCompletingBreakdown) return
     const form = event.currentTarget
     const formData = new FormData(form)
     const taskId = str(formData.get("taskId"))
     const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
-    if (!completedAt) throw new Error("Select a valid completion time.")
     const performer = signedInPerformer
-    if (!performer) throw new Error("Your signed-in account needs a name to record maintenance work.")
     const payload = {
       breakdownAction: "complete",
       changedItems: changedItems.map(str).filter(Boolean),
       completedAt,
-      completedBy: performer.name,
-      completedByEmployeeCode: performer.code || null,
+      completedBy: performer?.name ?? "",
+      completedByEmployeeCode: performer?.code || null,
       maintenanceType: "Breakdown",
       result: "Completed",
       taskId,
       workDone: str(formData.get("workDone")),
       remark: str(formData.get("remark")),
     }
-    await submitAction("data-entry", {
-      entryType: "maintenance_task",
-      key: dataEntryKey("maintenance_task", payload),
-      payload,
-    })
-    setSelectedBreakdownTaskKey("")
-    setChangedItems([""])
+    setIsCompletingBreakdown(true)
+    setBreakdownCompletionStatus(null)
+    try {
+      if (!completedAt) throw new Error("Select a valid completion time.")
+      if (!performer) throw new Error("Your signed-in account needs a name to record maintenance work.")
+      if (!payload.workDone) throw new Error("Enter the work done.")
+      await workPhotosRef.current?.uploadPending()
+      await submitAction("data-entry", {
+        entryType: "maintenance_task",
+        key: dataEntryKey("maintenance_task", payload),
+        payload,
+      })
+      setSelectedBreakdownTaskKey("")
+      setChangedItems([""])
+    } catch (error) {
+      setBreakdownCompletionStatus({ tone: "destructive", message: error instanceof Error ? error.message : "Breakdown could not be completed." })
+    } finally {
+      setIsCompletingBreakdown(false)
+    }
   }
 
   async function completeAssetBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedAssetBreakdown) return
+    if (!selectedAssetBreakdown || isCompletingBreakdown) return
     const formData = new FormData(event.currentTarget)
+    setIsCompletingBreakdown(true)
+    setBreakdownCompletionStatus(null)
     try {
       const completedAt = istDateTimeInputToIso(str(formData.get("completedAt")))
       if (!completedAt) throw new Error("Select a valid completion time.")
-      await submitAssetBreakdown({
+      if (!str(formData.get("workDone"))) throw new Error("Enter the work done.")
+      await workPhotosRef.current?.uploadPending()
+      await submitAssetMaintenance({
         action: "complete",
         breakdownId: selectedAssetBreakdown.id,
         changedItems: changedItems.map(str).filter(Boolean),
@@ -13166,10 +13629,12 @@ function MaintenancePanel({
       setChangedItems([""])
       setAssetBreakdownStatus({ tone: "default", message: "Asset breakdown completed." })
     } catch (error) {
-      setAssetBreakdownStatus({
+      setBreakdownCompletionStatus({
         tone: "destructive",
         message: error instanceof Error ? error.message : "Asset breakdown could not be completed.",
       })
+    } finally {
+      setIsCompletingBreakdown(false)
     }
   }
 
@@ -13187,7 +13652,7 @@ function MaintenancePanel({
           <div>
             <h1 className="text-2xl font-semibold">Maintenance Checklist</h1>
             <p className="text-sm text-muted-foreground">
-              {displayValue(selectedSchedule.machineNo)} /{" "}
+              {displayValue(selectedSchedule.assetCode || selectedSchedule.machineNo)} /{" "}
               {displayValue(selectedSchedule.maintenanceCode)} -{" "}
               {displayValue(selectedSchedule.maintenanceTitle)}
             </p>
@@ -13203,8 +13668,9 @@ function MaintenancePanel({
         <SectionCard>
           <CardHeader>
             <CardTitle>
-              {displayValue(selectedSchedule.checklistCode)} -{" "}
-              {displayValue(selectedSchedule.checklistTitle)}
+              {checklistSteps.length
+                ? `${displayValue(selectedSchedule.checklistCode)} - ${displayValue(selectedSchedule.checklistTitle)}`
+                : "Maintenance work"}
             </CardTitle>
             <CardDescription>
               {answeredCount} of {checklistSteps.length} points answered. Save
@@ -13212,6 +13678,12 @@ function MaintenancePanel({
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <Tabs defaultValue="checklist">
+              <TabsList aria-label="Maintenance entry">
+                <TabsTrigger value="checklist">Checklist and work</TabsTrigger>
+                <TabsTrigger value="photos">Photos</TabsTrigger>
+              </TabsList>
+              <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="checklist">
             {checklistSteps.length ? (
               <OperationalTable containerClassName="max-h-[65vh] rounded-lg border">
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -13391,6 +13863,16 @@ function MaintenancePanel({
                 />
               </div>
             </div>
+              </TabsContent>
+              <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                <MaintenanceWorkPhotos
+                  disabled={isSavingChecklist}
+                  key={taskKeyForSchedule(selectedSchedule)}
+                  ref={workPhotosRef}
+                  target={photoTargetForSchedule(selectedSchedule)}
+                />
+              </TabsContent>
+            </Tabs>
             {checklistStatus ? (
               <AlertMessage tone={checklistStatus.tone}>
                 {checklistStatus.message}
@@ -13407,7 +13889,7 @@ function MaintenancePanel({
               </Button>
               <Button
                 type="button"
-                disabled={isSavingChecklist || !signedInPerformer || !checklistSteps.length}
+                disabled={isSavingChecklist || !signedInPerformer || (!selectedSchedule.assetScheduleId && !checklistSteps.length)}
                 onClick={() => void saveMaintenanceChecklist(true)}
               >
                 <CheckCircle2 className="size-4" /> Complete Maintenance
@@ -13422,13 +13904,14 @@ function MaintenancePanel({
   return (
     <section className="grid gap-4">
       <MetricSummary
-        scope="Machine maintenance and Mechanical request records across every production unit."
+        scope="Machine and asset maintenance with Mechanical requests across every production unit."
         items={[
           { label: "Machines", tone: "brand", value: machineRows.length },
+          { label: "Assets", tone: "brand", value: new Set(assetBreakdownData.schedules.map((row) => row.assetCode)).size },
           {
             label: "Saved schedules",
             tone: "positive",
-            value: scheduleRows.length,
+            value: scheduleRows.length + assetDueRows.length,
           },
           { label: "Due now", tone: "warning", value: dueNowRows.length },
           {
@@ -13448,21 +13931,55 @@ function MaintenancePanel({
       >
         <CardHeader>
           <CardTitle>Maintenance Pending Tasks</CardTitle>
+          <CardDescription>
+            {taskDate
+              ? `${taskDate === todayIsoDate() ? "Today's" : formatIstDate(`${taskDate}T00:00:00+05:30`)} tasks · ${visibleWorkRows.length} pending`
+              : `All dates · ${visibleWorkRows.length} pending`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label htmlFor="mechanical-task-date">Task date (IST)</Label>
+              <Input
+                className="w-44"
+                id="mechanical-task-date"
+                onChange={(event) => setTaskDate(event.target.value)}
+                type="date"
+                value={taskDate}
+              />
+            </div>
+            <Button
+              onClick={() => setTaskDate(todayIsoDate())}
+              type="button"
+              variant={taskDate === todayIsoDate() ? "default" : "outline"}
+            >
+              Today
+            </Button>
+            <Button
+              onClick={() => setTaskDate("")}
+              type="button"
+              variant={taskDate ? "outline" : "default"}
+            >
+              All dates
+            </Button>
+          </div>
+          {assetLoadError ? (
+            <AlertMessage tone="destructive">{assetLoadError}</AlertMessage>
+          ) : null}
           {checklistStatus ? (
             <AlertMessage tone={checklistStatus.tone}>
               {checklistStatus.message}
             </AlertMessage>
           ) : null}
-          {workRows.length ? (
+          {visibleWorkRows.length ? (
             <div className="min-w-0 rounded-lg border">
-              <OperationalTable>
+              <OperationalTable filterStorageKey={`mechanical-pending-tasks-${taskDate || "all"}`}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Work Type</TableHead>
                     <TableHead>Priority</TableHead>
-                    <TableHead>Machine / Location</TableHead>
+                    <TableHead>Machine / Asset / Location</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Relevant Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -13471,12 +13988,14 @@ function MaintenancePanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workRows.map((work) => {
+                  {visibleWorkRows.map((work) => {
                     const scheduled =
                       work.workType === "Scheduled"
                         ? (work.scheduled as DashboardPayload)
                         : null
-                    const taskState = scheduled
+                    const taskState = scheduled?.assetScheduleId
+                      ? { status: scheduled.taskStatus }
+                      : scheduled
                       ? savedProgress[taskKeyForSchedule(scheduled)] ??
                         completionRows.find(
                           (task) =>
@@ -13543,9 +14062,13 @@ function MaintenancePanel({
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={istDateValue(work.date)}>
                           <div>
-                            {work.date ? formatIstDateTime(work.date) : "—"}
+                            {work.date
+                              ? scheduled
+                                ? formatIstDate(work.date)
+                                : formatIstDateTime(work.date)
+                              : "—"}
                           </div>
                           {scheduled &&
                           displayValue(scheduled.dueProgress) !== "-" ? (
@@ -13615,8 +14138,9 @@ function MaintenancePanel({
             </div>
           ) : (
             <EmptyRowsMessage>
-              No Maintenance Schedules Saved Yet. Add Schedules From Machine
-              Master.
+              {taskDate
+                ? `No pending tasks for ${formatIstDate(`${taskDate}T00:00:00+05:30`)}. Choose another date or All dates.`
+                : "No pending maintenance tasks."}
             </EmptyRowsMessage>
           )}
         </CardContent>
@@ -13657,6 +14181,8 @@ function MaintenancePanel({
                       <Button
                         onClick={() => {
                           setSelectedBreakdownTaskKey(str(row.taskId))
+                          setSelectedAssetBreakdownId("")
+                          setBreakdownCompletionStatus(null)
                           setChangedItems([""])
                         }}
                         size="sm"
@@ -13677,7 +14203,7 @@ function MaintenancePanel({
                     <TableCell>{row.reasonName}</TableCell>
                     <TableCell><StatusBadge value="In Progress" /></TableCell>
                     <TableCell>
-                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
+                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setBreakdownCompletionStatus(null); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -13787,6 +14313,7 @@ function MaintenancePanel({
           <CardContent>
             <form
               className="grid gap-4"
+              noValidate
               onSubmit={completeBreakdownMaintenance}
             >
               <input
@@ -13794,6 +14321,12 @@ function MaintenancePanel({
                 type="hidden"
                 value={str(selectedBreakdown.taskId)}
               />
+              <Tabs defaultValue="work">
+                <TabsList aria-label="Breakdown completion entry">
+                  <TabsTrigger value="work">Work details</TabsTrigger>
+                  <TabsTrigger value="photos">Photos</TabsTrigger>
+                </TabsList>
+                <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="work">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Completed At">
                   <Input
@@ -13861,8 +14394,19 @@ function MaintenancePanel({
               <Field label="Remark">
                 <Input name="remark" />
               </Field>
+                </TabsContent>
+                <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                  <MaintenanceWorkPhotos
+                    disabled={isCompletingBreakdown}
+                    key={str(selectedBreakdown.taskId)}
+                    ref={workPhotosRef}
+                    target={{ kind: "machine", taskKey: str(selectedBreakdown.taskId) }}
+                  />
+                </TabsContent>
+              </Tabs>
+              {breakdownCompletionStatus ? <AlertMessage tone={breakdownCompletionStatus.tone}>{breakdownCompletionStatus.message}</AlertMessage> : null}
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInPerformer} type="submit">
+                <Button disabled={!signedInPerformer || isCompletingBreakdown} type="submit">
                   <CheckCircle2 className="size-4" /> Complete Breakdown
                 </Button>
                 <Button
@@ -13889,7 +14433,13 @@ function MaintenancePanel({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-4" onSubmit={completeAssetBreakdownMaintenance}>
+            <form className="grid gap-4" noValidate onSubmit={completeAssetBreakdownMaintenance}>
+              <Tabs defaultValue="work">
+                <TabsList aria-label="Asset breakdown completion entry">
+                  <TabsTrigger value="work">Work details</TabsTrigger>
+                  <TabsTrigger value="photos">Photos</TabsTrigger>
+                </TabsList>
+                <TabsContent className="grid gap-4 data-[state=inactive]:hidden" forceMount value="work">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Completed At">
                   <Input defaultValue={istDateTimeInputValue()} name="completedAt" required type="datetime-local" />
@@ -13911,8 +14461,19 @@ function MaintenancePanel({
                 <Button className="w-fit" onClick={() => setChangedItems((current) => [...current, ""])} size="sm" type="button" variant="outline"><Plus className="size-4" /> Add Item</Button>
               </div>
               <Field label="Remark"><Input name="remark" /></Field>
+                </TabsContent>
+                <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
+                  <MaintenanceWorkPhotos
+                    disabled={isCompletingBreakdown}
+                    key={selectedAssetBreakdown.id}
+                    ref={workPhotosRef}
+                    target={{ kind: "asset-breakdown", breakdownId: selectedAssetBreakdown.id }}
+                  />
+                </TabsContent>
+              </Tabs>
+              {breakdownCompletionStatus ? <AlertMessage tone={breakdownCompletionStatus.tone}>{breakdownCompletionStatus.message}</AlertMessage> : null}
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!signedInPerformer} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
+                <Button disabled={!signedInPerformer || isCompletingBreakdown} type="submit"><CheckCircle2 className="size-4" /> Complete Breakdown</Button>
                 <Button onClick={() => { setSelectedAssetBreakdownId(""); setChangedItems([""]) }} type="button" variant="outline">Cancel</Button>
               </div>
             </form>
@@ -14225,9 +14786,13 @@ function DataEntryForm({
     ...masterRows,
     ...locallyGeneratedCodes.map((code) => ({ code })),
   ])
-  const resolvedDefaults = generatedCode
-    ? { ...defaults, code: generatedCode }
-    : defaults
+  const resolvedDefaults = {
+    ...defaults,
+    ...(spec.entryType === "machine_master" && productionFloorCode
+      ? { productionFloorCode }
+      : {}),
+    ...(generatedCode ? { code: generatedCode } : {}),
+  }
   const toolingAssetCodes = Array.isArray(productionControl.toolingAssetCodes)
     ? productionControl.toolingAssetCodes.filter(
         (value): value is string => typeof value === "string"
@@ -14240,9 +14805,10 @@ function DataEntryForm({
   const routeMachineFamilies = machineFamilyOptions([
     ...asArray(productionControl.machinePlanningRows),
   ])
-  const lockedFields = new Set(
-    defaults.__editingMaster ? immutableMasterFields(spec.entryType) : []
-  )
+  const lockedFields = new Set([
+    ...(defaults.__editingMaster ? immutableMasterFields(spec.entryType) : []),
+    ...(spec.entryType === "machine_master" ? ["productionFloorCode"] : []),
+  ])
   const resolvedFields = spec.fields.map((field) => {
     const routeOptions =
       spec.entryType === "route" && field.name === "setupName"
@@ -16687,6 +17253,7 @@ function LegacyActionForm({
                 <SearchableSelect
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   name={field.name}
+                  disabled={field.readOnly}
                   defaultValue={
                     str(defaults[field.name]) ||
                     field.defaultValue ||
@@ -17145,6 +17712,9 @@ function MachinePlannedPartsPanel({
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <StatusBadge value={row.runningStatus} />
                     <StatusBadge value={row.rmStatus} />
+                    {row.earlyDownstreamWipException ? (
+                      <StatusBadge value="Early WIP exception" tone="information" />
+                    ) : null}
                     {row.rmReplanRequired ? (
                       <StatusBadge value="Replacement RM replan" />
                     ) : null}
@@ -18089,6 +18659,13 @@ function machineIssueRowIsLocked(row: DashboardPayload) {
     ].includes(stage)
   )
 }
+function parallelTargetRowIsActive(row: DashboardPayload) {
+  return !shopFloorItemIsFinished(row) &&
+    !shopFloorRowIsExplicitlyStopped(row) &&
+    !planningRowIsBreakdownStopped(row) &&
+    !planningRowIsShiftedAfterBreakdown(row) &&
+    machineIssueRowIsLocked(row)
+}
 function partMachineSwitchTargetInterruptionRows(
   groups: MachineConstraintQueueReviewGroup[],
   selectedRows: DashboardPayload[]
@@ -18257,7 +18834,8 @@ function jobCardTrackingState(
   setupRows: DashboardPayload[] = []
 ) {
   const dispatchStatus = str(row.dispatchStatus).toLowerCase()
-  if (dispatchStatus.includes("dispatch")) return "Dispatched"
+  if (dispatchStatus === "partially dispatched") return "Partially dispatched"
+  if (["shifted to dispatch", "dispatched", "dispatch approved"].includes(dispatchStatus)) return "Dispatched"
 
   const statuses = [
     row.planningBlocker,
@@ -19887,6 +20465,7 @@ function machineProductionUnitLabel(row: DashboardPayload) {
 }
 
 function maintenanceScheduleKey(row: DashboardPayload) {
+  if (row.assetScheduleId) return `asset|${str(row.assetScheduleId)}`
   return [row.machineNo || row.machine, row.maintenanceCode]
     .map((value) => str(value).toLowerCase())
     .join("|")

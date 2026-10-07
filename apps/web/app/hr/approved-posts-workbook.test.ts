@@ -66,6 +66,9 @@ const templates = [
     minimumSalary: null,
     name: "Machine operator",
     roleResponsibilities: null,
+    shiftEndTime: null,
+    shiftStartTime: null,
+    shiftType: null,
     templateCode: "JRT-0001",
   },
   {
@@ -83,6 +86,9 @@ const templates = [
     minimumSalary: null,
     name: "Quality inspector",
     roleResponsibilities: null,
+    shiftEndTime: null,
+    shiftStartTime: null,
+    shiftType: null,
     templateCode: "JRT-0002",
   },
 ]
@@ -128,8 +134,8 @@ describe("approved posts workbook", () => {
         "Combined Job Code": "CMB-1",
         "Combined Job Name": "Combined operator",
         "Combined Job?": "Yes",
-        "Job Template Code": "JRT-0001",
-        "Job Template Name": "Machine operator",
+        "Job Description Template Code": "JRT-0001",
+        "Job Description Template Name": "Machine operator",
         "Post Code": "PR-OP-1",
         "Primary Post?": "Yes",
       })
@@ -137,8 +143,8 @@ describe("approved posts workbook", () => {
     expect(rows[1]).toEqual(
       expect.objectContaining({
         "Combined Job?": "No",
-        "Job Template Code": "JRT-0002",
-        "Job Template Name": "Quality inspector",
+        "Job Description Template Code": "JRT-0002",
+        "Job Description Template Name": "Quality inspector",
         "Post Code": "QC-IN-1",
       })
     )

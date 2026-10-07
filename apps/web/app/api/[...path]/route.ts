@@ -227,6 +227,14 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "machineType",
     "Machine Size",
     "location",
+    "Machine Model No.",
+    "Machine Make",
+    "Machine Load",
+    "Machine Serial No.",
+    "Machine Installation Date",
+    "Machine Stabiliser No.",
+    "Machine MCB No.",
+    "Machine Warranty",
     "status",
     "remarks",
   ],
@@ -514,6 +522,14 @@ async function preauthorizeDashboardMutation(
     await authorizedDashboardSession(request, capability)
     return
   }
+  if (path === "rm-inward-delete") {
+    const floor = requiredProductionFloor(body.productionFloorCode)
+    await authorizedDashboardSession(
+      request,
+      operationalEntryCapability("rm_inward", "delete", floor)
+    )
+    return
+  }
   if (path === "data-entry" || path === "data-import") {
     const entry = String(body.entryType || "")
     const payload = plainRecord(body.payload)
@@ -693,6 +709,7 @@ async function savePlanningMasterEntry(
     }
     return repository.upsertMachine({
       rejectDuplicates,
+      recordId,
       actorUserId,
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),
@@ -982,7 +999,8 @@ async function get(request: NextRequest, context: RouteContext) {
             const value = Number(search.get("knownVersion"))
             return Number.isSafeInteger(value) && value > 0 ? value : undefined
           })(),
-          search.get("scope") === "maintenance" ? "maintenance" : undefined
+          search.get("scope") === "maintenance" ? "maintenance" : undefined,
+          search.get("knownLiveVersion") || undefined
         )
       )
     }
@@ -1301,8 +1319,8 @@ async function post(request: NextRequest, context: RouteContext) {
           repository.recordPlanOverride({
             actorUserId,
             assignmentMode:
-              body.assignmentMode === "add_parallel_machine"
-                ? "add_parallel_machine"
+              body.assignmentMode === "add_parallel_machine" || body.assignmentMode === "early_downstream"
+                ? body.assignmentMode
                 : "move",
             fromMachineNumber: body.fromMachine
               ? String(body.fromMachine)
@@ -1325,7 +1343,9 @@ async function post(request: NextRequest, context: RouteContext) {
           message:
             body.assignmentMode === "add_parallel_machine"
               ? "Parallel machine added and planning recalculated."
-              : "Plan override saved.",
+              : body.assignmentMode === "early_downstream"
+                ? "Setup 2 reserved for early production; recorded WIP still limits output."
+                : "Plan override saved.",
         })
       )
     }
@@ -1419,6 +1439,7 @@ async function post(request: NextRequest, context: RouteContext) {
             jobCardNumber: text(body.jcNo),
             organizationId,
             productionFloorCode: text(body.productionFloorCode),
+            quantity: typeof body.quantity === "number" ? body.quantity : Number.NaN,
             remark: optionalText(body.remark),
           })
         }
@@ -1520,6 +1541,32 @@ async function post(request: NextRequest, context: RouteContext) {
           error instanceof Error ? error.message : "Master deletion failed."
         )
       }
+    }
+
+    if (path === "rm-inward-delete") {
+      const floor = requiredProductionFloor(body.productionFloorCode)
+      const result = await withProductionRepository(
+        request,
+        operationalEntryCapability("rm_inward", "delete", floor),
+        async ({ actorUserId, organizationId, repository }) => {
+          try {
+            return await repository.reverseRawMaterialReceipt({
+              actorUserId,
+              organizationId,
+              productionFloorCode: floor,
+              reason: requiredDashboardText(body.reason, "Deletion reason"),
+              sourceId: requiredDashboardText(body.sourceId, "RM Inward entry"),
+            })
+          } catch (error) {
+            if (error instanceof ProductionUnitAccessError || error instanceof RouteError) throw error
+            throw new RouteError(400, error instanceof Error ? error.message : "RM Inward deletion failed.")
+          }
+        }
+      )
+      return json(await withPlanningRefresh(request, path, body, {
+        ...result,
+        message: "RM Inward entry deleted. Planning recalculation queued.",
+      }))
     }
 
     if (path === "data-entry") {
@@ -2518,6 +2565,7 @@ const knownDashboardApiPaths = new Set([
   "plan-override",
   "planner-priority",
   "raw-material-rejection",
+  "rm-inward-delete",
   "production-sessions",
   "production-break-schedule",
   "quality-parameter-set",

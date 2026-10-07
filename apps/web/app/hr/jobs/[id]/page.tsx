@@ -28,9 +28,9 @@ import {
 } from "@workspace/ui/components/table"
 import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
-import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
-import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
+import { JobInterviewActions } from "@/components/hr/job-interview-actions"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
@@ -112,7 +112,7 @@ export default async function JobWorkspacePage({
         connectionString: readAuthEnvironment().connectionString,
       })
     : null
-  const { posts, workspace, offerLetters } = await (async () => {
+  const { posts, workspace, offerLetters, template } = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
       const [workspace, posts, offerLetters] = await Promise.all([
@@ -120,7 +120,12 @@ export default async function JobWorkspacePage({
         repository.listPosts(organizationId),
         letterRepository?.listForJob(organizationId, id) ?? [],
       ])
-      return { posts, workspace, offerLetters }
+      const template = workspace?.job.requirementTemplateCode
+        ? (await repository.listTemplates(organizationId)).find(
+            (row) => row.templateCode === workspace.job.requirementTemplateCode
+          ) ?? null
+        : null
+      return { posts, workspace, offerLetters, template }
     } finally {
       await Promise.all([repository.close(), letterRepository?.close()])
     }
@@ -130,6 +135,7 @@ export default async function JobWorkspacePage({
   const { applications, interviews, job } = workspace
   const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
+    <JobTemplatePreviewProvider templates={template ? [template] : []}>
     <div className="grid gap-6">
       <section className="grid gap-3">
         <Button asChild className="w-fit" size="sm" variant="ghost">
@@ -150,6 +156,9 @@ export default async function JobWorkspacePage({
             <p className="text-sm text-muted-foreground">
               {job.jobNumber} · Vacancy {job.vacancyCode} · Approved Post{" "}
               {job.postCode ?? "—"}
+            </p>
+            <p className="text-sm">
+              Job Description Template: <JobTemplatePreviewLink code={job.requirementTemplateCode} />
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -212,41 +221,10 @@ export default async function JobWorkspacePage({
       </section>
 
       {canWrite && job.status === "Open" ? (
-        <section className="grid gap-6 xl:grid-cols-2">
-          <SectionCard width="wide">
-            <CardHeader>
-              <CardTitle>Schedule Interview</CardTitle>
-              <CardDescription>
-                Select An Assigned Candidate And Confirm The Required Next
-                Round.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <JobInterviewScheduleForm applications={applications} job={job} />
-            </CardContent>
-          </SectionCard>
-
-          <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Record Interview Outcome</CardTitle>
-              <CardDescription>
-                The Required Round Is Locked. Complete Every Preset Question To
-                Save A Unified Assessment.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <InterviewOutcomeForm
-                applications={applications.map((application) => ({
-                  candidateName: application.candidateName,
-                  id: application.id,
-                  scoreableRound: application.scoreableRound,
-                }))}
-                interviewerOptions={interviewerOptions}
-                returnJobId={job.id}
-              />
-            </CardContent>
-          </SectionCard>
-        </section>
+        <JobInterviewActions
+          applications={applications}
+          job={job}
+        />
       ) : null}
 
       <SectionCard>
@@ -494,5 +472,6 @@ export default async function JobWorkspacePage({
         </CardContent>
       </SectionCard>
     </div>
+    </JobTemplatePreviewProvider>
   )
 }

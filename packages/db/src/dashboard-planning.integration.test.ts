@@ -4,6 +4,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
+import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 
@@ -75,13 +76,19 @@ beforeAll(async () => {
      VALUES ($1, $2, $3) RETURNING id`,
     [organizationId, subcategory.rows[0]!.id, `Cutting Tool ${suffix}`]
   )
+  const makeModel = await pool.query<{ id: string }>(
+    `INSERT INTO store.make_models (organization_id, name)
+     VALUES ($1, $2) RETURNING id`,
+    [organizationId, `Planning Model ${suffix}`]
+  )
   await pool.query(
     `INSERT INTO store.item_types (
        organization_id, type_code, asset_type, asset_category,
        asset_subcategory, asset_name, identification_name, tracking_mode,
-       unit, asset_category_id, asset_subcategory_id, asset_name_id
+       unit, asset_category_id, asset_subcategory_id, asset_name_id,
+       make_model_id
      ) VALUES ($1, $2, 'NON_CONSUMABLE', $3, $4, $5, $6, 'SERIALIZED',
-       'Nos', $7, $8, $9)`,
+       'Nos', $7, $8, $9, $10)`,
     [
       organizationId,
       toolingAssetCode,
@@ -92,6 +99,7 @@ beforeAll(async () => {
       category.rows[0]!.id,
       subcategory.rows[0]!.id,
       assetName.rows[0]!.id,
+      makeModel.rows[0]!.id,
     ]
   )
 })
@@ -600,6 +608,40 @@ describe("dashboard planning writes", () => {
     expect(floor.rows[0]?.code).toBe("cnc")
   })
 
+  test("edits an existing Machine Master record by its visible source ID", async () => {
+    const machineNumber = `DETAIL-${suffix}`
+    const original = await repository.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      rejectDuplicates: true,
+      sourcePayload: { machineNo: machineNumber },
+    })
+    const source = await pool.query<{ source_id: string }>(
+      "SELECT source_id FROM catalog.machines WHERE id = $1",
+      [original.id]
+    )
+    const correction = {
+      machineNumber,
+      organizationId,
+      productionFloorCode: "cnc",
+      rejectDuplicates: true,
+      sourcePayload: { machineNo: machineNumber, machineModelNo: "20-G" },
+    }
+    const updated = await repository.upsertMachine({
+      ...correction,
+      recordId: source.rows[0]!.source_id,
+    })
+    expect(updated.id).toBe(original.id)
+    const saved = await pool.query<{ model: string }>(
+      "SELECT source_payload->>'machineModelNo' AS model FROM catalog.machines WHERE id = $1",
+      [original.id]
+    )
+    expect(saved.rows[0]?.model).toBe("20-G")
+    await expect(repository.upsertMachine({ ...correction, recordId: "wrong-id" }))
+      .rejects.toThrow("record to edit was not found")
+  })
+
   test("corrects route details, protects structure and preserves the previous automatic option", async () => {
     const item = `ROUTE-EDIT-${suffix}`
     const routeInput = {
@@ -872,6 +914,11 @@ describe("dashboard planning writes", () => {
       ],
       reason: "Restore approved route",
     })
+    const workspace = await jobCards.readJobCardWorkspace({
+      jobCardNumber: firstJobCard, organizationId,
+    })
+    expect(workspace.routes.find((route) => route.selected)).toMatchObject({ routeCode: "1" })
+    expect(workspace.setups.map((setup) => setup.setupNumber)).toEqual(["1", "2"])
 
     const result = await pool.query<{
       constraints: string
@@ -945,6 +992,106 @@ describe("dashboard planning writes", () => {
       route_change_setups: "2",
       route_history: "2",
     })
+    await repository.recordRouteChange({
+      jobCardNumber: firstJobCard,
+      newRouteCode: "2",
+      organizationId,
+      remainingSetups: [{ plan: true, quantity: 60, setupNumber: 1 }],
+      reason: "Continue on second route",
+    })
+    const changes = await pool.query<{ from_code: string; to_code: string }>(`
+      SELECT previous.route_code AS from_code, next.route_code AS to_code
+      FROM manufacturing.route_change_events event
+      JOIN manufacturing.work_orders work_order ON work_order.id = event.work_order_id
+      JOIN manufacturing.route_options previous ON previous.id = event.from_route_option_id
+      JOIN manufacturing.route_options next ON next.id = event.to_route_option_id
+      WHERE work_order.job_card_number = $1 AND event.reversed_at IS NULL
+      ORDER BY event.occurred_at, event.id
+    `, [firstJobCard])
+    expect(changes.rows).toEqual([
+      { from_code: "2", to_code: "1" },
+      { from_code: "1", to_code: "2" },
+    ])
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.routeChanges.find((change) => change.jobCardNumber === firstJobCard
+      && change.newRouteCode === "2")?.fromRouteCode).toBe("1")
+  })
+
+  test("planner actions use the changed route and reject old-route active state", async () => {
+    const changedItem = `ACTION-ROUTE-${suffix}`
+    const changedJobCard = `ACTION-ROUTE-JC-${suffix}`
+    const targetMachine = `ACTION-ROUTE-MC-${suffix}`
+    const staleMachine = `ACTION-ROUTE-OLD-MC-${suffix}`
+    for (const machineNumber of [targetMachine, staleMachine]) {
+      await repository.upsertMachine({ organizationId, machineNumber, productionFloorCode: "cnc" })
+    }
+    for (const routeCode of ["OLD", "NEW"]) {
+      await repository.upsertRouteOption({
+        itemUid: changedItem, organizationId, productionFloorCode: "cnc", routeCode,
+        setups: [1, 2].map((setupNumber) => ({
+          operationCode: `SETUP-${setupNumber}`, sequence: setupNumber, setupNumber,
+        })),
+      })
+    }
+    await repository.upsertWorkOrder({
+      itemUid: changedItem, jobCardNumber: changedJobCard, organizationId,
+      orderedQuantity: 20, workOrderNumber: changedJobCard,
+      sourcePayload: { optionNumber: "OLD", productionFloorCode: "cnc" },
+    })
+    await repository.selectRoute({ jobCardNumber: changedJobCard, organizationId,
+      productionFloorCode: "cnc", routeCode: "OLD" })
+    await repository.recordRouteChange({
+      jobCardNumber: changedJobCard, organizationId, newRouteCode: "NEW",
+      productionFloorCode: "cnc",
+      reason: "Use revised route", remainingSetups: [{ setupNumber: 2, plan: true, quantity: 20 }],
+    })
+    const saved = await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine", jobCardNumber: changedJobCard,
+      organizationId, productionFloorCode: "cnc", reason: "Use new route setup", setupNumber: 2,
+      toMachineNumber: targetMachine,
+      queuePlacements: [{ targetJobCardNumber: changedJobCard,
+        targetMachineNumber: targetMachine, targetSetupNumber: 2 }],
+    })
+    const reference = await pool.query<{ actual_setup_id: string; detail_setup_id: string; expected_setup_id: string }>(
+      `SELECT event.operation_setup_id AS actual_setup_id,
+         detail.related_setup_id AS detail_setup_id,
+         setup.id AS expected_setup_id
+       FROM manufacturing.plan_override_events event
+       JOIN manufacturing.plan_override_event_details detail
+         ON detail.plan_override_event_id = event.id AND detail.detail_type = 'queue-placement'
+       JOIN manufacturing.operation_setups setup
+         ON setup.setup_number = 2 AND setup.route_option_id = (
+           SELECT id FROM manufacturing.route_options
+           WHERE item_id = (SELECT item_id FROM manufacturing.work_orders WHERE job_card_number = $2)
+             AND route_code = 'NEW')
+       WHERE event.id = $1`,
+      [saved.id, changedJobCard]
+    )
+    expect(reference.rows[0]?.actual_setup_id).toBe(reference.rows[0]?.expected_setup_id)
+    expect(reference.rows[0]?.detail_setup_id).toBe(reference.rows[0]?.expected_setup_id)
+
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, stage, active, source_system, source_table, source_id
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
+         'operator_started', true, 'test', 'old-route-state', $2
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 2
+       JOIN catalog.machines machine
+         ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
+      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+    )
+    await expect(repository.recordMachineConstraint({
+      interruptedSetups: [{ jobCardNumber: changedJobCard, machineNumber: staleMachine, setupNumber: 2 }],
+      machineNumber: staleMachine, organizationId, productionFloorCode: "cnc",
+      reason: "Unavailable after route change", rescheduleAction: "shift_required",
+      unavailableFrom: "2026-10-06T10:00:00+05:30",
+    })).rejects.toThrow("Active setup belongs to an earlier route")
   })
 
   test("blocks planner output duplication and records canonical closed-session output", async () => {
@@ -1138,7 +1285,7 @@ describe("dashboard planning writes", () => {
     }))
   })
 
-  test("requires target interruption and releases the stopped shop-floor setup", async () => {
+  test("requires target interruption and releases the stopped setup for parallel and move", async () => {
     const moveItemUid = `MOVE-${suffix}`
     const movingJobCard = `MOVE-${suffix}-1`
     const blockingJobCard = `MOVE-${suffix}-2`
@@ -1219,6 +1366,37 @@ describe("dashboard planning writes", () => {
       ]
     )
 
+    await expect(repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      jobCardNumber: movingJobCard,
+      organizationId,
+      reason: "Parallel target requires stop",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })).rejects.toThrow("Approve its stop")
+    const parallel = await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      interruptedSetups: [{
+        jobCardNumber: blockingJobCard,
+        machineNumber: targetMachine,
+        setupNumber: 1,
+      }],
+      jobCardNumber: movingJobCard,
+      organizationId,
+      reason: "Approved parallel target stop",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
+    const parallelState = await pool.query<{ active: boolean; assignment_mode: string }>(
+      `SELECT state.active, decision.source_payload->>'assignmentMode' AS assignment_mode
+       FROM manufacturing.shop_floor_setup_state state
+       CROSS JOIN manufacturing.plan_override_events decision
+       WHERE state.work_order_id = $1 AND state.machine_id = $2 AND decision.id = $3`,
+      [row.work_order_id, row.machine_id, parallel.id]
+    )
+    expect(parallelState.rows[0]).toEqual({ active: false, assignment_mode: "add_parallel_machine" })
+    await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
+
     await expect(
       repository.recordPlanOverride({
         fromMachineNumber: sourceMachine,
@@ -1276,7 +1454,7 @@ describe("dashboard planning writes", () => {
     expect(released.rows[0]).toEqual({
       active: false,
       stage: "planned",
-      stop_events: "1",
+      stop_events: "2",
     })
     await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
     await repository.recordPlannerPriority({

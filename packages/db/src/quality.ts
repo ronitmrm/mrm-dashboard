@@ -281,16 +281,55 @@ async function qualityContextFor(
   operationSetupCode: string,
   productionFloorCode: ProductionFloorCode
 ) {
+  const requiredJobCard = requiredText(jobCardNumber, "Job card")
+  // Route changes lock the work order first. Read its current route only after
+  // that lock is acquired, so a concurrent change cannot attach new evidence
+  // to the superseded setup.
+  await client.query(
+    `SELECT id FROM manufacturing.work_orders
+     WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+     FOR UPDATE`,
+    [organizationId, requiredJobCard]
+  )
   const result = await client.query<QualityContext>(
     `
       SELECT work_order.id AS work_order_id, work_order.item_id,
-        COALESCE(selection.route_option_id, automatic_route.route_option_id)
-          AS route_option_id,
+        COALESCE(route_change.to_route_option_id,
+          CASE WHEN imported.route_code IS NOT NULL THEN imported_route.id
+            ELSE COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          END) AS route_option_id,
         setup.id AS operation_setup_id
       FROM manufacturing.work_orders work_order
-      LEFT JOIN manufacturing.route_selections selection
-        ON selection.work_order_id = work_order.id
-        AND selection.reversed_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT to_route_option_id
+        FROM manufacturing.route_change_events
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY occurred_at DESC, id DESC LIMIT 1
+      ) route_change ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          NULLIF(btrim(work_order.source_payload->>'OPTION NUMBER'), ''),
+          NULLIF(btrim(work_order.source_payload->>'optionNumber'), '')
+        ) AS route_code
+      ) imported ON true
+      LEFT JOIN LATERAL (
+        SELECT route.id
+        FROM manufacturing.route_options route
+        JOIN manufacturing.production_floors floor
+          ON floor.id = route.production_floor_id
+        WHERE route.organization_id = work_order.organization_id
+          AND route.item_id = work_order.item_id AND route.active
+          AND floor.code = $4
+          AND (lower(route.route_code) = lower(imported.route_code)
+            OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
+        ORDER BY route.revision DESC LIMIT 1
+      ) imported_route ON imported.route_code IS NOT NULL
+      LEFT JOIN LATERAL (
+        SELECT route_option_id
+        FROM manufacturing.route_selections
+        WHERE work_order_id = work_order.id AND reversed_at IS NULL
+        ORDER BY selected_at DESC, id DESC LIMIT 1
+      ) selection ON true
       LEFT JOIN LATERAL (
         SELECT CASE WHEN count(*) = 1
           THEN (array_agg(candidate.id))[1]
@@ -304,11 +343,13 @@ async function qualityContextFor(
           AND candidate.active
           AND candidate_floor.code = $4
       ) automatic_route ON selection.route_option_id IS NULL
+        AND imported.route_code IS NULL
+        AND route_change.to_route_option_id IS NULL
       JOIN manufacturing.operation_setups setup
-        ON setup.route_option_id = COALESCE(
-          selection.route_option_id,
-          automatic_route.route_option_id
-        )
+        ON setup.route_option_id = COALESCE(route_change.to_route_option_id,
+          CASE WHEN imported.route_code IS NOT NULL THEN imported_route.id
+            ELSE COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          END)
       JOIN manufacturing.route_options route
         ON route.id = setup.route_option_id
       JOIN manufacturing.production_floors floor
@@ -327,7 +368,7 @@ async function qualityContextFor(
     `,
     [
       organizationId,
-      requiredText(jobCardNumber, "Job card"),
+      requiredJobCard,
       requiredText(operationSetupCode, "Operation setup"),
       productionFloorCode,
     ]

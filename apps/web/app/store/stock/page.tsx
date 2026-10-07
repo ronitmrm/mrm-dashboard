@@ -28,6 +28,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
+import { StoreStockLossForm } from "@/components/store/store-stock-loss-form"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -55,6 +56,7 @@ export default async function StoreStockPage({
     ordersSaved?: string | string[]
     repairOrdersSaved?: string | string[]
     requestNumber?: string | string[]
+    saved?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.stock.read", "/store/stock")
@@ -77,6 +79,9 @@ export default async function StoreStockPage({
         : requestedMode === "request" &&
             storeActions.has("store.requests.submit")
           ? "request"
+          : requestedMode === "adjust" &&
+              storeActions.has("store.asset_movement.write")
+            ? "adjust"
           : "view"
   const orderItemId = firstValue(params.orderItemId)
   const requestedIssuanceId = firstValue(params.issuance_id)
@@ -106,21 +111,42 @@ export default async function StoreStockPage({
       [
         repository.listItemTypes(organizationId),
         repository.listSupplierPrices(organizationId),
-        repository.listStockPhysicalUnits(organizationId),
+        repository.listStockPhysicalUnits(organizationId, "COMPANY"),
       ]
     )
     return { items, supplierPrices, physicalUnits }
   })().finally(() => repository.close())
-  const stockRows = storeStockRows(data.items, data.physicalUnits)
+  const showItemCatalog = mode === "order" || mode === "request"
+  const mainUnits = data.physicalUnits.filter((unit) =>
+    unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
+  )
+  const mainUnitItemIds = new Set(mainUnits.map((unit) => unit.itemTypeId))
+  const visibleItems = showItemCatalog ? data.items : data.items.filter((item) =>
+    item.trackingMode === "CONSUMABLE"
+      ? Number(item.availableStock) > 0
+      : mainUnitItemIds.has(item.id)
+  )
+  const stockRows = storeStockRows(visibleItems, data.physicalUnits).filter((row) =>
+    row.actionItem || (!showItemCatalog && row.physicalUnit?.isMainAccountable &&
+      row.physicalUnit.status !== "SCRAPPED" && row.physicalUnit.status !== "LOST")
+  )
   const today = istDateValue()
   const actionFormId = "stock-row-action"
-  const columnCount = mode === "view" ? 10 : mode === "order" ? 12 : 11
+  const columnCount = mode === "view" || mode === "adjust"
+    ? 14
+    : mode === "order" ? 16 : 15
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
       </div>
+
+      {firstValue(params.saved) === "1" ? (
+        <SectionCard role="status">
+          <CardContent className="py-4 text-sm">Unit ID loss recorded.</CardContent>
+        </SectionCard>
+      ) : null}
 
       {Number.isInteger(savedOrderCount) && savedOrderCount > 0 ? (
         <SectionCard role="status">
@@ -154,44 +180,54 @@ export default async function StoreStockPage({
       ) : null}
 
       <MetricSummary
-        scope="Stock register · before table filters"
+        scope={`${showItemCatalog ? "Item catalog" : "Main Store stock"} · before table filters`}
         items={[
           {
             label: "Asset Codes",
-            value: data.items.length,
+            value: visibleItems.length,
             tone: "information",
           },
           {
             label: "Available Units",
-            value: data.items.reduce(
+            value: visibleItems.reduce(
               (total, item) => total + item.availableUnitIds.length,
               0
             ),
-            description: "Non Consumable physical units",
+            description: "Non Consumable physical units available in Main Store",
             tone: "positive",
           },
           {
-            label: "Out of Stock",
-            value: data.items.filter((item) =>
+            label: "Not Available Here",
+            value: visibleItems.filter((item) =>
               item.trackingMode === "SERIALIZED"
                 ? !item.availableUnitIds.length
                 : Number(item.availableStock) <= 0
             ).length,
-            description: "Asset codes without available stock",
+            description: "Asset codes with no stock available to issue from Main Store",
             tone: "warning",
           },
         ]}
       />
 
+      {mode === "adjust" ? (
+        <StoreStockLossForm
+          units={data.physicalUnits.filter((unit) => unit.isMainAccountable)}
+        />
+      ) : null}
+
       <SectionCard>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Stock Register</CardTitle>
+              <CardTitle>{showItemCatalog ? "Item Catalog" : "Stock Register"}</CardTitle>
               <CardDescription>
                 {mode === "repair"
                   ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
-                  : "Asset Codes describe an item type; each Non Consumable unit has its own status, supplier and purchase price. The cheapest active quote is selected by default for a new purchase order."}
+                  : mode === "order"
+                    ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
+                  : mode === "request"
+                    ? "Select active Asset Codes to request, including items not yet in Main Store stock."
+                    : "Only stock held by or accountable to Main Store is listed. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -227,9 +263,19 @@ export default async function StoreStockPage({
                   <Link href="/store/orders">Repair Returns</Link>
                 </Button>
               ) : null}
+              {storeActions.has("store.asset_movement.write") ? (
+                <Button
+                  asChild
+                  variant={mode === "adjust" ? "default" : "outline"}
+                >
+                  <Link href="/store/stock?mode=adjust">Record Unit ID loss</Link>
+                </Button>
+              ) : null}
               {mode !== "view" ? (
                 <Button asChild variant="ghost">
-                  <Link href="/store/stock">Cancel Selection</Link>
+                  <Link href="/store/stock">
+                    {mode === "adjust" ? "Close Loss Form" : "Cancel Selection"}
+                  </Link>
                 </Button>
               ) : null}
             </div>
@@ -247,7 +293,7 @@ export default async function StoreStockPage({
           <OperationalTable
             filterStorageKey="store-stock-register-unit-ids"
             filteredSelection={
-              mode === "view"
+              mode === "view" || mode === "adjust"
                 ? undefined
                 : {
                     checkboxName:
@@ -261,16 +307,20 @@ export default async function StoreStockPage({
           >
             <TableHeader>
               <TableRow>
-                {mode !== "view" ? <TableHead>Select</TableHead> : null}
+                {mode !== "view" && mode !== "adjust" ? <TableHead>Select</TableHead> : null}
                 <TableHead data-filterable="true">
                   Asset Code / Unit ID
                 </TableHead>
-                <TableHead>Asset Name</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
-                <TableHead>Available Quantity</TableHead>
-                <TableHead>Assigned Quantity</TableHead>
-                <TableHead data-filterable="true">Status</TableHead>
+                <TableHead>Asset Name</TableHead>
+                <TableHead>Make/Model</TableHead>
+                <TableHead>Main Available</TableHead>
+                <TableHead>Company On Hand</TableHead>
+                <TableHead data-filterable="true">Asset Type</TableHead>
+                <TableHead>Company Assigned</TableHead>
+                <TableHead data-filterable="true">Unit Status</TableHead>
+                <TableHead data-filterable="true">Responsible Store</TableHead>
                 <TableHead>Location / Holder</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Quote / Purchase Price</TableHead>
@@ -303,12 +353,13 @@ export default async function StoreStockPage({
                 )
                 const canSelectRepairUnit =
                   item.physicalUnit &&
-                  item.physicalUnit.status !== "SCRAPPED" &&
+                  item.physicalUnit.isMainAccountable &&
+                  item.physicalUnit.status !== "SCRAPPED" && item.physicalUnit.status !== "LOST" &&
                   (item.physicalUnit.holderType !== "SUPPLIER" ||
                     (resumingRepairSelection && selectedRepairUnit))
                 return (
                   <TableRow key={item.rowKey}>
-                    {mode !== "view" ? (
+                    {mode !== "view" && mode !== "adjust" ? (
                       <TableCell>
                         {mode === "repair" ? (
                           canSelectRepairUnit ? (
@@ -341,7 +392,7 @@ export default async function StoreStockPage({
                     ) : null}
                     <TableCell
                       className="font-medium"
-                      data-filter-value={item.displayedCode}
+                      data-filter-value={`${item.typeCode} ${item.displayedCode}`}
                     >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
@@ -354,26 +405,35 @@ export default async function StoreStockPage({
                         item.displayedCode
                       )}
                       <span className="block text-xs font-normal text-muted-foreground">
-                        {item.physicalUnit ? "Physical Unit" : "Asset Code"}
+                        {item.physicalUnit
+                          ? `Asset Code ${item.typeCode}`
+                          : "Asset Code"}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      {item.assetName}
-                      <span className="block text-xs text-muted-foreground">
-                        {item.identificationName} ·{" "}
-                        {item.assetType === "NON_CONSUMABLE"
-                          ? "Non Consumable"
-                          : "Consumable"}
-                      </span>
+                      {mode === "view" && item.physicalUnit &&
+                      capabilities.has("store.asset_history.read") &&
+                      storeActions.has("store.receipts.receive") ? (
+                        <Link
+                          className="block w-fit text-xs font-normal text-primary underline underline-offset-4"
+                          href={`${storeAssetWorkspaceHref(item.displayedCode)}#unit-details`}
+                        >
+                          Edit Unit Details
+                        </Link>
+                      ) : null}
                     </TableCell>
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
+                    <TableCell>{item.assetName}</TableCell>
+                    <TableCell>{item.makeModel}</TableCell>
                     <TableCell>{item.availableQuantity}</TableCell>
+                    <TableCell>{item.companyQuantity}</TableCell>
+                    <TableCell>
+                      {item.assetType === "NON_CONSUMABLE"
+                        ? "Non Consumable"
+                        : "Consumable"}
+                    </TableCell>
                     <TableCell>{item.assignedQuantity}</TableCell>
                     <TableCell
-                      data-filter-value={
-                        item.physicalUnit?.status ?? "Item Type"
-                      }
+                      data-filter-value={item.physicalUnit?.status ?? "—"}
                     >
                       {item.physicalUnit ? (
                         <StatusBadge
@@ -384,25 +444,22 @@ export default async function StoreStockPage({
                                 ? "information"
                                 : item.physicalUnit.status === "BROKEN"
                                   ? "danger"
-                                  : item.physicalUnit.status === "SCRAPPED"
+                                  : item.physicalUnit.status === "LOST"
+                                    ? "danger"
+                                    : item.physicalUnit.status === "SCRAPPED"
                                     ? "inactive"
                                     : "warning"
                           }
                           value={item.physicalUnit.status}
                         />
-                      ) : item.trackingMode === "SERIALIZED" ? (
-                        "Item Type"
                       ) : (
-                        "Consumable"
+                        "—"
                       )}
                     </TableCell>
-                    <TableCell>
-                      {item.physicalUnit
-                        ? (item.physicalUnit.locationName ??
-                          item.physicalUnit.holderName ??
-                          item.physicalUnit.holderType)
-                        : item.storageLocations}
+                    <TableCell data-filter-value={item.physicalUnit?.accountableStoreName ?? "—"}>
+                      {item.physicalUnit?.accountableStoreName ?? "—"}
                     </TableCell>
+                    <TableCell>{item.locationHolder}</TableCell>
                     <TableCell>
                       {mode === "order" &&
                       item.actionItem &&

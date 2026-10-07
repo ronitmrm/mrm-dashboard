@@ -125,6 +125,9 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
         name,
         organizationId: context.organizationId,
         roleResponsibilities: csvValue(row, "role_responsibilities") || null,
+        shiftEndTime: csvValue(row, "shift_end_time"),
+        shiftStartTime: csvValue(row, "shift_start_time"),
+        shiftType: csvValue(row, "shift_type"),
         templateCode,
       })
     }
@@ -133,7 +136,7 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
   }
   revalidatePath(hrPath)
   redirect(`${hrPath}?panel=postMasterPanel&masterView=dataEntry`)
-  }, "Job template CSV import failed.")
+  }, "Job description template CSV import failed.")
 }
 
 export async function importCandidatesCsvAction(formData: FormData) {

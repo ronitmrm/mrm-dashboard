@@ -130,7 +130,8 @@ export class PendingRetainedUploadClient {
       const intent = parsePendingUploadIntent({
         ...registration.intent,
         ...mapped,
-        ...(registration.intent.kind === "maintenance-request-photo"
+        ...(registration.intent.kind === "maintenance-request-photo" ||
+        registration.intent.kind === "maintenance-work-photo"
           ? { index }
           : {}),
       })

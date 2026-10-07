@@ -38,12 +38,14 @@ export function InterviewOutcomeForm({
   applications,
   initialApplicationId = "",
   interviewerOptions,
+  onApplicationChange,
   panelId,
   returnJobId,
 }: {
   applications: InterviewApplicationOption[]
   initialApplicationId?: string
   interviewerOptions: Array<{ code: string; name: string }>
+  onApplicationChange?: (applicationId: string) => void
   panelId?: string
   returnJobId?: string
 }) {
@@ -74,7 +76,10 @@ export function InterviewOutcomeForm({
               className="w-full"
               id={`${fieldId}-application`}
               name="application_id"
-              onChange={(event) => setApplicationId(event.target.value)}
+              onChange={(event) => {
+                setApplicationId(event.target.value)
+                onApplicationChange?.(event.target.value)
+              }}
               required
               value={applicationId}
             >

@@ -83,6 +83,7 @@ export {
   type CommercialAttachmentAuthorization,
 } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
+export { createDepartmentStoreRepository } from "./department-stores"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
   normalizeSourceCoverage,
@@ -96,7 +97,18 @@ export {
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
-export { createMaintenanceRepository } from "./maintenance"
+export { createMaintenanceRepository, type CompletedMaintenanceReport } from "./maintenance"
+export {
+  createMaintenanceReportCorrectionRepository,
+  type MaintenanceReportCorrection,
+  type MaintenanceReportCorrectionInput,
+  type MaintenanceReportKind,
+} from "./maintenance-report-corrections"
+export {
+  authorizeMaintenanceWorkPhotoTarget,
+  createMaintenanceWorkPhotoRepository,
+  type MaintenanceWorkPhotoTarget,
+} from "./maintenance-work-photos"
 export {
   createPendingArtifactUploadRepository,
   PendingArtifactUploadNotFoundError,
@@ -134,6 +146,15 @@ export {
 } from "./store"
 export { storeUnitId } from "./store-item-codes"
 export {
+  createEmployeeDataRepository,
+  employeePersonalFields,
+  employeeTermFields,
+  type EmployeeDataRecord,
+  type EmployeePersonalDetails,
+  type EmployeeTermDetails,
+} from "./employee-data"
+export { groupEmployeeTerms } from "./employee-terms"
+export {
   authorizeRecruitmentCandidateArtifactTarget,
   createRecruitmentRepository,
   type RecruitmentEmployeeAssignmentRow,
@@ -152,6 +173,7 @@ export {
   type RecruitmentJobWorkspace,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
+  type RecruitmentShiftType,
   type RecruitmentTemplateRow,
 } from "./recruitment"
 export {

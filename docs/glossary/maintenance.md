@@ -27,13 +27,15 @@ The trade responsible for one approved request: Electrical, Plumbing, or Mechani
 
 Urgent or Regular. The requester asks for a Priority; the Maintenance Manager confirms the final Priority. Trade work lists order the manager-confirmed Urgent work before Regular work.
 
+The request register's Urgent count includes only unfinished requests in Pending Approval, Approved, or In Progress. Completed, Closed, Returned, and Rejected requests retain their recorded priority in history but do not require urgent work. Pending Approval counts requests awaiting the Maintenance Manager's decision.
+
 ## Maintenance Request Status
 
 The lifecycle is Pending Approval, Approved, In Progress, Completed, Closed, Returned, or Rejected. Every request starts Pending Approval. Only the Maintenance Manager may approve, reject, return, classify, prioritize, or close it. The assigned trade moves Approved work to In Progress and then Completed.
 
 ## Mechanical Work List
 
-The unified Mechanical table containing existing scheduled machine-maintenance rows and approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Scheduled generation, due calculation, checklists, and completion remain unchanged. Breakdown work follows the Machine Breakdown lifecycle below.
+The unified Mechanical table containing scheduled machine and physical Unit ID maintenance, plus approved Mechanical Request rows. Work Type distinguishes Scheduled from Request. Each scheduled Unit ID appears with its Asset Code, due date and Maintenance Master. The pending table opens on today's IST calendar date; users can choose another date or All dates. Scheduled due dates are calendar dates, while request dates use the submitted timestamp in IST. Mechanical users open its checklist and save progress or complete the work there. Completion advances only that Unit ID's schedule. Breakdown work follows the Machine or Physical Asset Breakdown lifecycle below.
 
 _Avoid_: separate Scheduled and Request tables, converting scheduled rows into requests.
 
@@ -43,7 +45,15 @@ The checklist assigned to one machine maintenance schedule is completed for each
 
 The task records a start date and time when work begins and an end date and time when it finishes. Actual minutes are calculated from those timestamps. The performer is the signed-in user authorized to record maintenance work. An active linked Employee ID supplies the code and name regardless of department; without one, the signed-in account name is recorded without an employee code. Each changed part is recorded separately so maintenance history can be searched and filtered by part.
 
+The same checklist workflow applies to physical Unit ID schedules. Its saved due occurrence, draft answers, performer, changed items, and completion belong to that Unit ID. Existing direct Unit ID timetables without checklist points remain completable from Mechanical with work notes.
+
+Up to twelve JPG or PNG work photos may be attached to each saved machine or Unit ID planned maintenance job. A photo belongs to that job's due occurrence, including while it is In Progress. An authorized maintenance worker may remove an attached photo; removed photos no longer appear on the job or completed report. Remaining saved photos remain available from the report linked in the maintenance register.
+
 _Avoid_: browser prompts for checklist points, treating a partial draft as completed work, repeating the same checklist point across production units.
+
+## Completed Maintenance Report Correction
+
+An authorized maintenance worker may correct a completed machine or physical Unit ID report. A correction may change recorded checklist answers and remarks, work done, and Changed Items, or add or remove work photos. Each correction requires a reason that remains visible in the report history with the editor and time. Corrections keep the original completion, performer, due occurrence, and next schedule date; they do not complete the job again or recalculate its schedule. Historical reports without an editable physical task retain only the details actually recorded.
 
 ## Machine Breakdown
 
@@ -58,6 +68,7 @@ authorized signed-in performer's Employee ID and name when linked, or account na
 optional remarks, and zero or more separately entered Changed Items.
 One breakdown may contain multiple Changed Items; they are not flattened into a
 single free-text part field.
+Up to twelve work photos may be attached to the open breakdown before completion. They remain with that completed breakdown in the report linked from the maintenance register.
 
 _Avoid_: completed-only breakdown entry, ending the Production Session when the
 breakdown starts, starting production while a machine breakdown remains open.
@@ -70,6 +81,7 @@ marks that unit Broken, remains open until repaired, and completes into the
 unit's maintenance history with the authorized signed-in performer, work done,
 and optional changed items. A shared Asset Code cannot own a breakdown.
 An Asset breakdown does not open machine Production Session downtime.
+Its work photos follow the same limit and retention as machine breakdown photos.
 
 ## Legacy Machine Maintenance History
 

@@ -24,6 +24,10 @@ vi.mock("@workspace/db", () => ({
         { id: "other-name-id", subcategoryId: "other-subcategory", name: "Fixture" },
         { id: "name-id", subcategoryId: "subcategory-id", name: "Fixture" },
       ],
+      makeModels: [
+        { id: "unspecified-id", name: "Unspecified" },
+        { id: "appm11-id", name: "APPM 11" },
+      ],
     }),
   }),
 }))
@@ -32,6 +36,7 @@ vi.mock("./actions", () => ({
   createStoreAssetNameAction: save,
   createStoreAssetSubcategoryAction: save,
   createStoreItemTypeAction: save,
+  createStoreMakeModelAction: save,
   createStoreLocationAction: save,
   createStoreSupplierAction: save,
   createStoreSupplierPriceAction: save,
@@ -76,6 +81,12 @@ test("resolves readable references across Store master CSVs and form labels", as
   expect(save.mock.lastCall?.[0].get("location_type")).toBe("STORE")
   expect(await importCsv("ITEM_TYPE", "asset_category,asset_subcategory,asset_name,asset_type,unit\nProduction Tooling,Tools,Fixture,Non Consumable,Number (No.)")).toBeUndefined()
   expect(save.mock.lastCall?.[0].get("unit")).toBe("No.")
+  expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("unspecified-id")
+  expect(await importCsv("ITEM_TYPE", "asset_category,asset_subcategory,asset_name,make_model,asset_type,unit\nProduction Tooling,Tools,Fixture,APPM 11,Non Consumable,No.")).toBeUndefined()
+  expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("appm11-id")
+  expect(await importCsv("ITEM_TYPE", "asset_category,asset_subcategory,asset_name,make,asset_type,unit\nProduction Tooling,Tools,Fixture,Kaishan,Non Consumable,No.")).toBeUndefined()
+  expect(save.mock.lastCall?.[0].get("make_model_id")).toBe("unspecified-id")
+  expect(save.mock.lastCall?.[0].has("manufacturer_make")).toBe(false)
 })
 
 test("normalizes day-first Supplier Price dates before saving", async () => {

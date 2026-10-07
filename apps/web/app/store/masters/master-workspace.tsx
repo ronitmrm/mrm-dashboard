@@ -10,7 +10,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { FormGrid, MetricSummary } from "@/components/ui/golden-patterns"
 import {
  SectionCard,
   CardContent,
@@ -52,6 +52,7 @@ import {
   createStoreAssetCategoryAction,
   createStoreAssetNameAction,
   createStoreAssetSubcategoryAction,
+  createStoreMakeModelAction,
   createStoreItemTypeAction,
   createStoreLocationAction,
   createStoreSupplierPriceAction,
@@ -97,7 +98,11 @@ export type StoreMasterData = {
     drawingNumber?: string | null
     id: string
     identificationName: string
+    makeModel: string
+    makeModelId: string
     minimumStock?: string
+    modelNumber: string | null
+    ratedLoad: string | null
     typeCode: string
     unit: string
   }>
@@ -116,6 +121,7 @@ export type StoreMasterData = {
       subcategoryName: string
     }>
     categories: Array<{ id: string; name: string }>
+    makeModels: Array<{ id: string; name: string }>
     subcategories: Array<{
       categoryId: string
       categoryName: string
@@ -251,8 +257,10 @@ export function StoreMasterWorkspace({
                     <TableHead>Category</TableHead>
                     <TableHead>Subcategory</TableHead>
                     <TableHead>Asset Name</TableHead>
+                    <TableHead>Make/Model</TableHead>
                     <TableHead>Asset Type</TableHead>
                     <TableHead>Identification</TableHead>
+                    <TableHead>Rated Load / Capacity</TableHead>
                     <TableHead>Drawing</TableHead>
                     <TableHead>Unit</TableHead>
                     {canManage || canDelete ? (
@@ -281,12 +289,14 @@ export function StoreMasterWorkspace({
                         <TableCell>{item.assetCategory}</TableCell>
                         <TableCell>{item.assetSubcategory}</TableCell>
                         <TableCell>{item.assetName}</TableCell>
+                        <TableCell>{item.makeModel}</TableCell>
                         <TableCell>
                           {item.assetType === "NON_CONSUMABLE"
                             ? "Non Consumable"
                             : "Consumable"}
                         </TableCell>
                         <TableCell>{item.identificationName}</TableCell>
+                        <TableCell>{item.ratedLoad || "—"}</TableCell>
                         <TableCell>
                           {drawing ? (
                             <Button asChild size="sm" variant="outline">
@@ -480,7 +490,7 @@ function masterRows(
     case "ITEM_TYPE":
       return data.items.map((item) => ({
         code: item.typeCode,
-        details: `${item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"} · ${item.assetCategory} / ${item.assetSubcategory} / ${item.assetName} · ${item.unit}`,
+        details: `${item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"} · ${item.assetCategory} / ${item.assetSubcategory} / ${item.assetName} / ${item.makeModel} · ${item.unit}`,
         key: item.id,
         kind: "store_item_type",
         name: item.identificationName,
@@ -493,8 +503,11 @@ function masterRows(
           asset_type: item.assetType,
           drawing_number: item.drawingNumber ?? "",
           identification_name: item.identificationName,
+          make_model_id: item.makeModelId,
           master_id: item.id,
           minimum_stock: item.minimumStock ?? "0",
+          model_number: item.modelNumber ?? "",
+          rated_load: item.ratedLoad ?? "",
           type_code: item.typeCode,
           unit: item.unit,
         },
@@ -535,6 +548,18 @@ function masterRows(
           asset_name: assetName.name,
           asset_subcategory_id: assetName.subcategoryId,
           master_id: assetName.id,
+        },
+      }))
+    case "MAKE_MODEL":
+      return data.masters.makeModels.map((makeModel) => ({
+        details: "Make/Model",
+        key: makeModel.id,
+        kind: "store_make_model",
+        name: makeModel.name,
+        editable: true,
+        editDefaults: {
+          make_model: makeModel.name,
+          master_id: makeModel.id,
         },
       }))
     case "LOCATION":
@@ -702,6 +727,19 @@ function masterForm(
           </Button>
         </MasterEntryForm>
       )
+    case "MAKE_MODEL":
+      return (
+        <MasterEntryForm action={createStoreMakeModelAction}>
+          <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
+          <TextField
+            defaultValue={defaults.make_model}
+            label="Make/Model"
+            name="make_model"
+            required
+          />
+          <Button className="mt-5" type="submit">Save Make/Model</Button>
+        </MasterEntryForm>
+      )
     case "LOCATION":
       return (
         <MasterEntryForm action={createStoreLocationAction}>
@@ -786,64 +824,7 @@ function masterForm(
         </MasterEntryForm>
       )
     case "SUPPLIER_PRICE":
-      return (
-        <MasterEntryForm
-          action={createStoreSupplierPriceAction}
-          uploads={[
-            {
-              field: "supplier_quote",
-              intent: { kind: "store-supplier-quote" },
-              intentFields: { itemTypeId: "item_type_id", supplierId: "supplier_id" },
-            },
-          ]}
-          encType="multipart/form-data"
-        >
-          <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <SelectField
-              label="Store Item"
-              name="item_type_id"
-              options={data.items.map((item) => ({
-                label: `${item.typeCode} — ${item.identificationName}`,
-                value: item.id,
-              }))}
-            />
-            <SelectField
-              label="Supplier"
-              name="supplier_id"
-              options={data.suppliers.map((supplier) => ({
-                label: `${supplier.code} — ${supplier.name}`,
-                value: supplier.id,
-              }))}
-            />
-            <TextField
-              label="Unit Price"
-              min="0"
-              name="unit_price"
-              required
-              step="0.01"
-              type="number"
-            />
-            <TextField label="Effective From" name="valid_from" type="date" />
-            <TextField label="Quote Reference" name="quote_reference" />
-            <Field>
-              <FieldLabel htmlFor="master-supplier-quote">Quote PDF</FieldLabel>
-              <Input
-                accept="application/pdf"
-                id="master-supplier-quote"
-                name="supplier_quote"
-                type="file"
-              />
-            </Field>
-          </FieldGroup>
-          <Button
-            className="mt-5"
-            disabled={!data.items.length || !data.suppliers.length}
-            type="submit"
-          >
-            Save Supplier Price
-          </Button>
-        </MasterEntryForm>
-      )
+      return <StoreSupplierPriceForm data={data} />
     case "VENDOR":
       return (
         <MasterEntryForm action={createStoreVendorAction}>
@@ -880,6 +861,183 @@ function masterForm(
   }
 }
 
+function storeItemOptions(
+  items: StoreMasterData["items"],
+  value: (item: StoreMasterData["items"][number]) => string,
+  label: (item: StoreMasterData["items"][number]) => string
+) {
+  const options = new Map<string, { label: string; value: string }>()
+  for (const item of items) {
+    const id = value(item)
+    if (id && !options.has(id)) options.set(id, { label: label(item), value: id })
+  }
+  return [...options.values()].sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function StoreSupplierPriceForm({ data }: { data: StoreMasterData }) {
+  const [categoryId, setCategoryId] = useState("")
+  const [subcategoryId, setSubcategoryId] = useState("")
+  const [assetNameId, setAssetNameId] = useState("")
+  const [makeModelId, setMakeModelId] = useState("")
+  const [itemTypeId, setItemTypeId] = useState("")
+  const categoryItems = categoryId
+    ? data.items.filter((item) => item.assetCategoryId === categoryId)
+    : data.items
+  const subcategoryItems = subcategoryId
+    ? categoryItems.filter((item) => item.assetSubcategoryId === subcategoryId)
+    : categoryItems
+  const assetNameItems = assetNameId
+    ? subcategoryItems.filter((item) => item.assetNameId === assetNameId)
+    : subcategoryItems
+  const visibleItems = makeModelId
+    ? assetNameItems.filter((item) => item.makeModelId === makeModelId)
+    : assetNameItems
+
+  function selectItem(nextItemTypeId: string) {
+    setItemTypeId(nextItemTypeId)
+    const item = data.items.find((candidate) => candidate.id === nextItemTypeId)
+    if (item) {
+      setCategoryId(item.assetCategoryId)
+      setSubcategoryId(item.assetSubcategoryId)
+      setAssetNameId(item.assetNameId)
+      setMakeModelId(item.makeModelId)
+    }
+  }
+
+  return (
+    <MasterEntryForm
+      action={createStoreSupplierPriceAction}
+      onSuccess={() => {
+        setCategoryId("")
+        setSubcategoryId("")
+        setAssetNameId("")
+        setMakeModelId("")
+        setItemTypeId("")
+      }}
+      uploads={[
+        {
+          field: "supplier_quote",
+          intent: { kind: "store-supplier-quote" },
+          intentFields: { itemTypeId: "item_type_id", supplierId: "supplier_id" },
+        },
+      ]}
+      encType="multipart/form-data"
+    >
+      <FormGrid className="xl:grid-cols-4">
+        <SelectField
+          label="Category"
+          name="filter_category_id"
+          onChange={(event) => {
+            setCategoryId(event.target.value)
+            setSubcategoryId("")
+            setAssetNameId("")
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(data.items, (item) => item.assetCategoryId, (item) => item.assetCategory)}
+          placeholder="All Categories"
+          required={false}
+          value={categoryId}
+        />
+        <SelectField
+          label="Subcategory"
+          name="filter_subcategory_id"
+          onChange={(event) => {
+            setSubcategoryId(event.target.value)
+            setAssetNameId("")
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(
+            categoryItems,
+            (item) => item.assetSubcategoryId,
+            (item) => categoryId ? item.assetSubcategory : `${item.assetCategory} — ${item.assetSubcategory}`
+          )}
+          placeholder="All Subcategories"
+          required={false}
+          value={subcategoryId}
+        />
+        <SelectField
+          label="Asset Name"
+          name="filter_asset_name_id"
+          onChange={(event) => {
+            setAssetNameId(event.target.value)
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(
+            subcategoryItems,
+            (item) => item.assetNameId,
+            (item) => subcategoryId ? item.assetName : `${item.assetSubcategory} — ${item.assetName}`
+          )}
+          placeholder="All Asset Names"
+          required={false}
+          value={assetNameId}
+        />
+        <SelectField
+          label="Make/Model"
+          name="filter_make_model_id"
+          onChange={(event) => {
+            setMakeModelId(event.target.value)
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(assetNameItems, (item) => item.makeModelId, (item) => item.makeModel)}
+          placeholder="All Make/Models"
+          required={false}
+          value={makeModelId}
+        />
+      </FormGrid>
+      <FormGrid className="mt-4">
+        <SelectField
+          label="Store Item"
+          name="item_type_id"
+          onChange={(event) => selectItem(event.target.value)}
+          options={visibleItems.map((item) => ({
+            label: `${item.typeCode} — ${item.assetName} · ${item.makeModel}${item.identificationName ? ` · ${item.identificationName}` : ""}`,
+            value: item.id,
+          }))}
+          placeholder="Select Store Item"
+          value={itemTypeId}
+        />
+        <SelectField
+          label="Supplier"
+          name="supplier_id"
+          options={data.suppliers.map((supplier) => ({
+            label: `${supplier.code} — ${supplier.name}`,
+            value: supplier.id,
+          }))}
+        />
+        <TextField
+          label="Unit Price"
+          min="0"
+          name="unit_price"
+          required
+          step="0.01"
+          type="number"
+        />
+        <TextField label="Effective From" name="valid_from" type="date" />
+        <TextField label="Quote Reference" name="quote_reference" />
+        <Field>
+          <FieldLabel htmlFor="master-supplier-quote">Quote PDF</FieldLabel>
+          <Input
+            accept="application/pdf"
+            id="master-supplier-quote"
+            name="supplier_quote"
+            type="file"
+          />
+        </Field>
+      </FormGrid>
+      <Button
+        className="mt-5"
+        disabled={!itemTypeId || !data.suppliers.length}
+        type="submit"
+      >
+        Save Supplier Price
+      </Button>
+    </MasterEntryForm>
+  )
+}
+
 function StoreItemTypeForm({
   data,
   defaults,
@@ -892,10 +1050,12 @@ function StoreItemTypeForm({
   const initialCategoryId = defaults.asset_category_id ?? ""
   const initialSubcategoryId = defaults.asset_subcategory_id ?? ""
   const initialAssetNameId = defaults.asset_name_id ?? ""
+  const initialMakeModelId = defaults.make_model_id ?? ""
   const [assetType, setAssetType] = useState(initialAssetType)
   const [categoryId, setCategoryId] = useState(initialCategoryId)
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
+  const [makeModelId, setMakeModelId] = useState(initialMakeModelId)
   const [saved, setSaved] = useState(false)
   const selectedUnit = defaults.unit ?? ""
   const unitOptions = !selectedUnit || STORE_UNIT_OPTIONS.some(
@@ -930,6 +1090,7 @@ function StoreItemTypeForm({
       assetNameId,
       assetSubcategoryId: subcategoryId,
       assetType,
+      makeModelId,
     },
     defaults.master_id
   )
@@ -954,6 +1115,7 @@ function StoreItemTypeForm({
           setCategoryId("")
           setSubcategoryId("")
           setAssetNameId("")
+          setMakeModelId("")
         }
         setSaved(true)
       }}
@@ -988,10 +1150,18 @@ function StoreItemTypeForm({
             placeholder="e.g. Bosch GWS 600, 100 mm"
           />
           <FieldDescription>
-            Enter the make, model, size, grade, or specification that identifies
-            this item.
+            Enter any other distinguishing specification for this item.
           </FieldDescription>
         </Field>
+        {editing ? (
+          <input name="model_number" type="hidden" value={defaults.model_number ?? ""} />
+        ) : null}
+        <TextField
+          defaultValue={defaults.rated_load}
+          label="Rated Load / Capacity (optional, include unit)"
+          name="rated_load"
+          placeholder="e.g. 15 kW or 1000 kg"
+        />
         {editing ? (
           <input name="asset_type" type="hidden" value={defaults.asset_type} />
         ) : null}
@@ -1041,6 +1211,17 @@ function StoreItemTypeForm({
           value={assetNameId}
         />
         <SelectField
+          label="Make/Model"
+          name="make_model_id"
+          placeholder="Select Make/Model"
+          onChange={(event) => setMakeModelId(event.target.value)}
+          options={data.masters.makeModels.map((row) => ({
+            label: row.name,
+            value: row.id,
+          }))}
+          value={makeModelId}
+        />
+        <SelectField
           defaultValue={selectedProductUid}
           label="Product Portfolio UID"
           name="applicable_item_code"
@@ -1080,6 +1261,12 @@ function StoreItemTypeForm({
           />
         </Field>
       </FieldGroup>
+      {!editing ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Select a different Make/Model to generate a separate Asset Code for the same Asset Name.
+          Record each Non Consumable unit’s actual Make when it is received.
+        </p>
+      ) : null}
       {saved ? (
         <p className="mt-5" role="status">
           <StatusBadge value="Asset saved" tone="positive" />
@@ -1095,7 +1282,7 @@ function StoreItemTypeForm({
       ) : null}
       <Button
         className="mt-5"
-        disabled={!assetNameId || Boolean(existingItem)}
+        disabled={!assetNameId || !makeModelId || Boolean(existingItem)}
         type="submit"
       >
         {editing

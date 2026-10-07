@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "./maintenance-work-list"
+import { mechanicalWorkRowsForDate, plannedMaintenanceScheduleRows, unifiedMechanicalWorkRows } from "./maintenance-work-list"
 
 describe("unified Mechanical work list", () => {
   test("excludes generated history backing rows from planned work", () => {
@@ -49,5 +49,43 @@ describe("unified Mechanical work list", () => {
       scheduled,
       workType: "Scheduled",
     })
+  })
+
+  test("identifies a scheduled physical asset by Unit ID", () => {
+    expect(unifiedMechanicalWorkRows([{
+      assetCode: "NC285-0001",
+      maintenanceTitle: "Monthly inspection",
+      nextDueDate: "2026-10-03",
+    }], [])[0]).toMatchObject({
+      machineOrLocation: "NC285-0001",
+      workType: "Scheduled",
+    })
+  })
+
+  test("shows only work on the selected IST calendar day", () => {
+    const rows = unifiedMechanicalWorkRows(
+      [{ machineNo: "CNC-1", nextDueDate: "2026-10-01" }],
+      [{
+        assigneeName: null,
+        finalPriority: "Regular",
+        id: "request-1",
+        location: "Plant 2",
+        problemDescription: "Repair guard",
+        status: "Approved",
+        submittedAt: "2026-09-30T20:00:00.000Z",
+      }, {
+        assigneeName: null,
+        finalPriority: "Regular",
+        id: "request-2",
+        location: "Plant 2",
+        problemDescription: "Check motor",
+        status: "Approved",
+        submittedAt: "2026-10-01T20:00:00.000Z",
+      }]
+    )
+
+    expect(mechanicalWorkRowsForDate(rows, "2026-10-01").map((row) => row.machineOrLocation))
+      .toEqual(["CNC-1", "Plant 2"])
+    expect(mechanicalWorkRowsForDate(rows, "")).toBe(rows)
   })
 })

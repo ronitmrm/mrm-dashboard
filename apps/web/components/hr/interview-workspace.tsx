@@ -45,7 +45,7 @@ import { useMemo, useState } from "react"
 
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
-import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 import {
   formatIstDate,
   formatIstTime,
@@ -96,16 +96,12 @@ export function InterviewScheduleBoard({
   appointmentApplicationId,
   canWrite,
   interviews,
-  interviewerOptions,
 }: {
   appointmentApplicationId?: string
   canWrite: boolean
   interviews: RecruitmentInterviewRow[]
-  interviewerOptions: Array<{ code: string; name: string }>
 }) {
   const [selectedDate, setSelectedDate] = useState("")
-  const [selectedInterview, setSelectedInterview] =
-    useState<RecruitmentInterviewRow | null>(null)
   const [dismissedAppointmentId, setDismissedAppointmentId] = useState<
     string | null
   >(null)
@@ -129,12 +125,7 @@ export function InterviewScheduleBoard({
   )
 
   return (
-    <Sheet
-      onOpenChange={(open) => {
-        if (!open) setSelectedInterview(null)
-      }}
-      open={selectedInterview !== null && !appointmentInterview}
-    >
+    <>
       <SummaryCards
         items={[
           {
@@ -187,6 +178,7 @@ export function InterviewScheduleBoard({
               <TableRow>
                 <TableHead>Candidate</TableHead>
                 <TableHead>Job</TableHead>
+                <TableHead>Job Description Template</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
                 <TableHead>Round</TableHead>
@@ -209,18 +201,19 @@ export function InterviewScheduleBoard({
                       </Link>
                     </TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
+                    <TableCell className="font-mono" data-filter-value={row.requirementTemplateCode ?? "—"}>
+                      <JobTemplatePreviewLink code={row.requirementTemplateCode} />
+                    </TableCell>
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
                     <TableCell>{formatTime(row.interviewAt)}</TableCell>
                     <TableCell>{row.scoreableRound}</TableCell>
                     {canWrite ? (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            onClick={() => setSelectedInterview(row)}
-                            size="sm"
-                            type="button"
-                          >
-                            Record Outcome
+                          <Button asChild size="sm">
+                            <Link href={`/hr/jobs/${row.jobId}/interview?application=${encodeURIComponent(row.applicationId)}&source=interviews`}>
+                              Record Outcome
+                            </Link>
                           </Button>
                           <CandidateApplicationActions
                             applicationId={row.applicationId}
@@ -239,7 +232,7 @@ export function InterviewScheduleBoard({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 6 : 5}
+                    colSpan={canWrite ? 7 : 6}
                   >
                     No Interviews Are Scheduled For This Date.
                   </TableCell>
@@ -250,31 +243,6 @@ export function InterviewScheduleBoard({
         </CardContent>
  </SectionCard>
 
-      {selectedInterview ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
-          <SheetHeader>
-            <SheetTitle>Interview Outcome</SheetTitle>
-            <SheetDescription>
-              {selectedInterview.candidateName} · {selectedInterview.jobTitle} ·{" "}
-              {selectedInterview.scoreableRound}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-6 pb-6">
-            <InterviewOutcomeForm
-              applications={[
-                {
-                  candidateName: `${selectedInterview.candidateName} · ${selectedInterview.jobTitle}`,
-                  id: selectedInterview.applicationId,
-                  scoreableRound: selectedInterview.scoreableRound,
-                },
-              ]}
-              initialApplicationId={selectedInterview.applicationId}
-              interviewerOptions={interviewerOptions}
-              panelId="interviewsPanel"
-            />
-          </div>
-        </SheetContent>
-      ) : null}
       {appointmentInterview && canWrite ? (
         <CandidateAppointmentDialog
           applicationId={appointmentInterview.applicationId}
@@ -289,7 +257,7 @@ export function InterviewScheduleBoard({
           panelId="interviewsPanel"
         />
       ) : null}
-    </Sheet>
+    </>
   )
 }
 

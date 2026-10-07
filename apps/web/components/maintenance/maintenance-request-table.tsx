@@ -42,27 +42,41 @@ function PriorityBadge({ value }: { value: string }) {
   )
 }
 
+function isOpenRequest(row: MaintenanceRequestRow) {
+  return row.status === "Pending Approval" || row.status === "Approved" ||
+    row.status === "In Progress"
+}
+
 export function MaintenanceRequestTable({
   managerReview = false,
   rows,
+  showPendingCard = false,
   trade,
 }: {
   managerReview?: boolean
   rows: MaintenanceRequestRow[]
+  showPendingCard?: boolean
   trade?: MaintenanceCategory
 }) {
+  const openRows = rows.filter(isOpenRequest)
   return (
     <div className="grid min-w-0 gap-4">
       <MetricSummary
         scope="Requests in this worklist · before table filters"
         items={[
           { label: "Requests", value: rows.length, tone: "information" },
+          ...(showPendingCard ? [{
+            label: "Pending Approval",
+            value: rows.filter((row) => row.status === "Pending Approval").length,
+            description: "Awaiting manager review",
+            tone: "information" as const,
+          }] : []),
           {
             label: "Urgent",
-            value: rows.filter(
+            value: openRows.filter(
               (row) => (row.finalPriority ?? row.requestedPriority) === "Urgent"
             ).length,
-            description: "Urgent priority in this worklist",
+            description: "Unfinished urgent requests",
             tone: "warning"
           },
           {
@@ -93,7 +107,7 @@ export function MaintenanceRequestTable({
             return (
               <TableRow
                 className={
-                  priority === "Urgent"
+                  isOpenRequest(row) && priority === "Urgent"
                     ? "bg-[var(--color-error-bg)]/55 hover:bg-[var(--color-error-bg)]/75"
                     : undefined
                 }

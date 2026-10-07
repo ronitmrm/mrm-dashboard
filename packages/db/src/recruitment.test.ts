@@ -15,6 +15,108 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
+test("job register returns the template selected for each job", async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [{
+    applicant_count: 0,
+    id: "job-1",
+    job_number: "POST-1",
+    post_code: "POST-1",
+    post_date: "2026-10-03",
+    requirement_template_code: "JRT-0001",
+    shift_type: "Night",
+    start_time: "22:00:00",
+    end_time: "06:00:00",
+    status: "Open",
+    target_date: null,
+    title: "Operator",
+    vacancy_code: "POST-1",
+  }] })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+
+  await expect(repository.listJobs("org-1")).resolves.toMatchObject([
+    {
+      id: "job-1",
+      requirementTemplateCode: "JRT-0001",
+      shiftType: "Night",
+      shiftStartTime: "22:00",
+      shiftEndTime: "06:00",
+    },
+  ])
+  expect(query.mock.calls[0]?.[0]).toContain(
+    "template.id = job.requirement_template_id"
+  )
+  expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
+})
+
+test("job description templates require a permitted shift and both times", async () => {
+  const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => {
+    void parameters
+    return {
+      rows: statement.includes("INSERT INTO recruitment.requirement_templates")
+        ? [{ id: "template-1" }]
+        : [],
+    }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  const input = {
+    organizationId: "org-1",
+    templateCode: "JRT-1",
+    name: "Night Operator",
+    departmentCode: "CNC",
+    designationCode: "OP",
+    shiftType: "Night",
+    shiftStartTime: "22:00",
+    shiftEndTime: "06:00",
+  }
+
+  await expect(repository.upsertTemplate(input)).resolves.toEqual({ id: "template-1" })
+  const insert = query.mock.calls.find(([statement]) =>
+    statement.includes("INSERT INTO recruitment.requirement_templates")
+  )
+  expect(insert?.[0]).toContain("shift_type, shift_start_time, shift_end_time")
+  expect(insert?.[1]?.slice(-3)).toEqual(["Night", "22:00", "06:00"])
+  await expect(repository.upsertTemplate({ ...input, shiftEndTime: "" }))
+    .rejects.toThrow("Shift End Time is required")
+})
+
+test("assigning a template to an Approved Post links its unassigned job", async () => {
+  const query = vi.fn(async (statement: string) => {
+    if (statement.includes("SELECT post.*")) return { rows: [{ id: "post-1" }], rowCount: 1 }
+    if (statement.includes("SELECT id") && statement.includes("FROM recruitment.requirement_templates")) {
+      return { rows: [{ id: "template-1" }], rowCount: 1 }
+    }
+    if (statement.includes("UPDATE recruitment.posts")) {
+      return { rows: [{ id: "post-1", requirement_template_id: "template-1" }], rowCount: 1 }
+    }
+    if (statement.includes("SELECT job.*") && statement.includes("FOR UPDATE OF job")) {
+      return { rows: [{ id: "job-1", requirement_template_id: null }], rowCount: 1 }
+    }
+    if (statement.includes("UPDATE recruitment.job_posts job")) {
+      return { rows: [{ id: "job-1", requirement_template_id: "template-1" }], rowCount: 1 }
+    }
+    return { rows: [], rowCount: 0 }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+
+  await repository.updatePost({
+    organizationId: "org-1",
+    postId: "post-1",
+    requirementTemplateCode: "JRT-0011",
+  })
+
+  const jobUpdate = query.mock.calls.find(([statement]) =>
+    statement.includes("UPDATE recruitment.job_posts job")
+  )
+  expect(jobUpdate?.[0]).toContain("job.requirement_template_id IS NULL")
+  expect(jobUpdate?.[0]).toContain("post.requirement_template_id = $2")
+})
+
 test("pending offer responses are scoped to approved applications without a response", async () => {
   const rows = [{ applicationId: "application-1", candidateName: "Pending Candidate" }]
   const query = vi.fn().mockResolvedValue({ rows })
@@ -1369,6 +1471,7 @@ describe("job workspace", () => {
               candidate_phone: "9999999999",
               current_company: null,
               experience: "4 years",
+              has_resume: true,
               id: "application-1",
               interview_at: "2026-08-08 10:00:00+00",
               interview_count: 2,
@@ -1428,6 +1531,7 @@ describe("job workspace", () => {
     expect(workspace?.applications[0]).toEqual(
       expect.objectContaining({
         candidateName: "Candidate One",
+        hasResume: true,
         interviewCount: 2,
         nextRound: "Technical Round",
       })
@@ -2632,6 +2736,7 @@ describe("listInterviews", () => {
           interview_at: null,
           job_id: "job-1",
           job_number: "JOB-001",
+          requirement_template_code: "JRT-0001",
           job_title: "Maintenance Engineer",
           joining_date: null,
           latest_round: null,
@@ -2655,12 +2760,17 @@ describe("listInterviews", () => {
       ),
       ["organization-1"]
     )
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("ON template.id = job.requirement_template_id"),
+      ["organization-1"]
+    )
     expect(rows[0]).toEqual(
       expect.objectContaining({
         applicationId: "application-1",
         candidateId: "candidate-1",
         jobId: "job-1",
         jobNumber: "JOB-001",
+        requirementTemplateCode: "JRT-0001",
         nextRound: "Screening Round",
         postCode: "ME-AS-1",
       })

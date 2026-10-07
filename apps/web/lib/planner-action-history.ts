@@ -135,6 +135,8 @@ function machineSwitchHistoryRow(
   const placements = records(row.queuePlacements)
   const isParallelMachine =
     text(row.assignmentMode).toLowerCase() === "add_parallel_machine"
+  const isEarlyDownstream =
+    text(row.assignmentMode).toLowerCase() === "early_downstream"
   const jobCards = uniqueText([
     row.jobCardNumber,
     row.jcNo,
@@ -168,15 +170,17 @@ function machineSwitchHistoryRow(
     text(row.toMachineNumber) || text(row.toMachine) || emptyValue
   return historyRow(
     row,
-    isParallelMachine ? "Add Parallel Machine" : "Move Setup",
+    isEarlyDownstream ? "Plan Setup 2 Early" : isParallelMachine ? "Add Parallel Machine" : "Move Setup",
     {
       "Job Card": jobCards.join(", ") || emptyValue,
       "Part Code": partCodes.join(", ") || emptyValue,
       Setups: setups.join(", ") || emptyValue,
-      "Machine / Route": isParallelMachine
+      "Machine / Route": isEarlyDownstream
+        ? targetMachine
+        : isParallelMachine
         ? `${sourceMachine} + ${targetMachine}`
         : `${sourceMachine} → ${targetMachine}`,
-      Decision: isParallelMachine ? "Parallel machine added" : "Setup moved",
+      Decision: isEarlyDownstream ? "Early WIP exception approved" : isParallelMachine ? "Parallel machine added" : "Setup moved",
     }
   )
 }
@@ -233,7 +237,7 @@ export function plannerActionHistoryRows(
     if (actionType === "Machine Unavailable") {
       return machineUnavailableHistoryRow(row)
     }
-    if (actionType === "Machine Switch") return machineSwitchHistoryRow(row)
+    if (actionType === "Machine Switch" || actionType === "Early Downstream Setup") return machineSwitchHistoryRow(row)
     if (actionType === "Route Change") return routeChangeHistoryRow(row)
     return historyRow(row, actionType || "Planner Action", {
       "Job Card": text(row.jobCardNumber) || text(row.jcNo) || emptyValue,

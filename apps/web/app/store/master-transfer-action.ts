@@ -24,6 +24,7 @@ import {
   createStoreAssetSubcategoryAction,
   createStoreItemTypeAction,
   createStoreLocationAction,
+  createStoreMakeModelAction,
   createStoreSupplierAction,
   createStoreSupplierPriceAction,
   createStoreVendorAction,
@@ -85,7 +86,7 @@ export async function importStoreMasterCsvAction(formData: FormData) {
 }
 
 async function readReferences(master: StoreMasterKey) {
-  if (!["ITEM_TYPE", "SUBCATEGORY", "ASSET_NAME", "SUPPLIER_PRICE"].includes(master)) return null
+  if (!["ITEM_TYPE", "SUBCATEGORY", "ASSET_NAME", "MAKE_MODEL", "SUPPLIER_PRICE"].includes(master)) return null
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -145,6 +146,7 @@ function resolveReferences(
       ),
     }
   }
+  if (master === "MAKE_MODEL") return row
   const category = csvValue(row, "asset_category", "asset_category_name", "category", "asset_category_id", "category_id")
   if (master === "ASSET_NAME") {
     const categoryId = category ? referenceId(category, masters.categories, "Asset Category") : null
@@ -173,7 +175,17 @@ function resolveReferences(
     masters.assetNames.filter((option) => option.subcategoryId === subcategoryId),
     "Asset Name"
   )
-  return { ...row, asset_category_id: categoryId, asset_subcategory_id: subcategoryId, asset_name_id: assetNameId }
+  return {
+    ...row,
+    asset_category_id: categoryId,
+    asset_subcategory_id: subcategoryId,
+    asset_name_id: assetNameId,
+    make_model_id: referenceId(
+      csvValue(row, "make_model", "make_model_id", "model_number", "model") || "Unspecified",
+      masters.makeModels,
+      "Make/Model"
+    ),
+  }
 }
 
 async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
@@ -195,6 +207,10 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
           asset_name: ["name"],
           asset_subcategory_id: ["subcategory_id"],
         })
+      )
+    case "MAKE_MODEL":
+      return createStoreMakeModelAction(
+        form(row, { make_model: ["name", "model", "make"] })
       )
     case "LOCATION":
       return createStoreLocationAction(
@@ -258,7 +274,10 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
             asset_subcategory_id: [],
             asset_type: [],
             identification_name: ["name", "identification"],
+            make_model_id: [],
             minimum_stock: [],
+            model_number: ["model"],
+            rated_load: ["rated_load_capacity", "rated_load"],
             unit: [],
           }
         )

@@ -301,8 +301,14 @@ describe("Store Purchase Order PDF issuance", () => {
         name: `Repair Supplier ${suffix}`,
         organizationId,
       })
+      const mainStore = await pool.query<{ id: string }>(
+        `SELECT id FROM store.accountable_stores
+         WHERE organization_id = $1 AND code = 'MAIN'`,
+        [organizationId]
+      )
       const repairIssuanceId = randomUUID()
       const repairInput = {
+        accountableStoreId: mainStore.rows[0]!.id,
         assetCode: receipt.assetCodes[0]!,
         issuanceId: repairIssuanceId,
         organizationId,

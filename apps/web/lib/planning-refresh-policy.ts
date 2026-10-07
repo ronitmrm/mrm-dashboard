@@ -13,6 +13,7 @@ const autoRefreshActionPaths = new Set([
   "route-selection",
   "mark-complete",
   "master-delete",
+  "rm-inward-delete",
 ]);
 
 const autoRefreshDataEntryTypes = new Set([

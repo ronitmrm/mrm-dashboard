@@ -54,6 +54,8 @@ after RM reaches the machine, even when its cycle or tooling master is still
 incomplete. Missing masters continue to block unstarted setup planning. For CNC
 startup openings, an `operator_started` setup is Running from the saved opening
 state; its cycle time may be entered when that setup's real session starts.
+The saved setup stage is available to the next Shop Floor, Machinist, or Quality
+task immediately; a pending planning recalculation does not delay that handoff.
 
 CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
 Quality Approval → Machine Start. The six CNC checklist points are completed at
@@ -119,6 +121,10 @@ active setup Item Complete in the same transaction, which releases the machine.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.
+Shift Ends leaves a started setup at Machine Started. A later entry for an earlier
+Shop Floor stage, such as a delayed Quality Approval, remains in the action
+history but must not move the setup's current stage backward or reopen a
+completed setup.
 When a setup runs on parallel machines, each machine keeps its own Shop Floor
 setup state. Starting or finishing work on one machine does not move or finish
 the other machine's setup state.
@@ -273,14 +279,15 @@ and is unavailable when the target quantity is zero.
 
 Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
 
-Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
+Saving an approved machine move, parallel-machine target stop, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
-A Planner may add an idle, compatible physical machine to a planned or running
-setup even when the normal minimum-run rule would not split the quantity again.
-This decision is additive: current machines keep their work, no running session
-is stopped, and planning recalculates the shared remaining allocation and
-downstream probable dates across the combined machines. The added machine must
-have no active setup, and its queue position must be reviewed before saving.
+A Planner may add a compatible physical machine to a planned or running setup
+even when the normal minimum-run rule would not split the quantity again.
+Current setup machines keep their work. If the added machine owns another active
+setup, the Planner explicitly approves stopping that setup and closes its open
+Production Session before saving. The decision releases only that target setup,
+records its settled output, and recalculates the shared remaining allocation and
+downstream probable dates. The target queue position must be reviewed before saving.
 The saved queue position remains binding during recalculation and idle-gap
 filling. Unstarted jobs with earlier material dates cannot pass a setup placed
 ahead of them by the Planner. Position 1 makes a ready setup available today,

@@ -8,7 +8,9 @@ import {
   createArtifactService,
   type ArtifactStorageProvider,
 } from "./artifacts"
+import { createDepartmentStoreRepository } from "./department-stores"
 import { migrateDatabase } from "./migrate"
+import { createMaintenanceRepository } from "./maintenance"
 import {
   authorizeStoreItemTypeArtifactTarget,
   authorizeStorePurchaseOrderArtifactTarget,
@@ -23,8 +25,10 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const store = createStoreRepository({ connectionString })
+const departmentStore = createDepartmentStoreRepository({ pool })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
+let mainAccountableStoreId: string
 let legacyItemTypeId: string
 let legacyAssetId: string
 let legacyAssetCode: string
@@ -127,6 +131,12 @@ beforeAll(async () => {
   )
   legacyAssetId = legacyAsset.rows[0]!.id
   await migrateDatabase({ connectionString })
+  const mainAccountableStore = await pool.query<{ id: string }>(
+    `SELECT id FROM store.accountable_stores
+     WHERE organization_id = $1 AND kind = 'MAIN'`,
+    [organizationId]
+  )
+  mainAccountableStoreId = mainAccountableStore.rows[0]!.id
   const migratedAsset = await pool.query<{ assetCode: string }>(
     `SELECT asset_code AS "assetCode" FROM store.assets WHERE id = $1`,
     [legacyAssetId]
@@ -136,6 +146,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await issuanceArtifacts.close()
+  await departmentStore.close()
   await store.close()
   await pool.end()
 })
@@ -280,6 +291,8 @@ describe("Store requests", () => {
       ...input,
       id: item.id,
       identificationName: " ",
+      modelNumber: "APPM 15",
+      ratedLoad: "15 kW",
     })
     const order = await createPurchaseOrder(item.id, 1, "100.00")
     const location = await store.ensurePrimaryStoreLocation({ organizationId })
@@ -289,12 +302,90 @@ describe("Store requests", () => {
       purchaseOrderLineId: order.id,
       quantity: 1,
       receivedBy: "store.integration@example.com",
+      unitDetails: {
+        installedOn: "2026-09-20",
+        manufacturerMake: "Kaishan",
+        manufacturerSerialNumber: "COMP-001",
+      },
+      warrantyPeriod: "365",
     })
     const result = await pool.query<{ identification_name: string }>(
       "SELECT identification_name FROM store.assets WHERE asset_code = $1 AND organization_id = $2",
       [receipt.assetCodes[0], organizationId]
     )
     expect(result.rows[0]?.identification_name).toBe("")
+    expect((await store.listItemTypes(organizationId)).find((row) => row.id === item.id)).toMatchObject({
+      modelNumber: "APPM 15",
+      ratedLoad: "15 kW",
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!, organizationId,
+    }))?.asset).toMatchObject({
+      installedOn: "2026-09-20",
+      manufacturerMake: "Kaishan",
+      manufacturerSerialNumber: "COMP-001",
+      mcbNumber: null,
+      warrantyPeriod: "365",
+      warrantyUntil: "2027-09-20",
+    })
+
+    await expect(store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      stabilizerUnitId: "MISSING-STABILIZER",
+    })).rejects.toThrow("Stabiliser Unit ID MISSING-STABILIZER was not found")
+
+    await expect(store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      mcbNumber: "MISSING-MCB",
+      organizationId,
+    })).rejects.toThrow("MCB Unit ID MISSING-MCB was not found")
+
+    const stabilizer = await store.createItemType({
+      ...(await createClassification("Connected Stabilizer")),
+      assetType: "NON_CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    const stabilizerOrder = await createPurchaseOrder(stabilizer.id, 1, "50.00")
+    const stabilizerReceipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: stabilizerOrder.id,
+      quantity: 1,
+    })
+    const mcb = await store.createItemType({
+      ...(await createClassification("Connected MCB")),
+      assetType: "NON_CONSUMABLE",
+      organizationId,
+      unit: "Nos",
+    })
+    const mcbOrder = await createPurchaseOrder(mcb.id, 1, "20.00")
+    const mcbReceipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: mcbOrder.id,
+      quantity: 1,
+    })
+    await store.updateAssetEquipmentDetails({
+      assetCode: receipt.assetCodes[0]!,
+      installedOn: "2026-09-21",
+      manufacturerMake: "Another Make",
+      manufacturerSerialNumber: "COMP-001",
+      mcbNumber: mcbReceipt.assetCodes[0]!,
+      organizationId,
+      stabilizerUnitId: stabilizerReceipt.assetCodes[0]!,
+      warrantyPeriod: "365",
+    })
+    expect((await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!, organizationId,
+    }))?.asset).toMatchObject({
+      installedOn: "2026-09-21",
+      manufacturerMake: "Another Make",
+      mcbNumber: mcbReceipt.assetCodes[0],
+      stabilizerUnitId: stabilizerReceipt.assetCodes[0],
+      warrantyUntil: "2027-09-21",
+    })
   })
 
   test("keeps current and superseded Item drawings while reusing Organization bytes", async () => {
@@ -1607,6 +1698,18 @@ describe("Store requests", () => {
         (item) => item.id === itemType.id
       )?.availableUnitIds
     ).toEqual(assetCodes)
+    const qualityStore = await departmentStore.getStoreByCode(
+      organizationId,
+      "QUALITY"
+    )
+    await expect(
+      store.moveAsset({
+        assetCode: assetCodes[0],
+        holderReference: qualityStore.defaultLocationId,
+        holderType: "STORE",
+        organizationId,
+      })
+    ).rejects.toThrow("Destination Store location was not found.")
 
     const itemWorkspace = await store.getItemTypeWorkspace({
       organizationId,
@@ -1835,6 +1938,42 @@ describe("Store requests", () => {
     expect(updatedFirstSchedule?.nextDueOn).toBe("2026-11-20")
     expect(unchangedSecondSchedule?.nextDueOn).toBe(secondMasterSchedule?.nextDueOn)
 
+    const maintenance = createMaintenanceRepository({ connectionString })
+    try {
+      const planned = {
+        changedItems: ["Bearing"],
+        checklistSteps: [],
+        completedBy: "Maintenance Technician",
+        completedByEmployeeCode: null,
+        dueOn: "2026-11-20",
+        organizationId,
+        scheduleId: firstMasterSchedule!.id,
+        startedAt: "2026-11-20T09:00:00+05:30",
+        workDone: "Serviced",
+      }
+      const draft = await store.saveAssetMaintenanceTask({
+        ...planned,
+        status: "In Progress",
+      })
+      expect((await store.listAssetMaintenanceWork(organizationId))
+        .find((row) => row.scheduleId === firstMasterSchedule!.id)?.taskStatus)
+        .toBe("In Progress")
+      await store.saveAssetMaintenanceTask({
+        ...planned,
+        endedAt: "2026-11-20T10:00:00+05:30",
+        status: "Completed",
+      })
+      expect((await maintenance.listAssetMaintenancePlan(organizationId, "2026-11-01", "2026-11-30"))
+        .find((row) => row.id === draft.id)).toMatchObject({
+          assetCode: assetCodes[0], dueOn: "2026-11-20", status: "Completed",
+        })
+      expect((await maintenance.listCompletedAssetMaintenance(organizationId))
+        .some((row) => row.assetCode === assetCodes[0] && row.workDone === "Serviced"))
+        .toBe(true)
+    } finally {
+      await maintenance.close()
+    }
+
     await store.setAssetLifecycleStatus({
       assetCode: assetCodes[0],
       organizationId,
@@ -1869,6 +2008,88 @@ describe("Store requests", () => {
     expect(workspace?.schedules.find((entry) => entry.id === schedule.id)?.nextDueOn).toBe("2026-09-19")
   })
 
+  test("issues a calibration PO before QC dispatch and returns to its accountable store", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Calibration service")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Calibration gauge ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "1000.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    const schedule = await store.scheduleAssetMaintenance({
+      assetCode,
+      firstDueOn: "2026-10-01",
+      frequencyDays: 365,
+      name: "Yearly calibration",
+      organizationId,
+      scheduleType: "CALIBRATION",
+    })
+    const visit = await store.openCalibrationVisit({
+      assetCode,
+      organizationId,
+      scheduleId: schedule.id,
+      scope: "Gauge calibration",
+    })
+    const supplier = await store.createSupplier({
+      name: `Calibration Supplier ${suffix}`,
+      organizationId,
+    })
+    const offer = await store.addCalibrationOffer({
+      accountableStoreId: mainAccountableStoreId,
+      organizationId,
+      quotedPrice: "250.00",
+      supplierId: supplier.id,
+      visitId: visit.id,
+    })
+    const prepared = await store.prepareCalibrationDispatch({
+      accountableStoreId: mainAccountableStoreId,
+      offerId: offer.id,
+      organizationId,
+      visitId: visit.id,
+    })
+    expect(prepared.alreadyIssued).toBe(false)
+    await storeIssuedPdf({
+      document: prepared.document,
+      organizationId,
+      purchaseOrderId: prepared.purchaseOrderId,
+    })
+    await store.issueCalibrationServiceOrder({
+      accountableStoreId: mainAccountableStoreId,
+      organizationId,
+      visitId: visit.id,
+    })
+    expect((await store.getAssetWorkspace({ assetCode, organizationId }))?.asset.holderType)
+      .toBe("STORE")
+    await store.finalizeCalibrationDispatch({ organizationId, visitId: visit.id })
+    expect((await store.getAssetWorkspace({ assetCode, organizationId }))?.asset.holderType)
+      .toBe("SUPPLIER")
+    const qualityLocation = await pool.query<{ id: string }>(
+      `SELECT default_location_id AS id FROM store.accountable_stores
+       WHERE organization_id = $1 AND code = 'QUALITY'`,
+      [organizationId]
+    )
+    await expect(store.returnCalibrationVisit({
+      locationId: qualityLocation.rows[0]!.id,
+      organizationId,
+      visitId: visit.id,
+    })).rejects.toThrow("originating accountable store")
+    await store.returnCalibrationVisit({ organizationId, visitId: visit.id })
+    const returned = await store.getAssetWorkspace({ assetCode, organizationId })
+    expect(returned?.asset).toMatchObject({
+      accountableStoreCode: "MAIN",
+      holderType: "STORE",
+      status: "UNDER_MAINTENANCE",
+    })
+  })
+
   test("creates a Repair PO against one Physical Asset and keeps its drawing", async () => {
     const location = await store.createLocation({
       code: `REPAIR-STORE-${suffix}`,
@@ -1894,6 +2115,7 @@ describe("Store requests", () => {
       organizationId,
     })
     const repairOrder = await store.createRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: receipt.assetCodes[0]!,
       issuanceId: randomUUID(),
       organizationId,
@@ -1905,6 +2127,7 @@ describe("Store requests", () => {
     })
     await expect(
       store.createRepairPurchaseOrder({
+        accountableStoreId: mainAccountableStoreId,
         assetCode: receipt.assetCodes[0]!,
         issuanceId: randomUUID(),
         organizationId,
@@ -1944,6 +2167,7 @@ describe("Store requests", () => {
       expect.objectContaining({ id: repairOrder.id })
     )
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: receipt.assetCodes[0]!,
       organizationId,
       purchaseOrderId: repairOrder.id,
@@ -2013,6 +2237,7 @@ describe("Store requests", () => {
       organizationId,
     })
     const order = await store.createRepairPurchaseOrderFromSelection({
+      accountableStoreId: mainAccountableStoreId,
       issuanceId: randomUUID(),
       items: repairAssetCodes.map((assetCode, index) => ({
         assetCode,
@@ -2035,6 +2260,7 @@ describe("Store requests", () => {
     ])
     await expect(
       store.createRepairPurchaseOrderFromSelection({
+        accountableStoreId: mainAccountableStoreId,
         issuanceId: randomUUID(),
         items: [{
           assetCode: receipt.assetCodes[0]!,
@@ -2130,6 +2356,7 @@ describe("Store requests", () => {
       expect.objectContaining({ status: "Fulfilled" })
     )
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: repairAssetCodes[0]!,
       organizationId,
       purchaseOrderId: order.id,
@@ -2167,6 +2394,7 @@ describe("Store requests", () => {
       )?.order.status
     ).toBe("Open")
     await store.completeRepairPurchaseOrder({
+      accountableStoreId: mainAccountableStoreId,
       assetCode: repairAssetCodes[1]!,
       organizationId,
       purchaseOrderId: order.id,
@@ -2228,6 +2456,7 @@ describe("Store requests", () => {
       }),
     ])
     const selection = {
+      accountableStoreId: mainAccountableStoreId,
       issuanceId: randomUUID(),
       items: receipt.assetCodes.map((assetCode, index) => ({
         assetCode,
@@ -2299,5 +2528,315 @@ describe("Store requests", () => {
       ).length,
       physicalAssets: assets.length,
     })
+  })
+
+  test("keeps an unavailable Unit ID unavailable when returned to Store", async () => {
+    const location = await store.createLocation({
+      code: `SERVICE-RETURN-${suffix}`,
+      name: `Service Return Store ${suffix}`,
+      organizationId,
+    })
+    await pool.query(
+      `UPDATE store.assets SET status = 'UNDER_MAINTENANCE',
+         current_holder_type = 'DEPARTMENT',
+         current_holder_reference = 'QUALITY',
+         current_holder_name = 'Quality', current_location_id = NULL
+       WHERE id = $1`,
+      [legacyAssetId]
+    )
+
+    await departmentStore.moveAsset({
+      assetCode: legacyAssetCode,
+      holderReference: location.id,
+      holderType: "STORE",
+      organizationId,
+      storeCode: "MAIN",
+    })
+
+    const asset = await pool.query<{
+      holderType: string
+      locationId: string | null
+      status: string
+    }>(
+      `SELECT status, current_holder_type AS "holderType",
+         current_location_id AS "locationId"
+       FROM store.assets WHERE id = $1`,
+      [legacyAssetId]
+    )
+    expect(asset.rows[0]).toEqual({
+      holderType: "STORE",
+      locationId: location.id,
+      status: "UNDER_MAINTENANCE",
+    })
+  })
+
+  test("requires an active gauge set to move together", async () => {
+    const location = await store.createLocation({
+      code: `SET-SOURCE-${suffix}`,
+      name: `Gauge Source Store ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Gauge Set Movement")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Gauge Set Movement ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "100.00")).id,
+      quantity: 2,
+    })
+    for (const assetCode of receipt.assetCodes) {
+      await departmentStore.transferAssetAccountability({
+        assetCode,
+        destinationStoreCode: "QUALITY",
+        organizationId,
+        sourceStoreCode: "MAIN",
+      })
+    }
+    await departmentStore.createGaugeSet({
+      assetCodes: [receipt.assetCodes[0]!, receipt.assetCodes[1]!],
+      name: `Gauge Set ${suffix}`,
+      organizationId,
+      storeCode: "QUALITY",
+    })
+    const quality = await departmentStore.getStoreByCode(organizationId, "QUALITY")
+    const destination = await pool.query<{ id: string }>(
+      `INSERT INTO store.locations (
+         organization_id, code, name, location_type, accountable_store_id
+       ) VALUES ($1, $2, $3, 'STORE', $4) RETURNING id`,
+      [organizationId, `QUALITY-TEST-${suffix}`, "Quality Test Location", quality.id]
+    )
+
+    await expect(departmentStore.moveAsset({
+      assetCode: receipt.assetCodes[0]!,
+      holderReference: destination.rows[0]!.id,
+      holderType: "STORE",
+      organizationId,
+      storeCode: "QUALITY",
+    })).rejects.toThrow("Move this Unit ID with its gauge set.")
+  })
+
+  test("fulfills a one-unit Store responsibility request for its exact Unit ID", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Store Responsibility Request")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Store Request Gauge ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 2, "100.00")).id,
+      quantity: 2,
+    })
+    const units = await store.listStockPhysicalUnits(organizationId, "COMPANY")
+    const requestedUnit = units.find((unit) => unit.assetCode === receipt.assetCodes[0])!
+    const otherUnit = receipt.assetCodes[1]!
+    const request = await store.createRequisitionBatch({
+      department: "CNC Store",
+      fulfillmentKind: "STORE_TRANSFER",
+      items: [{ itemTypeId: item.id, quantity: 1, requestedUnitId: requestedUnit.id }],
+      locationId: location.id,
+      organizationId,
+      receivingStoreCode: "cnc",
+      requestedBy: "CNC Store Representative",
+    })
+    await expect(departmentStore.transferAssetAccountability({
+      assetCode: otherUnit,
+      destinationStoreCode: "cnc",
+      organizationId,
+      requisitionId: request.lineIds[0],
+      sourceStoreCode: "MAIN",
+    })).rejects.toThrow("exact Unit ID")
+    await departmentStore.transferAssetAccountability({
+      assetCode: requestedUnit.assetCode,
+      destinationStoreCode: "cnc",
+      organizationId,
+      requisitionId: request.lineIds[0],
+      sourceStoreCode: "MAIN",
+    })
+    const line = (await store.listRequisitions({ organizationId })).rows.find(
+      (candidate) => candidate.id === request.lineIds[0]
+    )
+    expect(line).toMatchObject({ issuedQuantity: "1", status: "Fulfilled" })
+    const transfer = await pool.query<{ code: string; requisition_id: string }>(
+      `SELECT destination.code, transfer.requisition_id
+       FROM store.asset_accountability_transfers transfer
+       JOIN store.accountable_stores destination
+         ON destination.id = transfer.destination_store_id
+       WHERE transfer.asset_id = $1 AND transfer.requisition_id = $2`,
+      [requestedUnit.id, request.lineIds[0]]
+    )
+    expect(transfer.rows[0]).toEqual({ code: "cnc", requisition_id: request.lineIds[0] })
+  })
+
+  test("routes a Unit ID between department Stores through Main", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Store Transfer Route")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Transfer Route ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "100.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "QUALITY", organizationId, sourceStoreCode: "MAIN",
+    })
+    await expect(departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "cnc", organizationId, sourceStoreCode: "QUALITY",
+    })).rejects.toThrow("through Main Store")
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "MAIN", organizationId, sourceStoreCode: "QUALITY",
+    })
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "cnc", organizationId, sourceStoreCode: "MAIN",
+    })
+    expect((await departmentStore.getAssetAccountability(organizationId, assetCode))?.accountableStoreCode)
+      .toBe("cnc")
+  })
+
+  test("records one Unit ID loss against its accountable Store", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Lost Unit ID")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Lost Unit ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "100.00")).id,
+      quantity: 1,
+    })
+    const assetCode = receipt.assetCodes[0]!
+    await departmentStore.transferAssetAccountability({
+      assetCode, destinationStoreCode: "QUALITY", organizationId, sourceStoreCode: "MAIN",
+    })
+    await departmentStore.recordAssetLoss({
+      assetCode, organizationId, storeCode: "QUALITY", remark: "Unit could not be found",
+    })
+    const workspace = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "QUALITY" })
+    expect(workspace.assets.find((asset) => asset.assetCode === assetCode)?.status).toBe("LOST")
+    expect(workspace.serializedTotals.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      accountableQuantity: "0", companyQuantity: "0",
+    })
+    const movement = await pool.query<{ movement_type: string; quantity: string }>(
+      `SELECT movement_type, quantity::text FROM store.stock_movements
+       WHERE organization_id = $1 AND asset_id =
+         (SELECT id FROM store.assets WHERE organization_id = $1 AND asset_code = $2)
+         AND movement_type = 'LOSS'`,
+      [organizationId, assetCode]
+    )
+    expect(movement.rows).toEqual([{ movement_type: "LOSS", quantity: "-1.000" }])
+    await expect(departmentStore.recordAssetLoss({
+      assetCode, organizationId, storeCode: "QUALITY", remark: "Duplicate report",
+    })).rejects.toThrow("already left company stock")
+  })
+
+  test("shows Main-accountable units held by CNC in its allocation list", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const departmentName = "Ppac Cnc-01"
+    const assetCode = `ALLOC-${suffix}`
+    await pool.query(
+      `INSERT INTO store.assets (organization_id, item_type_id, asset_code,
+         identification_name, status, current_holder_type,
+         current_holder_reference, current_holder_name, accountable_store_id)
+       VALUES ($1, $2, $3, 'CNC fixture', 'ASSIGNED', 'DEPARTMENT',
+         $4, $5, $6)`,
+      [organizationId, legacyItemTypeId, assetCode, departmentName,
+        departmentName, mainAccountableStoreId]
+    )
+
+    const allocations = await departmentStore.listDepartmentAllocations({
+      organizationId, productionFloorCode: "cnc",
+    })
+    expect(allocations).toContainEqual(expect.objectContaining({
+      accountableStoreCode: "MAIN", assetCode, departmentName,
+    }))
+    const cncStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
+    expect(cncStock.assets.some((asset) => asset.assetCode === assetCode)).toBe(false)
+  })
+
+  test("shows each Store leg and one consumption without double-debiting company stock", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("Company Movement")),
+      assetType: "CONSUMABLE",
+      identificationName: `Company Movement ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 10, "100.00")).id,
+      quantity: 10,
+    })
+    await departmentStore.transferQuantity({
+      destinationStoreCode: "cnc", itemTypeId: item.id,
+      organizationId, quantity: 10, sourceStoreCode: "MAIN",
+    })
+    await departmentStore.consumeQuantities({
+      consumedOn: "2026-08-17", items: [{ itemTypeId: item.id, quantity: 10 }],
+      organizationId, storeCode: "cnc",
+    })
+
+    const [main, cnc, company] = await Promise.all([
+      departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" }),
+      departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" }),
+      departmentStore.listCompanyMovements({ organizationId, code: item.typeCode }),
+    ])
+    expect(main.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "0", companyQuantity: "0",
+    })
+    expect(cnc.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "0", companyQuantity: "0",
+    })
+    expect(company.movements).toHaveLength(4)
+    expect(company.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "RECEIPT", quantity: "+10", storeName: main.store.name }),
+      expect.objectContaining({ kind: "TRANSFER_OUT", quantity: "-10", storeName: main.store.name }),
+      expect.objectContaining({ kind: "TRANSFER_IN", quantity: "+10", storeName: cnc.store.name }),
+      expect.objectContaining({ kind: "CONSUMPTION", quantity: "-10",
+        storeName: cnc.store.name, usedOn: "2026-08-17" }),
+    ]))
   })
 })

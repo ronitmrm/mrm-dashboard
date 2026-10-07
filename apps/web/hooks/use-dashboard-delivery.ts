@@ -88,7 +88,11 @@ export function useDashboardDelivery({
     }
 
     try {
-      const response = await fetch(scopedStateUrl ?? dashboardCanonicalRequestUrl(request), {
+      const liveVersion = stateRef.current.data?.liveVersion
+      const response = await fetch(scopedStateUrl ?? dashboardCanonicalRequestUrl({
+        ...request,
+        knownLiveVersion: typeof liveVersion === "string" ? liveVersion : null,
+      }), {
         cache: "no-store",
         credentials: "same-origin",
         signal: controller.signal,

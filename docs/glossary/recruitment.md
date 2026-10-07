@@ -9,11 +9,31 @@ The import assigns vacant posts only; it does not change existing assignments.
 
 ## Creating a job from Employee Master
 
-Create Job first asks for a target date and an optional active Job Template.
+Create Job first asks for a target date and an optional active Job Description
+Template. The Approved Post's linked template is preselected when available;
+the operator may select another template or No Template.
 The selected template is copied into the new job's requirements; choosing No
 Template creates it without a template link. This does not change the Employee
 Master's template. Combined-role templates must belong to the selected combined
 role. Other job-entry paths retain their existing linked-template defaults.
+
+## Job Description Templates
+
+Each new or edited template requires a Shift Type of Day, Night, or Rotation,
+plus a Shift Start Time and Shift End Time. Night shifts may span midnight.
+Existing templates without shift details remain blank until edited. A new Job
+Post copies the selected template's shift and description into its own record.
+
+Editing a template changes the reusable profile for future Job Posts. HR must
+choose whether to apply its requirements to all matching Approved Posts,
+regardless of whether they are occupied or vacant. This updates posts already
+linked to the template and unlinked posts matching its combined role or its
+individual department and designation; posts linked to another template keep
+their own profile. The approved-post link and requirement fields update in the
+same transaction as the template. Existing Job Posts linked to those Approved
+Posts receive the template link when they have none; blank job requirements and
+shift fields are filled from the template. Existing job values and jobs linked
+to a different template remain historical. Employee assignments are unchanged.
 
 ## Approved Post Deletion
 
@@ -27,7 +47,7 @@ Any linked job that is not Closed still blocks deletion.
 
 Deleting a combined role removes the grouping, not its individual Approved Posts
 or employee assignments. Member posts regain their individual vacancy codes;
-job templates remain available with their combined-role link cleared. The audit
+job description templates remain available with their combined-role link cleared. The audit
 log retains the deleted grouping and membership. Any linked Job Post (including
 closed jobs) or pending replacement blocks deletion, preserving recruitment
 history and atomic appointment workflows. Deletion requires the independent
@@ -168,6 +188,20 @@ employee leaves. Pending appointments remain in the existing candidate and post
 records until joining is confirmed. Older current assignments start as a baseline;
 prior occupants without a retained letter or replacement snapshot cannot be
 reconstructed reliably.
+
+Employee Data begins with a confirmed Joined assignment and an Employee ID; an
+appointment alone does not create an employee data row. HR may fill the row later.
+Date of birth, contact and emergency details, addresses, gender, blood group,
+bank and statutory identifiers belong to the person identified by the Employee
+ID and remain editable across assignments. Shift, salary, salary rate increment,
+PF status and ESIC status belong to the particular joined assignment. If the
+employee leaves and later rejoins, the new employment period gets its own term
+details and may have a different department or designation, while the same Employee
+ID carries the existing personal details. A new Employee ID needs an explicit
+link to the earlier person; names alone never establish identity.
+Concurrent post assignments for the same Employee ID belong to one employment
+term while any of those posts remains occupied. Releasing one post as Role Changed
+does not start a new term; a later join after all posts have ended does.
 
 When a combined job is split, an employee who stays employed may stop covering
 one standalone Approved Post. HR records a Role Changed date for that post only.

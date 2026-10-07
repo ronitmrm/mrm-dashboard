@@ -8,8 +8,10 @@ import {
 import type { StoreRequestFormPolicy } from "@/lib/store-request-policy"
 
 export function StoreRequestIdentityFields({
+  allowStoreRequest = false,
   policy,
 }: {
+  allowStoreRequest?: boolean
   policy: StoreRequestFormPolicy
 }) {
   return (
@@ -48,7 +50,9 @@ export function StoreRequestIdentityFields({
         )}
         {!policy.departmentOptions.length ? (
           <p className="text-xs text-destructive">
-            Ask an administrator to link this account to Employee Master.
+            {allowStoreRequest
+              ? "A Department is required for use requests. Your receiving Store authorizes a stock request."
+              : "Ask an administrator to link this account to Employee Master."}
           </p>
         ) : null}
       </Field>

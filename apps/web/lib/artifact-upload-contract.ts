@@ -1,3 +1,5 @@
+import { MAX_MAINTENANCE_WORK_PHOTOS } from "./maintenance-work-photo-target"
+
 export const artifactUploadOffsetHeader = "Upload-Offset"
 
 export type PendingUploadSafeState =
@@ -47,6 +49,7 @@ export type PendingUploadIntent =
   | { kind: "commercial-purchase-order-source"; purchaseOrderId: string }
   | { candidateId?: string; kind: "recruitment-candidate-resume" }
   | { index: number; kind: "maintenance-request-photo" }
+  | { index: number; kind: "maintenance-work-photo" }
   | { kind: "store-calibration-certificate"; visitId: string }
   | { itemTypeId?: string; kind: "store-item-drawing" }
   | {
@@ -161,9 +164,11 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
       const candidateId = optionalText(input.candidateId, "candidateId")
       return { ...(candidateId ? { candidateId } : {}), kind }
     }
-    case "maintenance-request-photo": {
+    case "maintenance-request-photo":
+    case "maintenance-work-photo": {
       const index = Number(input.index)
-      if (!Number.isSafeInteger(index) || index < 1 || index > 8) {
+      const maxIndex = kind === "maintenance-work-photo" ? MAX_MAINTENANCE_WORK_PHOTOS : 8
+      if (!Number.isSafeInteger(index) || index < 1 || index > maxIndex) {
         throw new Error("Upload intent photo index is invalid.")
       }
       return { index, kind }
