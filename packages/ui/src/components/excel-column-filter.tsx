@@ -96,7 +96,7 @@ export function ExcelColumnFilter({
           <ListFilter className="size-3.5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 space-y-3 p-3">
+      <PopoverContent align="start" className="w-[min(28rem,calc(100vw-2rem))] space-y-3 p-3">
         <p className="text-sm font-medium">Filter {label}</p>
         {onSort ? (
           <div className="grid grid-cols-2 gap-1 border-b pb-2">
@@ -173,7 +173,7 @@ export function ExcelColumnFilter({
                   )
                 }
               />
-              <span className="truncate" title={option}>
+              <span className="min-w-0 break-words" title={option}>
                 {option}
               </span>
             </label>

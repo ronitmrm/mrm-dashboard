@@ -49,9 +49,15 @@ function Detail({
   )
 }
 
-function TemplateDetails({ template }: { template: RecruitmentTemplateRow }) {
+function TemplateDetails({
+  compact = false,
+  template,
+}: {
+  compact?: boolean
+  template: RecruitmentTemplateRow
+}) {
   return (
-    <dl className="grid gap-4 sm:grid-cols-2">
+    <dl className={compact ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
       <Detail
         label="Template For"
         value={
@@ -69,7 +75,7 @@ function TemplateDetails({ template }: { template: RecruitmentTemplateRow }) {
       <Detail label="Shift Type" value={template.shiftType} />
       <Detail label="Shift Start Time" value={template.shiftStartTime} />
       <Detail label="Shift End Time" value={template.shiftEndTime} />
-      <div className="sm:col-span-2">
+      <div className={compact ? undefined : "sm:col-span-2"}>
         <Detail label="Role Responsibilities" value={template.roleResponsibilities} />
       </div>
     </dl>
@@ -136,20 +142,22 @@ export function JobTemplatePreviewProvider({
   )
 }
 
-export function JobTemplateInline({ code }: { code: string | null }) {
+export function JobTemplateReference({ code }: { code: string | null }) {
   const context = useContext(Context)
   const template = context?.templates.find((row) => row.templateCode === code)
-  if (!template) return <p>Job Description Template: {code ?? "—"}</p>
 
   return (
-    <details className="mb-4 rounded-md border p-4">
-      <summary className="cursor-pointer font-medium">
-        Job Description Template {template.templateCode} · {template.name}
-      </summary>
-      <div className="pt-4">
-        <TemplateDetails template={template} />
-      </div>
-    </details>
+    <section aria-label="Job Description Template" className="min-w-0 rounded-lg border bg-muted/20 p-4">
+      <h3 className="font-medium">Job Description Template {code ?? "—"}</h3>
+      {template ? (
+        <>
+          <p className="mb-4 text-sm text-muted-foreground">{template.name}</p>
+          <TemplateDetails compact template={template} />
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">No Job Description Template Assigned.</p>
+      )}
+    </section>
   )
 }
 

@@ -46,7 +46,8 @@ import { useMemo, useState } from "react"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
-import { JobTemplateInline, JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
+import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
+import { InterviewScoringLayout } from "@/components/hr/interview-scoring-layout"
 import {
   formatIstDate,
   formatIstTime,
@@ -256,7 +257,7 @@ export function InterviewScheduleBoard({
  </SectionCard>
 
       {selectedInterview ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+        <SheetContent className="!w-full overflow-y-auto sm:!max-w-5xl">
           <SheetHeader>
             <SheetTitle>Interview Outcome</SheetTitle>
             <SheetDescription>
@@ -265,19 +266,20 @@ export function InterviewScheduleBoard({
             </SheetDescription>
           </SheetHeader>
           <div className="px-6 pb-6">
-            <JobTemplateInline code={selectedInterview.requirementTemplateCode} />
-            <InterviewOutcomeForm
-              applications={[
-                {
-                  candidateName: `${selectedInterview.candidateName} · ${selectedInterview.jobTitle}`,
-                  id: selectedInterview.applicationId,
-                  scoreableRound: selectedInterview.scoreableRound,
-                },
-              ]}
-              initialApplicationId={selectedInterview.applicationId}
-              interviewerOptions={interviewerOptions}
-              panelId="interviewsPanel"
-            />
+            <InterviewScoringLayout templateCode={selectedInterview.requirementTemplateCode}>
+              <InterviewOutcomeForm
+                applications={[
+                  {
+                    candidateName: `${selectedInterview.candidateName} · ${selectedInterview.jobTitle}`,
+                    id: selectedInterview.applicationId,
+                    scoreableRound: selectedInterview.scoreableRound,
+                  },
+                ]}
+                initialApplicationId={selectedInterview.applicationId}
+                interviewerOptions={interviewerOptions}
+                panelId="interviewsPanel"
+              />
+            </InterviewScoringLayout>
           </div>
         </SheetContent>
       ) : null}
