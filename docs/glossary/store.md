@@ -307,6 +307,10 @@ company totals include stock accountable to Quality and production Stores.
 Asset Name, Make/Model, and Asset Type appear in separate columns. Unit Status
 and Responsible Store apply only to physical Unit ID rows; an Asset Code row
 summarizes stock across Stores and has no single responsible Store.
+The Location / Holder column shows Main Store locations for a Consumable only
+when Main Store has stock; otherwise it shows a dash. A Non Consumable Asset
+Code row has no single location and shows a dash, while each Unit ID row shows
+that unit's recorded physical location or holder.
 Departmental and Quality Store workspaces show their own accountable stock.
 A Consumable has one quantity-managed row. Recording use reduces its
 local available balance and company on-hand.
