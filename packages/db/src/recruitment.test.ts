@@ -1471,6 +1471,7 @@ describe("job workspace", () => {
               candidate_phone: "9999999999",
               current_company: null,
               experience: "4 years",
+              has_resume: true,
               id: "application-1",
               interview_at: "2026-08-08 10:00:00+00",
               interview_count: 2,
@@ -1530,6 +1531,7 @@ describe("job workspace", () => {
     expect(workspace?.applications[0]).toEqual(
       expect.objectContaining({
         candidateName: "Candidate One",
+        hasResume: true,
         interviewCount: 2,
         nextRound: "Technical Round",
       })
