@@ -419,7 +419,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
     const measuredClient = {
       query: async (sql: string, parameters?: unknown[]) => {
         const result = await client.query(sql, parameters)
-        if (sql.includes("derived.dashboard_read_models")) {
+        if (sql.includes("AS previous_row")) {
           priorReads.push({
             parameters,
             responseBytes: Buffer.byteLength(JSON.stringify(result.rows)),

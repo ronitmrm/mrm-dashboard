@@ -5,11 +5,13 @@ import {
   instrumentPostgresPool,
 } from "@workspace/db"
 import {
+  recordDashboardPublication,
   withPerformanceOperation,
   type TelemetryRuntime,
   type TelemetrySink,
 } from "@workspace/observability"
 import { Pool, type PoolClient } from "pg"
+import { performance } from "node:perf_hooks"
 
 import {
   createRedisAcceleration,
@@ -32,11 +34,13 @@ export type RefreshBuildContext = {
   jobId: string
   organizationId: string
   workerId: string
+  forceRefresh?: boolean
 }
 
 export type ReadModelBuild = {
   payload: JsonRecord
   sourceWatermark: JsonRecord
+  storagePayload?: JsonRecord
 }
 
 export type ReadModelBuilder = (
@@ -80,7 +84,9 @@ export async function buildCanonicalRuntimeReadModel(
   client: PoolClient,
   context: RefreshBuildContext
 ): Promise<ReadModelBuild> {
-  return buildCanonicalDashboardReadModel(client, context)
+  return buildCanonicalDashboardReadModel(client, {
+    ...context, persistSegments: true, materializePayload: false,
+  })
 }
 
 export function createDurableRefreshWorker({
@@ -168,7 +174,7 @@ export function createDurableRefreshWorker({
                   WHERE status = 'pending'
                     AND ($1::uuid IS NULL OR organization_id = $1))
                   AS oldest_pending_seconds,
-                (SELECT max(version)::text FROM derived.dashboard_read_models
+                (SELECT max(version)::text FROM derived.dashboard_read_model_heads
                   WHERE ($1::uuid IS NULL OR organization_id = $1))
                   AS last_version
             `,
@@ -267,6 +273,7 @@ export function createDurableRefreshWorker({
           // server connection is lost. Keep the worker alive so the queue can retry.
           const onClientError = () => undefined
           client.on("error", onClientError)
+          const transactionStartedAt = performance.now()
           try {
             await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
             await client.query(
@@ -276,9 +283,10 @@ export function createDurableRefreshWorker({
               attempts: number
               id: string
               organization_id: string
+              force_full: boolean
             }>(
               `
-            SELECT id, organization_id, attempts
+            SELECT id, organization_id, attempts, force_full
             FROM derived.refresh_jobs
             WHERE status = 'pending' AND run_after <= now()
               AND ($1::uuid IS NULL OR organization_id = $1)
@@ -332,6 +340,7 @@ export function createDurableRefreshWorker({
                 jobId: job.id,
                 organizationId: job.organization_id,
                 workerId,
+                forceRefresh: job.force_full,
               })
               await client.query(
                 `
@@ -363,7 +372,7 @@ export function createDurableRefreshWorker({
                 [
                   job.organization_id,
                   version,
-                  built.payload,
+                  built.storagePayload ?? built.payload,
                   built.sourceWatermark,
                 ]
               )
@@ -397,6 +406,11 @@ export function createDurableRefreshWorker({
                   `dashboard-read-model:${job.organization_id}:${version}`,
                 ]
               )
+              await client.query("SELECT * FROM derived.prune_dashboard_history($1, 5)", [job.organization_id])
+              const publication = await client.query<{ created_at: Date; published_at: Date }>(
+                "SELECT created_at, published_at FROM derived.dashboard_read_model_heads WHERE organization_id = $1 AND version = $2",
+                [job.organization_id, version]
+              )
               const durationMs = Date.now() - startedAt
               await client.query(
                 `
@@ -419,6 +433,12 @@ export function createDurableRefreshWorker({
               )
               await client.query("RELEASE SAVEPOINT refresh_attempt")
               await client.query("COMMIT")
+              recordDashboardPublication({
+                organizationId: job.organization_id, version,
+                sourceAsOf: publication.rows[0]!.created_at.toISOString(),
+                publishedAt: publication.rows[0]!.published_at.toISOString(),
+                transactionDurationMs: performance.now() - transactionStartedAt,
+              })
               return {
                 attempts: attempt,
                 jobId: job.id,
@@ -629,7 +649,7 @@ export function createDurableRefreshWorker({
               WHERE ($1::uuid IS NULL OR job.organization_id = $1)
                 AND job.status = 'pending') AS oldest_pending_seconds,
             (SELECT max(model.version)::text
-              FROM derived.dashboard_read_models model
+              FROM derived.dashboard_read_model_heads model
               WHERE ($1::uuid IS NULL OR model.organization_id = $1))
               AS last_version,
             (SELECT count(*) FROM derived.outbox_events event

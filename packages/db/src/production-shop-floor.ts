@@ -3456,12 +3456,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         ),
         pool.query<{ payload: Record<string, unknown> }>(
           `WITH latest AS (
-             SELECT payload FROM derived.dashboard_read_models
-             WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+             SELECT payload FROM derived.dashboard_floor_read_models
+             WHERE organization_id = $1 AND production_floor_code = $2
+             ORDER BY publication_version DESC LIMIT 1
            ), control AS (
-             SELECT COALESCE(payload->'productionFloorSnapshots'->$2,
-               CASE WHEN $2 = 'conventional' THEN payload ELSE '{}'::jsonb END)
-               ->'productionControl' AS data FROM latest
+             SELECT payload->'productionControl' AS data FROM latest
            )
            SELECT jsonb_build_object(
              'machinePlanDetailRows', COALESCE((
