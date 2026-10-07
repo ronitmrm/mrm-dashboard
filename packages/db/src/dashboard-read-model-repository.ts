@@ -264,44 +264,19 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
     ) {
       const result = await pool.query<{
         created_at: Date
+        published_at: Date | null
         payload: JsonRecord
         source_watermark: JsonRecord
         version: string
       }>(
         `
-          SELECT version::text AS version,
-            COALESCE(
-              jsonb_extract_path(
-                payload,
-                'productionFloorSnapshots',
-                $2::text
-              ),
-              CASE
-                WHEN $2 = 'conventional'
-                  THEN payload - 'productionFloorSnapshots'
-                ELSE '{}'::jsonb
-              END
-            ) AS payload,
-            jsonb_build_object(
-              'changedAt', source_watermark -> 'changedAt',
-              'sourceCoverage', COALESCE(
-                payload #> ARRAY[
-                  'productionFloorSnapshots',
-                  $2::text,
-                  'sourceCoverage'
-                ],
-                CASE
-                  WHEN $2 = 'conventional' THEN payload -> 'sourceCoverage'
-                  ELSE NULL
-                END,
-                '{}'::jsonb
-              )
-            ) AS source_watermark,
-            created_at
-          FROM derived.dashboard_read_models AS dashboard_model
-          WHERE dashboard_model.organization_id = $1
-          ORDER BY dashboard_model.version DESC
-          LIMIT 1
+          SELECT version::text AS version, payload,
+            jsonb_build_object('changedAt', source_watermark->'changedAt',
+              'sourceCoverage', COALESCE(payload->'sourceCoverage', '{}'::jsonb)) AS source_watermark,
+            created_at, published_at
+          FROM derived.dashboard_floor_read_models
+          WHERE organization_id = $1 AND production_floor_code = $2
+          ORDER BY publication_version DESC LIMIT 1
         `,
         [organizationId, productionFloorCode]
       )
@@ -314,6 +289,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         productionFloorCode,
         readModelVersion: Number(row.version),
         snapshotCacheUpdatedAt: row.created_at.toISOString(),
+        publishedAt: row.published_at?.toISOString() ?? null,
         sourceCoverage,
         sourceWatermark: {
           ...row.source_watermark,
@@ -337,6 +313,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         live_setup_stages: LiveSetupStage[] | null
         live_version: string | null
         model_created_at: Date | null
+        model_published_at: Date | null
         model_payload: JsonRecord | null
         model_source_watermark: JsonRecord | null
         model_version: string | null
@@ -349,12 +326,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
                 AND (live.version IS NULL OR live.version = $4::text)
                 THEN NULL
-              ELSE COALESCE(
-                model.payload #> ARRAY['productionFloorSnapshots', $2::text],
-                CASE WHEN $2 = 'conventional'
-                  THEN model.payload - 'productionFloorSnapshots'
-                  ELSE '{}'::jsonb END
-              )
+              ELSE model.payload
             END AS model_payload,
             CASE
               WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
@@ -362,40 +334,25 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
                 THEN NULL
               ELSE jsonb_build_object(
                 'changedAt', model.source_watermark -> 'changedAt',
-                'sourceCoverage', COALESCE(
-                  model.payload #> ARRAY[
-                    'productionFloorSnapshots', $2::text, 'sourceCoverage'
-                  ],
-                  CASE WHEN $2 = 'conventional'
-                    THEN model.payload -> 'sourceCoverage'
-                    ELSE NULL END,
-                  '{}'::jsonb
-                )
+                'sourceCoverage', COALESCE(model.payload->'sourceCoverage', '{}'::jsonb)
               )
             END AS model_source_watermark,
-            model.created_at AS model_created_at,
-            live.stages AS live_setup_stages,
+            model.created_at AS model_created_at, model.published_at AS model_published_at,
+            live_stages.stages AS live_setup_stages,
             live.version AS live_version,
             job.status AS job_status, job.attempts,
             job.created_at AS requested_at, job.started_at,
             job.completed_at, job.last_error
           FROM (SELECT $1::uuid AS organization_id) requested
           LEFT JOIN LATERAL (
-            SELECT version, payload, source_watermark, created_at
-            FROM derived.dashboard_read_models
-            WHERE organization_id = requested.organization_id
-            ORDER BY version DESC
+            SELECT version, payload, source_watermark, created_at, published_at
+            FROM derived.dashboard_floor_read_models
+            WHERE organization_id = requested.organization_id AND production_floor_code = $2
+            ORDER BY publication_version DESC
             LIMIT 1
           ) model ON true
           LEFT JOIN LATERAL (
-            SELECT max(state.updated_at)::text AS version,
-              jsonb_agg(jsonb_build_object(
-                'machine', machine.machine_number,
-                'stage', state.stage,
-                'active', state.active,
-                'payload', state.source_payload,
-                'completedAt', state.completed_at
-              )) AS stages
+            SELECT max(state.updated_at)::text AS version
             FROM manufacturing.shop_floor_setup_state state
             JOIN catalog.machines machine ON machine.id = state.machine_id
             JOIN manufacturing.production_floors floor
@@ -405,6 +362,20 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               AND state.updated_at > model.created_at
               AND state.source_payload IS NOT NULL
           ) live ON true
+          LEFT JOIN LATERAL (
+            SELECT jsonb_agg(jsonb_build_object(
+              'machine', machine.machine_number, 'stage', state.stage,
+              'active', state.active, 'payload', state.source_payload,
+              'completedAt', state.completed_at
+            )) AS stages
+            FROM manufacturing.shop_floor_setup_state state
+            JOIN catalog.machines machine ON machine.id = state.machine_id
+            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+            WHERE state.organization_id = requested.organization_id AND floor.code = $2
+              AND state.updated_at > model.created_at AND state.source_payload IS NOT NULL
+              AND NOT ($3::bigint IS NOT NULL AND model.version = $3::bigint
+                AND (live.version IS NULL OR live.version = $4::text))
+          ) live_stages ON true
           LEFT JOIN LATERAL (
             SELECT status, attempts, created_at, started_at,
               completed_at, last_error
@@ -434,6 +405,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
                 productionFloorCode,
                 readModelVersion: version,
                 snapshotCacheUpdatedAt: row.model_created_at.toISOString(),
+                publishedAt: row.model_published_at?.toISOString() ?? null,
                 sourceCoverage: coverage,
                 sourceWatermark: {
                   ...(row.model_source_watermark ?? {}),
@@ -471,10 +443,13 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       }
     },
 
-    async requestRefresh(organizationId: string) {
-      return transaction(pool, (client) =>
-        queueDashboardRefresh(client, organizationId)
-      )
+    async requestRefresh(organizationId: string, options: { force?: boolean } = {}) {
+      return transaction(pool, async (client) => {
+        const result = await queueDashboardRefresh(client, organizationId)
+        if (options.force) await client.query(
+          "UPDATE derived.refresh_jobs SET force_full = true WHERE id = $1", [result.jobId])
+        return result
+      })
     },
 
     async status(organizationId: string) {

@@ -1,9 +1,10 @@
 import { channel } from "node:diagnostics_channel"
 import { performance } from "node:perf_hooks"
 import { readToolingAllocations, readToolingOccupancy } from "./tooling-availability"
+import { dashboardSegmentBuilderVersion, floorSourceFingerprint, persistFloorSegments, readPublishedFloorSegments } from "./dashboard-floor-segments"
 import type { PoolClient } from "pg"
 
-import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
+import { buildLegacyDashboardSnapshot, type LegacyDashboardInput } from "./legacy-dashboard-analysis"
 import {
   activeCorrectionTargetKeys,
   dataEntryCorrectionTargetsWithWorkflowCascade,
@@ -24,6 +25,13 @@ import type {
 
 type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
+type DashboardBuildContext = {
+  organizationId: string
+  forceRefresh?: boolean
+  builderVersion?: string
+  persistSegments?: boolean
+  materializePayload?: boolean
+}
 
 // Opt-in boundary measurements; subscribers retain them outside the payload.
 // CPU and memory are process samples, not isolated allocation/peak metrics.
@@ -31,7 +39,8 @@ const dashboardBuildMetrics = channel("mrm.dashboard.build")
 
 function startDashboardBuildMeasurement(
   organizationId: string,
-  productionFloorCode?: ProductionFloorCode
+  productionFloorCode?: ProductionFloorCode,
+  work: "built" | "reused" = "built"
 ) {
   if (!dashboardBuildMetrics.hasSubscribers) return () => {}
   const startedAt = performance.now()
@@ -45,6 +54,7 @@ function startDashboardBuildMeasurement(
       organizationId,
       productionFloorCode: productionFloorCode ?? null,
       stage: productionFloorCode ? "floor" : "build",
+      work,
       outcome,
       durationMs: performance.now() - startedAt,
       cpuUserMs: cpu.user / 1000,
@@ -729,7 +739,7 @@ export async function readCorrectionCandidateSource(
 
 export async function buildCanonicalDashboardReadModel(
   client: DashboardQueryClient,
-  context: { organizationId: string }
+  context: DashboardBuildContext
 ) {
   const finish = startDashboardBuildMeasurement(context.organizationId)
   let outcome: "success" | "error" = "error"
@@ -744,8 +754,12 @@ export async function buildCanonicalDashboardReadModel(
 
 async function buildDashboardReadModel(
   client: DashboardQueryClient,
-  context: { organizationId: string }
+  context: DashboardBuildContext
 ) {
+  const sourceClock = await client.query<{ source_as_of: Date }>("SELECT transaction_timestamp() AS source_as_of")
+  const sourceAsOf = sourceClock.rows[0]!.source_as_of
+  const previousSegments = new Map((await readPublishedFloorSegments(client, context.organizationId))
+    .map(segment => [segment.production_floor_code, segment]))
   const source = await readCanonicalDashboardSource(
     client,
     context.organizationId
@@ -780,36 +794,15 @@ async function buildDashboardReadModel(
 
   const previousModel = await client.query<PreviousPlanningRow>(
     `
-      WITH previous_model AS (
-        SELECT payload
-        FROM derived.dashboard_read_models
-        WHERE organization_id = $1
-        ORDER BY version DESC
-        LIMIT 1
-      ), floor_payloads AS (
-        SELECT floor.code AS production_floor_code,
-          floor.ordinality AS floor_order,
-          CASE
-            WHEN floor.code = $4 THEN COALESCE(
-              NULLIF(
-                previous_model.payload #>
-                  ARRAY['productionFloorSnapshots', floor.code],
-                'null'::jsonb
-              ),
-              previous_model.payload
-            )
-            ELSE COALESCE(
-              NULLIF(
-                previous_model.payload #>
-                  ARRAY['productionFloorSnapshots', floor.code],
-                'null'::jsonb
-              ),
-              '{}'::jsonb
-            )
-          END AS floor_payload
-        FROM previous_model
-        CROSS JOIN jsonb_array_elements_text($2::jsonb)
-          WITH ORDINALITY floor(code, ordinality)
+      WITH floor_payloads AS (
+        SELECT floor.code AS production_floor_code, floor.ordinality AS floor_order,
+          model.payload AS floor_payload
+        FROM jsonb_array_elements_text($2::jsonb) WITH ORDINALITY floor(code, ordinality)
+        LEFT JOIN LATERAL (
+          SELECT payload FROM derived.dashboard_floor_read_models
+          WHERE organization_id = $1 AND production_floor_code = floor.code
+          ORDER BY publication_version DESC LIMIT 1
+        ) model ON true
       )
       SELECT floor_payloads.production_floor_code,
         (
@@ -846,7 +839,6 @@ async function buildDashboardReadModel(
       context.organizationId,
       JSON.stringify(productionFloors.map((floor) => floor.code)),
       machinePlanContinuityFields,
-      defaultProductionFloorCode,
     ]
   )
   const finishBaselineResult = await client.query<FinishBaselineRow>(
@@ -896,11 +888,8 @@ async function buildDashboardReadModel(
   const toolingAllocations = await readToolingAllocations(client, context.organizationId)
   const toolingOccupancy = await readToolingOccupancy(client, context.organizationId)
 
-  function buildFloorPayload(floorCode: ProductionFloorCode) {
+  function prepareFloorInput(floorCode: ProductionFloorCode) {
     const floorDataEntries = dashboardDataEntriesForFloor(dataEntries, floorCode)
-    const qualityReferenceRows = (entryType: string) => floorDataEntries
-      .filter((row) => row.entryType === entryType)
-      .map((row) => ({ ...jsonRecord(row.payload), _id: row._id, entryType }))
     const floorCorrections = floorRows(source.corrections, floorCode)
     const floorUpdatedAt = latestCreatedAt(
       floorRows(source.productionEntries, floorCode),
@@ -917,7 +906,7 @@ async function buildDashboardReadModel(
       floorDataEntries,
       floorCorrections
     )
-    const snapshot = buildLegacyDashboardSnapshot({
+    const input: LegacyDashboardInput = {
       includeToolFixtureNumbers:
         floorCode === "conventional" || floorCode === "conventional-02",
       productionFloorCode: floorCode,
@@ -979,7 +968,38 @@ async function buildDashboardReadModel(
       ) as never,
       updatedAt: floorUpdatedAt,
       workbookName: "PostgreSQL",
-    })
+    }
+    return { input, floorDataEntries, floorCorrections, floorUpdatedAt }
+  }
+
+  const preparedFloors = new Map(productionFloors.map(floor => [floor.code, prepareFloorInput(floor.code)]))
+  function fingerprint(floorCode: ProductionFloorCode) {
+    const prepared = preparedFloors.get(floorCode)!
+    const { previousMachinePlanDetailRows: _continuity, ...sourceInput } = prepared.input
+    void _continuity
+    return floorSourceFingerprint({
+      sourceInput, corrections: prepared.floorCorrections,
+      sourceCoverage: source.sourceCoverageByFloor[floorCode],
+    }, context.builderVersion ?? dashboardSegmentBuilderVersion)
+  }
+  const changedFloors = new Set(productionFloors.filter(floor =>
+    context.forceRefresh || !previousSegments.get(floor.code)?.segment_id
+      || previousSegments.get(floor.code)?.source_fingerprint !== fingerprint(floor.code)
+  ).map(floor => floor.code))
+  const retainedPayloads = context.materializePayload === false ? [] : (await client.query<{
+    production_floor_code: ProductionFloorCode; payload: JsonRecord
+  }>("SELECT production_floor_code, payload FROM derived.dashboard_floor_segments WHERE organization_id = $1 AND id = ANY($2::uuid[])", [
+    context.organizationId, productionFloors.filter(floor => !changedFloors.has(floor.code))
+      .map(floor => previousSegments.get(floor.code)!.segment_id),
+  ])).rows
+  const retainedByFloor = new Map(retainedPayloads.map(row => [row.production_floor_code, row.payload]))
+
+  function buildFloorPayload(floorCode: ProductionFloorCode) {
+    const { input, floorDataEntries, floorCorrections } = preparedFloors.get(floorCode)!
+    const snapshot = buildLegacyDashboardSnapshot(input)
+    const qualityReferenceRows = (entryType: string) => floorDataEntries
+      .filter(row => row.entryType === entryType)
+      .map(row => ({ ...jsonRecord(row.payload), _id: row._id, entryType }))
     const liveCounts = countRowsByEntryType(floorDataEntries)
     return {
       ...snapshot,
@@ -1009,10 +1029,10 @@ async function buildDashboardReadModel(
 
   const productionFloorSnapshots = Object.fromEntries(
     productionFloors.map((floor) => {
-      const finish = startDashboardBuildMeasurement(context.organizationId, floor.code)
+      const finish = startDashboardBuildMeasurement(context.organizationId, floor.code, changedFloors.has(floor.code) ? "built" : "reused")
       let outcome: "success" | "error" = "error"
       try {
-        const payload = buildFloorPayload(floor.code)
+        const payload = changedFloors.has(floor.code) ? buildFloorPayload(floor.code) : retainedByFloor.get(floor.code) ?? {}
         outcome = "success"
         return [floor.code, payload]
       } finally {
@@ -1079,8 +1099,22 @@ async function buildDashboardReadModel(
       if (!finalizedIds.has(candidate.baselineId)) continue
       candidate.row.plannedDispatchDateAtRmReceipt =
         candidate.row.currentProbableDispatchDate
+      finishBaselineRows.find(row => row.baselineId === candidate.baselineId)!.plannedDispatchDateAtRmReceipt = candidate.plannedFinishOn
     }
   }
+  const storedFloors = context.persistSegments ? await persistFloorSegments(client, context.organizationId, sourceAsOf,
+    productionFloors.filter(floor => changedFloors.has(floor.code)).map(floor => ({
+      floorCode: floor.code, version: Number(previousSegments.get(floor.code)?.version ?? 0) + 1,
+      fingerprint: fingerprint(floor.code), payload: productionFloorSnapshots[floor.code] as JsonRecord,
+      sourceWatermark: {
+        changedAt: preparedFloors.get(floor.code)!.floorUpdatedAt || null,
+        sourceCoverage: source.sourceCoverageByFloor[floor.code],
+      },
+    }))) : []
+  const segmentIds = Object.fromEntries(productionFloors.map(floor => [
+    floor.code, storedFloors.find(row => row.production_floor_code === floor.code)?.id
+      ?? previousSegments.get(floor.code)?.segment_id,
+  ]))
   const defaultSnapshot = productionFloorSnapshots[
     defaultProductionFloorCode
   ] as JsonRecord
@@ -1101,11 +1135,12 @@ async function buildDashboardReadModel(
   )
 
   return {
-    payload: {
-      ...defaultSnapshot,
-      productionFloorSnapshots,
-      productionFloors,
+    payload: context.materializePayload === false ? {} : {
+      ...defaultSnapshot, productionFloorSnapshots, productionFloors,
     } as JsonRecord,
+    storagePayload: context.persistSegments ? {
+      format: "mrm-floor-manifest-1", segmentIds, metadata: { productionFloors },
+    } as JsonRecord : undefined,
     sourceWatermark: {
       changedAt: updatedAt || null,
       sourceCoverage: source.sourceCoverage,

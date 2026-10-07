@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks"
+import { channel } from "node:diagnostics_channel"
 import { performance } from "node:perf_hooks"
 
 export type TelemetryRuntime = {
@@ -122,6 +123,53 @@ export type StructuredTelemetryEvent =
   | RedisAccelerationEvent
   | WorkerListenerEvent
   | WorkerSweepEvent
+  | DashboardBuildEvent
+  | DashboardPublicationEvent
+
+type DashboardBuildMetrics = {
+  event: "dashboard.build"
+  organizationId: string
+  productionFloorCode: string | null
+  stage: "build" | "floor"
+  work: "built" | "reused"
+  outcome: "success" | "error"
+  durationMs: number
+  cpuUserMs: number
+  cpuSystemMs: number
+  rssBeforeBytes: number
+  rssAfterBytes: number
+  heapUsedBeforeBytes: number
+  heapUsedAfterBytes: number
+}
+type DashboardBuildEvent = DashboardBuildMetrics & {
+  artifactCommit: string; environment: string; timestamp: string
+  commandId: string | null; subsystem: "dashboard"
+}
+type DashboardPublicationMetrics = {
+  organizationId: string; version: number; sourceAsOf: string
+  publishedAt: string; transactionDurationMs: number
+}
+type DashboardPublicationEvent = DashboardPublicationMetrics & {
+  artifactCommit: string; environment: string; timestamp: string
+  commandId: string | null; subsystem: "dashboard"; event: "dashboard.publication"
+}
+const dashboardTelemetry = new AsyncLocalStorage<{
+  commandId: string | null; runtime: TelemetryRuntime; sink: TelemetrySink
+}>()
+channel("mrm.dashboard.build").subscribe(message => {
+  const context = dashboardTelemetry.getStore()
+  if (context) safeEmit(context.sink, {
+    ...message as DashboardBuildMetrics, ...runtimeFields(context.runtime),
+    commandId: context.commandId, subsystem: "dashboard",
+  })
+})
+export function recordDashboardPublication(metrics: DashboardPublicationMetrics) {
+  const context = dashboardTelemetry.getStore()
+  if (context) safeEmit(context.sink, {
+    ...metrics, ...runtimeFields(context.runtime), event: "dashboard.publication",
+    commandId: context.commandId, subsystem: "dashboard",
+  })
+}
 
 type OperationMetrics = {
   coverage: OperationCoverage | null
@@ -230,7 +278,8 @@ export async function withPerformanceOperation<Result>(
   let outcome: PerformanceOperationEvent["outcome"] = "success"
 
   try {
-    return await operationStorage.run([...parentMetrics, metrics], execute)
+    return await dashboardTelemetry.run({ commandId, runtime, sink }, () =>
+      operationStorage.run([...parentMetrics, metrics], execute))
   } catch (error) {
     outcome = "error"
     throw error
