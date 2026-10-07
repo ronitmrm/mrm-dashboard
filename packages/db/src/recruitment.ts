@@ -238,6 +238,7 @@ export type RecruitmentJobApplicationRow = {
   candidatePhone: string
   currentCompany: string | null
   experience: string | null
+  hasResume: boolean
   id: string
   interviewAt: string | null
   interviewCount: number
@@ -1845,6 +1846,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             did_not_join_reason: string | null
             current_company: string | null
             experience: string | null
+            has_resume: boolean
             id: string
             interview_at: string | null
             interview_count: number
@@ -1862,6 +1864,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 candidate.phone AS candidate_phone,
                 candidate.email AS candidate_email,
                 candidate.current_company, candidate.experience,
+                (candidate.resume_reference IS NOT NULL OR EXISTS (
+                  SELECT 1 FROM core.file_links resume_link
+                  WHERE resume_link.organization_id = candidate.organization_id
+                    AND resume_link.target_schema = 'recruitment'
+                    AND resume_link.target_table = 'candidates'
+                    AND resume_link.target_id = candidate.id
+                    AND resume_link.purpose = 'resume'
+                    AND resume_link.is_current
+                )) AS has_resume,
                 application.status, application.interview_at::text,
                 application.did_not_join_on::text, application.did_not_join_reason,
                 (application.status = 'Approved' AND application.willing_to_join = true
@@ -1979,6 +1990,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             candidatePhone: row.candidate_phone,
             currentCompany: row.current_company,
             experience: row.experience,
+            hasResume: row.has_resume,
             id: row.id,
             interviewAt: row.interview_at,
             interviewCount: row.interview_count,

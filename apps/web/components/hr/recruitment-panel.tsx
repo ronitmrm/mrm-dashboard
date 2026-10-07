@@ -91,7 +91,6 @@ import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
-import { recruitmentInterviewerOptions } from "@/lib/shared-employee-master"
 import {
   recruitmentMasterHref,
   type RecruitmentMasterKind,
@@ -1042,20 +1041,17 @@ function CandidateSearchPanel({
 function InterviewsPanel({
   canWrite,
   interviews,
-  posts,
   selectedAppointmentApplicationId,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "interviews" | "posts" | "selectedAppointmentApplicationId"
+  "canWrite" | "interviews" | "selectedAppointmentApplicationId"
 >) {
-  const interviewerOptions = recruitmentInterviewerOptions(posts)
   return (
     <>
       <InterviewScheduleBoard
         appointmentApplicationId={selectedAppointmentApplicationId}
         canWrite={canWrite}
         interviews={interviews}
-        interviewerOptions={interviewerOptions}
       />
       {canWrite ? <InterviewScheduleForm interviews={interviews} /> : null}
     </>
@@ -1148,7 +1144,6 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         <InterviewsPanel
           canWrite={props.canWrite}
           interviews={props.interviews}
-          posts={props.posts}
           selectedAppointmentApplicationId={
             props.selectedAppointmentApplicationId
           }

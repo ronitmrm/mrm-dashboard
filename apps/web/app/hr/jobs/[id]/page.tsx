@@ -223,7 +223,6 @@ export default async function JobWorkspacePage({
       {canWrite && job.status === "Open" ? (
         <JobInterviewActions
           applications={applications}
-          interviewerOptions={interviewerOptions}
           job={job}
         />
       ) : null}
