@@ -2449,7 +2449,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         applyToApprovedPosts?: boolean
         rejectDuplicates?: boolean
         combinedRoleId?: string | null
-        departmentCode?: string | null
         designationCode: string
         education?: string | null
         experienceRequirement?: string | null
@@ -2484,20 +2483,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           "(lower(template_code) = lower($2) OR lower(btrim(name)) = lower(btrim($3))) AND ($4::uuid IS NULL OR id <> $4::uuid)",
           [input.templateCode.trim(), input.name, templateId]
         )
-        const departmentCode = optional(input.departmentCode)
         const combinedRoleId = optional(input.combinedRoleId)
         const shiftType = requiredShiftType(input.shiftType)
         const shiftStartTime = requiredShiftTime(input.shiftStartTime, "Shift Start Time")
         const shiftEndTime = requiredShiftTime(input.shiftEndTime, "Shift End Time")
-        if ((departmentCode ? 1 : 0) + (combinedRoleId ? 1 : 0) !== 1) {
-          throw new Error(
-            "Select either one department or one combined job for the template."
-          )
-        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.requirement_templates (
-              organization_id, template_code, name, department_id,
+              organization_id, template_code, name,
               combined_role_id, designation_id, gender,
               experience_requirement, education,
               minimum_salary, maximum_salary, role_responsibilities,
@@ -2505,25 +2498,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, upper($2), $3, department.id, combined.id,
+            SELECT $1, upper($2), $3, combined.id,
               designation.id, $4, $5, $6, $7, $8, $9,
-              $15, $16::time, $17::time, $10, $10,
+              $14, $15::time, $16::time, $10, $10,
               'mrm-dashboard', 'requirementTemplates', $11
             FROM recruitment.designations designation
-            LEFT JOIN recruitment.departments department
-              ON department.organization_id = $1
-             AND lower(department.code) = lower($13)
             LEFT JOIN recruitment.combined_roles combined
               ON combined.organization_id = $1
-             AND combined.id = nullif($14, '')::uuid
+             AND combined.id = nullif($13, '')::uuid
              AND combined.status = 'Active'
             WHERE designation.organization_id = $1
               AND lower(designation.code) = lower($12)
-              AND (($13 <> '' AND department.id IS NOT NULL AND combined.id IS NULL)
-                OR ($14 <> '' AND combined.id IS NOT NULL AND department.id IS NULL))
+              AND ($13 = '' OR combined.id IS NOT NULL)
             ON CONFLICT (organization_id, lower(template_code)) DO UPDATE SET
               name = EXCLUDED.name,
-              department_id = EXCLUDED.department_id,
               combined_role_id = EXCLUDED.combined_role_id,
               designation_id = EXCLUDED.designation_id,
               gender = EXCLUDED.gender,
@@ -2553,7 +2541,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             randomUUID(),
             required(input.designationCode, "Designation"),
-            departmentCode ?? "",
             combinedRoleId ?? "",
             shiftType,
             shiftStartTime,
@@ -2562,7 +2549,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         if (!result.rows[0]) {
           throw new Error(
-            "Department, combined job, or designation was not found."
+            "Combined job or designation was not found."
           )
         }
         let updatedPostCount = 0
@@ -2584,12 +2571,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                AND post.organization_id = $2
                AND (post.requirement_template_id = template.id OR
                  (post.requirement_template_id IS NULL AND
-                   ((template.combined_role_id IS NOT NULL
-                     AND post.combined_role_id = template.combined_role_id) OR
-                    (template.combined_role_id IS NULL
-                     AND post.combined_role_id IS NULL
-                     AND post.department_id = template.department_id
-                     AND post.designation_id = template.designation_id))))`,
+                   template.combined_role_id IS NOT NULL
+                   AND post.combined_role_id = template.combined_role_id))`,
             [result.rows[0].id, input.organizationId, input.actorUserId ?? null]
           )
           updatedPostCount = updatedPosts.rowCount ?? 0

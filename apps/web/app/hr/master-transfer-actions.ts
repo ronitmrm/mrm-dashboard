@@ -115,7 +115,6 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
       await context.repository.upsertTemplate({
         actorUserId: context.actorUserId,
         combinedRoleId: csvValue(row, "combined_role_id") || null,
-        departmentCode: csvValue(row, "department_code") || null,
         designationCode,
         education: csvValue(row, "education") || null,
         experienceRequirement: csvValue(row, "experience_requirement") || null,

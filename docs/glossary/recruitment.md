@@ -19,18 +19,24 @@ role. Other job-entry paths retain their existing linked-template defaults.
 
 ## Job Description Templates
 
+Individual templates can be assigned to Approved Posts in any department.
+Each Approved Post selects its template explicitly; sharing a designation alone
+does not select one because different jobs may need different profiles.
+Combined-job templates stay tied to their combined role. The operational
+department remains on the Approved Post. Legacy template department values do
+not restrict assignment.
+
 Each new or edited template requires a Shift Type of Day, Night, or Rotation,
 plus a Shift Start Time and Shift End Time. Night shifts may span midnight.
 Existing templates without shift details remain blank until edited. A new Job
 Post copies the selected template's shift and description into its own record.
 
 Editing a template changes the reusable profile for future Job Posts. HR must
-choose whether to apply its requirements to all matching Approved Posts,
-regardless of whether they are occupied or vacant. This updates posts already
-linked to the template and unlinked posts matching its combined role or its
-individual department and designation; posts linked to another template keep
-their own profile. The approved-post link and requirement fields update in the
-same transaction as the template. Existing Job Posts linked to those Approved
+choose whether to apply its requirements to Approved Posts, regardless of
+whether they are occupied or vacant. This updates posts already linked to the
+template and unlinked posts in its combined role. Posts linked to another
+template keep their own profile. The approved-post link and requirement fields
+update in the same transaction as the template. Existing Job Posts linked to those Approved
 Posts receive the template link when they have none; blank job requirements and
 shift fields are filled from the template. Existing job values and jobs linked
 to a different template remain historical. Employee assignments are unchanged.

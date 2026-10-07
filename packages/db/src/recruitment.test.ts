@@ -65,7 +65,6 @@ test("job description templates require a permitted shift and both times", async
     organizationId: "org-1",
     templateCode: "JRT-1",
     name: "Night Operator",
-    departmentCode: "CNC",
     designationCode: "OP",
     shiftType: "Night",
     shiftStartTime: "22:00",
@@ -77,9 +76,43 @@ test("job description templates require a permitted shift and both times", async
     statement.includes("INSERT INTO recruitment.requirement_templates")
   )
   expect(insert?.[0]).toContain("shift_type, shift_start_time, shift_end_time")
+  expect(insert?.[0]).not.toContain("department_id")
   expect(insert?.[1]?.slice(-3)).toEqual(["Night", "22:00", "06:00"])
   await expect(repository.upsertTemplate({ ...input, shiftEndTime: "" }))
     .rejects.toThrow("Shift End Time is required")
+})
+
+test("applying an individual template updates linked posts only", async () => {
+  const query = vi.fn(async (statement: string) => ({
+    rows: statement.includes("SELECT 1 FROM recruitment.requirement_templates") ||
+      statement.includes("INSERT INTO recruitment.requirement_templates")
+      ? [{ id: "template-1" }]
+      : [],
+    rowCount: 0,
+  }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+
+  await repository.upsertTemplate({
+    organizationId: "org-1",
+    templateId: "template-1",
+    templateCode: "JRT-1",
+    name: "Inprocess Quality Assistant",
+    designationCode: "AS",
+    shiftType: "Day",
+    shiftStartTime: "09:00",
+    shiftEndTime: "17:00",
+    applyToApprovedPosts: true,
+  })
+
+  const update = query.mock.calls.find(([statement]) =>
+    statement.includes("UPDATE recruitment.posts post SET")
+  )?.[0]
+  expect(update).toContain("post.requirement_template_id = template.id")
+  expect(update).not.toContain("post.department_id = template.department_id")
+  expect(update).not.toContain("post.designation_id = template.designation_id")
 })
 
 test("assigning a template to an Approved Post links its unassigned job", async () => {

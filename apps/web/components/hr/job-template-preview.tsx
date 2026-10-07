@@ -63,7 +63,7 @@ function TemplateDetails({
         value={
           template.combinedRoleName
             ? `Combined: ${template.combinedRoleName}`
-            : template.department
+            : "Individual Posts"
         }
       />
       <Detail label="Designation" value={template.designation} />

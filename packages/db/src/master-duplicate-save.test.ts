@@ -219,7 +219,6 @@ test("manual HR template creation rejects an existing template name", async () =
       organizationId: "organization",
       name: " Turner ",
       templateCode: "NEW",
-      departmentCode: "CNC",
       designationCode: "OP",
       rejectDuplicates: true,
     })

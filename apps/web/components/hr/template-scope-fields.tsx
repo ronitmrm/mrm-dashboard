@@ -18,20 +18,18 @@ import { useState } from "react"
 export function TemplateScopeFields({
   combinedRoles,
   defaultCombinedRoleId,
-  defaultDepartmentCode,
   defaultDesignationCode,
   masters,
   prefix,
 }: {
   combinedRoles: RecruitmentCombinedRoleRow[]
   defaultCombinedRoleId?: string | null
-  defaultDepartmentCode?: string | null
   defaultDesignationCode?: string
   masters: RecruitmentMasterSnapshot
   prefix: string
 }) {
   const [scope, setScope] = useState(
-    defaultCombinedRoleId ? "combined" : "department"
+    defaultCombinedRoleId ? "combined" : "individual"
   )
   const activeCombinedRoles = combinedRoles.filter(
     (role) => role.status === "Active" || role.id === defaultCombinedRoleId
@@ -47,11 +45,14 @@ export function TemplateScopeFields({
           onChange={(change) => setScope(change.target.value)}
           value={scope}
         >
-          <NativeSelectOption value="department">
-            Individual Department Job
-          </NativeSelectOption>
+          <NativeSelectOption value="individual">Individual Job</NativeSelectOption>
           <NativeSelectOption value="combined">Combined Job</NativeSelectOption>
         </NativeSelect>
+        {scope === "individual" ? (
+          <FieldDescription>
+            Assign This Template To Approved Posts In Any Department.
+          </FieldDescription>
+        ) : null}
       </Field>
       {scope === "combined" ? (
         <Field>
@@ -79,25 +80,7 @@ export function TemplateScopeFields({
             This Creates One Job Description Template For The Complete Combined Role.
           </FieldDescription>
         </Field>
-      ) : (
-        <Field>
-          <FieldLabel htmlFor={`${prefix}-department`}>Department</FieldLabel>
-          <NativeSelect
-            className="w-full"
-            defaultValue={defaultDepartmentCode ?? ""}
-            id={`${prefix}-department`}
-            name="department_code"
-            required
-          >
-            <NativeSelectOption value="">Select Department</NativeSelectOption>
-            {masters.departments.map((department) => (
-              <NativeSelectOption key={department.id} value={department.code}>
-                {department.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-      )}
+      ) : null}
       <Field>
         <FieldLabel htmlFor={`${prefix}-designation`}>Designation</FieldLabel>
         <NativeSelect
