@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "^/api/user-daily-attendance/test-webhook/?$",
+      "status": 410
+    }
+  ]
+}
