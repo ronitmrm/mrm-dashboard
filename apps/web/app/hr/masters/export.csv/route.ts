@@ -25,7 +25,6 @@ export async function GET(request: Request) {
         rows.map((row) => ({
           "Template Code": row.templateCode,
           Name: row.name,
-          "Department Code": row.departmentCode,
           "Combined Role Id": row.combinedRoleId,
           "Designation Code": row.designationCode,
           Gender: row.gender,

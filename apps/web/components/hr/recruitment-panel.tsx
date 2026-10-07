@@ -345,7 +345,6 @@ function TemplatePanel({
             columns={[
               "template_code",
               "name",
-              "department_code",
               "designation_code",
               "combined_role_id",
               "education",
