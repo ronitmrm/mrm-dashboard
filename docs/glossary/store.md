@@ -390,8 +390,10 @@ each event. It is a view of recorded events, not another stock posting.
 Fulfilling a Department request remains an Issue, not a transfer into a
 department Store.
 Each production and Quality Store has its own Movement Register, separate from
-its Stock Register. Its Stock Register combines local Consumable balances with
-accountable Non Consumable Unit IDs; repair orders have a separate register.
+its Stock Register. Its Stock Register shows Consumable codes with a positive
+local balance alongside accountable Non Consumable Unit IDs. Depleted codes
+remain in movement history; all active codes remain in the company stock view.
+Repair orders have a separate register.
 Each production Store's Stock Register also shows Unit IDs held by that floor's
 Departments, including Unit IDs still accountable to Main Store. The Responsible
 Store column identifies who controls each Unit ID's movements and return. These

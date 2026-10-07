@@ -44,7 +44,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
   const accountableUnitIds = new Set(assets.map((asset) => asset.assetCode.toLowerCase()))
   const otherStoreAllocations = departmentAllocations.filter((asset) =>
     !accountableUnitIds.has(asset.assetCode.toLowerCase()))
-  const stockCount = consumables.length + assets.length + otherStoreAllocations.length
+  const stockCount = availableConsumables.length + assets.length + otherStoreAllocations.length
   const selectionFormId = "department-store-stock-selection"
   const selectingAssets = selectMode === "repair" || selectMode === "calibration"
   const selectionAction = selectMode === "repair" ? "/department-store/repair"
@@ -70,7 +70,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       </Link></Button> : null}
       <MetricSummary
         items={[
-          { label: "Consumable codes", value: consumables.length, tone: "information" },
+          { label: "Consumable codes in stock", value: availableConsumables.length, tone: "information" },
           { label: "Accountable Unit IDs", value: assets.filter((asset) =>
             asset.status !== "SCRAPPED" && asset.status !== "LOST").length, tone: "brand" },
           ...(isQuality ? [{ label: "Gauge sets", value: gaugeSets.length, tone: "accent" as const }] : []),
@@ -138,8 +138,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               {store.kind === "PRODUCTION" ? <TableHead>Responsible Store</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
-              {consumables.map((item) => <TableRow key={item.itemTypeId}>
-                {selectMode ? <TableCell>{selectMode === "use" && Number(item.availableQuantity) > 0 ? <input
+              {availableConsumables.map((item) => <TableRow key={item.itemTypeId}>
+                {selectMode ? <TableCell>{selectMode === "use" ? <input
                   aria-label={`Select ${item.typeCode} for use`} form={selectionFormId}
                   name="item_type_id" type="checkbox" value={item.itemTypeId} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{item.typeCode}</TableCell>
