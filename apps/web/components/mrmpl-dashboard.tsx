@@ -451,6 +451,7 @@ const storeMasterCsvColumns = {
     "asset_subcategory",
     "asset_type",
     "identification_name",
+    "make_model",
     "manufacturer_make",
     "minimum_stock",
     "model_number",
@@ -458,6 +459,7 @@ const storeMasterCsvColumns = {
     "unit",
   ],
   LOCATION: ["location_code", "location_name", "location_type"],
+  MAKE_MODEL: ["make_model"],
   SUBCATEGORY: ["asset_category", "asset_subcategory_name"],
   SUPPLIER: [
     "supplier_name",
