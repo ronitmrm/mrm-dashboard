@@ -33,7 +33,6 @@ export function selectedStoreMasterData(
               assetSubcategory,
               assetSubcategoryId,
               assetType: "",
-              manufacturerMake: null,
               modelNumber: null,
               ratedLoad: null,
             }))

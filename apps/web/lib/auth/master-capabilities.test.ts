@@ -135,7 +135,6 @@ describe("independent master permissions", () => {
         makeModel: "Non Specific",
         makeModelId: "make-model",
         identificationName: "",
-        manufacturerMake: "private",
         modelNumber: "private",
         ratedLoad: "private",
         unit: "No.",
@@ -192,7 +191,6 @@ describe("independent master permissions", () => {
       assetName: "VCGT-16 0.8",
       makeModel: "Non Specific",
     })
-    expect(itemReferences[0]?.manufacturerMake).toBeNull()
     expect(itemReferences[0]?.modelNumber).toBeNull()
     expect(itemReferences[0]?.ratedLoad).toBeNull()
     expect(selectedStoreMasterData(data, "SUPPLIER_PRICE", false).items).toEqual([])

@@ -26,6 +26,7 @@ export function StoreUnitDetailsForm({
   asset: {
     assetCode: string
     installedOn: string | null
+    manufacturerMake: string | null
     manufacturerSerialNumber: string | null
     mcbNumber: string | null
     stabilizerUnitId: string | null
@@ -52,6 +53,14 @@ export function StoreUnitDetailsForm({
   return (
     <MasterEntryForm action={action} className="grid gap-4 sm:grid-cols-2">
       <input name="asset_code" type="hidden" value={asset.assetCode} />
+      <Field>
+        <FieldLabel htmlFor="asset-manufacturer_make">Make (optional)</FieldLabel>
+        <Input
+          defaultValue={asset.manufacturerMake ?? ""}
+          id="asset-manufacturer_make"
+          name="manufacturer_make"
+        />
+      </Field>
       <Field>
         <FieldLabel htmlFor="asset-manufacturer_serial_number">Manufacturer Serial Number</FieldLabel>
         <Input

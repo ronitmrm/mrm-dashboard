@@ -16,9 +16,11 @@ size, grade, or specification when useful. It may be left blank in Data Entry
 and CSV imports; received Physical Assets may also have blank Identification.
 Make/Model is selected from its master and distinguishes different models with
 the same Category, Subcategory, and Asset Name. Existing codes retain their
-numbers when their saved model is assigned to the new master. Use `Unspecified`
-when a model is not known. Make is optional manufacturer information on the
-Store Item Type; changing it does not create another Asset Code. Rated Load /
+numbers when their saved model is assigned to the new master. Use the existing
+`Non Specific` or `Unspecified` Make/Model when it does not distinguish the
+Item Type. Make is optional manufacturer information on each
+received Physical Asset / Unit ID; changing it does not create another Asset
+Code or Unit ID. Rated Load /
 Capacity describes a specification
 shared by every physical unit of that Asset Code and includes its unit (for
 example, `15 kW` or `1000 kg`).
@@ -28,14 +30,15 @@ Type, Asset Category,
 Asset Subcategory, Asset Name, and Make/Model combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
-Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, Make, and
+Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, and
 Identification in separate columns. When a Store Item Type applies to a
 manufactured product, its Product Portfolio UID is selected from active internal
 Portfolio products instead of entered as free text.
 
 Item Type CSV imports use Category, Subcategory, Asset Name, and Make/Model text from the
 existing classification masters, matched ignoring letter case and outer spaces.
-The optional Make column is descriptive and never selects the Make/Model master.
+Make is recorded against each Non Consumable Unit ID when received, not through
+the Item Type CSV.
 Subcategory is resolved within its Category and Asset Name within its Subcategory.
 Unknown or ambiguous names are rejected with a row error; imports do not create
 classification masters. Existing CSVs with internal IDs remain accepted.
@@ -69,7 +72,7 @@ Its Unit ID owns due dates, completed maintenance and calibration history, and
 any open breakdown. Maintenance Masters and calibration appointments are assigned
 to a physical Unit ID. The shared Asset Code describes the item type and never
 receives a maintenance schedule.
-Manufacturer Serial Number, Warranty Period, Warranty Until, actual Installation
+Optional Make, Manufacturer Serial Number, Warranty Period, Warranty Until, actual Installation
 Date, connected Stabiliser Unit ID, and connected MCB Unit ID belong to the physical Unit
 ID. These optional fields may be supplied when one unit is received or updated
 later in its workspace. Installation details are recorded when known and can be
@@ -229,7 +232,7 @@ never mix lines from different Purchase Orders. Received By is the authorized
 signed-in person's active linked Employee ID and name, or account name when no
 active link exists.
 An optional Warranty Period is likewise copied to received Physical Assets.
-When a receipt creates exactly one physical Unit ID, its serial and known
+When a receipt creates exactly one physical Unit ID, its Make, serial, and known
 installation details can be recorded there. Multi-unit receipts use the Unit ID
 workspace to complete details individually after receipt.
 

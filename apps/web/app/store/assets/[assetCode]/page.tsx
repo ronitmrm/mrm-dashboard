@@ -825,7 +825,6 @@ function StoreItemWorkspace({
         <Info label="Asset Name" value={item.assetName} />
         <Info label="Identification" value={item.identificationName} />
         <Info label="Make/Model" value={item.makeModel} />
-        <Info label="Make" value={item.manufacturerMake || "Not recorded"} />
         <Info label="Rated Load / Capacity" value={item.ratedLoad || "Not recorded"} />
         <Info
           label="Classification"
@@ -851,6 +850,7 @@ function StoreItemWorkspace({
             <TableHeader>
               <TableRow>
                 <TableHead>Unit ID</TableHead>
+                <TableHead>Make</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Current Assignment</TableHead>
                 <TableHead>Acquired On</TableHead>
@@ -876,6 +876,7 @@ function StoreItemWorkspace({
                       </Link>
                     ) : null}
                   </TableCell>
+                  <TableCell>{asset.manufacturerMake || "—"}</TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -904,7 +905,7 @@ function StoreItemWorkspace({
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={5}
+                    colSpan={6}
                   >
                     {isNonConsumable
                       ? `No physical unit received yet. The first Unit ID will be ${storeUnitId(item.typeCode, 1)}.`

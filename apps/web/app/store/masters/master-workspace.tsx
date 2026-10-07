@@ -100,7 +100,6 @@ export type StoreMasterData = {
     identificationName: string
     makeModel: string
     makeModelId: string
-    manufacturerMake: string | null
     minimumStock?: string
     modelNumber: string | null
     ratedLoad: string | null
@@ -259,7 +258,6 @@ export function StoreMasterWorkspace({
                     <TableHead>Subcategory</TableHead>
                     <TableHead>Asset Name</TableHead>
                     <TableHead>Make/Model</TableHead>
-                    <TableHead>Make</TableHead>
                     <TableHead>Asset Type</TableHead>
                     <TableHead>Identification</TableHead>
                     <TableHead>Rated Load / Capacity</TableHead>
@@ -292,7 +290,6 @@ export function StoreMasterWorkspace({
                         <TableCell>{item.assetSubcategory}</TableCell>
                         <TableCell>{item.assetName}</TableCell>
                         <TableCell>{item.makeModel}</TableCell>
-                        <TableCell>{item.manufacturerMake || "—"}</TableCell>
                         <TableCell>
                           {item.assetType === "NON_CONSUMABLE"
                             ? "Non Consumable"
@@ -507,7 +504,6 @@ function masterRows(
           drawing_number: item.drawingNumber ?? "",
           identification_name: item.identificationName,
           make_model_id: item.makeModelId,
-          manufacturer_make: item.manufacturerMake ?? "",
           master_id: item.id,
           minimum_stock: item.minimumStock ?? "0",
           model_number: item.modelNumber ?? "",
@@ -1157,18 +1153,6 @@ function StoreItemTypeForm({
             Enter any other distinguishing specification for this item.
           </FieldDescription>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="master-manufacturer_make">Make (optional)</FieldLabel>
-          <Input
-            defaultValue={defaults.manufacturer_make}
-            id="master-manufacturer_make"
-            name="manufacturer_make"
-            placeholder="e.g. Kaishan"
-          />
-          <FieldDescription>
-            For information only. Make does not change the Asset Code.
-          </FieldDescription>
-        </Field>
         {editing ? (
           <input name="model_number" type="hidden" value={defaults.model_number ?? ""} />
         ) : null}
@@ -1280,6 +1264,7 @@ function StoreItemTypeForm({
       {!editing ? (
         <p className="mt-4 text-sm text-muted-foreground">
           Select a different Make/Model to generate a separate Asset Code for the same Asset Name.
+          Record each Non Consumable unit’s actual Make when it is received.
         </p>
       ) : null}
       {saved ? (

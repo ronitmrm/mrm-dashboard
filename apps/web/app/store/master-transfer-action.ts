@@ -274,7 +274,6 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
             asset_subcategory_id: [],
             asset_type: [],
             identification_name: ["name", "identification"],
-            manufacturer_make: ["make"],
             make_model_id: [],
             minimum_stock: [],
             model_number: ["model"],

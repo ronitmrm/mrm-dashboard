@@ -544,6 +544,7 @@ type StoreReceiptLineInput = {
   quantity: number | "remaining"
   unitDetails?: {
     installedOn?: string | null
+    manufacturerMake?: string | null
     manufacturerSerialNumber?: string | null
     mcbNumber?: string | null
     stabilizerUnitId?: string | null
@@ -811,12 +812,12 @@ async function receiveStockWithClient(
             identification_name, manufacturer_serial_number,
             current_location_id, accountable_store_id,
             warranty_until, warranty_period, acquired_on,
-            installed_on, stabilizer_asset_id, mcb_number,
+            installed_on, stabilizer_asset_id, mcb_number, manufacturer_make,
             created_by_user_id, updated_by_user_id
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
             NULLIF($9, '')::date, $10,
             COALESCE(NULLIF($11, '')::date, current_date),
-            NULLIF($12, '')::date, $13, $14, $15, $15)
+            NULLIF($12, '')::date, $13, $14, $15, $16, $16)
           RETURNING id
         `,
           [
@@ -836,6 +837,7 @@ async function receiveStockWithClient(
             unitDetails?.installedOn ?? null,
             connectedStabilizerId,
             connectedMcbUnitId,
+            unitDetails?.manufacturerMake?.trim() || null,
             input.actorUserId ?? null,
           ]
         )
@@ -4037,7 +4039,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       applicableItemCode?: string | null
       identificationName?: string
       makeModelId?: string
-      manufacturerMake?: string | null
       minimumStock?: number
       modelNumber?: string | null
       organizationId: string
@@ -4096,12 +4097,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset_subcategory, asset_name, asset_category_id,
               asset_subcategory_id, asset_name_id, identification_name,
               applicable_item_code, drawing_number, tracking_mode, unit,
-              minimum_stock, manufacturer_make, model_number, rated_load,
+              minimum_stock, model_number, rated_load,
               make_model_id,
               created_by_user_id, updated_by_user_id
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-              $13, $14, $15, $16, $17, $18, $19, $20, $20
+              $13, $14, $15, $16, $17, $18, $19, $19
             )
             RETURNING id
           `,
@@ -4121,7 +4122,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             trackingMode,
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
-            input.manufacturerMake?.trim() || null,
             input.modelNumber?.trim() || null,
             input.ratedLoad?.trim() || null,
             makeModelId,
@@ -4142,7 +4142,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       id: string
       identificationName?: string
       makeModelId?: string
-      manufacturerMake?: string | null
       minimumStock?: number
       modelNumber?: string | null
       organizationId: string
@@ -4173,8 +4172,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
              identification_name = $8, applicable_item_code = $9,
              drawing_number = type_code, tracking_mode = $10, unit = $11,
              minimum_stock = $12, updated_by_user_id = $13,
-             manufacturer_make = $16, model_number = $17, rated_load = $18,
-             make_model_id = $19,
+             model_number = $16, rated_load = $17,
+             make_model_id = $18,
              updated_at = now()
            WHERE id = $14 AND organization_id = $15
            RETURNING id`,
@@ -4194,7 +4193,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             input.id,
             input.organizationId,
-            input.manufacturerMake?.trim() || null,
             input.modelNumber?.trim() || null,
             input.ratedLoad?.trim() || null,
             makeModelId,
@@ -4229,7 +4227,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         identificationName: string
         makeModel: string
         makeModelId: string
-        manufacturerMake: string | null
         minimumStock: string
         modelNumber: string | null
         ratedLoad: string | null
@@ -4251,7 +4248,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.identification_name AS "identificationName",
             make_model.name AS "makeModel",
             item.make_model_id AS "makeModelId",
-            item.manufacturer_make AS "manufacturerMake",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
             item.applicable_item_code AS "applicableItemCode",
@@ -5101,7 +5097,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.locations location ON location.id = asset.current_location_id
           WHERE asset.organization_id = $1
             AND ($2 = '' OR concat_ws(' ', asset.asset_code, item.type_code,
-              item.asset_name, asset.identification_name,
+              item.asset_name, asset.identification_name, asset.manufacturer_make,
               asset.current_holder_name) ILIKE '%' || $2 || '%')
           ORDER BY asset.asset_code
         `,
@@ -5123,7 +5119,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         id: string
         identificationName: string
         makeModel: string
-        manufacturerMake: string | null
         minimumStock: string
         modelNumber: string | null
         ratedLoad: string | null
@@ -5140,7 +5135,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.asset_name AS "assetName",
             item.identification_name AS "identificationName", item.unit,
             make_model.name AS "makeModel",
-            item.manufacturer_make AS "manufacturerMake",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
             trim_scale(item.minimum_stock)::text AS "minimumStock",
@@ -5214,6 +5208,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           holderType: StoreHolderType
           id: string
           locationName: string | null
+          manufacturerMake: string | null
           nextDueOn: string | null
           status: string
         }>(
@@ -5223,6 +5218,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               asset.current_holder_name AS "holderName",
               location.name AS "locationName",
               asset.acquired_on::text AS "acquiredOn",
+              asset.manufacturer_make AS "manufacturerMake",
               (SELECT min(schedule.next_due_on)::text
                 FROM store.asset_maintenance_schedules schedule
                 WHERE schedule.asset_id = asset.id AND schedule.active
@@ -5422,6 +5418,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       assetCode: string
       installedOn?: string | null
+      manufacturerMake?: string | null
       manufacturerSerialNumber?: string | null
       mcbNumber?: string | null
       organizationId: string
@@ -5472,13 +5469,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           : null
         await client.query(
           `UPDATE store.assets
-           SET manufacturer_serial_number = $1,
-             warranty_period = $2, warranty_until = $3::date,
-             installed_on = NULLIF($4, '')::date,
-             stabilizer_asset_id = $5, mcb_number = $6,
-             updated_by_user_id = $7, updated_at = now()
-           WHERE id = $8`,
+           SET manufacturer_make = $1, manufacturer_serial_number = $2,
+             warranty_period = $3, warranty_until = $4::date,
+             installed_on = NULLIF($5, '')::date,
+             stabilizer_asset_id = $6, mcb_number = $7,
+             updated_by_user_id = $8,
+             updated_at = now()
+           WHERE id = $9`,
           [
+            input.manufacturerMake?.trim() || null,
             input.manufacturerSerialNumber?.trim() || null,
             warrantyDays?.toString() ?? legacyPeriod,
             calculatedWarrantyEnd ?? historicalEnd,
@@ -5543,7 +5542,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             make_model.name AS "makeModel",
             asset.identification_name AS "identificationName",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
-            item.manufacturer_make AS "manufacturerMake",
+            asset.manufacturer_make AS "manufacturerMake",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
             asset.warranty_period AS "warrantyPeriod",

@@ -291,7 +291,6 @@ describe("Store requests", () => {
       ...input,
       id: item.id,
       identificationName: " ",
-      manufacturerMake: "Kaishan",
       modelNumber: "APPM 15",
       ratedLoad: "15 kW",
     })
@@ -305,6 +304,7 @@ describe("Store requests", () => {
       receivedBy: "store.integration@example.com",
       unitDetails: {
         installedOn: "2026-09-20",
+        manufacturerMake: "Kaishan",
         manufacturerSerialNumber: "COMP-001",
       },
       warrantyPeriod: "365",
@@ -315,7 +315,6 @@ describe("Store requests", () => {
     )
     expect(result.rows[0]?.identification_name).toBe("")
     expect((await store.listItemTypes(organizationId)).find((row) => row.id === item.id)).toMatchObject({
-      manufacturerMake: "Kaishan",
       modelNumber: "APPM 15",
       ratedLoad: "15 kW",
     })
@@ -323,6 +322,7 @@ describe("Store requests", () => {
       assetCode: receipt.assetCodes[0]!, organizationId,
     }))?.asset).toMatchObject({
       installedOn: "2026-09-20",
+      manufacturerMake: "Kaishan",
       manufacturerSerialNumber: "COMP-001",
       mcbNumber: null,
       warrantyPeriod: "365",
@@ -370,6 +370,7 @@ describe("Store requests", () => {
     await store.updateAssetEquipmentDetails({
       assetCode: receipt.assetCodes[0]!,
       installedOn: "2026-09-21",
+      manufacturerMake: "Another Make",
       manufacturerSerialNumber: "COMP-001",
       mcbNumber: mcbReceipt.assetCodes[0]!,
       organizationId,
@@ -380,6 +381,7 @@ describe("Store requests", () => {
       assetCode: receipt.assetCodes[0]!, organizationId,
     }))?.asset).toMatchObject({
       installedOn: "2026-09-21",
+      manufacturerMake: "Another Make",
       mcbNumber: mcbReceipt.assetCodes[0],
       stabilizerUnitId: stabilizerReceipt.assetCodes[0],
       warrantyUntil: "2027-09-21",
