@@ -2734,6 +2734,7 @@ describe("listInterviews", () => {
           interview_at: null,
           job_id: "job-1",
           job_number: "JOB-001",
+          requirement_template_code: "JRT-0001",
           job_title: "Maintenance Engineer",
           joining_date: null,
           latest_round: null,
@@ -2757,12 +2758,17 @@ describe("listInterviews", () => {
       ),
       ["organization-1"]
     )
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("ON template.id = job.requirement_template_id"),
+      ["organization-1"]
+    )
     expect(rows[0]).toEqual(
       expect.objectContaining({
         applicationId: "application-1",
         candidateId: "candidate-1",
         jobId: "job-1",
         jobNumber: "JOB-001",
+        requirementTemplateCode: "JRT-0001",
         nextRound: "Screening Round",
         postCode: "ME-AS-1",
       })

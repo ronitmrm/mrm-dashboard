@@ -68,6 +68,7 @@ export default async function HrRecruitmentPage({
   const replacedActions = new Set(scopedMasters.filter(({ main }) => main === "hr_masters").flatMap((master) => supportedMasterActions(master).filter((action) => action !== "read").flatMap((action) => previousMasterCapabilities(master, action))))
   const grants = [...rawGrants.filter((key) => !replacedActions.has(key) && !key.startsWith("masters.")), ...(selectedMaster ? masterComponentActions(selectedMaster, rawGrants) : [])]
   const masterControls = hrMasterControls(selectedMaster, rawGrants)
+  const canEditTemplate = rawGrants.includes(masterCapability("job_templates", "save"))
   const canManageEmployees = masterControls.assign
   const canWrite = selectedMaster ? masterControls.create : grants.some(
     (capability) =>
@@ -106,12 +107,14 @@ export default async function HrRecruitmentPage({
       "postMasterPanel",
       "approvedPostPanel",
       "candidatesPanel",
-    ].includes(panelId)
+    ].includes(panelId) || (canEditTemplate && ["combinedRolesPanel", "employeeMasterPanel", "jobsPanel"].includes(panelId))
     const needsTemplates = [
       "postMasterPanel",
       "approvedPostPanel",
       "combinedRolesPanel",
       "employeeMasterPanel",
+      "jobsPanel",
+      "interviewsPanel",
     ].includes(panelId)
     const needsPosts = [
       "approvedPostPanel",
@@ -305,6 +308,7 @@ export default async function HrRecruitmentPage({
         masterControls={masterControls}
         canCreateJob={grants.includes(hrTaskCapabilities.createJob)}
         canLogCandidateEvent={grants.includes(hrTaskCapabilities.logCandidateEvent)}
+        canEditTemplate={canEditTemplate}
         canManageEmployees={canManageEmployees}
         canWrite={canWrite}
         candidates={candidates}

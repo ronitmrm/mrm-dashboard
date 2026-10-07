@@ -46,6 +46,7 @@ import { useMemo, useState } from "react"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobTemplateInline, JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 import {
   formatIstDate,
   formatIstTime,
@@ -187,6 +188,7 @@ export function InterviewScheduleBoard({
               <TableRow>
                 <TableHead>Candidate</TableHead>
                 <TableHead>Job</TableHead>
+                <TableHead>Job Description Template</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
                 <TableHead>Round</TableHead>
@@ -209,6 +211,9 @@ export function InterviewScheduleBoard({
                       </Link>
                     </TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
+                    <TableCell className="font-mono">
+                      <JobTemplatePreviewLink code={row.requirementTemplateCode} />
+                    </TableCell>
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
                     <TableCell>{formatTime(row.interviewAt)}</TableCell>
                     <TableCell>{row.scoreableRound}</TableCell>
@@ -239,7 +244,7 @@ export function InterviewScheduleBoard({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 6 : 5}
+                    colSpan={canWrite ? 7 : 6}
                   >
                     No Interviews Are Scheduled For This Date.
                   </TableCell>
@@ -260,6 +265,7 @@ export function InterviewScheduleBoard({
             </SheetDescription>
           </SheetHeader>
           <div className="px-6 pb-6">
+            <JobTemplateInline code={selectedInterview.requirementTemplateCode} />
             <InterviewOutcomeForm
               applications={[
                 {

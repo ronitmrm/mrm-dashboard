@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
 
 import type {
   RecruitmentCombinedRoleRow,
@@ -56,7 +55,6 @@ import {
 } from "@/app/hr/actions"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
-import { templateReturnPath } from "@/lib/recruitment-master-navigation"
 
 type FilterKey =
   | "code"
@@ -68,7 +66,7 @@ type FilterKey =
   | "shiftType"
   | "shiftTiming"
 
-function JobTemplateEditor({
+export function JobTemplateEditor({
   canWrite,
   combinedRoles,
   masterView,
@@ -271,9 +269,6 @@ export function JobTemplatesTable({
   masters: RecruitmentMasterSnapshot
   templates: RecruitmentTemplateRow[]
 }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const returnPath = templateReturnPath(searchParams.get("returnTo"))
   const [editingTemplate, setEditingTemplate] =
     useState<RecruitmentTemplateRow | null>(() =>
       templates.find((row) => row.templateCode === initialTemplateCode) ?? null
@@ -317,7 +312,6 @@ export function JobTemplatesTable({
       onOpenChange={(open) => {
         if (!open) {
           setEditingTemplate(null)
-          if (returnPath) router.replace(returnPath)
         }
       }}
       open={editingTemplate !== null}
