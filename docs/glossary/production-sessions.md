@@ -279,14 +279,15 @@ and is unavailable when the target quantity is zero.
 
 Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
 
-Saving an approved machine move, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
+Saving an approved machine move, parallel-machine target stop, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
-A Planner may add an idle, compatible physical machine to a planned or running
-setup even when the normal minimum-run rule would not split the quantity again.
-This decision is additive: current machines keep their work, no running session
-is stopped, and planning recalculates the shared remaining allocation and
-downstream probable dates across the combined machines. The added machine must
-have no active setup, and its queue position must be reviewed before saving.
+A Planner may add a compatible physical machine to a planned or running setup
+even when the normal minimum-run rule would not split the quantity again.
+Current setup machines keep their work. If the added machine owns another active
+setup, the Planner explicitly approves stopping that setup and closes its open
+Production Session before saving. The decision releases only that target setup,
+records its settled output, and recalculates the shared remaining allocation and
+downstream probable dates. The target queue position must be reviewed before saving.
 The saved queue position remains binding during recalculation and idle-gap
 filling. Unstarted jobs with earlier material dates cannot pass a setup placed
 ahead of them by the Planner. Position 1 makes a ready setup available today,

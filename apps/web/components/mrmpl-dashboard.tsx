@@ -4800,6 +4800,8 @@ function ParallelMachinePlannerForm({
   const [reason, setReason] = useState("")
   const [reviewReady, setReviewReady] = useState(false)
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
+  const [selectedTargetInterruptions, setSelectedTargetInterruptions] =
+    useState<Record<string, boolean>>({})
   const [queueAfterByRow, setQueueAfterByRow] = useState<
     Record<string, string>
   >({})
@@ -4856,13 +4858,6 @@ function ParallelMachinePlannerForm({
   )
   const targetMachineOptions = useMemo(() => {
     const assigned = new Set(assignedMachines.map(machineKey))
-    const occupied = new Set(
-      plannedRows
-        .filter(
-          (row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row)
-        )
-        .map((row) => machineKey(machineValue(row, "machine")))
-    )
     const unavailable = new Set(
       openMachineIssues(asArray(productionControl.machineConstraintRows)).map(
         (row) => machineKey(displayValue(row.machineNo || row.machine))
@@ -4874,15 +4869,32 @@ function ParallelMachinePlannerForm({
       sourceMachine: "",
     }).filter((machine) => {
       const key = machineKey(machine)
-      return !assigned.has(key) && !occupied.has(key) && !unavailable.has(key)
+      return !assigned.has(key) && !unavailable.has(key)
     })
   }, [
     assignedMachines,
     machineRows,
-    plannedRows,
     productionControl.machineConstraintRows,
     selectedRows,
   ])
+  const occupiedMachineKeys = useMemo(
+    () =>
+      new Set(
+        plannedRows
+          .filter(parallelTargetRowIsActive)
+          .map((row) => machineKey(machineValue(row, "machine")))
+      ),
+    [plannedRows]
+  )
+  const targetOccupiedRows = useMemo(
+    () =>
+      plannedRows.filter(
+        (row) =>
+          machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
+          parallelTargetRowIsActive(row)
+      ),
+    [plannedRows, toMachine]
+  )
   const queueReviewGroups = useMemo(
     () =>
       machineConstraintQueueReview({
@@ -4917,11 +4929,15 @@ function ParallelMachinePlannerForm({
     )
   )
   const canSave =
-    canReview && reviewReady && queueReviewConfirmed && Boolean(reason.trim())
+    canReview && reviewReady && queueReviewConfirmed && Boolean(reason.trim()) &&
+    targetOccupiedRows.every(
+      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+    )
 
   function resetReview() {
     setReviewReady(false)
     setQueueReviewConfirmed(false)
+    setSelectedTargetInterruptions({})
     setQueueAfterByRow({})
   }
 
@@ -4939,6 +4955,11 @@ function ParallelMachinePlannerForm({
         target,
         setupNo,
         toMachine,
+        interruptedSetups: targetOccupiedRows.map((row) => ({
+          jcNo: jobCardNumber(row),
+          setupNo: displayValue(row.setupNo),
+          machine: machineValue(row, "machine"),
+        })),
         queuePlacements: proposedQueuePlacements,
         reason,
       })
@@ -4961,9 +4982,9 @@ function ParallelMachinePlannerForm({
       <div>
         <div className="text-sm font-medium">Add Parallel Machine Details</div>
         <div className="text-xs text-muted-foreground">
-          Keep the current machines running and add one idle compatible machine.
-          Planning will redistribute the setup quantity and recalculate later
-          dates.
+          Add a compatible machine. If it is running another setup, close that
+          production session and approve the stop first. Current setup machines
+          keep running while planning redistributes the remaining quantity.
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -5027,7 +5048,7 @@ function ParallelMachinePlannerForm({
             ))}
           </SearchableSelect>
         </Field>
-        <Field label="Idle Machine To Add">
+        <Field label="Machine To Add">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={toMachine}
@@ -5037,10 +5058,10 @@ function ParallelMachinePlannerForm({
               resetReview()
             }}
           >
-            <option value="">Select Idle Compatible Machine</option>
+            <option value="">Select Compatible Machine</option>
             {targetMachineOptions.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {option} {occupiedMachineKeys.has(machineKey(option)) ? "(active setup)" : "(idle)"}
               </option>
             ))}
           </SearchableSelect>
@@ -5048,7 +5069,7 @@ function ParallelMachinePlannerForm({
         <Field label="Reason">
           <Input
             value={reason}
-            placeholder="Planner approved use of idle capacity"
+            placeholder="Planner approved parallel capacity"
             required
             onChange={(event) => setReason(event.target.value)}
           />
@@ -5056,7 +5077,7 @@ function ParallelMachinePlannerForm({
       </div>
       {target && setupNo && !targetMachineOptions.length ? (
         <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          No idle compatible machine is currently available for this setup.
+          No compatible machine is currently available for this setup.
         </div>
       ) : null}
       {reviewReady ? (
@@ -5075,6 +5096,39 @@ function ParallelMachinePlannerForm({
             normal RM at Machine, Setting, Quality Approval, and Machine Start
             workflow.
           </div>
+          {targetOccupiedRows.length ? (
+            <div className="grid gap-2 rounded-md border bg-background p-3">
+              <div className="text-sm font-medium">Target Machine Active Setup</div>
+              <div className="text-xs text-muted-foreground">
+                Approve the stop. Close its Production Session first if one is open.
+              </div>
+              {targetOccupiedRows.map((row) => {
+                const rowKey = machineIssueRowKey(row)
+                return (
+                  <label key={rowKey} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedTargetInterruptions[rowKey])}
+                      onChange={(event) =>
+                        setSelectedTargetInterruptions((current) => ({
+                          ...current,
+                          [rowKey]: event.target.checked,
+                        }))
+                      }
+                    />
+                    Stop {itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)} on {toMachine}
+                  </label>
+                )
+              })}
+              {targetOccupiedRows.some(machineIssueRowNeedsProducedQty) ? (
+                <PlannerSessionSettlementNotice
+                  mode="close"
+                  rows={targetOccupiedRows.filter(machineIssueRowNeedsProducedQty)}
+                  sessionRows={asArray(productionControl.productionCardRows)}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <MachineConstraintQueueReviewPanel
             groups={queueReviewGroups}
             movableRows={selectedRows.slice(0, 1)}
@@ -5098,8 +5152,8 @@ function ParallelMachinePlannerForm({
               }
             />
             <span>
-              Queue reviewed; add this machine and recalculate the shared setup
-              quantity.
+              Queue reviewed; stop any approved target setup, add this machine,
+              and recalculate the shared setup quantity.
             </span>
           </label>
         </div>
@@ -18604,6 +18658,13 @@ function machineIssueRowIsLocked(row: DashboardPayload) {
       "quality_approval",
     ].includes(stage)
   )
+}
+function parallelTargetRowIsActive(row: DashboardPayload) {
+  return !shopFloorItemIsFinished(row) &&
+    !shopFloorRowIsExplicitlyStopped(row) &&
+    !planningRowIsBreakdownStopped(row) &&
+    !planningRowIsShiftedAfterBreakdown(row) &&
+    machineIssueRowIsLocked(row)
 }
 function partMachineSwitchTargetInterruptionRows(
   groups: MachineConstraintQueueReviewGroup[],

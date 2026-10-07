@@ -1285,7 +1285,7 @@ describe("dashboard planning writes", () => {
     }))
   })
 
-  test("requires target interruption and releases the stopped shop-floor setup", async () => {
+  test("requires target interruption and releases the stopped setup for parallel and move", async () => {
     const moveItemUid = `MOVE-${suffix}`
     const movingJobCard = `MOVE-${suffix}-1`
     const blockingJobCard = `MOVE-${suffix}-2`
@@ -1366,6 +1366,37 @@ describe("dashboard planning writes", () => {
       ]
     )
 
+    await expect(repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      jobCardNumber: movingJobCard,
+      organizationId,
+      reason: "Parallel target requires stop",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })).rejects.toThrow("Approve its stop")
+    const parallel = await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      interruptedSetups: [{
+        jobCardNumber: blockingJobCard,
+        machineNumber: targetMachine,
+        setupNumber: 1,
+      }],
+      jobCardNumber: movingJobCard,
+      organizationId,
+      reason: "Approved parallel target stop",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
+    const parallelState = await pool.query<{ active: boolean; assignment_mode: string }>(
+      `SELECT state.active, decision.source_payload->>'assignmentMode' AS assignment_mode
+       FROM manufacturing.shop_floor_setup_state state
+       CROSS JOIN manufacturing.plan_override_events decision
+       WHERE state.work_order_id = $1 AND state.machine_id = $2 AND decision.id = $3`,
+      [row.work_order_id, row.machine_id, parallel.id]
+    )
+    expect(parallelState.rows[0]).toEqual({ active: false, assignment_mode: "add_parallel_machine" })
+    await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
+
     await expect(
       repository.recordPlanOverride({
         fromMachineNumber: sourceMachine,
@@ -1423,7 +1454,7 @@ describe("dashboard planning writes", () => {
     expect(released.rows[0]).toEqual({
       active: false,
       stage: "planned",
-      stop_events: "1",
+      stop_events: "2",
     })
     await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
     await repository.recordPlannerPriority({

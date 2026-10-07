@@ -2644,7 +2644,31 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [targetMachineId]
         )
-        if ((assignmentMode === "add_parallel_machine" || assignmentMode === "early_downstream") && targetLock.rows[0]) {
+        if (assignmentMode === "add_parallel_machine") {
+          const activeTarget = targetLock.rows[0]
+          if (activeTarget?.work_order_id === workOrder.id && activeTarget.setup_number === input.setupNumber) {
+            throw new Error("This setup already owns the target machine. Choose another machine.")
+          }
+          if (requestedInterruptions.some((interruption) =>
+            !activeTarget || !interruptionMatches(interruption, {
+              jobCardNumber: activeTarget.job_card_number,
+              machineNumber: input.toMachineNumber,
+              setupNumber: activeTarget.setup_number,
+            })
+          )) {
+            throw new Error("Only the active target machine setup can be stopped. Refresh the plan and review it again.")
+          }
+          if (activeTarget && !interruptedSetups.some((interruption) =>
+            interruptionMatches(interruption, {
+              jobCardNumber: activeTarget.job_card_number,
+              machineNumber: input.toMachineNumber,
+              setupNumber: activeTarget.setup_number,
+            })
+          )) {
+            throw new Error("Target machine has an active setup. Approve its stop and close its Production Session first.")
+          }
+        }
+        if (assignmentMode === "early_downstream" && targetLock.rows[0]) {
           throw new Error("Target machine is not idle. Finish or move its active setup first.")
         }
         if (
