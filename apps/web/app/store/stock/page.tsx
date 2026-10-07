@@ -116,7 +116,20 @@ export default async function StoreStockPage({
     )
     return { items, supplierPrices, physicalUnits }
   })().finally(() => repository.close())
-  const stockRows = storeStockRows(data.items, data.physicalUnits)
+  const showItemCatalog = mode === "order" || mode === "request"
+  const mainUnits = data.physicalUnits.filter((unit) =>
+    unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
+  )
+  const mainUnitItemIds = new Set(mainUnits.map((unit) => unit.itemTypeId))
+  const visibleItems = showItemCatalog ? data.items : data.items.filter((item) =>
+    item.trackingMode === "CONSUMABLE"
+      ? Number(item.availableStock) > 0
+      : mainUnitItemIds.has(item.id)
+  )
+  const stockRows = storeStockRows(visibleItems, data.physicalUnits).filter((row) =>
+    row.actionItem || (!showItemCatalog && row.physicalUnit?.isMainAccountable &&
+      row.physicalUnit.status !== "SCRAPPED" && row.physicalUnit.status !== "LOST")
+  )
   const today = istDateValue()
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" || mode === "adjust"
@@ -167,16 +180,16 @@ export default async function StoreStockPage({
       ) : null}
 
       <MetricSummary
-        scope="Stock register · before table filters"
+        scope={`${showItemCatalog ? "Item catalog" : "Main Store stock"} · before table filters`}
         items={[
           {
             label: "Asset Codes",
-            value: data.items.length,
+            value: visibleItems.length,
             tone: "information",
           },
           {
             label: "Available Units",
-            value: data.items.reduce(
+            value: visibleItems.reduce(
               (total, item) => total + item.availableUnitIds.length,
               0
             ),
@@ -184,13 +197,13 @@ export default async function StoreStockPage({
             tone: "positive",
           },
           {
-            label: "Out of Stock",
-            value: data.items.filter((item) =>
+            label: "Not Available Here",
+            value: visibleItems.filter((item) =>
               item.trackingMode === "SERIALIZED"
                 ? !item.availableUnitIds.length
                 : Number(item.availableStock) <= 0
             ).length,
-            description: "Asset codes without available stock",
+            description: "Asset codes with no stock available to issue from Main Store",
             tone: "warning",
           },
         ]}
@@ -206,13 +219,15 @@ export default async function StoreStockPage({
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Stock Register</CardTitle>
+              <CardTitle>{showItemCatalog ? "Item Catalog" : "Stock Register"}</CardTitle>
               <CardDescription>
                 {mode === "repair"
                   ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
                   : mode === "order"
                     ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
-                  : "Asset Code rows summarize stock across Stores. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store. Unit ID rows show their status, responsible Store, and physical holder."}
+                  : mode === "request"
+                    ? "Select active Asset Codes to request, including items not yet in Main Store stock."
+                    : "Only stock held by or accountable to Main Store is listed. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">

@@ -41,10 +41,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
   const selectMode = canWrite ? requestedSelectMode : undefined
   const isQuality = store.kind === "QUALITY"
   const availableConsumables = consumables.filter((item) => Number(item.availableQuantity) > 0)
-  const accountableUnitIds = new Set(assets.map((asset) => asset.assetCode.toLowerCase()))
+  const accountableAssets = assets.filter((asset) =>
+    asset.status !== "SCRAPPED" && asset.status !== "LOST")
+  const accountableUnitIds = new Set(accountableAssets.map((asset) => asset.assetCode.toLowerCase()))
   const otherStoreAllocations = departmentAllocations.filter((asset) =>
     !accountableUnitIds.has(asset.assetCode.toLowerCase()))
-  const stockCount = availableConsumables.length + assets.length + otherStoreAllocations.length
+  const stockCount = availableConsumables.length + accountableAssets.length + otherStoreAllocations.length
   const selectionFormId = "department-store-stock-selection"
   const selectingAssets = selectMode === "repair" || selectMode === "calibration"
   const selectionAction = selectMode === "repair" ? "/department-store/repair"
@@ -71,13 +73,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       <MetricSummary
         items={[
           { label: "Consumable codes in stock", value: availableConsumables.length, tone: "information" },
-          { label: "Accountable Unit IDs", value: assets.filter((asset) =>
-            asset.status !== "SCRAPPED" && asset.status !== "LOST").length, tone: "brand" },
+          { label: "Accountable Unit IDs", value: accountableAssets.length, tone: "brand" },
           ...(isQuality ? [{ label: "Gauge sets", value: gaugeSets.length, tone: "accent" as const }] : []),
         ]}
         scope={`Stock accountable to ${store.name} · before table filters`}
       />
-      {canWrite && action ? <DepartmentStoreForms action={action} assets={assets}
+      {canWrite && action ? <DepartmentStoreForms action={action} assets={accountableAssets}
         consumables={consumables} departments={departments} gaugeSets={gaugeSets}
         machines={machines} recorderId={recorderId} selectedItemIds={selectedItemIds} store={store}
         stores={stores} today={today} vendors={vendors} /> : null}
@@ -101,7 +102,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <Link href={`${basePath}?action=${key}`}>{label}</Link>
             </Button>) : null}
             {action ? <Button asChild size="sm" variant="ghost"><Link href={basePath}>Close form</Link></Button> : null}
-            {canRepair && assets.length ? <>
+            {canRepair && accountableAssets.length ? <>
               <Button asChild size="sm" variant={selectMode === "repair" ? "default" : "outline"}>
                 <Link href={`${basePath}?select=repair`}>Make Repair PO</Link>
               </Button>
@@ -150,8 +151,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{store.name}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
-              {assets.map((asset) => <TableRow key={asset.assetCode}>
-                {selectMode ? <TableCell>{selectingAssets && asset.status !== "SCRAPPED" && asset.status !== "LOST" ? <input
+              {accountableAssets.map((asset) => <TableRow key={asset.assetCode}>
+                {selectMode ? <TableCell>{selectingAssets ? <input
                   aria-label={`Select ${asset.assetCode} for ${selectMode}`} form={selectionFormId}
                   name="asset_code" type="checkbox" value={asset.assetCode} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{asset.typeCode}</TableCell>
@@ -159,7 +160,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                   href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
                   {asset.assetCode}</Link></TableCell><TableCell>{asset.assetName}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"}</TableCell>
-                <TableCell>{asset.status === "SCRAPPED" || asset.status === "LOST" ? "0" : "1"}</TableCell>
+                <TableCell>1</TableCell>
                 <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}

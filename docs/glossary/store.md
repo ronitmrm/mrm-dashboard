@@ -303,26 +303,29 @@ batch is issued in one atomic operation. A mixed Department, missing or duplicat
 Unit ID, unavailable Unit ID, or stock shortfall leaves every selected line
 unchanged.
 
-**Stock Register**: Main Store's filterable inventory table containing both
-Consumable and Non Consumable items across accountable Stores. It shows Main
-Store availability alongside company-wide on-hand quantity or Unit ID count;
-company totals include stock accountable to Quality and production Stores.
+**Stock Register**: Main Store's filterable inventory table showing Consumables
+with a positive Main Store balance and active Non Consumable Unit IDs accountable
+to Main Store. Asset Codes with neither are omitted from the normal Stock view.
+Purchase Order and Request selection use the complete active Item Type catalog.
+The register shows Main Store availability alongside company-wide on-hand
+quantity or Unit ID count for displayed Asset Codes; company totals include
+stock accountable to Quality and production Stores.
 Asset Name, Make/Model, and Asset Type appear in separate columns. Unit Status
 and Responsible Store apply only to physical Unit ID rows; an Asset Code row
 summarizes stock across Stores and has no single responsible Store.
-The Location / Holder column shows Main Store locations for a Consumable only
-when Main Store has stock; otherwise it shows a dash. A Non Consumable Asset
-Code row has no single location and shows a dash, while each Unit ID row shows
-that unit's recorded physical location or holder.
+The Location / Holder column shows Main Store locations for a stocked Consumable.
+A Non Consumable Asset Code row has no single location and shows a dash, while
+each Unit ID row shows that unit's recorded physical location or holder.
 Departmental and Quality Store workspaces show their own accountable stock.
 A Consumable has one quantity-managed row. Recording use reduces its
 local available balance and company on-hand.
-Each Non Consumable Asset Code has a classification row with Main available and
-company-wide unit counts.
-Every company physical unit has a separate row, including assigned or unavailable units,
-showing its permanent Unit ID, responsible Store, status, holder or location, and its actual purchase
-Supplier and cost when recorded. Available units have quantity one; other units
-show zero available. Assigned quantity is one only for a unit currently in
+Each displayed Non Consumable Asset Code has a classification row with Main
+available and company-wide unit counts.
+Every active Main-accountable physical unit has a separate row, including
+assigned or unavailable units, showing its permanent Unit ID, responsible
+Store, status, holder or location, and its actual purchase Supplier and cost
+when recorded. Available units have quantity one; other units show zero
+available. Assigned quantity is one only for a unit currently in
 Assigned status and zero for other units. Asset Code rows show Main available
 quantity and the company-wide count of assigned units; Consumables show their available
 balance and no assigned quantity. Supplier quotes for future purchases remain
@@ -391,8 +394,9 @@ Fulfilling a Department request remains an Issue, not a transfer into a
 department Store.
 Each production and Quality Store has its own Movement Register, separate from
 its Stock Register. Its Stock Register shows Consumable codes with a positive
-local balance alongside accountable Non Consumable Unit IDs. Depleted codes
-remain in movement history; all active codes remain in the company stock view.
+local balance alongside active accountable Non Consumable Unit IDs. Depleted
+codes remain in movement history; the complete active Item Type catalog is
+available when ordering or requesting stock.
 Repair orders have a separate register.
 Each production Store's Stock Register also shows Unit IDs held by that floor's
 Departments, including Unit IDs still accountable to Main Store. The Responsible
