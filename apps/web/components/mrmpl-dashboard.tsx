@@ -452,7 +452,6 @@ const storeMasterCsvColumns = {
     "asset_type",
     "identification_name",
     "make_model",
-    "manufacturer_make",
     "minimum_stock",
     "model_number",
     "rated_load",

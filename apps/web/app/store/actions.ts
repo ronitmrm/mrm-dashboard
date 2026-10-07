@@ -593,7 +593,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
           identificationName:
             optionalText(formData, "identification_name") ?? "",
           makeModelId: requiredText(formData, "make_model_id"),
-          manufacturerMake: optionalText(formData, "manufacturer_make"),
           minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
           modelNumber: optionalText(formData, "model_number"),
           organizationId,
@@ -991,6 +990,7 @@ export async function receiveStoreStockAction(formData: FormData) {
     purchaseOrderLineId,
   }
   const unitDetails = {
+    manufacturerMake: optionalText(formData, "manufacturer_make"),
     manufacturerSerialNumber: optionalText(formData, "manufacturer_serial_number"),
     installedOn: optionalText(formData, "installed_on"),
     stabilizerUnitId: optionalText(formData, "stabilizer_unit_id"),
@@ -1123,6 +1123,7 @@ export async function updateStoreAssetEquipmentDetailsAction(formData: FormData)
         actorUserId,
         assetCode,
         installedOn: optionalText(formData, "installed_on"),
+        manufacturerMake: optionalText(formData, "manufacturer_make"),
         manufacturerSerialNumber: optionalText(formData, "manufacturer_serial_number"),
         mcbNumber: optionalText(formData, "mcb_number"),
         organizationId,

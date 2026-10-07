@@ -43,6 +43,12 @@ export function StoreReceiptUnitFields({
             Optional details for this one physical Unit ID. Record actual installation details only when known.
           </p>
           <Field>
+            <FieldLabel htmlFor={`receipt-make-${orderId}`}>
+              Make (optional)
+            </FieldLabel>
+            <Input id={`receipt-make-${orderId}`} name="manufacturer_make" />
+          </Field>
+          <Field>
             <FieldLabel htmlFor={`receipt-serial-${orderId}`}>
               Manufacturer Serial Number
             </FieldLabel>
@@ -79,6 +85,11 @@ export function StoreReceiptUnitFields({
             </SearchableSelect>
           </Field>
         </div>
+      ) : null}
+      {serialized && quantity !== 1 ? (
+        <p className="text-sm text-muted-foreground sm:col-span-2">
+          Record each Unit ID’s Make and serial number in Unit Details after receipt.
+        </p>
       ) : null}
     </>
   )

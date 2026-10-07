@@ -12,7 +12,9 @@ test("shows optional physical-unit fields only for a single serialized receipt",
   )
 
   expect(single).toContain("Manufacturer Serial Number")
+  expect(single).toContain("Make (optional)")
   expect(single).toContain("Connected Stabiliser Unit ID")
   expect(single).toContain("Connected MCB Unit ID")
   expect(multiple).not.toContain("Manufacturer Serial Number")
+  expect(multiple).not.toContain("Make (optional)")
 })
