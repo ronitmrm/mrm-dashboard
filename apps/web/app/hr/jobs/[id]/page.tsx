@@ -28,10 +28,9 @@ import {
 } from "@workspace/ui/components/table"
 import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
-import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
-import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
+import { JobInterviewActions } from "@/components/hr/job-interview-actions"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
@@ -222,44 +221,11 @@ export default async function JobWorkspacePage({
       </section>
 
       {canWrite && job.status === "Open" ? (
-        <section className="grid gap-6 xl:grid-cols-2">
-          <SectionCard width="wide">
-            <CardHeader>
-              <CardTitle>Schedule Interview</CardTitle>
-              <CardDescription>
-                Select An Assigned Candidate And Confirm The Required Next
-                Round.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <JobInterviewScheduleForm applications={applications} job={job} />
-            </CardContent>
-          </SectionCard>
-
-          <SectionCard width="standard">
-            <CardHeader>
-              <CardTitle>Record Interview Outcome</CardTitle>
-              <CardDescription>
-                The Required Round Is Locked. Complete Every Preset Question To
-                Save A Unified Assessment.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm">
-                Job Description Template: <JobTemplatePreviewLink code={job.requirementTemplateCode} />
-              </p>
-              <InterviewOutcomeForm
-                applications={applications.map((application) => ({
-                  candidateName: application.candidateName,
-                  id: application.id,
-                  scoreableRound: application.scoreableRound,
-                }))}
-                interviewerOptions={interviewerOptions}
-                returnJobId={job.id}
-              />
-            </CardContent>
-          </SectionCard>
-        </section>
+        <JobInterviewActions
+          applications={applications}
+          interviewerOptions={interviewerOptions}
+          job={job}
+        />
       ) : null}
 
       <SectionCard>
