@@ -87,8 +87,8 @@ export default async function EmployeeDataPage({ params, searchParams }: {
   }
   if (!record) notFound()
   return <main className="grid min-w-0 gap-6">
-    <Link className="inline-flex w-fit items-center gap-2 text-sm font-medium" href="/hr?panel=employeeMasterPanel">
-      <ArrowLeft className="size-4" /> Back to Employee Master
+    <Link className="inline-flex w-fit items-center gap-2 text-sm font-medium" href="/hr?panel=employeeDataPanel">
+      <ArrowLeft className="size-4" /> Back to Employee Data
     </Link>
     <PageHeader title={`${record.employeeName} · Employee Data`} description={`Employee ID ${record.employeeCode} · ${record.postCode} · ${record.department ?? "Department not recorded"} · ${record.designation ?? "Designation not recorded"}`} />
     <p className="text-sm text-muted-foreground">Joined {record.joinedOn ?? "date not recorded"}{record.endedOn ? ` · Left ${record.endedOn}` : " · Current term"}. Personal details follow this Employee ID; employment conditions are saved for this joined term.</p>

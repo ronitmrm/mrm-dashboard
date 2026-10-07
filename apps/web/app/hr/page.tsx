@@ -189,7 +189,7 @@ export default async function HrRecruitmentPage({
       panelId === "employeeMasterPanel"
         ? letterRepository.list(organizationId)
         : Promise.resolve(employmentLetters),
-      ["employeeMasterPanel", "probationRemindersPanel", "employeeAssignmentHistoryPanel"].includes(panelId)
+      ["employeeMasterPanel", "employeeDataPanel", "probationRemindersPanel", "employeeAssignmentHistoryPanel"].includes(panelId)
         ? repository.listEmployeeAssignments(organizationId)
         : Promise.resolve(employeeAssignments),
       panelId === "interviewWorkspacePanel"
@@ -242,6 +242,7 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "combinedRolesPanel" &&
       activeItem.panelId !== "candidatesPanel" &&
       activeItem.panelId !== "employeeMasterPanel" &&
+      activeItem.panelId !== "employeeDataPanel" &&
       activeItem.panelId !== "probationRemindersPanel" &&
       activeItem.panelId !== "employeeAssignmentHistoryPanel" &&
       activeItem.panelId !== "interviewsPanel" &&

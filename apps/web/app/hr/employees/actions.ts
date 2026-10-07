@@ -18,7 +18,7 @@ function values<const T extends readonly string[]>(formData: FormData, fields: T
 
 export async function saveEmployeeDataAction(formData: FormData) {
   const assignmentId = formData.get("assignment_id")?.toString() ?? ""
-  if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) redirect("/hr?panel=employeeMasterPanel")
+  if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) redirect("/hr?panel=employeeDataPanel")
   const returnPath = `/hr/employees/${assignmentId}`
   const session = await requireCapability(masterCapability("employee_assignments", "save"), returnPath)
   const connectionString = readAuthEnvironment().connectionString
