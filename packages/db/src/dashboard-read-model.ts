@@ -1,3 +1,5 @@
+import { channel } from "node:diagnostics_channel"
+import { performance } from "node:perf_hooks"
 import { readToolingAllocations, readToolingOccupancy } from "./tooling-availability"
 import type { PoolClient } from "pg"
 
@@ -22,6 +24,38 @@ import type {
 
 type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
+
+// Opt-in boundary measurements; subscribers retain them outside the payload.
+// CPU and memory are process samples, not isolated allocation/peak metrics.
+const dashboardBuildMetrics = channel("mrm.dashboard.build")
+
+function startDashboardBuildMeasurement(
+  organizationId: string,
+  productionFloorCode?: ProductionFloorCode
+) {
+  if (!dashboardBuildMetrics.hasSubscribers) return () => {}
+  const startedAt = performance.now()
+  const cpuBefore = process.cpuUsage()
+  const memoryBefore = process.memoryUsage()
+  return (outcome: "success" | "error") => {
+    const cpu = process.cpuUsage(cpuBefore)
+    const memoryAfter = process.memoryUsage()
+    dashboardBuildMetrics.publish({
+      event: "dashboard.build",
+      organizationId,
+      productionFloorCode: productionFloorCode ?? null,
+      stage: productionFloorCode ? "floor" : "build",
+      outcome,
+      durationMs: performance.now() - startedAt,
+      cpuUserMs: cpu.user / 1000,
+      cpuSystemMs: cpu.system / 1000,
+      rssBeforeBytes: memoryBefore.rss,
+      rssAfterBytes: memoryAfter.rss,
+      heapUsedBeforeBytes: memoryBefore.heapUsed,
+      heapUsedAfterBytes: memoryAfter.heapUsed,
+    })
+  }
+}
 
 type SourceRow = {
   changed_at: Date | string
@@ -697,6 +731,21 @@ export async function buildCanonicalDashboardReadModel(
   client: DashboardQueryClient,
   context: { organizationId: string }
 ) {
+  const finish = startDashboardBuildMeasurement(context.organizationId)
+  let outcome: "success" | "error" = "error"
+  try {
+    const result = await buildDashboardReadModel(client, context)
+    outcome = "success"
+    return result
+  } finally {
+    finish(outcome)
+  }
+}
+
+async function buildDashboardReadModel(
+  client: DashboardQueryClient,
+  context: { organizationId: string }
+) {
   const source = await readCanonicalDashboardSource(
     client,
     context.organizationId
@@ -959,7 +1008,17 @@ export async function buildCanonicalDashboardReadModel(
   }
 
   const productionFloorSnapshots = Object.fromEntries(
-    productionFloors.map((floor) => [floor.code, buildFloorPayload(floor.code)])
+    productionFloors.map((floor) => {
+      const finish = startDashboardBuildMeasurement(context.organizationId, floor.code)
+      let outcome: "success" | "error" = "error"
+      try {
+        const payload = buildFloorPayload(floor.code)
+        outcome = "success"
+        return [floor.code, payload]
+      } finally {
+        finish(outcome)
+      }
+    })
   )
   const pendingBaselines = new Map(
     finishBaselineRows
