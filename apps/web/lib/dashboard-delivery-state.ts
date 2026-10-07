@@ -1,7 +1,6 @@
 import type { ProductionFloorCode } from "@workspace/db"
 
-const DASHBOARD_SAFETY_REFRESH_MS = 60_000
-const DASHBOARD_ACTIVE_REFRESH_POLL_MS = 1_000
+const DASHBOARD_SAFETY_REFRESH_MS = 2_500
 
 type DashboardPayloadState = "none" | "current" | "stale"
 type DashboardCanonicalRequestState =
@@ -19,15 +18,20 @@ export type DashboardVisibilityState = "visible" | "hidden"
 
 type DashboardRequest = {
   floor: ProductionFloorCode
+  scopeKey?: string
   requestId: number
 }
 
 export type DashboardRequestDescriptor = DashboardRequest & {
+  knownSourceRevision?: string | null
   knownLiveVersion?: string | null
   knownVersion: number | null
 }
 
 export type DashboardDeliveryState<Data> = {
+  accessDenied: boolean
+  failureCount: number
+  scopeKey: string
   coverage: DashboardCoverageState
   data: Data | null
   floor: ProductionFloorCode
@@ -45,7 +49,7 @@ export type DashboardDeliveryState<Data> = {
 }
 
 export type DashboardDeliveryAction<Data> =
-  | { type: "floor.changed"; floor: ProductionFloorCode }
+  | { type: "floor.changed"; floor: ProductionFloorCode; scopeKey?: string }
   | { type: "refresh.failed"; message: string }
   | { type: "refresh.poll-due" }
   | { type: "refresh.requested" }
@@ -61,6 +65,7 @@ export type DashboardDeliveryAction<Data> =
       type: "request.failed"
       atMs: number
       message: string
+      accessDenied?: boolean
     } & DashboardRequest)
   | ({ type: "request.aborted" } & DashboardRequest)
   | ({ type: "request.started" } & DashboardRequest)
@@ -85,9 +90,13 @@ export type DashboardDeliveryAction<Data> =
 
 export function createDashboardDeliveryState<Data>(
   floor: ProductionFloorCode,
-  visibility: DashboardVisibilityState = "visible"
+  visibility: DashboardVisibilityState = "visible",
+  scopeKey: string = floor
 ): DashboardDeliveryState<Data> {
   return {
+    accessDenied: false,
+    failureCount: 0,
+    scopeKey,
     coverage: "complete",
     data: null,
     floor,
@@ -112,7 +121,8 @@ function ownsRequest<Data>(
   return (
     state.inFlight?.requestId === request.requestId &&
     state.inFlight.floor === request.floor &&
-    state.floor === request.floor
+    state.floor === request.floor &&
+    (request.scopeKey === undefined || state.scopeKey === request.scopeKey)
   )
 }
 
@@ -122,7 +132,11 @@ export function dashboardDeliveryReducer<Data>(
 ): DashboardDeliveryState<Data> {
   switch (action.type) {
     case "floor.changed":
-      return createDashboardDeliveryState<Data>(action.floor, state.visibility)
+      return createDashboardDeliveryState<Data>(
+        action.floor,
+        state.visibility,
+        action.scopeKey ?? action.floor
+      )
     case "refresh.requested":
       return {
         ...state,
@@ -176,24 +190,19 @@ export function dashboardDeliveryReducer<Data>(
       if (action.visibility === "hidden") {
         return { ...state, visibility: "hidden" }
       }
-      const shouldRefetch =
-        state.request === "initial" ||
-        state.payload === "stale" ||
-        (state.safetyDeadlineMs !== null &&
-          action.atMs >= state.safetyDeadlineMs)
       const nextRequest: DashboardCanonicalRequestState =
         state.data === null ? "initial" : "canonical-state"
       return {
         ...state,
-        ...(shouldRefetch
-          ? { refetchPending: true, request: nextRequest }
-          : {}),
+        refetchPending: true,
+        request: nextRequest,
         visibility: "visible",
       }
     }
     case "request.started":
       if (
         state.floor !== action.floor ||
+        (action.scopeKey !== undefined && state.scopeKey !== action.scopeKey) ||
         state.inFlight !== null ||
         (state.request !== "initial" && state.request !== "canonical-state") ||
         state.visibility === "hidden"
@@ -202,22 +211,34 @@ export function dashboardDeliveryReducer<Data>(
       }
       return {
         ...state,
-        inFlight: { floor: action.floor, requestId: action.requestId },
+        inFlight: {
+          floor: action.floor,
+          requestId: action.requestId,
+          scopeKey: action.scopeKey,
+        },
         refetchPending: false,
       }
-    case "request.failed":
+    case "request.failed": {
       if (!ownsRequest(state, action)) return state
+      const data = action.accessDenied ? null : state.data
       return {
         ...state,
         inFlight: null,
         lastError: action.message,
-        payload: state.data === null ? "none" : "stale",
-        request: state.data === null ? "error" : "settled",
+        accessDenied: state.accessDenied || action.accessDenied === true,
+        data,
+        failureCount: state.failureCount + 1,
+        payload: data === null ? "none" : "stale",
+        request: data === null ? "error" : "settled",
         safetyDeadlineMs:
-          state.data === null
-            ? null
-            : action.atMs + DASHBOARD_SAFETY_REFRESH_MS,
+          action.atMs +
+          Math.min(
+            30_000,
+            DASHBOARD_SAFETY_REFRESH_MS *
+              2 ** Math.min(state.failureCount + 1, 4)
+          ),
       }
+    }
     case "request.aborted":
       if (!ownsRequest(state, action)) return state
       return {
@@ -253,6 +274,8 @@ export function dashboardDeliveryReducer<Data>(
       return {
         ...state,
         coverage: action.coverage,
+        accessDenied: false,
+        failureCount: 0,
         data: action.data,
         inFlight: null,
         lastError:
@@ -287,6 +310,8 @@ export function dashboardDeliveryReducer<Data>(
       }
       return {
         ...state,
+        accessDenied: false,
+        failureCount: 0,
         data: action.data,
         inFlight: null,
         lastError:
@@ -311,9 +336,6 @@ export function dashboardDeliveryPollDelay<Data>(
   if (state.request === "initial" || state.request === "canonical-state") {
     return 0
   }
-  if (state.refresh === "pending" || state.refresh === "running") {
-    return DASHBOARD_ACTIVE_REFRESH_POLL_MS
-  }
   if (state.safetyDeadlineMs === null) return null
   return Math.max(0, state.safetyDeadlineMs - nowMs)
 }
@@ -331,8 +353,10 @@ export function dashboardRequestDescriptor<Data>(
   }
   return {
     floor: state.floor,
+    scopeKey: state.scopeKey,
     knownVersion:
       state.request === "initial" ||
+      state.data === null ||
       state.suppressKnownVersion ||
       state.version === null
         ? null

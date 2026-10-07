@@ -22,8 +22,9 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { Clock3, History, Pencil, Play, Search, Square, TriangleAlert } from "lucide-react"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { useConditionalRecords } from "@/hooks/use-conditional-records"
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import { productionSessionEndReasons, sessionTimelineDetail } from "@/lib/production-session-timeline"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -174,18 +175,14 @@ export function ProductionSessionsWorkspace({
   ) as Row, [floorPayload.productionControl])
   const shift = productionShiftAt(floor, new Date())
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError("")
+  const detailRef = useRef(detail)
+  const requestedSessionOpened = useRef(false)
+  const employeeRevisionRef = useRef<string | null>(null)
+  useEffect(() => { detailRef.current = detail }, [detail])
+
+  const loadEmployees = useCallback(async () => {
     try {
-      const [sessionBody, eventsBody, employeeBody] = await Promise.all([
-        api(`/api/production-sessions?floor=${encodeURIComponent(floor)}&limit=500`),
-        api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&limit=1000`),
-        api("/api/employee-master"),
-      ])
-      const loadedSessions = rows(sessionBody.rows)
-      setSessions(loadedSessions)
-      setEventRows(rows(eventsBody.rows))
+      const employeeBody = await api("/api/employee-master")
       const employeeCode = text(employeeBody.currentEmployeeCode).toLowerCase()
       const employeeRows = rows(employeeBody.rows)
       const shopFloor = productionShopFloorOptions(employeeRows, floor)
@@ -207,28 +204,57 @@ export function ProductionSessionsWorkspace({
       setSignedInPerson(signedInPerson)
       setSignedInStarter(signedInPerson)
       setSignedInRoles(assignedRoles.length ? assignedRoles : signedInPerson ? ["authorized_staff"] : [])
-      const requestedSession = initialSessionId
-        ? loadedSessions.find((session) => text(session.id) === initialSessionId)
-        : undefined
-      if (requestedSession) {
-        setView("register")
-        setDetail(requestedSession)
-        setDetailEvents([])
-        const detailBody = await api(
-          `/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(text(requestedSession.id))}&limit=500`
-        )
-        setDetailEvents(rows(detailBody.rows))
-      }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Production sessions could not be loaded.")
-    } finally {
-      setLoading(false)
-    }
-  }, [floor, initialSessionId])
 
-  useEffect(() => {
-    queueMicrotask(() => void load())
-  }, [load])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Employee options could not be loaded.")
+    }
+  }, [floor])
+
+  const reconcileSessions = useCallback((body: Row) => {
+    const loadedSessions = rows(body.rows)
+    const loadedEvents = rows(body.events)
+    setSessions(loadedSessions)
+    setEventRows(loadedEvents)
+    setLoading(false)
+    setError("")
+    setDetail(current => current ? loadedSessions.find(row => text(row.id) === text(current.id)) ?? null : null)
+    const requested = !requestedSessionOpened.current && initialSessionId
+      ? loadedSessions.find(row => text(row.id) === initialSessionId) : undefined
+    if (requested) {
+      requestedSessionOpened.current = true
+      setView("register")
+      setDetail(requested)
+      detailRef.current = requested
+    }
+    const currentDetail = requested ?? detailRef.current
+    if (currentDetail) {
+      const detailId = text(currentDetail.id)
+      setDetailEvents(loadedEvents.filter(row => text(row.sessionId) === detailId))
+      void api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(detailId)}&limit=500`)
+        .then(detailBody => {
+          if (text(detailRef.current?.id) === detailId) setDetailEvents(rows(detailBody.rows))
+        }).catch(reason => setError(reason instanceof Error ? reason.message : "Session events could not be loaded."))
+    }
+    const revision = text(body.employeeRevision)
+    if (employeeRevisionRef.current !== revision) {
+      employeeRevisionRef.current = revision
+      void loadEmployees()
+    }
+  }, [floor, initialSessionId, loadEmployees])
+  const clearSessions = useCallback(() => {
+    setSessions([])
+    setEventRows([])
+    setDetail(null)
+    detailRef.current = null
+    setDetailEvents([])
+  }, [])
+  const sessionDelivery = useConditionalRecords(
+    `/api/production-sessions?floor=${encodeURIComponent(floor)}&limit=500&conditional=1&includeEvents=1`,
+    reconcileSessions,
+    clearSessions
+  )
+  const load = sessionDelivery.refresh
+  const initialLoading = loading || sessionDelivery.loading
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
@@ -272,11 +298,12 @@ export function ProductionSessionsWorkspace({
   }
 
   async function openDetail(row: Row) {
+    detailRef.current = row
     setDetail(row)
     setDetailEvents([])
     try {
       const body = await api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(text(row.id))}&limit=500`)
-      setDetailEvents(rows(body.rows))
+      if (text(detailRef.current?.id) === text(row.id)) setDetailEvents(rows(body.rows))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Session events could not be loaded.")
     }
@@ -310,11 +337,13 @@ export function ProductionSessionsWorkspace({
     URL.revokeObjectURL(url)
   }
 
+  if (sessionDelivery.accessDenied || state.accessDenied) return <p role="alert">You no longer have access to this production workspace.</p>
+
   return (
     <div className="grid gap-4">
         <PageHeader title="Production Sessions" actions={<>
             {canViewBreakSchedule ? <Button asChild variant="outline"><Link href={`/masters/production-breaks?floor=${floor}`}>Break-time master</Link></Button> : null}
-            <Button variant="outline" disabled={loading || saving} onClick={() => setBulkOpen(true)}><TriangleAlert data-icon="inline-start" />Bulk Breakdown</Button>
+            <Button variant="outline" disabled={initialLoading || saving} onClick={() => setBulkOpen(true)}><TriangleAlert data-icon="inline-start" />Bulk Breakdown</Button>
             {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
             <Badge variant="outline" className="h-8 px-3">{shift ? `${shift.shift} · ${shift.productionDate}` : "Outside production shift"}</Badge>
@@ -335,12 +364,12 @@ export function ProductionSessionsWorkspace({
             </div> : null}
           </CardHeader>
           <CardContent>
-            {error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+            {error || sessionDelivery.error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error || sessionDelivery.error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {(initialLoading && !sessionDelivery.error) ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
  </SectionCard>
-      {!loading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
+      {!initialLoading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
       {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} signedInPerson={signedInPerson} signedInRoles={signedInRoles} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} signedInPerson={signedInPerson} signedInStarter={signedInStarter} signedInRoles={signedInRoles} workerOptions={workerOptions} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
       <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />

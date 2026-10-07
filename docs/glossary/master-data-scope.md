@@ -62,8 +62,10 @@ Master Table view; imports remain write-authorized Data Entry operations, while
 exports remain read-authorized table operations.
 
 Successful production master saves and uploads automatically queue a dashboard
-refresh. Their tables update when the refresh completes, without a separate
-Recalculate Planning action. Universal checklists and maintenance schedules
+refresh. Authorized visible workspaces reconcile committed records and status
+in the background while forecasts retain the last published plan until
+recalculation completes. Explicit Refresh can recover a full plan without
+changing the saved records. Universal checklists and maintenance schedules
 are available in every Production Unit; unit-owned masters stay scoped to their unit.
 
 Master Tables opens only after Unit, Main Master, and Sub Master are chosen on

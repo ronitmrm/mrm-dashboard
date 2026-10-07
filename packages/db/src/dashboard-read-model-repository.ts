@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { dashboardLiveFactEntryTypes, readDashboardSourceRevision, readDirectDashboardFacts, readToolingAssetCodes } from "./dashboard-direct-facts"
 
 
 import {
@@ -324,13 +325,16 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           SELECT model.version::text AS model_version,
             CASE
               WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
-                AND (live.version IS NULL OR live.version = $4::text)
+                AND live.version = $4::text
                 THEN NULL
+              WHEN model.version = $3::bigint THEN jsonb_build_object(
+                'productionControl', jsonb_build_object('machinePlanDetailRows',
+                  model.payload #> '{productionControl,machinePlanDetailRows}'))
               ELSE model.payload
             END AS model_payload,
             CASE
               WHEN $3::bigint IS NOT NULL AND model.version = $3::bigint
-                AND (live.version IS NULL OR live.version = $4::text)
+                AND live.version = $4::text
                 THEN NULL
               ELSE jsonb_build_object(
                 'changedAt', model.source_watermark -> 'changedAt',
@@ -352,15 +356,13 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             LIMIT 1
           ) model ON true
           LEFT JOIN LATERAL (
-            SELECT max(state.updated_at)::text AS version
-            FROM manufacturing.shop_floor_setup_state state
-            JOIN catalog.machines machine ON machine.id = state.machine_id
-            JOIN manufacturing.production_floors floor
-              ON floor.id = machine.production_floor_id
-            WHERE state.organization_id = requested.organization_id
-              AND floor.code = $2
-              AND state.updated_at > model.created_at
-              AND state.source_payload IS NOT NULL
+            SELECT COALESCE(string_agg(
+              revision.production_floor_code || ':' || revision.source_key || ':' || revision.revision,
+              ',' ORDER BY revision.production_floor_code, revision.source_key), '0') AS version
+            FROM derived.dashboard_source_revisions revision
+            WHERE revision.organization_id = requested.organization_id
+              AND revision.source_key = ANY($5::text[])
+              AND (revision.production_floor_code IN ($2, '*') OR revision.source_key = 'corrections')
           ) live ON true
           LEFT JOIN LATERAL (
             SELECT jsonb_agg(jsonb_build_object(
@@ -374,7 +376,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             WHERE state.organization_id = requested.organization_id AND floor.code = $2
               AND state.updated_at > model.created_at AND state.source_payload IS NOT NULL
               AND NOT ($3::bigint IS NOT NULL AND model.version = $3::bigint
-                AND (live.version IS NULL OR live.version = $4::text))
+                AND live.version = $4::text)
           ) live_stages ON true
           LEFT JOIN LATERAL (
             SELECT status, attempts, created_at, started_at,
@@ -388,19 +390,35 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           ) job ON true
         `,
         [organizationId, productionFloorCode, knownVersion ?? null,
-          knownLiveVersion ?? null]
+          knownLiveVersion ?? null,
+          ["setup_state", "corrections", "shop_floor_status", ...dashboardLiveFactEntryTypes]]
       )
       const row = result.rows[0]!
       const version = row.model_version ? Number(row.model_version) : null
       const coverage = row.model_payload
         ? normalizeSourceCoverage(row.model_payload.sourceCoverage)
         : null
+      const liveFacts = row.model_payload
+        ? await readDirectDashboardFacts(pool, organizationId, productionFloorCode, dashboardLiveFactEntryTypes)
+        : null
+      const liveControl = liveFacts ? Object.fromEntries(
+        ["setupChecklistSessionRows", "firstPieceInspectionReportRows", "hourlyQualityCheckRows"]
+          .map(key => [key, payloadRecord(liveFacts.productionControl)[key]])
+      ) : {}
+      const liveDashboard = row.model_payload
+        ? withLiveSetupStages({ ...row.model_payload, productionControl: {
+            ...payloadRecord(row.model_payload.productionControl), ...liveControl,
+          } }, row.live_setup_stages)
+        : null
+      const patch = knownVersion !== undefined && row.model_version === String(knownVersion) && liveDashboard
+        ? { productionControl: liveDashboard.productionControl } : null
       return {
         coverage,
+        patch,
         dashboard:
-          row.model_version && row.model_payload && row.model_created_at
+          !patch && row.model_version && liveDashboard && row.model_created_at
             ? {
-                ...withLiveSetupStages(row.model_payload, row.live_setup_stages),
+                ...liveDashboard,
                 filters,
                 productionFloorCode,
                 readModelVersion: version,
@@ -449,6 +467,56 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         if (options.force) await client.query(
           "UPDATE derived.refresh_jobs SET force_full = true WHERE id = $1", [result.jobId])
         return result
+      })
+    },
+
+    async scopedFactsState(input: {
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      entryTypes: readonly string[]
+      identity: readonly string[]
+      knownSourceRevision?: string | null
+      knownVersion?: number
+      toolingAssetCodes?: boolean
+    }) {
+      return transaction(pool, async client => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        const sourceRevision = await readDashboardSourceRevision(client, input.organizationId,
+          input.productionFloorCode, [...input.entryTypes,
+            ...(input.toolingAssetCodes ? ["tooling_asset_codes"] : []),
+            ...(input.entryTypes.includes("software_raw") ? ["productionEntries", "sessions"] : [])], input.identity)
+        const metadata = await client.query<{ version: string | null; status: string | null }>(
+          `SELECT model.version::text, job.status FROM (SELECT $1::uuid AS organization_id) requested
+           LEFT JOIN LATERAL (SELECT version FROM derived.dashboard_floor_read_models
+             WHERE organization_id = requested.organization_id AND production_floor_code = $2
+             ORDER BY publication_version DESC LIMIT 1) model ON true
+           LEFT JOIN LATERAL (SELECT status FROM derived.refresh_jobs
+             WHERE organization_id = requested.organization_id
+               AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
+             ORDER BY (status IN ('pending','running')) DESC, updated_at DESC LIMIT 1) job ON true`,
+          [input.organizationId, input.productionFloorCode])
+        const row = metadata.rows[0]!
+        const version = Number(row.version ?? 0)
+        const envelope = { productionFloorCode: input.productionFloorCode, version, sourceRevision,
+          coverage: null, status: { isRefreshing: row.status === "pending" || row.status === "running", status: row.status ?? "idle" } }
+        if (input.knownSourceRevision === sourceRevision && input.knownVersion === version)
+          return { ...envelope, notModified: true, dashboard: null }
+        const facts = await readDirectDashboardFacts(client, input.organizationId, input.productionFloorCode, input.entryTypes)
+        const productionControl: JsonRecord = facts.productionControl
+        if (input.entryTypes.includes("work_order")) {
+          const published = await client.query<{ rows: JsonRecord[] | null }>(
+            `SELECT payload #> '{productionControl,workOrderRegisterRows}' AS rows
+             FROM derived.dashboard_floor_read_models WHERE organization_id = $1 AND production_floor_code = $2
+             ORDER BY publication_version DESC LIMIT 1`, [input.organizationId, input.productionFloorCode])
+          const key = (row: JsonRecord) => text(row.jcNo).toLowerCase()
+          const prior = new Map((published.rows[0]?.rows ?? []).map(row => [key(row), row]))
+          productionControl.workOrders = facts.productionControl.workOrders.map(row => ({ ...prior.get(key(row)), ...row }))
+        }
+        if (input.toolingAssetCodes) productionControl.toolingAssetCodes = await readToolingAssetCodes(client, input.organizationId)
+        return { ...envelope, notModified: false, dashboard: {
+          ...facts, productionControl, productionFloorCode: input.productionFloorCode,
+          readModelVersion: version, cacheStatus: "ready",
+        } }
       })
     },
 
