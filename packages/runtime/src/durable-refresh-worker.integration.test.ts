@@ -260,6 +260,7 @@ describe("durable dashboard refresh runtime", () => {
     try {
       expect(await refresh()).toHaveLength(4)
       const initial = await repository.latest(id, {}, "conventional")
+      const initialState = await repository.state(id, {}, "conventional")
       expect(await refresh()).toHaveLength(0)
       await pool.query(`INSERT INTO derived.dashboard_source_records (
         organization_id, source_schema, source_table, source_id,
@@ -274,7 +275,10 @@ describe("durable dashboard refresh runtime", () => {
       expect(changed[0]).toMatchObject({ productionFloorCode: "cnc" })
       const retained = await repository.latest(id, {}, "conventional")
       expect(retained).toMatchObject({ readModelVersion: initial!.readModelVersion })
-      const unchanged = await repository.state(id, {}, "conventional", initial!.readModelVersion)
+      const unchanged = await repository.state(
+        id, {}, "conventional", initial!.readModelVersion,
+        initialState.liveVersion ?? undefined
+      )
       expect(unchanged).toMatchObject({ dashboard: null, notModified: true })
       expect(Buffer.byteLength(JSON.stringify(unchanged))).toBeLessThan(2048)
       const history = await pool.query<{ versions: string[] }>(
