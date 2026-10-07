@@ -3880,22 +3880,23 @@ function finalizeMachineAndSetupSchedule(
     const row = scheduled[index]!;
     if (!isAutomaticUnstartedPlan(row) || safeNumber(row.parallelMachineCount) !== 1 || row.toolingPlanBlocked) continue;
     const compatible = activePhysicalMachineRows(rowText(row, "routeMachine"), rowText(row, "machineType"), machineRows);
-    const predecessors = scheduled.map((previous, previousIndex) => ({ previous, previousIndex }))
-      .filter(({ previous }) => {
-        if (previous === row || safeNumber(previous.parallelMachineCount) !== 1 || previous.toolingPlanBlocked) return false;
-        if (canonicalKey(previous.partCode) !== canonicalKey(row.partCode) || rowText(previous, "optionNumber") !== rowText(row, "optionNumber")) return false;
-        if (!compatible.some(machine => canonicalKey(machine.machine) === canonicalKey(previous.machine))) return false;
-        if (rowText(previous, "jcNo") === rowText(row, "jcNo")) {
-          return rowText(previous, "setupNo") === planningMeta(row).previousSetupNo;
-        }
-        if (priorityQueueState(previous) === "idle" && !shopFloorRowIsComplete(previous)) return false;
-        if (rowText(previous, "setupNo") === rowText(row, "setupNo")) return true;
-        return rowText(previous, "setupNo") === planningMeta(row).previousSetupNo
+    const predecessors: Array<{ previous: Record<string, unknown>; previousIndex: number }> = [];
+    for (const [previousIndex, previous] of scheduled.entries()) {
+      if (previous === row || safeNumber(previous.parallelMachineCount) !== 1 || previous.toolingPlanBlocked) continue;
+      if (canonicalKey(previous.partCode) !== canonicalKey(row.partCode) || rowText(previous, "optionNumber") !== rowText(row, "optionNumber")) continue;
+      if (!compatible.some(machine => canonicalKey(machine.machine) === canonicalKey(previous.machine))) continue;
+      if (rowText(previous, "jcNo") === rowText(row, "jcNo")) {
+        if (rowText(previous, "setupNo") === planningMeta(row).previousSetupNo) predecessors.push({ previous, previousIndex });
+        continue;
+      }
+      if (priorityQueueState(previous) === "idle" && !shopFloorRowIsComplete(previous)) continue;
+      if (rowText(previous, "setupNo") === rowText(row, "setupNo")
+        || (rowText(previous, "setupNo") === planningMeta(row).previousSetupNo
           && requiredToolingCodesFromPlan(previous).some(code => requiredToolingCodesFromPlan(row)
-            .some(nextCode => canonicalKey(nextCode) === canonicalKey(code)));
-      })
-      .sort((a, b) => Number(rowText(b.previous, "jcNo") === rowText(row, "jcNo")) - Number(rowText(a.previous, "jcNo") === rowText(row, "jcNo"))
-        || parseDate(rowText(b.previous, "plannedProductionEndDate")).localeCompare(parseDate(rowText(a.previous, "plannedProductionEndDate"))));
+            .some(nextCode => canonicalKey(nextCode) === canonicalKey(code))))) predecessors.push({ previous, previousIndex });
+    }
+    predecessors.sort((a, b) => Number(rowText(b.previous, "jcNo") === rowText(row, "jcNo")) - Number(rowText(a.previous, "jcNo") === rowText(row, "jcNo"))
+      || parseDate(rowText(b.previous, "plannedProductionEndDate")).localeCompare(parseDate(rowText(a.previous, "plannedProductionEndDate"))));
     for (const { previous, previousIndex } of predecessors) {
       const previousEnd = parseDate(rowText(previous, "plannedProductionEndDate"));
       const currentEnd = parseDate(rowText(row, "plannedProductionEndDate"));
@@ -5880,9 +5881,10 @@ function plannedWipBufferReadyDate({
   let date = firstStart;
   const lastPossibleDate = addDays(maxDateValue(...supplyStreams.map((stream) => stream.endDate)), 1, planningCalendar)
     || addDays(date, Math.max(365, Math.ceil(orderPcs / previousDailyQty) + supplyStreams.length + 30), planningCalendar);
+  const availableWipQtyThroughDate = pooledWipSupplyThroughDate(supplyStreams, orderPcs, planningCalendar);
 
   while (date && date <= lastPossibleDate) {
-    const producedQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => availableWipThroughDate(stream, date, planningCalendar))));
+    const producedQty = availableWipQtyThroughDate(date);
     if (producedQty >= requiredBufferQty) {
       return downstreamWipFeasibleStartDate({
         supplyStreams,
@@ -5890,6 +5892,7 @@ function plannedWipBufferReadyDate({
         orderPcs,
         nextDailyQty,
         planningCalendar,
+        availableWipQtyThroughDate,
       });
     }
     date = addDays(date, 1, planningCalendar);
@@ -5903,12 +5906,14 @@ function downstreamWipFeasibleStartDate({
   orderPcs,
   nextDailyQty,
   planningCalendar,
+  availableWipQtyThroughDate,
 }: {
   supplyStreams: WipProductionStream[];
   startNotBefore: string;
   orderPcs: number;
   nextDailyQty: number;
   planningCalendar: PlanningCalendar;
+  availableWipQtyThroughDate: (date: string) => number;
 }) {
   let candidate = addDays(startNotBefore, 0, planningCalendar);
   const lastSupplyDate = maxDateValue(...supplyStreams.map((stream) => stream.endDate));
@@ -5916,7 +5921,7 @@ function downstreamWipFeasibleStartDate({
   const lastCandidateDate = addDays(maxDateValue(candidate, lastSupplyDate), runDays + 30, planningCalendar);
   let guard = 0;
   while (candidate && candidate <= lastCandidateDate && guard < 1000) {
-    if (downstreamWipRunIsFeasible(candidate, supplyStreams, orderPcs, nextDailyQty, planningCalendar)) return candidate;
+    if (downstreamWipRunIsFeasible(candidate, availableWipQtyThroughDate, orderPcs, nextDailyQty, planningCalendar)) return candidate;
     candidate = addDays(candidate, 1, planningCalendar);
     guard += 1;
   }
@@ -5925,7 +5930,7 @@ function downstreamWipFeasibleStartDate({
 
 function downstreamWipRunIsFeasible(
   startDate: string,
-  supplyStreams: WipProductionStream[],
+  availableWipQtyThroughDate: (date: string) => number,
   orderPcs: number,
   nextDailyQty: number,
   planningCalendar: PlanningCalendar,
@@ -5936,7 +5941,7 @@ function downstreamWipRunIsFeasible(
   while (current && downstreamConsumedQty < orderPcs && guard < 1000) {
     if (isPlanningDate(current, planningCalendar)) {
       downstreamConsumedQty = Math.min(orderPcs, downstreamConsumedQty + nextDailyQty);
-      const availableWipQty = Math.min(orderPcs, sum(supplyStreams.map((stream) => availableWipThroughDate(stream, current, planningCalendar))));
+      const availableWipQty = availableWipQtyThroughDate(current);
       if (availableWipQty + 0.001 < downstreamConsumedQty) return false;
     }
     current = addCalendarDays(current, 1);
@@ -5944,15 +5949,55 @@ function downstreamWipRunIsFeasible(
   }
   return downstreamConsumedQty >= orderPcs;
 }
-function streamProducedQtyThroughDate(stream: WipProductionStream, dateValue: string, planningCalendar: PlanningCalendar) {
-  const start = parseDate(stream.startDate) || stream.startDate;
-  const end = minDateValue(parseDate(stream.endDate) || stream.endDate, parseDate(dateValue) || dateValue);
-  if (!start || !end || end < start) return 0;
-  return Math.min(stream.quantity, plannedProductionDays(start, end, planningCalendar) * stream.dailyQty);
-}
-function availableWipThroughDate(stream: WipProductionStream, dateValue: string, planningCalendar: PlanningCalendar) {
-  const availableThroughDate = stream.recorded ? dateValue : addDays(dateValue, -1, planningCalendar);
-  return streamProducedQtyThroughDate(stream, availableThroughDate, planningCalendar);
+function pooledWipSupplyThroughDate(streams: WipProductionStream[], orderPcs: number, planningCalendar: PlanningCalendar) {
+  // Each stream walks its calendar at most once per readiness calculation.
+  // Retain plannedProductionDays' inclusive count, minimum and 1000-day guard.
+  const indexedStreams = streams.map(stream => {
+    const start = parseDate(stream.startDate) || stream.startDate;
+    const end = parseDate(stream.endDate) || stream.endDate;
+    const counts = new Map<string, number>();
+    let current = start;
+    let countedThrough = "";
+    let days = 0;
+    let guard = 0;
+    return (date: string) => {
+      const through = minDateValue(end, parseDate(date) || date);
+      if (!start || !through || through < start) return 0;
+      let count = counts.get(through);
+      if (count === undefined) {
+        // Keep the original date behavior for noncanonical dates skipped by
+        // JavaScript's calendar rollover; normal planner dates hit the index.
+        if (through < countedThrough) count = plannedProductionDays(start, through, planningCalendar);
+        else {
+          while (current && current <= through && guard < 1000) {
+            if (isPlanningDate(current, planningCalendar)) days += 1;
+            counts.set(current, days);
+            countedThrough = current;
+            current = addCalendarDays(current, 1);
+            guard += 1;
+          }
+          count = days;
+        }
+      }
+      return Math.min(stream.quantity, Math.max(1, count) * stream.dailyQty);
+    };
+  });
+  // Candidate runs revisit the same supply dates. Bound retention even for
+  // unusually long input horizons; reaching the cap only stops memoization.
+  const supplyByDate = new Map<string, number>();
+  return (date: string) => {
+    const cached = supplyByDate.get(date);
+    if (cached !== undefined) return cached;
+    let quantity = 0;
+    let forecastThrough: string | undefined;
+    for (const [index, stream] of streams.entries()) {
+      if (!stream.recorded) forecastThrough ??= addDays(date, -1, planningCalendar);
+      quantity += indexedStreams[index]!(stream.recorded ? date : forecastThrough!);
+    }
+    const available = Math.min(orderPcs, quantity);
+    if (supplyByDate.size < 4096) supplyByDate.set(date, available);
+    return available;
+  };
 }
 
 function actualWipBufferAvailable({
