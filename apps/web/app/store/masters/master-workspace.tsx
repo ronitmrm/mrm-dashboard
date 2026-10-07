@@ -10,7 +10,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { FormGrid, MetricSummary } from "@/components/ui/golden-patterns"
 import {
  SectionCard,
   CardContent,
@@ -828,64 +828,7 @@ function masterForm(
         </MasterEntryForm>
       )
     case "SUPPLIER_PRICE":
-      return (
-        <MasterEntryForm
-          action={createStoreSupplierPriceAction}
-          uploads={[
-            {
-              field: "supplier_quote",
-              intent: { kind: "store-supplier-quote" },
-              intentFields: { itemTypeId: "item_type_id", supplierId: "supplier_id" },
-            },
-          ]}
-          encType="multipart/form-data"
-        >
-          <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <SelectField
-              label="Store Item"
-              name="item_type_id"
-              options={data.items.map((item) => ({
-                label: `${item.typeCode} — ${item.identificationName}`,
-                value: item.id,
-              }))}
-            />
-            <SelectField
-              label="Supplier"
-              name="supplier_id"
-              options={data.suppliers.map((supplier) => ({
-                label: `${supplier.code} — ${supplier.name}`,
-                value: supplier.id,
-              }))}
-            />
-            <TextField
-              label="Unit Price"
-              min="0"
-              name="unit_price"
-              required
-              step="0.01"
-              type="number"
-            />
-            <TextField label="Effective From" name="valid_from" type="date" />
-            <TextField label="Quote Reference" name="quote_reference" />
-            <Field>
-              <FieldLabel htmlFor="master-supplier-quote">Quote PDF</FieldLabel>
-              <Input
-                accept="application/pdf"
-                id="master-supplier-quote"
-                name="supplier_quote"
-                type="file"
-              />
-            </Field>
-          </FieldGroup>
-          <Button
-            className="mt-5"
-            disabled={!data.items.length || !data.suppliers.length}
-            type="submit"
-          >
-            Save Supplier Price
-          </Button>
-        </MasterEntryForm>
-      )
+      return <StoreSupplierPriceForm data={data} />
     case "VENDOR":
       return (
         <MasterEntryForm action={createStoreVendorAction}>
@@ -920,6 +863,183 @@ function masterForm(
         </MasterEntryForm>
       )
   }
+}
+
+function storeItemOptions(
+  items: StoreMasterData["items"],
+  value: (item: StoreMasterData["items"][number]) => string,
+  label: (item: StoreMasterData["items"][number]) => string
+) {
+  const options = new Map<string, { label: string; value: string }>()
+  for (const item of items) {
+    const id = value(item)
+    if (id && !options.has(id)) options.set(id, { label: label(item), value: id })
+  }
+  return [...options.values()].sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function StoreSupplierPriceForm({ data }: { data: StoreMasterData }) {
+  const [categoryId, setCategoryId] = useState("")
+  const [subcategoryId, setSubcategoryId] = useState("")
+  const [assetNameId, setAssetNameId] = useState("")
+  const [makeModelId, setMakeModelId] = useState("")
+  const [itemTypeId, setItemTypeId] = useState("")
+  const categoryItems = categoryId
+    ? data.items.filter((item) => item.assetCategoryId === categoryId)
+    : data.items
+  const subcategoryItems = subcategoryId
+    ? categoryItems.filter((item) => item.assetSubcategoryId === subcategoryId)
+    : categoryItems
+  const assetNameItems = assetNameId
+    ? subcategoryItems.filter((item) => item.assetNameId === assetNameId)
+    : subcategoryItems
+  const visibleItems = makeModelId
+    ? assetNameItems.filter((item) => item.makeModelId === makeModelId)
+    : assetNameItems
+
+  function selectItem(nextItemTypeId: string) {
+    setItemTypeId(nextItemTypeId)
+    const item = data.items.find((candidate) => candidate.id === nextItemTypeId)
+    if (item) {
+      setCategoryId(item.assetCategoryId)
+      setSubcategoryId(item.assetSubcategoryId)
+      setAssetNameId(item.assetNameId)
+      setMakeModelId(item.makeModelId)
+    }
+  }
+
+  return (
+    <MasterEntryForm
+      action={createStoreSupplierPriceAction}
+      onSuccess={() => {
+        setCategoryId("")
+        setSubcategoryId("")
+        setAssetNameId("")
+        setMakeModelId("")
+        setItemTypeId("")
+      }}
+      uploads={[
+        {
+          field: "supplier_quote",
+          intent: { kind: "store-supplier-quote" },
+          intentFields: { itemTypeId: "item_type_id", supplierId: "supplier_id" },
+        },
+      ]}
+      encType="multipart/form-data"
+    >
+      <FormGrid className="xl:grid-cols-4">
+        <SelectField
+          label="Category"
+          name="filter_category_id"
+          onChange={(event) => {
+            setCategoryId(event.target.value)
+            setSubcategoryId("")
+            setAssetNameId("")
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(data.items, (item) => item.assetCategoryId, (item) => item.assetCategory)}
+          placeholder="All Categories"
+          required={false}
+          value={categoryId}
+        />
+        <SelectField
+          label="Subcategory"
+          name="filter_subcategory_id"
+          onChange={(event) => {
+            setSubcategoryId(event.target.value)
+            setAssetNameId("")
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(
+            categoryItems,
+            (item) => item.assetSubcategoryId,
+            (item) => categoryId ? item.assetSubcategory : `${item.assetCategory} — ${item.assetSubcategory}`
+          )}
+          placeholder="All Subcategories"
+          required={false}
+          value={subcategoryId}
+        />
+        <SelectField
+          label="Asset Name"
+          name="filter_asset_name_id"
+          onChange={(event) => {
+            setAssetNameId(event.target.value)
+            setMakeModelId("")
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(
+            subcategoryItems,
+            (item) => item.assetNameId,
+            (item) => subcategoryId ? item.assetName : `${item.assetSubcategory} — ${item.assetName}`
+          )}
+          placeholder="All Asset Names"
+          required={false}
+          value={assetNameId}
+        />
+        <SelectField
+          label="Make/Model"
+          name="filter_make_model_id"
+          onChange={(event) => {
+            setMakeModelId(event.target.value)
+            setItemTypeId("")
+          }}
+          options={storeItemOptions(assetNameItems, (item) => item.makeModelId, (item) => item.makeModel)}
+          placeholder="All Make/Models"
+          required={false}
+          value={makeModelId}
+        />
+      </FormGrid>
+      <FormGrid className="mt-4">
+        <SelectField
+          label="Store Item"
+          name="item_type_id"
+          onChange={(event) => selectItem(event.target.value)}
+          options={visibleItems.map((item) => ({
+            label: `${item.typeCode} — ${item.assetName} · ${item.makeModel}${item.identificationName ? ` · ${item.identificationName}` : ""}`,
+            value: item.id,
+          }))}
+          placeholder="Select Store Item"
+          value={itemTypeId}
+        />
+        <SelectField
+          label="Supplier"
+          name="supplier_id"
+          options={data.suppliers.map((supplier) => ({
+            label: `${supplier.code} — ${supplier.name}`,
+            value: supplier.id,
+          }))}
+        />
+        <TextField
+          label="Unit Price"
+          min="0"
+          name="unit_price"
+          required
+          step="0.01"
+          type="number"
+        />
+        <TextField label="Effective From" name="valid_from" type="date" />
+        <TextField label="Quote Reference" name="quote_reference" />
+        <Field>
+          <FieldLabel htmlFor="master-supplier-quote">Quote PDF</FieldLabel>
+          <Input
+            accept="application/pdf"
+            id="master-supplier-quote"
+            name="supplier_quote"
+            type="file"
+          />
+        </Field>
+      </FormGrid>
+      <Button
+        className="mt-5"
+        disabled={!itemTypeId || !data.suppliers.length}
+        type="submit"
+      >
+        Save Supplier Price
+      </Button>
+    </MasterEntryForm>
+  )
 }
 
 function StoreItemTypeForm({

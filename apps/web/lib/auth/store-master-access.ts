@@ -14,19 +14,24 @@ export function selectedStoreMasterData(
       master === "ITEM_TYPE"
         ? data.items
         : itemReferences
-          ? data.items.map(({ id, typeCode, identificationName, unit }) => ({
+          ? data.items.map(({
+              id, typeCode, identificationName, unit,
+              assetCategory, assetCategoryId, assetSubcategory,
+              assetSubcategoryId, assetName, assetNameId, makeModel,
+              makeModelId,
+            }) => ({
               id,
               typeCode,
               identificationName,
-              makeModel: "",
-              makeModelId: "",
+              makeModel,
+              makeModelId,
               unit,
-              assetCategory: "",
-              assetCategoryId: "",
-              assetName: "",
-              assetNameId: "",
-              assetSubcategory: "",
-              assetSubcategoryId: "",
+              assetCategory,
+              assetCategoryId,
+              assetName,
+              assetNameId,
+              assetSubcategory,
+              assetSubcategoryId,
               assetType: "",
               manufacturerMake: null,
               modelNumber: null,
