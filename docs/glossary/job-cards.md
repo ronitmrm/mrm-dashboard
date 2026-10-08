@@ -4,6 +4,14 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
+The summary counts the selected production unit before table filters. Every
+Job Card belongs to exactly one bucket: Awaiting RM, In Production, Production
+Complete, or Dispatched. In Production includes ready-for-setup and part-readiness
+work, active production, and partially dispatched Job Cards whose lifecycle is
+still open. Production Complete means all route setups have reached 100% and
+the Job Card has not entered dispatch. Dispatched means final dispatch, including
+historical dispatch approval. The four bucket counts always add up to Job Cards.
+
 Production Progress in both the register and workspace gives every distinct setup in the selected
 route an equal share of 100%. Each setup's progress is its cumulative good
 pieces across machines divided by ordered pieces, capped between 0% and 100%.

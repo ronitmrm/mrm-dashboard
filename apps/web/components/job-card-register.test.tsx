@@ -6,6 +6,30 @@ vi.mock("@/components/ui/golden-patterns", () => import("./ui/golden-patterns"))
 
 import { JobCardRegister } from "./job-card-register"
 
+test("counts every Job Card in one summary bucket, including readiness and partial dispatch", () => {
+  const markup = renderToStaticMarkup(
+    <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
+      finishDateRows={[]} routeRows={[{ partNo: "PART-1", optionNumber: "1", setupNo: "1" }]}
+      productionRows={[{ jobCard: "COMPLETE", partCode: "PART-1", setupNo: "1", actualQty: 100 }]}
+      rows={[
+        { jcNo: "AWAITING" },
+        { jcNo: "READY", rmStatus: "Received" },
+        { jcNo: "READINESS", rmStatus: "Received", routeStatus: "Missing route" },
+        { jcNo: "ACTIVE", rawRows: 1 },
+        { jcNo: "PARTIAL", dispatchStatus: "Partially dispatched" },
+        { jcNo: "COMPLETE", partCode: "PART-1", optionNumber: "1", orderPcs: 100 },
+        { jcNo: "DISPATCHED", dispatchStatus: "Dispatched" },
+        { jcNo: "HISTORICAL", dispatchStatus: "Dispatch approved" },
+      ]} />
+  )
+  const summary = markup.match(/data-slot="metric-summary"[\s\S]*?<\/section>/)?.[0].replace(/<[^>]*>/g, "")
+  expect(summary).toContain("Job Cards8")
+  expect(summary).toContain("Awaiting RM1")
+  expect(summary).toContain("In Production4")
+  expect(summary).toContain("Production Complete1")
+  expect(summary).toContain("Dispatched2")
+})
+
 test("shows the saved finish and changing current forecast for the matching Job Card and part", () => {
   const render = (currentProbableDispatchDate: string) => renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
