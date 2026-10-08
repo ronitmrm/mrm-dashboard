@@ -277,6 +277,10 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             created_at, published_at
           FROM derived.dashboard_floor_read_models
           WHERE organization_id = $1 AND production_floor_code = $2
+            AND publication_version = (
+              SELECT version FROM derived.dashboard_read_model_heads
+              WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+            )
           ORDER BY publication_version DESC LIMIT 1
         `,
         [organizationId, productionFloorCode]
@@ -352,6 +356,10 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             SELECT version, payload, source_watermark, created_at, published_at
             FROM derived.dashboard_floor_read_models
             WHERE organization_id = requested.organization_id AND production_floor_code = $2
+              AND publication_version = (
+                SELECT version FROM derived.dashboard_read_model_heads
+                WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+              )
             ORDER BY publication_version DESC
             LIMIT 1
           ) model ON true
@@ -489,6 +497,10 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           `SELECT model.version::text, job.status FROM (SELECT $1::uuid AS organization_id) requested
            LEFT JOIN LATERAL (SELECT version FROM derived.dashboard_floor_read_models
              WHERE organization_id = requested.organization_id AND production_floor_code = $2
+               AND publication_version = (
+                 SELECT version FROM derived.dashboard_read_model_heads
+                 WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+               )
              ORDER BY publication_version DESC LIMIT 1) model ON true
            LEFT JOIN LATERAL (SELECT status FROM derived.refresh_jobs
              WHERE organization_id = requested.organization_id
@@ -507,6 +519,10 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           const published = await client.query<{ rows: JsonRecord[] | null }>(
             `SELECT payload #> '{productionControl,workOrderRegisterRows}' AS rows
              FROM derived.dashboard_floor_read_models WHERE organization_id = $1 AND production_floor_code = $2
+               AND publication_version = (
+                 SELECT version FROM derived.dashboard_read_model_heads
+                 WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+               )
              ORDER BY publication_version DESC LIMIT 1`, [input.organizationId, input.productionFloorCode])
           const key = (row: JsonRecord) => text(row.jcNo).toLowerCase()
           const prior = new Map((published.rows[0]?.rows ?? []).map(row => [key(row), row]))
