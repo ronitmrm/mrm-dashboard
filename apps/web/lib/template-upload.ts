@@ -26,6 +26,11 @@ export function parseTemplateUpload(
     .map((row) => normalizeImportedPayload(row, entryType))
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
+  if (!rows.length) {
+    throw new TemplateUploadError(
+      "The CSV contains no data rows. Fill the template before uploading."
+    )
+  }
   if (entryType === "rm_inward") {
     const failures = rows.flatMap((row, index) => {
       const date = parseRmInwardUploadDate(row.rmInwardDate)
@@ -77,12 +82,13 @@ function parseCsv(csvText: string): Array<Record<string, unknown>> {
     } else if (char === ",") {
       row.push(cell)
       cell = ""
-    } else if (char === "\n") {
+    } else if (char === "\n" || char === "\r") {
       row.push(cell)
       rows.push(row)
       row = []
       cell = ""
-    } else if (char !== "\r") {
+      if (char === "\r" && next === "\n") index += 1
+    } else {
       cell += char
     }
   }

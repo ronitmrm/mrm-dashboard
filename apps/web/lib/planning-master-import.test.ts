@@ -12,6 +12,21 @@ import {
 import { parseTemplateUpload } from "./template-upload"
 
 describe("planning master CSV imports", () => {
+  it("reads CR-separated routes with quoted multiline cells and CRLF endings", () => {
+    const csv = 'partNo,optionNumber,setupNo,setupName\rM855,1,1,1/2-14 NPTF OD THREAD\rM855,1,2,"\n3/4-16 UNF OD THREAD"\r\n'
+    const batch = parseTemplateUpload("route", "route.csv", Buffer.from(csv).toString("base64"), new Set(["route"]))
+    expect(batch.duplicateCount).toBe(0)
+    expect(batch.rows).toEqual([
+      { partNo: "M855", optionNumber: 1, setupNo: 1, setupName: "1/2-14 Nptf Od Thread" },
+      { partNo: "M855", optionNumber: 1, setupNo: 2, setupName: "3/4-16 Unf Od Thread" },
+    ])
+  })
+
+  it("rejects a template with no data rows", () => {
+    expect(() => parseTemplateUpload("route", "route.csv", Buffer.from("partNo,setupNo\r\n").toString("base64"), new Set(["route"])))
+      .toThrow("The CSV contains no data rows.")
+  })
+
   const rows = [
     { partNo: "M4", optionNumber: "1", setupNo: "5" },
     { partNo: "M5", optionNumber: "1", setupNo: "3" },

@@ -8,6 +8,10 @@ are committed. If any row fails, the entire upload is rolled back, including
 earlier rows, audit records, generated master codes, and queued refresh work.
 The user corrects the reported error and uploads the complete file again.
 
+Dashboard template uploads accept LF, CRLF, and CR line endings, including
+quoted multiline cells. A template without data rows is rejected instead of
+reporting a successful zero-row import.
+
 ## Deduplication
 
 Every CSV or spreadsheet import keeps the first exact business row and skips
