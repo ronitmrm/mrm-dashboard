@@ -241,6 +241,10 @@ Production Date is the date on which the shift starts. CNC Shift C therefore kee
 
 Start Session pre-fills the selected shift's scheduled start. End Session pre-fills that session's scheduled shift end. Both remain editable for exceptions; for example, Conventional starts at 08:30 and ends at 20:00.
 
+For CNC Shift C, End Session pre-fills 06:00 on the calendar day after the
+session's Production Date, even when the session is closed late. Shift A and B
+keep their end date on the session's Production Date.
+
 ## Session reference
 
 Every session receives an immutable human-readable reference:
