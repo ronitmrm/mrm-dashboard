@@ -256,7 +256,8 @@ export function ProductionSessionsWorkspace({
   const sessionDelivery = useConditionalRecords(
     `/api/production-sessions?floor=${encodeURIComponent(floor)}&limit=500&conditional=1&includeEvents=1`,
     reconcileSessions,
-    clearSessions
+    clearSessions,
+    true
   )
   const load = sessionDelivery.refresh
   const initialLoading = loading || sessionDelivery.loading
@@ -371,7 +372,7 @@ export function ProductionSessionsWorkspace({
           <CardContent>
             {error || sessionDelivery.error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error || sessionDelivery.error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {(initialLoading && !sessionDelivery.error) ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading full session history…" description="Older sessions are included automatically." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
  </SectionCard>
       {!initialLoading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}

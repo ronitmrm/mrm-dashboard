@@ -337,6 +337,6 @@ An active machine-unavailable window is a hard scheduling constraint. Automatic 
 
 Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before the authorized signed-in person chooses an active Worker as operator and enters the start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
 
-The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.
+The Production Session Register shows the full non-reversed session history for the selected Production Unit in one continuous table, newest first, without page controls. Search, status filters, and the register CSV download apply to that full history. Completing a setup retains its closed sessions. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.
 
 Shop Floor Status links each currently running item to its matching open Production Session and opens that session's detail directly. It does not duplicate session completion with a separate Item Finished action or repeat the worker name in the action cell.
