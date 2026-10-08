@@ -121,11 +121,14 @@ export default async function StoreStockPage({
     unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
   )
   const mainUnitItemIds = new Set(mainUnits.map((unit) => unit.itemTypeId))
-  const visibleItems = showItemCatalog ? data.items : data.items.filter((item) =>
-    item.trackingMode === "CONSUMABLE"
-      ? Number(item.availableStock) > 0
-      : mainUnitItemIds.has(item.id)
-  )
+  const visibleItems =
+    mode === "view" || showItemCatalog
+      ? data.items
+      : data.items.filter((item) =>
+          item.trackingMode === "CONSUMABLE"
+            ? Number(item.availableStock) > 0
+            : mainUnitItemIds.has(item.id)
+        )
   const stockRows = storeStockRows(visibleItems, data.physicalUnits).filter((row) =>
     row.actionItem || (!showItemCatalog && row.physicalUnit?.isMainAccountable &&
       row.physicalUnit.status !== "SCRAPPED" && row.physicalUnit.status !== "LOST")
@@ -227,6 +230,8 @@ export default async function StoreStockPage({
                     ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
                   : mode === "request"
                     ? "Select active Asset Codes to request, including items not yet in Main Store stock."
+                  : mode === "view"
+                    ? "All active Asset Codes are listed, including zero stock, so items can be found and requested or ordered. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store."
                     : "Only stock held by or accountable to Main Store is listed. Main Available is stock Main Store can issue; Company On Hand includes every accountable Store."}
               </CardDescription>
             </div>
