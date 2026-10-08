@@ -16,7 +16,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   OperationalTable,
@@ -34,6 +33,7 @@ import { JobInterviewActions } from "@/components/hr/job-interview-actions"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { JobLifecycleActions } from "@/components/hr/job-lifecycle-actions"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
@@ -195,8 +195,9 @@ export default async function JobWorkspacePage({
         </Alert>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {(
+      <MetricSummary
+        scope="Current job · before table filters"
+        items={
           [
             {
               label: "Applicants",
@@ -215,10 +216,8 @@ export default async function JobWorkspacePage({
               tone: job.targetDate ? "information" : "warning",
             },
           ] as const
-        ).map(({ label, value, tone }) => (
-          <MetricCard key={label} label={label} tone={tone} value={value} />
-        ))}
-      </section>
+        }
+      />
 
       {canWrite && job.status === "Open" ? (
         <JobInterviewActions

@@ -1,10 +1,12 @@
 "use client"
 
+import { MetricSummary } from "@/components/ui/golden-patterns"
+
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from "@workspace/ui/components/card"
+import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
@@ -74,10 +76,6 @@ async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode) 
   const body = await response.json().catch(() => ({})) as Workspace & { error?: string; message?: string }
   if (!response.ok) throw new Error(body.error || body.message || "Job Card could not be loaded.")
   return body
-}
-
-function Metric({ label, value: metric, note }: { label: string; note?: string; value: string }) {
-  return <MetricCard label={label} value={metric} description={note} tone="information" />
 }
 
 function Field({ label, value: fieldValue }: { label: string; value: unknown }) {
@@ -226,7 +224,31 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
       <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
 
       {activeTab === "overview" ? <section className="grid gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Job Complete" value={completion === null ? "Unavailable" : `${quantity(completion, 1)}%`} note={`${quantity(analytics.completedSetupCount)} / ${quantity(analytics.setupCount)} setups complete`} /><Metric label="Current Stage" value={currentStage} /><Metric label="Delivery Rating" value={display(delivery.rating)} note={display(delivery.status)} /><Metric label="Order Short" value={quantity(material.orderShortPieces)} note="finished pieces still required" /></div>
+        <MetricSummary
+          scope="Current Job Card · Job Complete"
+          items={[
+            {
+              label: "Job Complete",
+              value:
+                completion === null ? "Unavailable" : `${quantity(completion, 1)}%`,
+              description: `${quantity(analytics.completedSetupCount)} / ${quantity(analytics.setupCount)} setups complete`,
+              tone: "information",
+            },
+            { label: "Current Stage", value: currentStage, tone: "information" },
+            {
+              label: "Delivery Rating",
+              value: display(delivery.rating),
+              description: display(delivery.status),
+              tone: "information",
+            },
+            {
+              label: "Order Short",
+              value: quantity(material.orderShortPieces),
+              description: "finished pieces still required",
+              tone: "information",
+            },
+          ]}
+        />
  <SectionCard><CardHeader><CardTitle>Job Card Progress</CardTitle><CardDescription>Overall completion gives each route setup an equal share. Finished pieces are counted only after the final setup.</CardDescription></CardHeader><CardContent className="grid gap-4"><div><div className="mb-1 flex justify-between gap-3 text-sm"><span>Overall production progress</span><strong className="text-right tabular-nums">{completion === null ? "Progress unavailable" : `${quantity(completion, 1)}%`}</strong></div><div role="progressbar" aria-label="Overall Job Card completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completion ?? undefined} className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[var(--color-info)]" style={{ width: `${completion ?? 0}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{finishedOutputNote}. Earlier setup output remains work in progress.</p></div><dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Planned Start" value={date(analytics.plannedStartDate)} /><Field label="Actual Start" value={date(analytics.actualStartAt, true)} /><Field label="Estimated Job Finish" value={formatPlanningFinish(date(analytics.plannedEndDate), analytics.plannedEndWorkingHours)} /><Field label="Target Delivery" value={date(delivery.targetDate)} /></dl></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Exceptions Needing Attention</CardTitle></CardHeader><CardContent className="grid gap-2 md:grid-cols-3"><Field label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Field label="Downtime" value={`${quantity(analytics.downtimeMinutes)} min`} /><Field label="Unexplained Material Loss" value={material.available === false ? "Set Product Master Blank Piece Weight" : `${quantity(material.unexplainedLossPieces)} pcs estimate`} /></CardContent></SectionCard>
       </section> : null}
@@ -238,14 +260,67 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
  </CardContent></SectionCard> : null}
 
       {activeTab === "setup" ? <section className="grid gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Setups" value={quantity(setupTimings.length)} /><Metric label="Machinist Time" value={`${quantity(setupTimings.reduce((sum, row) => sum + number(row.machinistSetupMinutes), 0))} min`} note="setting start to setting complete" /><Metric label="QC Wait" value={`${quantity(setupTimings.reduce((sum, row) => sum + number(row.qcWaitMinutes), 0))} min`} /><Metric label="Start Wait" value={`${quantity(setupTimings.reduce((sum, row) => sum + number(row.machineStartWaitMinutes), 0))} min`} /></div>
+        <MetricSummary
+          scope="Current Job Card · Setups"
+          items={[
+            {
+              label: "Setups",
+              value: quantity(setupTimings.length),
+              tone: "information",
+            },
+            {
+              label: "Machinist Time",
+              value: `${quantity(setupTimings.reduce((sum, row) => sum + number(row.machinistSetupMinutes), 0))} min`,
+              description: "setting start to setting complete",
+              tone: "information",
+            },
+            {
+              label: "QC Wait",
+              value: `${quantity(setupTimings.reduce((sum, row) => sum + number(row.qcWaitMinutes), 0))} min`,
+              tone: "information",
+            },
+            {
+              label: "Start Wait",
+              value: `${quantity(setupTimings.reduce((sum, row) => sum + number(row.machineStartWaitMinutes), 0))} min`,
+              tone: "information",
+            },
+          ]}
+        />
  <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Settings2 className="size-4" /> Setup-wise Time</CardTitle><CardDescription>Target comes from Cycle Master. Missing timestamps remain blank and are not counted as zero.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Setup</TableHead><TableHead>Operation</TableHead><TableHead className="text-right">Target</TableHead><TableHead className="text-right">Machinist</TableHead><TableHead className="text-right">Variance</TableHead><TableHead className="text-right">QC Wait</TableHead><TableHead className="text-right">Start Wait</TableHead></TableRow></TableHeader><TableBody>{setupTimings.length ? setupTimings.map((row) => <TableRow key={text(row.setupId)}><TableCell className="font-medium">{display(row.setupNumber)}</TableCell><TableCell>{display(row.operationName || row.operationCode)}</TableCell><TableCell className="text-right">{row.targetSetupMinutes == null ? "-" : `${quantity(row.targetSetupMinutes)} min`}</TableCell><TableCell className="text-right">{row.machinistSetupMinutes == null ? "-" : `${quantity(row.machinistSetupMinutes)} min`}</TableCell><TableCell className={`text-right ${number(row.setupVarianceMinutes) > 0 ? "text-destructive" : ""}`}>{row.setupVarianceMinutes == null ? "-" : `${number(row.setupVarianceMinutes) > 0 ? "+" : ""}${quantity(row.setupVarianceMinutes)} min`}</TableCell><TableCell className="text-right">{row.qcWaitMinutes == null ? "-" : `${quantity(row.qcWaitMinutes)} min`}</TableCell><TableCell className="text-right">{row.machineStartWaitMinutes == null ? "-" : `${quantity(row.machineStartWaitMinutes)} min`}</TableCell></TableRow>) : <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No setup timing recorded yet.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
       </section> : null}
 
       {activeTab === "setup-production" ? <SetupProduction rows={list(analytics.setupPerformance)} setups={setups} orderedQuantity={analytics.orderedQuantity} /> : null}
 
       {activeTab === "production" ? <section className="grid gap-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Finished Good" value={hasFinishedOutput ? quantity(analytics.actualGoodPieces) : "-"} note={hasFinishedOutput ? `${quantity(analytics.finishedCompletionPercent, 1)}% finished pieces` : `Waiting for Setup ${finalSetupNumber || "-"}`} /><Metric label="Final Setup Total" value={hasFinishedOutput ? quantity(analytics.actualProducedPieces) : "-"} note="Good + rejected pieces from final setup" /><Metric label="Runtime" value={`${quantity(analytics.runtimeMinutes)} min`} /><Metric label="Sessions" value={quantity(analytics.sessionCount)} /></div>
+        <MetricSummary
+          scope="Current Job Card · Finished Good"
+          items={[
+            {
+              label: "Finished Good",
+              value: hasFinishedOutput ? quantity(analytics.actualGoodPieces) : "-",
+              description: hasFinishedOutput
+                ? `${quantity(analytics.finishedCompletionPercent, 1)}% finished pieces`
+                : `Waiting for Setup ${finalSetupNumber || "-"}`,
+              tone: "information",
+            },
+            {
+              label: "Final Setup Total",
+              value: hasFinishedOutput ? quantity(analytics.actualProducedPieces) : "-",
+              description: "Good + rejected pieces from final setup",
+              tone: "information",
+            },
+            {
+              label: "Runtime",
+              value: `${quantity(analytics.runtimeMinutes)} min`,
+              tone: "information",
+            },
+            {
+              label: "Sessions",
+              value: quantity(analytics.sessionCount),
+              tone: "information",
+            },
+          ]}
+        />
  <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Required RM = ordered pieces × blank piece weight (g) ÷ 1,000. Material yield uses received and remaining kilograms.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Required RM" value={material.requiredKg == null ? "Blank piece weight required" : `${quantity(material.requiredKg, 3)} kg`} /></div></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Production Sessions</CardTitle><CardDescription>Setup-level machine and operator entries. Output before the final setup is WIP.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Session</TableHead><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Operator</TableHead><TableHead>Started</TableHead><TableHead>Ended</TableHead><TableHead className="text-right">Setup Output</TableHead><TableHead className="text-right">Setup Rejected</TableHead><TableHead className="text-right">Setup Good</TableHead></TableRow></TableHeader><TableBody>{sessions.length ? sessions.map((row) => <TableRow key={text(row.id)}><TableCell><Link className="font-medium text-primary underline underline-offset-4" href={`/dashboard/production-sessions?${new URLSearchParams({ floor, session: text(row.id) })}`}>{display(row.session_reference)}</Link><Badge className="ml-2" variant={text(row.status) === "open" ? "default" : "outline"}>{title(row.status)}</Badge></TableCell><TableCell>{display(row.machine_number)}</TableCell><TableCell>{display(row.setup_number)}</TableCell><TableCell>{display(row.operator_code)}</TableCell><TableCell>{date(row.started_at, true)}</TableCell><TableCell>{date(row.ended_at, true)}</TableCell><TableCell className="text-right">{quantity(row.total_pieces)}</TableCell><TableCell className="text-right">{quantity(row.quantity_rejected)}</TableCell><TableCell className="text-right">{quantity(row.quantity_good)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No production sessions recorded.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Planner Movement History</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Decision Time</TableHead><TableHead>Action</TableHead><TableHead>Setup</TableHead><TableHead>Machine Movement</TableHead><TableHead>Reason</TableHead><TableHead>Session Settlement</TableHead><TableHead className="text-right">Good Output</TableHead><TableHead>Planner</TableHead></TableRow></TableHeader><TableBody>{plannerMovements.length ? plannerMovements.map((row, index) => {
@@ -258,11 +333,77 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
  <SectionCard><CardHeader><CardTitle>Production Plan</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{planRows.length ? planRows.map((row, index) => <TableRow key={`${value(row, "machineNo", "machineNumber")}-${index}`}><TableCell>{value(row, "machineNo", "machineNumber") || "-"}</TableCell><TableCell>{value(row, "setupNo", "setupNumber") || "-"}</TableCell><TableCell>{date(value(row, "plannedProductionStartDate", "productionStartDate"))}</TableCell><TableCell>{date(value(row, "plannedProductionEndDate", "productionEndDate"))}</TableCell><TableCell>{title(value(row, "runningStatus", "status", "shopFloorStage"))}</TableCell></TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No plan rows available.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
       </section> : null}
 
- {activeTab === "rejection" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Rejected Pieces" value={quantity(analytics.rejectedPieces)} /><Metric label="Rejection Rate" value={`${quantity(analytics.rejectionPercent, 2)}%`} /><Metric label="Rejection Entries" value={quantity(rejectionEvents.length)} /></div><JobCardQualityRecords rows={workspace.qualityRecords ?? emptyRows} floor={floor} /><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} rejectionColumns /></CardContent></SectionCard></section> : null}
+ {activeTab === "rejection" ? <section className="grid gap-4"><MetricSummary
+   scope="Current Job Card · Rejected Pieces"
+   items={[
+     {
+       label: "Rejected Pieces",
+       value: quantity(analytics.rejectedPieces),
+       tone: "information",
+     },
+     {
+       label: "Rejection Rate",
+       value: `${quantity(analytics.rejectionPercent, 2)}%`,
+       tone: "information",
+     },
+     {
+       label: "Rejection Entries",
+       value: quantity(rejectionEvents.length),
+       tone: "information",
+     },
+   ]}
+ /><JobCardQualityRecords rows={workspace.qualityRecords ?? emptyRows} floor={floor} /><SectionCard><CardHeader><CardTitle>Rejection Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No rejection entries recorded." rows={rejectionEvents} rejectionColumns /></CardContent></SectionCard></section> : null}
 
- {activeTab === "downtime" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Downtime" value={`${quantity(analytics.downtimeMinutes)} min`} /><Metric label="Entries" value={quantity(downtimeEvents.length)} /><Metric label="Largest Reason" value={display(list(analytics.downtimeByReason)[0]?.name)} /></div><div className="grid gap-4 xl:grid-cols-2"><SectionCard><CardHeader><CardTitle>By Reason</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeByReason)} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>By Setup</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeBySetup)} /></CardContent></SectionCard></div><SectionCard><CardHeader><CardTitle>Downtime Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No downtime entries recorded." rows={downtimeEvents} /></CardContent></SectionCard></section> : null}
+ {activeTab === "downtime" ? <section className="grid gap-4"><MetricSummary
+   scope="Current Job Card · Downtime"
+   items={[
+     {
+       label: "Downtime",
+       value: `${quantity(analytics.downtimeMinutes)} min`,
+       tone: "information",
+     },
+     {
+       label: "Entries",
+       value: quantity(downtimeEvents.length),
+       tone: "information",
+     },
+     {
+       label: "Largest Reason",
+       value: display(list(analytics.downtimeByReason)[0]?.name),
+       tone: "information",
+     },
+   ]}
+ /><div className="grid gap-4 xl:grid-cols-2"><SectionCard><CardHeader><CardTitle>By Reason</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeByReason)} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>By Setup</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeBySetup)} /></CardContent></SectionCard></div><SectionCard><CardHeader><CardTitle>Downtime Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No downtime entries recorded." rows={downtimeEvents} /></CardContent></SectionCard></section> : null}
 
- {activeTab === "delivery" ? <section className="grid gap-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Delivery Rating" value={display(delivery.rating)} note={display(delivery.status)} /><Metric label="RM Complete" value={date(material.rawMaterialCompleteDate)} /><Metric label="Target Date" value={date(delivery.targetDate)} /><Metric label="Effective Target" value={deliveryTarget.effectiveWorkingDays ? `${quantity(deliveryTarget.effectiveWorkingDays)} days` : "Not set"} note={title(deliveryTarget.source)} /></div><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Fridays and Planning Calendar holidays are excluded.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Delivery timing starts when cumulative receipts reach required RM kilograms.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard></section> : null}
+ {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary
+   scope="Current Job Card · Delivery Rating"
+   items={[
+     {
+       label: "Delivery Rating",
+       value: display(delivery.rating),
+       description: display(delivery.status),
+       tone: "information",
+     },
+     {
+       label: "RM Complete",
+       value: date(material.rawMaterialCompleteDate),
+       tone: "information",
+     },
+     {
+       label: "Target Date",
+       value: date(delivery.targetDate),
+       tone: "information",
+     },
+     {
+       label: "Effective Target",
+       value: deliveryTarget.effectiveWorkingDays
+         ? `${quantity(deliveryTarget.effectiveWorkingDays)} days`
+         : "Not set",
+       description: title(deliveryTarget.source),
+       tone: "information",
+     },
+   ]}
+ /><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Fridays and Planning Calendar holidays are excluded.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Delivery timing starts when cumulative receipts reach required RM kilograms.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard></section> : null}
 
  {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} /></CardContent></SectionCard> : null}
     </> : null}

@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createCommercialRevisionsRepository } from "@workspace/db"
@@ -8,7 +9,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -76,23 +76,26 @@ export default async function CustomerBulkRevisionPage({
           </>
         }
       />
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
-          tone="information"
-          label="Customer Revision Requests"
-          value={summary.openRevisionCount}
-        />
-        <MetricCard
-          tone="accent"
-          label="Commercial-Only Revision"
-          value={summary.commercialOnlyRevision}
-        />
-        <MetricCard
-          tone="brand"
-          label="Customer Prices In Scope"
-          value={summary.activePriceCount}
-        />
-      </section>
+      <MetricSummary
+        scope="All customer revision requests · before table filters"
+        items={[
+          {
+            tone: "information",
+            label: "Customer Revision Requests",
+            value: summary.openRevisionCount,
+          },
+          {
+            tone: "accent",
+            label: "Commercial-Only Revision",
+            value: summary.commercialOnlyRevision,
+          },
+          {
+            tone: "brand",
+            label: "Customer Prices In Scope",
+            value: summary.activePriceCount,
+          },
+        ]}
+      />
 
       <BulkRevisionEntry>
         <SectionCard width="wide">

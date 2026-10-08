@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 
 import { createCommercialCostingRepository } from "@workspace/db"
@@ -9,7 +10,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Field,
@@ -170,21 +170,27 @@ export async function CustomerParameterCostingView({
             />
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard tone="information"
-              label="New Quote Costing"
-              value={summary.newQuoteCosting}
-            />
-            <MetricCard tone="brand" label="PO Price Match" value={summary.poPriceMatch} />
-            <MetricCard tone="accent"
-              label="Bulk Price Revision"
-              value={summary.bulkPriceRevision}
-            />
-            <MetricCard tone="warning"
-              label="ECN Price Review"
-              value={summary.ecnPriceReview}
-            />
-          </section>
+          <MetricSummary
+            scope="Current customer costing view"
+            items={[
+              {
+                tone: "information",
+                label: "New Quote Costing",
+                value: summary.newQuoteCosting,
+              },
+              { tone: "brand", label: "PO Price Match", value: summary.poPriceMatch },
+              {
+                tone: "accent",
+                label: "Bulk Price Revision",
+                value: summary.bulkPriceRevision,
+              },
+              {
+                tone: "warning",
+                label: "ECN Price Review",
+                value: summary.ecnPriceReview,
+              },
+            ]}
+          />
 
  <SectionCard>
             <CardHeader>
@@ -547,20 +553,26 @@ export async function CustomerParameterCostingView({
                 ) : null}
 
                 {selectedTask.quoteDefaults.id ? (
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <MetricCard tone="information"
-                      label="Saved INR / Pc"
-                      value={`₹ ${money(selectedTask.quoteDefaults.rateInr)}`}
-                    />
-                    <MetricCard tone="brand"
-                      label="Saved USD / Pc"
-                      value={`$ ${money(selectedTask.quoteDefaults.rateUsd)}`}
-                    />
-                    <MetricCard tone="positive"
-                      label="Approved USD / Pc"
-                      value={`$ ${money(selectedTask.quoteDefaults.approvedPriceUsd)}`}
-                    />
-                  </div>
+                  <MetricSummary
+                    scope="Current customer costing view"
+                    items={[
+                      {
+                        tone: "information",
+                        label: "Saved INR / Pc",
+                        value: `₹ ${money(selectedTask.quoteDefaults.rateInr)}`,
+                      },
+                      {
+                        tone: "brand",
+                        label: "Saved USD / Pc",
+                        value: `$ ${money(selectedTask.quoteDefaults.rateUsd)}`,
+                      },
+                      {
+                        tone: "positive",
+                        label: "Approved USD / Pc",
+                        value: `$ ${money(selectedTask.quoteDefaults.approvedPriceUsd)}`,
+                      },
+                    ]}
+                  />
                 ) : null}
 
                 <div className="flex flex-wrap gap-2">

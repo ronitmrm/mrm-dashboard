@@ -13,7 +13,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import {
@@ -27,6 +26,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -153,18 +153,23 @@ export async function ProductParameterCostingView({
             />
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard tone="information"
-              label="New Product Costing"
-              value={summary.newProductCosting}
-            />
-            <MetricCard tone="accent"
-              label="Product Bulk Revision"
-              value={summary.productBulkRevisions}
-            />
-            <MetricCard tone="warning" label="ECN Product Change" value={summary.ecn} />
-            <MetricCard tone="brand" label="Total Costing Tasks" value={summary.total} />
-          </section>
+          <MetricSummary
+            scope="All product costing tasks · before table filters"
+            items={[
+              {
+                tone: "information",
+                label: "New Product Costing",
+                value: summary.newProductCosting,
+              },
+              {
+                tone: "accent",
+                label: "Product Bulk Revision",
+                value: summary.productBulkRevisions,
+              },
+              { tone: "warning", label: "ECN Product Change", value: summary.ecn },
+              { tone: "brand", label: "Total Costing Tasks", value: summary.total },
+            ]}
+          />
 
  <SectionCard>
             <CardHeader>

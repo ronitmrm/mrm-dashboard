@@ -46,9 +46,12 @@ items, permission matrices and mixed record workspaces retain the default
 `width="full"`; bound their separate entry forms when appropriate.
 
 Use `MetricSummary` from `apps/web/components/ui/golden-patterns.tsx` for a
-left-aligned, wrapping row of register counts. Cards are 16rem wide, shrinking
-to the available width on narrow screens; small groups leave unused space to
-the right instead of stretching across the page. It composes `MetricCard`, formats
+left-aligned row of register counts that stays below the navigation header while
+the page scrolls. Cards are 16rem wide; small groups leave unused space to the
+right instead of stretching across the page. Desktop rows wrap; narrow screens
+scroll the cards horizontally, shrinking each card to the available width.
+The card area is bounded to 40% of the viewport height so content stays accessible
+in short viewports. It composes `MetricCard`, formats
 numbers consistently, and requires a visible scope label. Use existing authorized
 page data; do not add global reads just to populate cards. Distinguish loaded,
 paginated, search-matching and table-filtered records. Count distinct entities
@@ -56,7 +59,10 @@ where rows repeat (orders versus order lines, employees versus posts, checklists
 versus steps). Do not sum quantities with different units or money in different
 currencies. One useful card is enough for a simple master. Forms, navigation-only
 screens and individual record dossiers need no artificial totals. Preserve
-existing dashboard cards; do not duplicate them.
+existing dashboard cards; do not duplicate them. Keep the summary in the same
+container as the content it summarizes, rather than a wrapper containing only
+the cards. Shared cards use `overflow-clip` so they do not create a competing
+scroll container. `OperationalTable` continues to own scrolling for its rows.
 
 ## Operational tables
 
@@ -168,8 +174,8 @@ Low-level `Card` and native `table` are allowed only inside the canonical shared
 Record a new exception in this document before merging it. Prefer extending an existing primitive over adding an exception.
 
 Access Administration uses the existing shell title for page identity. At the
-user's request, omit its duplicate body banner and use a full-width summary-card
-row above the workspace tabs via `MetricSummary layout="fill"`.
+user's request, omit its duplicate body banner. Its summary above the workspace
+tabs follows the shared pinned, bounded card layout.
 
 ## Enforcement and extension
 

@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Field,
@@ -28,6 +27,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -95,18 +95,23 @@ export default async function EngineeringChangeNotesPage() {
         ) : null}
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard tone="information" label="Open ECNs" value={metrics.open} />
-        <MetricCard tone="brand" label="With Design" value={metrics.pendingDesign} />
-        <MetricCard tone="accent"
-          label="With Product Costing"
-          value={metrics.pendingProductCosting}
-        />
-        <MetricCard tone="warning"
-          label="With Customer Costing"
-          value={metrics.pendingCosting}
-        />
-      </section>
+      <MetricSummary
+        scope="All open engineering change notes · before table filters"
+        items={[
+          { tone: "information", label: "Open ECNs", value: metrics.open },
+          { tone: "brand", label: "With Design", value: metrics.pendingDesign },
+          {
+            tone: "accent",
+            label: "With Product Costing",
+            value: metrics.pendingProductCosting,
+          },
+          {
+            tone: "warning",
+            label: "With Customer Costing",
+            value: metrics.pendingCosting,
+          },
+        ]}
+      />
 
  <SectionCard width="wide">
         <CardHeader>

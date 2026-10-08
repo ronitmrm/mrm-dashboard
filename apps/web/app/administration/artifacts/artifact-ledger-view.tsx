@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import type { ArtifactLedgerFilters } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -7,7 +8,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
@@ -110,32 +110,32 @@ export function ArtifactLedgerView({
         </p>
       </section>
 
-      <section
-        aria-label="Artifact storage summary"
-        className="grid gap-2 sm:grid-cols-3"
-      >
-        <MetricCard
-          tone="information"
-          description={`${ledger.totals.livePhysicalObjects} live physical object${ledger.totals.livePhysicalObjects === 1 ? "" : "s"}`}
-          icon={<HardDrive className="size-4" aria-hidden="true" />}
-          label="Unique live storage"
-          value={`${byteSize(ledger.totals.uniqueLiveBytes)} of ${byteSize(ledger.totals.allowanceBytes)}`}
-        />
-        <MetricCard
-          tone="brand"
-          description="Uploaded and generated records"
-          icon={<Files className="size-4" aria-hidden="true" />}
-          label="Logical Artifacts"
-          value={ledger.totals.logicalArtifacts.toLocaleString("en-IN")}
-        />
-        <MetricCard
-          tone="accent"
-          description={`${ledger.totalArtifacts.toLocaleString("en-IN")} match the current filters`}
-          icon={<Search className="size-4" aria-hidden="true" />}
-          label="Filtered results"
-          value={`${ledger.page} / ${ledger.totalPages}`}
-        />
-      </section>
+      <MetricSummary
+        scope="Organization storage · filtered results reflect current search"
+        items={[
+          {
+            tone: "information",
+            description: `${ledger.totals.livePhysicalObjects} live physical object${ledger.totals.livePhysicalObjects === 1 ? "" : "s"}`,
+            icon: <HardDrive className="size-4" aria-hidden="true" />,
+            label: "Unique live storage",
+            value: `${byteSize(ledger.totals.uniqueLiveBytes)} of ${byteSize(ledger.totals.allowanceBytes)}`,
+          },
+          {
+            tone: "brand",
+            description: "Uploaded and generated records",
+            icon: <Files className="size-4" aria-hidden="true" />,
+            label: "Logical Artifacts",
+            value: ledger.totals.logicalArtifacts.toLocaleString("en-IN"),
+          },
+          {
+            tone: "accent",
+            description: `${ledger.totalArtifacts.toLocaleString("en-IN")} match the current filters`,
+            icon: <Search className="size-4" aria-hidden="true" />,
+            label: "Filtered results",
+            value: `${ledger.page} / ${ledger.totalPages}`,
+          },
+        ]}
+      />
 
       <p className="text-xs text-muted-foreground">
         The 5 GB-months allowance is advisory. Storage counts each live physical

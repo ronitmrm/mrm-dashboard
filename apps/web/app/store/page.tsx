@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import {
@@ -18,7 +19,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   OperationalTable,
@@ -91,55 +91,55 @@ export default async function StoreOverviewPage() {
       />
 
       <DashboardSection
+        className="contents"
         description="Current stock, asset, request, and maintenance volume."
         title="Key Performance Indicators"
       >
-        <DashboardGrid columns="five">
-          <MetricCard
-            action={<PinDashboardMetricButton metricId="store.locations" />}
-            description="Active stock locations"
-            icon={<Building2 aria-hidden="true" />}
-            label="Store Locations"
-            tone="information"
-            value={snapshot.locations.length}
-          />
-          <MetricCard
-            action={<PinDashboardMetricButton metricId="store.item-types" />}
-            description="Coded inventory types"
-            icon={<Boxes aria-hidden="true" />}
-            label="Item Types"
-            tone="brand"
-            value={snapshot.items.length}
-          />
-          <MetricCard
-            action={
-              <PinDashboardMetricButton metricId="store.physical-assets" />
-            }
-            description="Tracked returnable units"
-            icon={<Package aria-hidden="true" />}
-            label="Physical Assets"
-            tone="accent"
-            value={snapshot.assets.length}
-          />
-          <MetricCard
-            action={<PinDashboardMetricButton metricId="store.open-requests" />}
-            description="Pending or partially issued"
-            icon={<ClipboardList aria-hidden="true" />}
-            label="Open Requests"
-            tone={openRequests.length ? "warning" : "positive"}
-            value={openRequests.length}
-          />
-          <MetricCard
-            action={
-              <PinDashboardMetricButton metricId="store.due-maintenance" />
-            }
-            description="Maintenance or calibration due"
-            icon={<Wrench aria-hidden="true" />}
-            label="Due Maintenance"
-            tone={dueAssets.length ? "danger" : "positive"}
-            value={dueAssets.length}
-          />
-        </DashboardGrid>
+        <MetricSummary
+          scope="Store overview · all records, before table filters"
+          items={[
+            {
+              action: <PinDashboardMetricButton metricId="store.locations" />,
+              description: "Active stock locations",
+              icon: <Building2 aria-hidden="true" />,
+              label: "Store Locations",
+              tone: "information",
+              value: snapshot.locations.length,
+            },
+            {
+              action: <PinDashboardMetricButton metricId="store.item-types" />,
+              description: "Coded inventory types",
+              icon: <Boxes aria-hidden="true" />,
+              label: "Item Types",
+              tone: "brand",
+              value: snapshot.items.length,
+            },
+            {
+              action: <PinDashboardMetricButton metricId="store.physical-assets" />,
+              description: "Tracked returnable units",
+              icon: <Package aria-hidden="true" />,
+              label: "Physical Assets",
+              tone: "accent",
+              value: snapshot.assets.length,
+            },
+            {
+              action: <PinDashboardMetricButton metricId="store.open-requests" />,
+              description: "Pending or partially issued",
+              icon: <ClipboardList aria-hidden="true" />,
+              label: "Open Requests",
+              tone: openRequests.length ? "warning" : "positive",
+              value: openRequests.length,
+            },
+            {
+              action: <PinDashboardMetricButton metricId="store.due-maintenance" />,
+              description: "Maintenance or calibration due",
+              icon: <Wrench aria-hidden="true" />,
+              label: "Due Maintenance",
+              tone: dueAssets.length ? "danger" : "positive",
+              value: dueAssets.length,
+            },
+          ]}
+        />
       </DashboardSection>
 
       <DashboardSection

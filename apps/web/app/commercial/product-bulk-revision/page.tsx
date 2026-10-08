@@ -8,11 +8,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -70,23 +70,26 @@ export default async function ProductBulkRevisionPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
-          tone="information"
-          label="Product Revision Requests"
-          value={summary.openRevisionCount}
-        />
-        <MetricCard
-          tone="accent"
-          label="Product Changes Staged"
-          value={summary.stagedChangeCount}
-        />
-        <MetricCard
-          tone="brand"
-          label="Customer Prices Affected"
-          value={summary.activePriceCount}
-        />
-      </section>
+      <MetricSummary
+        scope="All product revision requests · before table filters"
+        items={[
+          {
+            tone: "information",
+            label: "Product Revision Requests",
+            value: summary.openRevisionCount,
+          },
+          {
+            tone: "accent",
+            label: "Product Changes Staged",
+            value: summary.stagedChangeCount,
+          },
+          {
+            tone: "brand",
+            label: "Customer Prices Affected",
+            value: summary.activePriceCount,
+          },
+        ]}
+      />
 
       <BulkRevisionEntry>
         <SectionCard width="wide">

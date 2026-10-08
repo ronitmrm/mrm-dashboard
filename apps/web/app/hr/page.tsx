@@ -16,11 +16,10 @@ import {
   type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import { MetricCard } from "@workspace/ui/components/card"
 import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
 import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
-import { ActionToolbar } from "@/components/ui/golden-patterns"
+import { ActionToolbar, MetricSummary } from "@/components/ui/golden-patterns"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import { importEmployeeDataCsvAction } from "./employees/actions"
@@ -257,11 +256,9 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "employeeAssignmentHistoryPanel" &&
       activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (
-        <section
-          aria-label="HR overview"
-          className="grid min-w-0 grid-cols-[repeat(auto-fill,min(100%,16rem))] gap-3"
-        >
-          {(
+        <MetricSummary
+          scope="HR overview · all records, before table filters"
+          items={(
             [
               {
                 label: "Approved Posts",
@@ -300,19 +297,13 @@ export default async function HrRecruitmentPage({
                 tone: "brand",
               },
             ] as const
-          ).map(({ label, metricId, value, tone }) => (
-            <MetricCard
-              action={<PinDashboardMetricButton metricId={metricId} />}
-              key={label}
-              label={label}
-              tone={tone}
-              value={value.toLocaleString("en-IN")}
-            />
-          ))}
-          <p className="col-span-full text-xs text-muted-foreground">
-            HR overview · all records, before table filters
-          </p>
-        </section>
+          ).map(({ label, metricId, value, tone }) => ({
+            action: <PinDashboardMetricButton metricId={metricId} />,
+            label,
+            tone,
+            value,
+          }))}
+        />
       ) : null}
 
       <RecruitmentPanel

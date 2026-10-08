@@ -7,7 +7,7 @@ import {
   calculateStoredProductCosting,
 } from "@workspace/db/pricing-calculation"
 import { Button } from "@workspace/ui/components/button"
-import { MetricCard } from "@workspace/ui/components/card"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 
 type ProductInputs = {
   alloyPremium: number
@@ -199,14 +199,35 @@ export function PoProfitTargetCalculator({
 
   return (
     <div
-      className="grid gap-3 rounded-2xl border border-dashed p-4 sm:grid-cols-2 xl:grid-cols-5"
+      className="grid gap-3 rounded-2xl border border-dashed p-4"
       ref={rootRef}
     >
-      <MetricCard tone="brand" label="PO Target / Pc" value={`${currency} ${money(targetPrice)}`} />
-      <MetricCard tone="information" label="Target INR / Pc" value={`₹ ${money(suggestion.targetInr)}`} />
-      <MetricCard tone="accent" label="Base Before Profit" value={`₹ ${money(suggestion.rateInrWithoutProfit)}`} />
-      <MetricCard tone="brand" label="Required Profit" value={`${money(suggestion.profitPercent * 100)}%`} />
-      <div className="grid content-center gap-2">
+      <MetricSummary
+        scope="Suggested profit · current PO target"
+        items={[
+          {
+            tone: "brand",
+            label: "PO Target / Pc",
+            value: `${currency} ${money(targetPrice)}`,
+          },
+          {
+            tone: "information",
+            label: "Target INR / Pc",
+            value: `₹ ${money(suggestion.targetInr)}`,
+          },
+          {
+            tone: "accent",
+            label: "Base Before Profit",
+            value: `₹ ${money(suggestion.rateInrWithoutProfit)}`,
+          },
+          {
+            tone: "brand",
+            label: "Required Profit",
+            value: `${money(suggestion.profitPercent * 100)}%`,
+          },
+        ]}
+      />
+      <div className="grid w-fit content-center gap-2">
         <span className="text-xs text-muted-foreground">
           Profit Amount ₹ {money(suggestion.profitAmount)}
         </span>
