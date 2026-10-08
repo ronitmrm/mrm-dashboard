@@ -96,6 +96,15 @@ export function JobCardRegister({
       }
     })
   }, [rows, routeRows, productionRows])
+  const counts = { awaitingRm: 0, inProduction: 0, productionComplete: 0, dispatched: 0 }
+  for (const row of progressRows) {
+    switch (jobCardStage(row)) {
+      case "Awaiting RM": counts.awaitingRm++; break
+      case "Production complete": counts.productionComplete++; break
+      case "Dispatched": counts.dispatched++; break
+      default: counts.inProduction++
+    }
+  }
   const finishDatesByJobCard = new Map(finishDateRows.map((row) => [jobCardKey(row), row]))
   return (
  <SectionCard>
@@ -115,17 +124,25 @@ export function JobCardRegister({
             { label: "Job Cards", value: rows.length, tone: "information" },
             {
               label: "Awaiting RM",
-              value: progressRows.filter((row) => jobCardStage(row) === "Awaiting RM")
-                .length,
+              value: counts.awaitingRm,
               tone: "warning"
             },
             {
+              label: "In Production",
+              value: counts.inProduction,
+              description: "Readiness, setup, production or partial dispatch",
+              tone: "information"
+            },
+            {
               label: "Production Complete",
-              value: progressRows.filter(
-                (row) => jobCardStage(row) === "Production complete"
-              ).length,
+              value: counts.productionComplete,
               description: "Completed, not yet in dispatch stage",
               tone: "positive"
+            },
+            {
+              label: "Dispatched",
+              value: counts.dispatched,
+              tone: "inactive"
             }
           ]}
         />
