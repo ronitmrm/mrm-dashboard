@@ -4,6 +4,7 @@ import { Clock3, Pencil, Square, TriangleAlert } from "lucide-react"
 export type ProductionSessionDetailAction =
   | "end"
   | "downtime"
+  | "accident"
   | "downtimeEnd"
   | "correctClose"
   | "rejection"
@@ -75,10 +76,16 @@ export function ProductionSessionDetailActions({
             </Button>
           )
         ) : (
-          <Button variant="outline" onClick={() => onAction("downtime")}>
-            <Clock3 />
-            Start downtime
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => onAction("downtime")}>
+              <Clock3 />
+              Start downtime
+            </Button>
+            <Button variant="outline" onClick={() => onAction("accident")}>
+              <TriangleAlert />
+              Record accident
+            </Button>
+          </>
         )}
         <Button variant="outline" onClick={() => onAction("rejection")}>
           <TriangleAlert />

@@ -4,7 +4,7 @@ import { expect, test } from "vitest"
 import { ProductionSessionDetailActions } from "./production-session-detail-actions"
 import { sessionTimelineDetail } from "../lib/production-session-timeline"
 
-test("lets Shop Floor end an open session from its detail", () => {
+test("offers accident reporting on an open session", () => {
   const markup = renderToStaticMarkup(
     <ProductionSessionDetailActions
       session={{ status: "open" }}
@@ -13,6 +13,7 @@ test("lets Shop Floor end an open session from its detail", () => {
   )
 
   expect(markup).toContain("End session")
+  expect(markup).toContain("Record accident")
 })
 
 test("shows the selected close reason in the session timeline", () => {

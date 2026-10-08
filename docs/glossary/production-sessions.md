@@ -196,6 +196,20 @@ downtime or start production.
 
 Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
 
+An Accident is a downtime started on a running session with an existing downtime
+reason and a required account of what happened. The report may identify multiple
+lost Non Consumable Unit IDs and already used Consumables. Saving the accident
+and its Unit ID losses is atomic: each lost Unit ID leaves company stock once and
+keeps its Store history. Listed Consumables are evidence only; their earlier use
+already reduced stock, so the accident does not post another debit. The accident
+report stays linked to its downtime even after that interval closes or is
+corrected. Accident downtime cannot be reversed through the ordinary downtime
+correction because that would hide the report and would not restore any Store
+losses.
+If a lost Unit ID supplied active setup tooling, resolving the accident requires
+usable replacement tooling allocated to that production unit. The unresolved
+shift-end outcome remains available while replacement is pending.
+
 An ordinary open downtime interval blocks End Session. A downtime linked to an
 open Machine Breakdown is the exception: choosing Shift Ends closes that interval
 at the entered session end as Shift Ended — Unresolved, while leaving the Machine

@@ -16,6 +16,7 @@ import { Dialog, DialogFooter } from "@workspace/ui/components/dialog"
 import { Field as FormField, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
+import { Textarea } from "@workspace/ui/components/textarea"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
@@ -71,6 +72,10 @@ type Action =
   | "carryResolve"
   | ProductionSessionDetailAction
 type Row = Record<string, unknown>
+type AccidentStoreOptions = {
+  units: Array<{ assetCode: string; assetName: string; typeCode: string; status: string; storeCode: string; holderName: string | null }>
+  consumables: Array<{ id: string; assetName: string; typeCode: string; unit: string }>
+}
 type EntryRole = "shop_floor" | "machinist" | "quality" | "authorized_staff"
 
 const entryRoleLabels: Record<EntryRole, string> = {
@@ -541,7 +546,7 @@ function StartSessionLookup({ options, selected, shift, floor, now, onSelect, on
         <PlanField label="Piece weight" value={pieceWeight ? `${pieceWeight} g` : "Not configured"} />
         {session ? <><PlanField label="Operator" value={`${text(session.operatorCode)} · ${text(session.operatorName)}`} /><PlanField label="Started" value={formatDateTime(session.startedAt)} /><PlanField label="Session" value={text(session.sessionReference)} /></> : null}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" disabled={session.hasOpenDowntime === true && session.hasOpenBreakdownDowntime !== true} title={session.hasOpenDowntime && !session.hasOpenBreakdownDowntime ? "Close the open downtime before ending this session." : session.hasOpenBreakdownDowntime ? "Shift Ends will carry the open breakdown into Maintenance." : undefined} onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? session.hasOpenBreakdownDowntime ? null : <Button className="h-11" variant="destructive" onClick={() => onAction("downtimeEnd", session)}><Clock3 />Close downtime</Button> : <Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Start downtime</Button>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter start details</Button>}</div>
+      <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" disabled={session.hasOpenDowntime === true && session.hasOpenBreakdownDowntime !== true} title={session.hasOpenDowntime && !session.hasOpenBreakdownDowntime ? "Close the open downtime before ending this session." : session.hasOpenBreakdownDowntime ? "Shift Ends will carry the open breakdown into Maintenance." : undefined} onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? session.hasOpenBreakdownDowntime ? null : <Button className="h-11" variant="destructive" onClick={() => onAction("downtimeEnd", session)}><Clock3 />Close downtime</Button> : <><Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Start downtime</Button><Button className="h-11" variant="outline" onClick={() => onAction("accident", session)}><TriangleAlert />Record accident</Button></>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter start details</Button>}</div>
  {session?.hasOpenDowntime ? <p className="mt-2 text-sm text-[var(--color-warning-text)] ">{session.hasOpenBreakdownDowntime ? "End with Shift Ends to carry this breakdown; Maintenance completes it after repair." : "Close the open downtime before ending this production session."}</p> : null}
       {!session && !shift ? <p className="mt-2 text-sm text-destructive">A session can be started only during the Production Unit&apos;s configured shift.</p> : null}
       {!session && !pieceWeight ? <p className="mt-2 text-sm text-destructive">A positive piece weight is required in the Route or Cycle Time Master.</p> : null}
@@ -553,13 +558,13 @@ function PlanField({ label, value }: { label: string; value: unknown }) {
   return <div><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium">{text(value) || "-"}</div></div>
 }
 
-function Register({ rows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
-  return <ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{rows.map((row) => {
+function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
+  return <ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{sessionRows.map((row) => {
     const status = sessionOperationalStatus(row, floor, now)
     const closingRequired = status === "closing_required"
     const action = row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "downtimeEnd" : "end"
     const pending = outputPending(row)
- return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-[var(--color-warning-bg)] hover:bg-[var(--color-warning-bg)] dark:hover:bg-[var(--color-warning-bg)]" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><Badge className="mt-1" variant={closingRequired ? "destructive" : status === "open" ? "default" : "secondary"}>{pending ? "Weight Pending" : titleCase(status)}</Badge></TableCell><TableCell className="whitespace-nowrap">{formatIstDate(text(row.productionDate))}</TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}<div className="text-xs text-muted-foreground">Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}</TableCell><TableCell className="text-right tabular-nums">{pending ? "Pending" : number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{pending ? "Pending" : number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{closingRequired ? <Button className="h-9 whitespace-nowrap" variant={row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "destructive" : "default"} onClick={(event) => { event.stopPropagation(); onAction(action, row) }}>{row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "Close downtime" : "Close session"}</Button> : status === "closed" ? <Button className="h-9 whitespace-nowrap" variant={pending ? "default" : "outline"} onClick={(event) => { event.stopPropagation(); onAction("correctClose", row) }}><Pencil />{pending ? "Complete weight" : "Correct"}</Button> : "-"}</TableCell></TableRow>
+ return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-[var(--color-warning-bg)] hover:bg-[var(--color-warning-bg)] dark:hover:bg-[var(--color-warning-bg)]" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><div className="mt-1 flex flex-wrap gap-1"><Badge variant={closingRequired ? "destructive" : status === "open" ? "default" : "secondary"}>{pending ? "Weight Pending" : titleCase(status)}</Badge>{rows(row.downtimeEvents).some((event) => event.accident) ? <StatusBadge tone="warning" value="Accident" /> : null}</div></TableCell><TableCell className="whitespace-nowrap">{formatIstDate(text(row.productionDate))}</TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}<div className="text-xs text-muted-foreground">Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}</TableCell><TableCell className="text-right tabular-nums">{pending ? "Pending" : number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{pending ? "Pending" : number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{closingRequired ? <Button className="h-9 whitespace-nowrap" variant={row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "destructive" : "default"} onClick={(event) => { event.stopPropagation(); onAction(action, row) }}>{row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "Close downtime" : "Close session"}</Button> : status === "closed" ? <Button className="h-9 whitespace-nowrap" variant={pending ? "default" : "outline"} onClick={(event) => { event.stopPropagation(); onAction("correctClose", row) }}><Pencil />{pending ? "Complete weight" : "Correct"}</Button> : "-"}</TableCell></TableRow>
   })}</ScrollableTable>
 }
 
@@ -590,7 +595,7 @@ function ScrollableTable({ headers, children }: { headers: string[]; children: R
 
 function ActionSheet({ action, target, floor, shift, signedInPerson, signedInStarter, signedInRoles, workerOptions, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; signedInPerson: { code: string; name: string } | null; signedInStarter: { code: string; name: string } | null; signedInRoles: EntryRole[]; workerOptions: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
   const defaults = productionSessionActionDefaults(floor, new Date(), {
-    action: action === "downtime" ? "downtime" : undefined,
+    action: action === "downtime" || action === "accident" ? "downtime" : undefined,
     productionDate: text(target?.productionDate),
     shift: text(target?.shift),
   })
@@ -635,7 +640,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
   const departmentRoles = signedInRoles.filter((candidate) =>
     action === "end" ||
     action === "correctClose" ||
-    action === "downtime" ||
+    action === "downtime" || action === "accident" ||
     action === "lateDowntime" ||
     candidate === "shop_floor" ||
     (floor === "cnc" && candidate === "quality")
@@ -647,6 +652,29 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     ? selectedRole
     : allowedRoles.length === 1 ? allowedRoles[0]! : ""
   const [reason, setReason] = useState(text(target?.carriedReasonCode))
+  const [accidentDescription, setAccidentDescription] = useState("")
+  const [accidentOptions, setAccidentOptions] = useState<AccidentStoreOptions>({ units: [], consumables: [] })
+  const [accidentOptionsError, setAccidentOptionsError] = useState("")
+  const [accidentOptionsLoading, setAccidentOptionsLoading] = useState(action === "accident")
+  const [unitToAdd, setUnitToAdd] = useState("")
+  const [lostUnitIds, setLostUnitIds] = useState<string[]>([])
+  const [consumableToAdd, setConsumableToAdd] = useState("")
+  const [consumableQuantity, setConsumableQuantity] = useState("")
+  const [usedConsumables, setUsedConsumables] = useState<Array<{ itemTypeId: string; quantity: number }>>([])
+  useEffect(() => {
+    if (action !== "accident") return
+    let active = true
+    void api("/api/production-accident-store-options")
+      .then((body) => {
+        if (active) setAccidentOptions({
+          units: Array.isArray(body.units) ? body.units as AccidentStoreOptions["units"] : [],
+          consumables: Array.isArray(body.consumables) ? body.consumables as AccidentStoreOptions["consumables"] : [],
+        })
+      })
+      .catch((cause) => { if (active) setAccidentOptionsError(cause instanceof Error ? cause.message : "Store choices could not be loaded.") })
+      .finally(() => { if (active) setAccidentOptionsLoading(false) })
+    return () => { active = false }
+  }, [action])
   const [typeCode, setTypeCode] = useState("")
   const [remark, setRemark] = useState("")
   const [quantity, setQuantity] = useState("")
@@ -707,6 +735,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     if (action === "end") onSave("production_session_close", { sessionId, enteredRole: role, endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined })
     if (action === "correctClose") onSave("production_session_correct", { sessionId, correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined, downtimeCorrection })
     if (action === "downtime") onSave("production_session_downtime_start", { sessionId, enteredRole: role, startedAt: startAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label || text(target.carriedReasonName) })
+    if (action === "accident") onSave("production_session_accident_start", { sessionId, enteredRole: role, startedAt: startAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label, accident: { description: accidentDescription.trim(), lostUnitIds, consumables: usedConsumables } })
     if (action === "lateDowntime") onSave("production_session_downtime", { sessionId, correctionReason, enteredRole: role, startedAt: startAtIso, endedAt: endAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label })
     if (action === "downtimeEnd") onSave("production_session_downtime_end", { sessionId, endedAt: endAtIso, endOutcome: downtimeEndOutcome })
     if (action === "carryResolve") onSave("production_session_downtime_carry_resolve", { eventId: target.eventId, resolvedAt: endAtIso })
@@ -718,12 +747,14 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     : action === "end" ? Boolean(role && endAtIso && endReason && (method === "counter" ? endCount : weightCloseIsValid))
     : action === "correctClose" ? Boolean(role && correctionReason && endAtIso && endReason && (method === "counter" ? endCount : ((hasGrossWeight && hasCrateCount && hasCrateWeight) || (outputPending(target) && downtimeCorrection && !hasGrossWeight && !hasCrateCount && !hasCrateWeight))) && (downtimeChange === "none" || (selectedDowntime && (downtimeChange === "reverse" || (istDateTimeInputToIso(downtimeStart) && istDateTimeInputToIso(downtimeEnd) && correctedDowntimeReason)))))
     : action === "downtime" ? Boolean(reason && startAtIso && role)
+    : action === "accident" ? Boolean(reason && startAtIso && role && accidentDescription.trim() && !accidentOptionsLoading && !accidentOptionsError)
     : action === "lateDowntime" ? Boolean(correctionReason && reason && startAtIso && endAtIso && role)
     : action === "downtimeEnd" || action === "carryResolve" ? Boolean(endAtIso)
     : action === "rejection" ? Boolean(typeCode && reason && remark && number(quantity) > 0)
     : action === "lateRejection" ? Boolean(correctionReason && typeCode && reason && remark && number(quantity) > 0)
     : false
   const sheetTitle = action === "downtime" ? "Start downtime"
+    : action === "accident" ? "Record accident"
     : action === "lateDowntime" ? "Add missed downtime"
     : action === "downtimeEnd" ? "Close downtime"
     : action === "carryResolve" ? "Resolve carried downtime"
@@ -731,6 +762,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     : action === "correctClose" ? outputPending(target) ? downtimeCorrection ? "Correct downtime" : "Complete session weight" : "Correct closed session"
     : `${titleCase(action)} production session`
   const saveLabel = action === "downtime" ? "Start downtime"
+    : action === "accident" ? "Record accident and start downtime"
     : action === "lateDowntime" ? "Add downtime"
     : action === "downtimeEnd" ? "Close downtime"
     : action === "carryResolve" ? "Mark resolved"
@@ -759,6 +791,34 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     {action === "end" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{productionSessionEndReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><EntryRoleField label="Entry role" roles={allowedRoles} value={role} onChange={setSelectedRole} /><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight. If weighing is not ready, leave all three fields blank.</p></>}</> : null}
     {action === "correctClose" ? <><IstDateTimeField label="End time (IST)" value={endAt} onChange={setEndAt} /><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{productionSessionEndReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><EntryRoleField label="Entry role" roles={allowedRoles} value={role} onChange={setSelectedRole} /><div className="rounded-md bg-muted p-3 text-sm">Production method: <b>{method === "counter" ? "Machine counter" : "Weight"}</b></div>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <><div className="grid gap-3 sm:grid-cols-3"><Field label="Gross weight incl. crates (kg)"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field><CrateWeightField value={crateWeightKg} onChange={setCrateWeightKg} /></div><p className="text-sm text-muted-foreground">Net produced weight = gross weight − crates × selected crate weight.</p></>}<Field label="Correction remark"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Explain the session or downtime correction" /></Field></> : null}
  {action === "downtime" ? <><EntryRoleField label="Department / role" roles={allowedRoles} value={role} onChange={setSelectedRole} />{text(target.carriedReasonName) ? <div className="rounded-md bg-[var(--color-warning-bg)] p-3 text-sm "><div className="text-xs text-muted-foreground">Continuing carried problem</div><div className="font-medium">{reason} · {text(target.carriedReasonName)}</div></div> : <Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field>}<IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><p className="text-sm text-muted-foreground">Close this downtime with an actual end time before resuming production or ending the session.</p></> : null}
+    {action === "accident" ? <>
+      <EntryRoleField label="Department / role" roles={allowedRoles} value={role} onChange={setSelectedRole} />
+      <Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field>
+      <IstDateTimeField label="Accident / downtime starts (IST)" value={startAt} onChange={setStartAt} />
+      <Field label="What happened"><Textarea value={accidentDescription} onChange={(event) => setAccidentDescription(event.target.value)} placeholder="For example, wrong side of the part clamped or operator mistake" rows={3} /></Field>
+      <div className="grid gap-2 rounded-md border p-3">
+        <div className="font-medium">Lost Non Consumable Unit IDs</div>
+        <p className="text-xs text-muted-foreground">Selected Unit IDs are removed from company stock when this accident is saved.</p>
+        {accidentOptionsLoading ? <p className="text-sm text-muted-foreground">Loading Store items…</p> : null}
+        {accidentOptionsError ? <p role="alert" className="text-sm text-destructive">{accidentOptionsError}</p> : null}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-56 flex-1"><Field label="Unit ID"><SearchableSelect value={unitToAdd} onChange={(event) => setUnitToAdd(event.target.value)} disabled={accidentOptionsLoading}><option value="">Select Unit ID</option>{accidentOptions.units.filter((unit) => !lostUnitIds.includes(unit.assetCode)).map((unit) => <option key={unit.assetCode} value={unit.assetCode}>{unit.assetCode} · {unit.assetName} · {unit.storeCode}</option>)}</SearchableSelect></Field></div>
+          <Button type="button" variant="outline" disabled={!unitToAdd} onClick={() => { setLostUnitIds((ids) => [...ids, unitToAdd]); setUnitToAdd("") }}>Add Unit ID</Button>
+        </div>
+        {lostUnitIds.map((id) => { const unit = accidentOptions.units.find((item) => item.assetCode === id); return <div key={id} className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm"><span>{id} · {unit?.assetName ?? "Unit ID"}</span><Button type="button" size="sm" variant="ghost" onClick={() => setLostUnitIds((ids) => ids.filter((item) => item !== id))}>Remove</Button></div> })}
+      </div>
+      <div className="grid gap-2 rounded-md border p-3">
+        <div className="font-medium">Consumables involved</div>
+        <p className="text-xs text-muted-foreground">These were already consumed. Listing them here does not deduct Store stock again.</p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-48 flex-1"><Field label="Consumable Asset Code"><SearchableSelect value={consumableToAdd} onChange={(event) => setConsumableToAdd(event.target.value)} disabled={accidentOptionsLoading}><option value="">Select consumable</option>{accidentOptions.consumables.filter((item) => !usedConsumables.some((used) => used.itemTypeId === item.id)).map((item) => <option key={item.id} value={item.id}>{item.typeCode} · {item.assetName}</option>)}</SearchableSelect></Field></div>
+          <div className="w-28"><Field label="Quantity"><Input type="number" min="0.001" step="any" value={consumableQuantity} onChange={(event) => setConsumableQuantity(event.target.value)} /></Field></div>
+          <Button type="button" variant="outline" disabled={!consumableToAdd || !Number.isFinite(Number(consumableQuantity)) || Number(consumableQuantity) <= 0} onClick={() => { setUsedConsumables((items) => [...items, { itemTypeId: consumableToAdd, quantity: Number(consumableQuantity) }]); setConsumableToAdd(""); setConsumableQuantity("") }}>Add consumable</Button>
+        </div>
+        {usedConsumables.map((used) => { const item = accidentOptions.consumables.find((candidate) => candidate.id === used.itemTypeId); return <div key={used.itemTypeId} className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm"><span>{item?.typeCode} · {item?.assetName} · {used.quantity} {item?.unit}</span><Button type="button" size="sm" variant="ghost" onClick={() => setUsedConsumables((items) => items.filter((item) => item.itemTypeId !== used.itemTypeId))}>Remove</Button></div> })}
+      </div>
+      <p className="text-sm text-muted-foreground">The session stays open. Close the downtime after the problem is resolved. Required tooling must be replaced before production resumes.</p>
+    </> : null}
     {action === "lateDowntime" ? <><EntryRoleField label="Department / role" roles={allowedRoles} value={role} onChange={setSelectedRole} /><Field label="Downtime reason"><MasterSelect value={reason} options={downtimeReasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field><IstDateTimeField label="Downtime starts (IST)" value={startAt} onChange={setStartAt} /><IstDateTimeField label="Downtime ends (IST)" value={endAt} onChange={setEndAt} /><Field label="Correction reason"><Input value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why was this downtime entered late?" /></Field></> : null}
  {action === "downtimeEnd" ? <><IstDateTimeField label="Downtime end (IST)" value={endAt} onChange={setEndAt} /><Field label="Closure outcome"><NativeSelect value={downtimeEndOutcome} onChange={(event) => { const outcome = event.target.value as "resolved" | "shift_end_unresolved"; setDowntimeEndOutcome(outcome); setEndAt(outcome === "shift_end_unresolved" ? defaults.endAt : istDateTimeInputValue(new Date())) }}><NativeSelectOption value="resolved">Resolved — Resume production</NativeSelectOption><NativeSelectOption value="shift_end_unresolved">Shift ended — Unresolved</NativeSelectOption></NativeSelect></Field>{downtimeEndOutcome === "shift_end_unresolved" ? <div className="rounded-md bg-[var(--color-warning-bg)] p-3 text-sm ">The interval ends at this shift&apos;s end. The machine problem remains in Unresolved Downtime for the next shift; off-shift hours are excluded.</div> : null}</> : null}
     {action === "carryResolve" ? <><IstDateTimeField label="Problem resolved at (IST)" value={endAt} onChange={setEndAt} /><div className="rounded-md bg-muted p-3 text-sm">Use this when the machine was repaired before another production shift interval was started. No off-shift hours will be counted as production downtime.</div></> : null}
@@ -766,7 +826,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     {action === "correctClose" && correctableDowntime.length ? <div className="grid gap-3 rounded-md border p-3">
       <div className="font-medium">Correct recorded downtime (optional)</div>
       <Field label="Downtime entry"><NativeSelect value={downtimeEventId} onChange={(event) => selectDowntime(event.target.value)}><NativeSelectOption value="">No downtime change</NativeSelectOption>{correctableDowntime.map((event) => <NativeSelectOption key={text(event.id)} value={text(event.id)}>{text(event.reasonName)} · {formatDateTime(event.startedAt)} to {formatDateTime(event.endedAt)}</NativeSelectOption>)}</NativeSelect></Field>
-      {selectedDowntime ? <Field label="Downtime action"><NativeSelect value={downtimeChange} onChange={(event) => setDowntimeChange(event.target.value as "none" | "edit" | "reverse")}><NativeSelectOption value="none">No change</NativeSelectOption><NativeSelectOption value="edit">Edit entry</NativeSelectOption><NativeSelectOption value="reverse">Reverse entry made in error</NativeSelectOption></NativeSelect></Field> : null}
+      {selectedDowntime ? <Field label="Downtime action"><NativeSelect value={downtimeChange} onChange={(event) => setDowntimeChange(event.target.value as "none" | "edit" | "reverse")}><NativeSelectOption value="none">No change</NativeSelectOption><NativeSelectOption value="edit">Edit entry</NativeSelectOption>{selectedDowntime.accident ? null : <NativeSelectOption value="reverse">Reverse entry made in error</NativeSelectOption>}</NativeSelect></Field> : null}
       {downtimeChange === "edit" && selectedDowntime ? <><Field label="Downtime reason"><NativeSelect value={downtimeReasonCode} onChange={(event) => setDowntimeReasonCode(event.target.value)}>{!downtimeReasonOptions.some((option) => option.code === text(selectedDowntime.reasonCode)) ? <NativeSelectOption value={text(selectedDowntime.reasonCode)}>{text(selectedDowntime.reasonCode)} · {text(selectedDowntime.reasonName)}</NativeSelectOption> : null}{downtimeReasonOptions.map((option) => <NativeSelectOption key={option.code} value={option.code}>{option.code} · {option.label}</NativeSelectOption>)}</NativeSelect></Field><IstDateTimeField label="Downtime starts (IST)" value={downtimeStart} onChange={setDowntimeStart} /><IstDateTimeField label="Downtime ends (IST)" value={downtimeEnd} onChange={setDowntimeEnd} /></> : null}
       {downtimeChange === "reverse" && selectedDowntime ? <p className="text-sm text-muted-foreground">This entry will stop counting as downtime. The original values and correction reason remain in the audit log.</p> : null}
     </div> : null}
@@ -809,6 +869,11 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
   const startedBy = [text(sessionPayload.startedByEmployeeCode), text(sessionPayload.startedBy)]
     .filter(Boolean).join(" · ") || text(session.startedByName) || "-"
   const measurementMethod = text(session.measurementMethod).toLowerCase()
+  const accidents = rows(session.downtimeEvents).map((downtime) => ({
+    downtime,
+    report: downtime.accident && typeof downtime.accident === "object" && !Array.isArray(downtime.accident)
+      ? downtime.accident as Row : null,
+  })).filter((item): item is { downtime: Row; report: Row } => item.report !== null)
   const efficiency = productionSessionEfficiency({
     targetPieces: number(session.targetPieces),
     totalPieces: number(session.totalPieces),
@@ -847,5 +912,5 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     onOpenChange(false)
     onAction(action, session)
   }
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><ProductionSessionDetailActions session={session} onAction={chooseAction} /><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><ProductionSessionDetailActions session={session} onAction={chooseAction} /><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div>{accidents.length ? <div className="grid max-h-52 shrink-0 gap-2 overflow-y-auto"><h3 className="font-medium">Accident reports</h3>{accidents.map(({ downtime, report }) => <div key={text(downtime.id)} className="grid gap-1 rounded-md border p-3 text-sm"><div className="font-medium">{formatDateTime(downtime.startedAt)} · {text(downtime.reasonName)}</div><div>{text(report.description)}</div><div><span className="text-muted-foreground">Lost Unit IDs: </span>{rows(report.lostUnits).map((unit) => `${text(unit.assetCode)} · ${text(unit.assetName)}`).join(", ") || "None"}</div><div><span className="text-muted-foreground">Consumables already used: </span>{rows(report.consumables).map((item) => `${text(item.typeCode)} · ${number(item.quantity)} ${text(item.unit)}`).join(", ") || "None"}</div></div>)}</div> : null}<div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
 }
