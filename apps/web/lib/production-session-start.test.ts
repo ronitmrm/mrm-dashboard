@@ -42,6 +42,20 @@ describe("production session action defaults", () => {
       startAt: "2026-08-16T22:00",
     })
   })
+
+  it("prefills the next-day end for a late Shift C close using the serialized session date", () => {
+    expect(
+      productionSessionActionDefaults(
+        "cnc",
+        new Date("2026-10-08T15:30:00.000Z"),
+        { productionDate: "2026-10-06T18:30:00.000Z", shift: "C" }
+      )
+    ).toEqual({
+      endAt: "2026-10-08T06:00",
+      endReason: "shift_end",
+      startAt: "2026-10-07T22:00",
+    })
+  })
 })
 
 describe("production session machine lookup", () => {

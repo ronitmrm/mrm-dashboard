@@ -1,4 +1,4 @@
-import { istDateTimeInputValue } from "./date-time"
+import { istDateTimeInputValue, istDateValue } from "./date-time"
 
 export type ProductionSessionRow = Record<string, unknown>
 
@@ -55,9 +55,7 @@ export function productionSessionActionDefaults(
   const floor = productionFloorCode.trim().toLowerCase()
   const clock = productionClock(instant)
   const localNow = istDateTimeInputValue(instant)
-  const contextualDate = /^\d{4}-\d{2}-\d{2}$/.test(context.productionDate ?? "")
-    ? context.productionDate!
-    : undefined
+  const contextualDate = istDateValue(context.productionDate ?? "") || undefined
 
   if (floor === "cnc") {
     const activeShift = context.shift === "A" || context.shift === "B" || context.shift === "C"
