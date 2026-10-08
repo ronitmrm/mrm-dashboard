@@ -32,6 +32,10 @@ export async function readPublishedFloorSegments(client: Pick<PoolClient, "query
       production_floor_code, segment_id, version::text, source_fingerprint
     FROM derived.dashboard_floor_read_models
     WHERE organization_id = $1
+      AND publication_version = (
+        SELECT version FROM derived.dashboard_read_model_heads
+        WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+      )
     ORDER BY production_floor_code, publication_version DESC
   `, [organizationId])).rows
 }
