@@ -215,6 +215,12 @@ details only. Personal details must agree across CSV rows for the same Employee
 ID. Blank detail cells clear saved values; identity and employment dates are not
 editable through this CSV. The entire upload is saved together or rejected.
 
+HR Tasks shows a separate Phone Number column. It uses the Employee Data
+Contact No when personal details have been saved; otherwise it uses the candidate
+linked to that assignment's application. A cleared saved contact stays blank.
+Missing numbers display as a dash; names and the post's current occupant never
+determine contact identity.
+
 When a combined job is split, an employee who stays employed may stop covering
 one standalone Approved Post. HR records a Role Changed date for that post only.
 The post becomes Vacant, its assignment history retains the employee and role end

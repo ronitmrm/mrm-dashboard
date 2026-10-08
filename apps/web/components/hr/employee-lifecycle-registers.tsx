@@ -117,6 +117,7 @@ export function ProbationEndReminders({
               <OperationalTable filterStorageKey="hr-probation-end-reminders" containerClassName="max-h-[36rem] rounded-md border">
                 <TableHeader><TableRow>
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
+                  <TableHead>Phone Number</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
                   <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
                   <TableHead>Reminder</TableHead><TableHead>Latest Remark</TableHead>
@@ -128,6 +129,7 @@ export function ProbationEndReminders({
                     return <TableRow key={assignment.id}>
                       <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                       <TableCell className="font-medium">{assignment.employeeName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{assignment.employeePhone ?? "—"}</TableCell>
                       <TableCell>{assignment.department ?? "—"}</TableCell>
                       <TableCell>{assignment.designation ?? "—"}</TableCell>
                       <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
@@ -137,7 +139,7 @@ export function ProbationEndReminders({
                       {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                     </TableRow>
                   })}
-                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 9 : 8}>
+                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 10 : 9}>
                     <StandardState title="No Open Probation Tasks" description="Joined assignments appear here until probation is completed or the employee leaves." />
                   </TableCell></TableRow> : null}
                 </TableBody>

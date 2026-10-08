@@ -199,6 +199,7 @@ export type RecruitmentEmployeeAssignmentRow = {
   designation: string | null
   employeeName: string
   employeeCode: string | null
+  employeePhone: string | null
   joinedOn: string | null
   probationDueOn: string | null
   probationRemark: string | null
@@ -3356,6 +3357,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         designation: string | null
         employee_name: string
         employee_code: string | null
+        employee_phone: string | null
         joined_on: string | null
         probation_due_on: string | null
         probation_remark: string | null
@@ -3373,6 +3375,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            term.assignment_id IS NOT NULL AS term_details_saved,
            department.name AS department, designation.name AS designation,
            assignment.employee_name,
+           CASE WHEN profile.employee_code IS NOT NULL
+             THEN nullif(btrim(profile.details->>'contactNo'), '')
+             ELSE nullif(btrim(candidate.phone), '')
+           END AS employee_phone,
            assignment.employee_code, assignment.joined_on::text,
            assignment.probation_due_on::text, remark_event.reason AS probation_remark,
            assignment.legacy_probation_completed,
@@ -3384,6 +3390,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
          LEFT JOIN recruitment.employee_profiles profile
            ON profile.organization_id = assignment.organization_id
              AND profile.employee_code = btrim(assignment.employee_code)
+         LEFT JOIN recruitment.applications application
+           ON application.id = assignment.application_id
+             AND application.organization_id = assignment.organization_id
+         LEFT JOIN recruitment.candidates candidate
+           ON candidate.id = application.candidate_id
+             AND candidate.organization_id = assignment.organization_id
          LEFT JOIN recruitment.employee_term_details term
            ON term.organization_id = assignment.organization_id
              AND term.assignment_id = assignment.id
@@ -3434,6 +3446,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         designation: row.designation,
         employeeName: row.employee_name,
         employeeCode: row.employee_code,
+        employeePhone: row.employee_phone,
         joinedOn: row.joined_on,
         probationDueOn: row.probation_due_on,
         probationRemark: row.probation_remark,
