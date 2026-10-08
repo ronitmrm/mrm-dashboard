@@ -299,6 +299,13 @@ Planner Actions never accept a second produced-quantity figure. When a planner d
 
 Saving an approved machine move, parallel-machine target stop, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
+The released Planned assignment remains in history without locking its former
+machine. Shop Floor may prepare the setup on its newly planned machine after
+recalculation. Once that setup becomes active there, its old inactive assignment
+does not authorize another simultaneous start on the former machine; that still
+requires a current Planner move or parallel-machine approval. A later release
+supersedes earlier approvals for the released machine.
+
 A Planner may add a compatible physical machine to a planned or running setup
 even when the normal minimum-run rule would not split the quantity again.
 Current setup machines keep their work. If the added machine owns another active

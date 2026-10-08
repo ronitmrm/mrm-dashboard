@@ -1456,6 +1456,14 @@ describe("dashboard planning writes", () => {
       stage: "planned",
       stop_events: "2",
     })
+    await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      jobCardNumber: blockingJobCard,
+      organizationId,
+      reason: "Parallel approval before the later stop",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
     await pool.query("UPDATE manufacturing.shop_floor_setup_state SET active=true, stage='operator_started' WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
     await repository.recordPlannerPriority({
       jobCardNumber: movingJobCard, organizationId, priority: "Urgent",
@@ -1464,5 +1472,28 @@ describe("dashboard planning writes", () => {
     })
     const priorityState = await pool.query("SELECT active, stage, completed_at FROM manufacturing.shop_floor_setup_state WHERE work_order_id=$1 AND machine_id=$2", [row.work_order_id, row.machine_id])
     expect(priorityState.rows[0]).toEqual({ active: false, stage: "planned", completed_at: null })
+
+    const restart = {
+      jobCardNumber: blockingJobCard,
+      machineNumber: sourceMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { partCode: moveItemUid },
+      stage: "raw_material_at_machine",
+    }
+    await jobCards.recordShopFloorStage(restart)
+    const restarted = await pool.query<{ machine_number: string; active: boolean; stage: string }>(
+      `SELECT machine.machine_number, state.active, state.stage
+       FROM manufacturing.shop_floor_setup_state state
+       JOIN catalog.machines machine ON machine.id = state.machine_id
+       WHERE state.work_order_id = $1 ORDER BY machine.machine_number`,
+      [row.work_order_id]
+    )
+    expect(restarted.rows).toEqual([
+      { machine_number: sourceMachine, active: true, stage: "raw_material_at_machine" },
+      { machine_number: targetMachine, active: false, stage: "planned" },
+    ])
+    await expect(jobCards.recordShopFloorStage({ ...restart, machineNumber: targetMachine }))
+      .rejects.toMatchObject({ status: 409, message: expect.stringMatching(/planner.*machine switch/i) })
   })
 })

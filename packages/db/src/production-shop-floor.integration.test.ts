@@ -1294,17 +1294,28 @@ describe("production and shop-floor workflows", () => {
   })
 
   test("retains the source machine until an explicit planner switch and releases it on completion", async () => {
+    const lockedJobCard = `LOCK-JC-${suffix}`
+    const sourceMachine = `LOCK-MC-${suffix}-1`
+    const targetMachine = `LOCK-MC-${suffix}-2`
+    await planning.upsertWorkOrder({
+      itemUid, jobCardNumber: lockedJobCard, orderedQuantity: 100,
+      organizationId, workOrderNumber: lockedJobCard,
+    })
+    await planning.selectRoute({ jobCardNumber: lockedJobCard, organizationId, routeCode: "1" })
+    for (const machineNumber of [sourceMachine, targetMachine]) {
+      await planning.upsertMachine({ machineNumber, organizationId })
+    }
     await repository.recordShopFloorStage({
-      jobCardNumber: firstJobCard,
-      machineNumber: firstMachine,
+      jobCardNumber: lockedJobCard,
+      machineNumber: sourceMachine,
       operationSetupCode: "1",
       organizationId,
       payload: { doneBy: "Stores", partCode: itemUid },
       stage: "raw_material_at_machine",
     })
     await repository.recordShopFloorStage({
-      jobCardNumber: firstJobCard,
-      machineNumber: firstMachine,
+      jobCardNumber: lockedJobCard,
+      machineNumber: sourceMachine,
       operationSetupCode: "1",
       organizationId,
       payload: { doneBy: "Setter", partCode: itemUid },
@@ -1312,8 +1323,8 @@ describe("production and shop-floor workflows", () => {
     })
     await expect(
       repository.recordShopFloorStage({
-        jobCardNumber: firstJobCard,
-        machineNumber: secondMachine,
+        jobCardNumber: lockedJobCard,
+        machineNumber: targetMachine,
         operationSetupCode: "1",
         organizationId,
         payload: { doneBy: "Setter", partCode: itemUid },
@@ -1322,16 +1333,16 @@ describe("production and shop-floor workflows", () => {
     ).rejects.toThrow(/planner.*machine switch/i)
 
     await planning.recordPlanOverride({
-      fromMachineNumber: firstMachine,
-      jobCardNumber: firstJobCard,
+      fromMachineNumber: sourceMachine,
+      jobCardNumber: lockedJobCard,
       organizationId,
       reason: "Approved machine switch",
       setupNumber: 1,
-      toMachineNumber: secondMachine,
+      toMachineNumber: targetMachine,
     })
     await repository.recordShopFloorStage({
-      jobCardNumber: firstJobCard,
-      machineNumber: secondMachine,
+      jobCardNumber: lockedJobCard,
+      machineNumber: targetMachine,
       operationSetupCode: "1",
       organizationId,
       payload: { doneBy: "OP-1", partCode: itemUid },
@@ -1340,7 +1351,7 @@ describe("production and shop-floor workflows", () => {
     await expect(
       repository.recordShopFloorStage({
         jobCardNumber: secondJobCard,
-        machineNumber: secondMachine,
+        machineNumber: targetMachine,
         operationSetupCode: "1",
         organizationId,
         payload: { doneBy: "OP-2", partCode: itemUid },
@@ -1348,20 +1359,20 @@ describe("production and shop-floor workflows", () => {
       })
     ).rejects.toMatchObject({
       status: 409,
-      message: expect.stringContaining(`Job Card ${firstJobCard}, Setup 1`),
+      message: expect.stringContaining(`Job Card ${lockedJobCard}, Setup 1`),
     })
 
     await repository.recordSetupCompletion({
       completedBy: "OP-1",
-      jobCardNumber: firstJobCard,
-      machineNumber: secondMachine,
+      jobCardNumber: lockedJobCard,
+      machineNumber: targetMachine,
       operationSetupCode: "1",
       organizationId,
       remark: "Setup complete",
     })
     await repository.recordShopFloorStage({
       jobCardNumber: secondJobCard,
-      machineNumber: secondMachine,
+      machineNumber: targetMachine,
       operationSetupCode: "1",
       organizationId,
       payload: { doneBy: "OP-2", partCode: itemUid },
@@ -1376,7 +1387,7 @@ describe("production and shop-floor workflows", () => {
     }>(
       `
         SELECT
-          (SELECT active FROM manufacturing.shop_floor_setup_state state
+          (SELECT bool_or(state.active) FROM manufacturing.shop_floor_setup_state state
             JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
             WHERE work_order.job_card_number = $1 AND state.operation_setup_id = (
               SELECT operation_setup_id FROM manufacturing.setup_completion_events completion
@@ -1394,13 +1405,13 @@ describe("production and shop-floor workflows", () => {
           (SELECT count(*) FROM manufacturing.setup_completion_events
             WHERE source_payload->>'jobCardNumber' = $1) AS completion_events
       `,
-      [firstJobCard, secondJobCard]
+      [lockedJobCard, secondJobCard]
     )
     expect(result.rows[0]).toEqual({
-      active_machine: secondMachine,
+      active_machine: targetMachine,
       completion_events: "1",
       first_active: false,
-      stage_events: "4",
+      stage_events: "5",
     })
   })
 
