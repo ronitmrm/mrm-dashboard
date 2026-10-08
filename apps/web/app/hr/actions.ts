@@ -203,7 +203,6 @@ export async function saveTemplateAction(formData: FormData) {
         ...context,
         applyToApprovedPosts: value(formData, "apply_to_approved_posts") === "yes",
         combinedRoleId: value(formData, "combined_role_id"),
-        departmentCode: value(formData, "department_code"),
         designationCode: value(formData, "designation_code"),
         education: value(formData, "education"),
         experienceRequirement: value(formData, "experience_requirement"),

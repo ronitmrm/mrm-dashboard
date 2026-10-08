@@ -89,6 +89,7 @@ import {
   readPostgresEmployeeMaster,
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
+  savePostgresMeasuringProgramAvailability,
   savePostgresQualityParameterSet,
 } from "@/lib/postgres-operational-entry-server"
 import { telemetryRequestId } from "../../../lib/request-telemetry"
@@ -478,6 +479,17 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "quality-measuring-program") {
+    const floor = parseProductionFloorCode(body.productionFloorCode)
+    if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
+    if (typeof body.available !== "boolean")
+      throw new RouteError(400, "Select Available or Not available.")
+    await authorizedDashboardSession(
+      request,
+      masterCapability("quality_parameter_master", "save", floor)
+    )
+    return
+  }
   if (path === "quality-parameter-set") {
     const changes = body.changes
     if (!Array.isArray(changes) || !changes.length || changes.length > 500) {
@@ -1049,6 +1061,22 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request, "operations.dashboard.read", { force: true }))
+    }
+
+    if (path === "quality-measuring-program") {
+      if (typeof body.available !== "boolean")
+        throw new RouteError(400, "Select Available or Not available.")
+      const result = await savePostgresMeasuringProgramAvailability(request, {
+        partNo: requiredDashboardText(body.partNo, "Item Code"),
+        optionNumber: requiredDashboardText(body.optionNumber, "Option No."),
+        setupNo: requiredDashboardText(body.setupNo, "Setup No."),
+        available: body.available,
+        productionFloorCode: body.productionFloorCode,
+      })
+      return json({
+        ...result,
+        savedText: "Measuring machine program availability saved.",
+      })
     }
 
     if (path === "quality-parameter-set") {
@@ -2568,6 +2596,7 @@ const knownDashboardApiPaths = new Set([
   "rm-inward-delete",
   "production-sessions",
   "production-break-schedule",
+  "quality-measuring-program",
   "quality-parameter-set",
   "reschedule",
   "reverse-entry",

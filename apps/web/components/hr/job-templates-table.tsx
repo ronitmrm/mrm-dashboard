@@ -58,7 +58,7 @@ import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 
 type FilterKey =
   | "code"
-  | "department"
+  | "combinedRole"
   | "designation"
   | "education"
   | "experience"
@@ -114,7 +114,6 @@ export function JobTemplateEditor({
         <TemplateScopeFields
           combinedRoles={combinedRoles}
           defaultCombinedRoleId={template.combinedRoleId}
-          defaultDepartmentCode={template.departmentCode}
           defaultDesignationCode={template.designationCode}
           masters={masters}
           prefix="edit-template"
@@ -236,9 +235,9 @@ export function JobTemplateEditor({
               </NativeSelectOption>
             </NativeSelect>
             <FieldDescription>
-              Includes occupied and vacant posts. Unlinked matching posts will
-              use this template. Department, designation, employee assignments,
-              and existing Job Posts stay as they are.
+              Updates occupied and vacant posts already linked to this template.
+              Combined jobs also include unlinked member posts. Employee
+              assignments and existing Job Posts stay as they are.
             </FieldDescription>
           </Field>
         ) : null}
@@ -278,7 +277,7 @@ export function JobTemplatesTable({
   const filterKeys: Array<{ key: FilterKey; label: string }> = [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
-    { key: "department", label: "Department / Combined Job" },
+    { key: "combinedRole", label: "Combined Job" },
     { key: "designation", label: "Designation" },
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
@@ -293,8 +292,8 @@ export function JobTemplatesTable({
       values: (row: RecruitmentTemplateRow) => [
         key === "code"
           ? row.templateCode
-          : key === "department"
-            ? (row.combinedRoleName ?? row.department)
+          : key === "combinedRole"
+            ? row.combinedRoleName
             : key === "experience"
               ? row.experienceRequirement
               : key === "shiftType"
@@ -372,11 +371,7 @@ export function JobTemplatesTable({
                     </Button>
                   </TableCell>
                   <TableCell>{row.name}</TableCell>
-                  <TableCell>
-                    {row.combinedRoleName
-                      ? `Combined: ${row.combinedRoleName}`
-                      : (row.department ?? "—")}
-                  </TableCell>
+                  <TableCell>{row.combinedRoleName ?? "—"}</TableCell>
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>

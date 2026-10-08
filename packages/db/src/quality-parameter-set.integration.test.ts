@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createQualityRepository } from "./quality"
+import { directDashboardControlRows } from "./legacy-dashboard-analysis"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -28,7 +29,10 @@ beforeAll(async () => {
     organizationId,
     productionFloorCode: "cnc",
     routeCode: "1",
-    setups: [{ operationCode: "QUALITY", sequence: 1, setupNumber: 1 }],
+    setups: [
+      { operationCode: "QUALITY", sequence: 1, setupNumber: 1 },
+      { operationCode: "QUALITY", sequence: 2, setupNumber: 2 },
+    ],
   })
   for (const name of [`Base ${suffix}`, `Added ${suffix}`]) {
     await quality.upsertQualityReference({
@@ -82,6 +86,12 @@ afterAll(async () => {
       "DELETE FROM manufacturing.production_floors WHERE organization_id = $1",
       [organizationId]
     )
+    await pool.query("UPDATE store.accountable_stores SET default_location_id = NULL WHERE organization_id = $1", [organizationId])
+    await pool.query("DELETE FROM store.locations WHERE organization_id = $1", [
+      organizationId,
+    ])
+    await pool.query("DELETE FROM store.accountable_stores WHERE organization_id = $1", [organizationId])
+    await pool.query("DELETE FROM derived.dashboard_source_revisions WHERE organization_id = $1", [organizationId])
     await pool.query("DELETE FROM core.organizations WHERE id = $1", [
       organizationId,
     ])
@@ -143,4 +153,73 @@ test("one changed parameter commits with one successor refresh while a rebuild h
     await blocker.query("ROLLBACK")
     blocker.release()
   }
+})
+
+test("program availability saves without planning refresh and survives route edits", async () => {
+  const input = {
+    organizationId,
+    itemUid,
+    routeCode: "1",
+    operationSetupCode: "2",
+    productionFloorCode: "cnc",
+  }
+  const parameters = () =>
+    pool.query(
+      "SELECT id, row_version, source_payload FROM quality.parameter_definitions WHERE organization_id = $1 ORDER BY id",
+      [organizationId]
+    )
+  const before = await parameters()
+  await pool.query(
+    "UPDATE manufacturing.operation_setups SET source_payload = jsonb_build_object('payload', source_payload) WHERE organization_id = $1 AND setup_number = 2",
+    [organizationId]
+  )
+  const availability = () =>
+    pool.query(
+      "SELECT setup_number, COALESCE(source_payload->'payload', source_payload)->'measuringProgramAvailable' AS available FROM manufacturing.operation_setups WHERE organization_id = $1 ORDER BY setup_number",
+      [organizationId]
+    )
+  const refreshJobsSql = "SELECT id, xmin::text AS version FROM derived.refresh_jobs WHERE organization_id = $1 ORDER BY id"
+  const jobsBefore = await pool.query<{ id: string; version: string }>(refreshJobsSql, [organizationId])
+  await quality.saveMeasuringProgramAvailability({ ...input, available: true })
+  expect((await pool.query<{ id: string; version: string }>(refreshJobsSql, [organizationId])).rows).toEqual(jobsBefore.rows)
+  const source = await pool.query<{
+    source_id: string
+    payload: Record<string, unknown>
+  }>(
+    "SELECT source_id, COALESCE(source_payload->'payload', source_payload) AS payload FROM manufacturing.operation_setups WHERE organization_id = $1 AND setup_number = 2",
+    [organizationId]
+  )
+  expect(
+    directDashboardControlRows([
+      {
+        _id: source.rows[0]!.source_id,
+        entryType: "route",
+        key: "",
+        ownerId: "",
+        createdAt: "",
+        payload: {
+          ...source.rows[0]!.payload,
+          partNo: itemUid,
+          optionNumber: "1",
+          setupNo: "2",
+        },
+      },
+    ]).routeMasterRows[0]?.measuringProgramAvailable
+  ).toBe(true)
+  expect((await availability()).rows).toEqual([
+    { setup_number: 1, available: null },
+    { setup_number: 2, available: true },
+  ])
+  await planning.upsertRouteOption({
+    organizationId,
+    itemUid,
+    routeCode: "1",
+    productionFloorCode: "cnc",
+    replaceSetups: false,
+    setups: [{ operationCode: "REVISED", sequence: 2, setupNumber: 2 }],
+  })
+  expect((await availability()).rows[1]?.available).toBe(true)
+  await quality.saveMeasuringProgramAvailability({ ...input, available: false })
+  expect((await availability()).rows[1]?.available).toBe(false)
+  expect((await parameters()).rows).toEqual(before.rows)
 })

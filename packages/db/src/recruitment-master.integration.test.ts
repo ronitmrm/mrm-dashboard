@@ -164,7 +164,7 @@ describe("Department Master rename", () => {
   })
 })
 
-test("editing a template can update occupied and vacant Approved Posts", async () => {
+test("editing a template updates linked Approved Posts across departments", async () => {
   const suffix = randomUUID()
   const organization = await pool.query<{ id: string }>(
     `INSERT INTO core.organizations (code, name)
@@ -178,6 +178,12 @@ test("editing a template can update occupied and vacant Approved Posts", async (
      VALUES ($1, 'CNC', 'Cnc', 'test', 'departments', $2) RETURNING id`,
     [organizationId, `department-${suffix}`]
   )
+  const secondDepartment = await pool.query<{ id: string }>(
+    `INSERT INTO recruitment.departments
+       (organization_id, code, name, source_system, source_table, source_id)
+     VALUES ($1, 'CNC2', 'Cnc-02', 'test', 'departments', $2) RETURNING id`,
+    [organizationId, `department-2-${suffix}`]
+  )
   const designation = await pool.query<{ id: string }>(
     `INSERT INTO recruitment.designations
        (organization_id, code, name, source_system, source_table, source_id)
@@ -189,7 +195,6 @@ test("editing a template can update occupied and vacant Approved Posts", async (
     organizationId,
     templateCode: "JRT-0001",
     name: "Cnc Operator",
-    departmentCode: "CNC",
     designationCode: "OP",
     rejectDuplicates: true,
     shiftType: "Day",
@@ -207,10 +212,11 @@ test("editing a template can update occupied and vacant Approved Posts", async (
         experience_requirement, source_system, source_table, source_id)
      VALUES ($1, $2, $3, $4, '1', 'CNC-OP-1', 'CNC-OP-1', 'Occupied',
              'Existing Operator', 'One year', 'test', 'posts', $5),
-            ($1, $2, $3, NULL, '2', 'CNC-OP-2', 'CNC-OP-2', 'Vacant',
+            ($1, $7, $3, $4, '2', 'CNC-OP-2', 'CNC-OP-2', 'Vacant',
              NULL, 'One year', 'test', 'posts', $6)`,
     [organizationId, department.rows[0]!.id, designation.rows[0]!.id,
-      template.id, `occupied-${suffix}`, `vacant-${suffix}`]
+      template.id, `occupied-${suffix}`, `vacant-${suffix}`,
+      secondDepartment.rows[0]!.id]
   )
   await pool.query(
     `INSERT INTO recruitment.job_posts

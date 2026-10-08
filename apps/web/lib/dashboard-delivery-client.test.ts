@@ -154,7 +154,7 @@ describe("dashboard delivery client", () => {
     })
   })
 
-  it("presents a canonical update check while retaining current data", () => {
+  it("keeps routine canonical checks quiet while retaining current data", () => {
     const initial = createDashboardDeliveryState<{ dashboard: object }>("cnc")
     const started = dashboardDeliveryReducer(initial, {
       type: "request.started",
@@ -182,9 +182,7 @@ describe("dashboard delivery client", () => {
     })
 
     expect(checking.data).toBe(loaded.data)
-    expect(dashboardDeliveryNotice(checking)).toBe(
-      "Checking for dashboard updates."
-    )
+    expect(dashboardDeliveryNotice(checking)).toBeNull()
   })
 
   it("presents refresh failure evidence alongside retained data", () => {

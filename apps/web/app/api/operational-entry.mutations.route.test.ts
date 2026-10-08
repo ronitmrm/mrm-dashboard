@@ -367,7 +367,7 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.upsertCycleStandard).toHaveBeenCalledWith(expect.objectContaining({
       recordId: "cycle-source-1", cycleTimeSeconds: 30, productionFloorCode: "cnc", rejectDuplicates: true,
     }))
-    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1")
+    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1", {})
   })
 
   it("refreshes after the last checklist upload row using the import permission alone", async () => {
@@ -382,7 +382,7 @@ describe("production entry mutation API authorization", () => {
     })
     expect(response.status).toBe(200)
     expect(dependencies.executePostgresOperationalEntry).toHaveBeenCalledTimes(2)
-    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1")
+    expect(dependencies.requestRefresh).toHaveBeenCalledWith("organization-1", {})
     expect(dependencies.requestRefresh.mock.invocationCallOrder[0]).toBeGreaterThan(
       dependencies.executePostgresOperationalEntry.mock.invocationCallOrder[1]!
     )

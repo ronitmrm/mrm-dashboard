@@ -233,7 +233,7 @@ function validateReplacement(kind: MasterDataKind, source: Record<string, unknow
     quality_parameter_master: ["operation_setup_id", "data_type"],
     setup_checklist_master: ["template_id", "response_type"],
     maintenance_checklist_master: ["definition_id", "response_type"],
-    hr_job_template: ["department_id", "designation_id", "combined_role_id"],
+    hr_job_template: ["designation_id", "combined_role_id"],
   }
   if (scopes[kind]?.some((field) => source[field] !== replacement[field])) {
     throw new Error("The replacement must have the same Production Unit, parent and field type as this master.")

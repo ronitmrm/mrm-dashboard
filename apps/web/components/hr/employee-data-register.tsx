@@ -8,6 +8,7 @@ import {
 import Link from "next/link"
 
 import { StandardState } from "@/components/ui/golden-patterns"
+import { employeeDepartmentLabel } from "@/lib/employee-data-csv"
 
 export function EmployeeDataRegister({ assignments, canManage }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
@@ -21,13 +22,14 @@ export function EmployeeDataRegister({ assignments, canManage }: {
         <CardTitle>Employee Data</CardTitle>
         <CardDescription>
           Each employment period gets a line after joining. Add details later; a rejoin starts a new term.
+          Download CSV to fill details in bulk, keeping Assignment ID and Employee ID unchanged. Blank detail cells clear saved values.
         </CardDescription>
       </CardHeader>
       <CardContent className="min-w-0">
         <OperationalTable filterStorageKey="hr-employee-data" containerClassName="max-h-[36rem] rounded-md border">
           <TableHeader><TableRow>
             <TableHead>Employee ID</TableHead><TableHead>Employee Name</TableHead>
-            <TableHead>Department</TableHead><TableHead>Designation</TableHead>
+            <TableHead>Department / Combined ID</TableHead><TableHead>Designation</TableHead>
             <TableHead>Joined</TableHead><TableHead>Left</TableHead>
             <TableHead>Personal Data</TableHead><TableHead>Term Data</TableHead>
             {canManage ? <TableHead className="text-right">Action</TableHead> : null}
@@ -35,14 +37,13 @@ export function EmployeeDataRegister({ assignments, canManage }: {
           <TableBody>
             {rows.map((term) => {
               const first = term.assignments[0]!
-              const departments = [...new Set(term.assignments.map((assignment) => assignment.department).filter(Boolean))]
               const designations = [...new Set(term.assignments.map((assignment) => assignment.designation).filter(Boolean))]
               const personalSaved = term.assignments.some((assignment) => assignment.personalDetailsSaved)
               const termSaved = term.assignments.some((assignment) => assignment.termDetailsSaved)
               return <TableRow key={term.anchorId}>
               <TableCell className="font-mono">{term.employeeCode}</TableCell>
               <TableCell className="font-medium">{first.employeeName}</TableCell>
-              <TableCell>{departments.join(", ") || "—"}</TableCell>
+              <TableCell>{employeeDepartmentLabel(term.assignments)}</TableCell>
               <TableCell>{designations.join(", ") || "—"}</TableCell>
               <TableCell>{term.joinedOn ?? "Date needed"}</TableCell>
               <TableCell>{term.endedOn ?? "Current"}</TableCell>

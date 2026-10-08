@@ -15181,6 +15181,14 @@ function QualityParameterMasterForm({
       : [newQualityParameterDraft(1)]
   )
   const loadedParameterSetRef = useRef("")
+  const [savedProgramAvailability, setSavedProgramAvailability] = useState<
+    Record<string, boolean>
+  >({})
+  const [programDraft, setProgramDraft] = useState<{
+    setupKey: string
+    available: boolean
+  } | null>(null)
+  const [isSavingProgram, setIsSavingProgram] = useState(false)
 
   useEffect(() => {
     const nextSignature = `${selectedSetupKey}|${qualityParameterRowsSignature(selectedRows)}`
@@ -15231,10 +15239,48 @@ function QualityParameterMasterForm({
       ),
     [routeLines, setupFields.optionNumber, setupFields.partNo]
   )
-  const selectedRouteLineExists = routeLines.some(
+  const selectedRouteLine = routeLines.find(
     (row) =>
       qualityParameterSetupKey(row) === qualityParameterSetupKey(setupFields)
   )
+  const selectedRouteLineExists = !!selectedRouteLine
+  const savedProgramAvailable =
+    savedProgramAvailability[selectedSetupKey] ??
+    selectedRouteLine?.measuringProgramAvailable ?? false
+  const programAvailable =
+    programDraft?.setupKey === selectedSetupKey
+      ? programDraft.available
+      : savedProgramAvailable
+
+  async function saveProgramAvailability() {
+    if (!selectedRouteLineExists) return
+    setIsSavingProgram(true)
+    setStatus(null)
+    try {
+      await submitAction(
+        "quality-measuring-program",
+        { ...setupFields, available: programAvailable, productionFloorCode },
+        { throwOnError: true }
+      )
+      setSavedProgramAvailability((current) => ({
+        ...current,
+        [selectedSetupKey]: programAvailable,
+      }))
+      setProgramDraft(null)
+      setStatus({
+        tone: "default",
+        message: "Measuring machine program availability saved.",
+      })
+    } catch (err) {
+      setStatus({
+        tone: "destructive",
+        message:
+          err instanceof Error ? err.message : "Program availability save failed.",
+      })
+    } finally {
+      setIsSavingProgram(false)
+    }
+  }
 
   function updateDraft(
     draftId: string,
@@ -15408,7 +15454,11 @@ function QualityParameterMasterForm({
           <ProcessingNotice message="Saving quality inspection parameters..." />
         </div>
       ) : null}
-      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
+      <fieldset
+        aria-busy={isSaving || isSavingProgram}
+        className="contents"
+        disabled={isSaving || isSavingProgram}
+      >
         <CardContent className="grid gap-4">
           {!routeLines.length ? (
             <AlertMessage tone="destructive">
@@ -15484,6 +15534,44 @@ function QualityParameterMasterForm({
                 ))}
               </SearchableSelect>
             </Field>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Measuring machine program">
+                <SearchableSelect
+                  aria-label="Measuring machine program"
+                  value={programAvailable ? "available" : "not_available"}
+                  disabled={!selectedRouteLineExists}
+                  onChange={(event) =>
+                    setProgramDraft({
+                      setupKey: selectedSetupKey,
+                      available: event.target.value === "available",
+                    })
+                  }
+                >
+                  <option value="available">Available</option>
+                  <option value="not_available">Not available</option>
+                </SearchableSelect>
+              </Field>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedRouteLineExists}
+                onClick={() => void saveProgramAvailability()}
+              >
+                {isSavingProgram ? "Saving" : "Save Program Availability"}
+              </Button>
+              {selectedRouteLineExists ? (
+                <StatusBadge
+                  className="self-center"
+                  tone={savedProgramAvailable ? "positive" : "inactive"}
+                  value={savedProgramAvailable ? "Available" : "Not available"}
+                />
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Independent of inspection parameters. Update when the program is ready.
+            </p>
           </div>
           <div className="min-w-0 rounded-lg border">
             <OperationalTable>
@@ -20023,7 +20111,12 @@ function combinedQualityInspectionMasterRows(
 function qualityParameterRouteLines(rows: DashboardPayload[]) {
   const byKey = new Map<
     string,
-    { partNo: string; optionNumber: string; setupNo: string }
+    {
+      partNo: string
+      optionNumber: string
+      setupNo: string
+      measuringProgramAvailable: boolean
+    }
   >()
   for (const row of rows) {
     const line = {
@@ -20032,7 +20125,10 @@ function qualityParameterRouteLines(rows: DashboardPayload[]) {
       setupNo: displayValue(row.setupNo),
     }
     if (Object.values(line).some((value) => value === "-")) continue
-    byKey.set(qualityParameterSetupKey(line), line)
+    byKey.set(qualityParameterSetupKey(line), {
+      ...line,
+      measuringProgramAvailable: row.measuringProgramAvailable === true,
+    })
   }
   return [...byKey.values()].sort((a, b) =>
     qualityParameterSetupKey(a).localeCompare(

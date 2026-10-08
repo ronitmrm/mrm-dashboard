@@ -11,6 +11,13 @@ also applies through the automatic employee link. The protected System
 Administrator identity is the sole account that stays separate from Employee
 Master.
 
+**Employee Departure**: A linked Staff Account cannot sign in once the employee
+has no active assignment. Resigned employees retain access through their Last
+Working Date; a departure recorded as Removed takes effect immediately. Existing
+sessions are rejected and revoked on their next authentication check. Ending one
+post does not block a person who still holds another active assignment. Employee
+ID, employment history, account identity and audit records remain retained.
+
 **Staff Login ID**: The email address used to sign in to a Staff Account. A
 staff provisioner may correct it after creation. The account's permanent user
 identity, employee link, password, and access stay the same; existing sessions

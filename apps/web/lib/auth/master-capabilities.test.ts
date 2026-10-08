@@ -113,6 +113,14 @@ describe("independent master permissions", () => {
       { partNo: "P1", setupNo: "S1", setupName: "TURN", machineType: "Cnc" },
     ])
     expect(edit.productionControl).not.toHaveProperty("workOrders")
+    const qualityEdit = productionMasterSnapshot({
+      productionControl: {
+        routeMasterRows: [{ partNo: "P1", optionNumber: "1", setupNo: "1", measuringProgramAvailable: true, internalNote: "private" }],
+      },
+    }, new Set(["masters.cnc.quality_parameter_master.read", "masters.cnc.quality_parameter_master.save"]), "cnc")
+    expect(qualityEdit.productionControl.routeMasterRows).toEqual([
+      { partNo: "P1", optionNumber: "1", setupNo: "1", measuringProgramAvailable: true },
+    ])
     const routeEdit = productionMasterSnapshot(source, new Set([
       "masters.cnc.route.read", "masters.cnc.route.save",
     ]), "cnc")

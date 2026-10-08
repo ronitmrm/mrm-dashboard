@@ -6379,6 +6379,7 @@ function routeMasterTableRow(row: Record<string, unknown>) {
     machineUsed: machineFamily,
     machineType: rowText(row, "MACHINE TYPE", "machineType"),
     stageWeight: rowValue(row, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "stageWeight"),
+    measuringProgramAvailable: row.measuringProgramAvailable === true,
   };
 }
 
