@@ -303,9 +303,11 @@ batch is issued in one atomic operation. A mixed Department, missing or duplicat
 Unit ID, unavailable Unit ID, or stock shortfall leaves every selected line
 unchanged.
 
-**Stock Register**: Main Store's filterable inventory table showing Consumables
-with a positive Main Store balance and active Non Consumable Unit IDs accountable
-to Main Store. Asset Codes with neither are omitted from the normal Stock view.
+**Stock Register**: Main Store's filterable inventory table showing every active
+Item Type's Asset Code, including Consumables with zero balance and Non
+Consumables with no physical units. Other Stores use this catalog to find items
+and request stock; Main Store can order items when needed. Active Non Consumable
+Unit IDs accountable to Main Store appear beneath their Asset Codes.
 Purchase Order and Request selection use the complete active Item Type catalog.
 The register shows Main Store availability alongside company-wide on-hand
 quantity or Unit ID count for displayed Asset Codes; company totals include
