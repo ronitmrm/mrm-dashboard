@@ -139,6 +139,9 @@ at a time, with a reason. Loss keeps its history and last known physical holder,
 marks it unavailable, and reduces company on-hand by one. A lost Unit ID cannot
 be issued, moved, transferred, repaired, or selected for calibration. Loss is
 distinct from damage, which keeps the physical Unit ID in company inventory.
+An Accident report on a running Production Session may record the same loss for
+several Unit IDs in one transaction. Its listed Consumables were already used and
+do not create another stock movement.
 
 **Supplier**: The party from whom goods or repair services are purchased. A
 Supplier owns one immutable system-generated code (`SUP-001`, `SUP-002`, and so

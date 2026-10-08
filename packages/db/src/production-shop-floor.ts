@@ -5,6 +5,7 @@ import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import { recordAssetLossInTransaction } from "./department-stores"
 import { readDashboardSourceRevision } from "./dashboard-direct-facts"
 import {
   productionBreakMinutes,
@@ -1800,6 +1801,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async startProductionSessionDowntime(input: {
       actorUserId?: string | null
+      accident?: {
+        description: string
+        lostUnitIds: string[]
+        consumables: Array<{ itemTypeId: string; quantity: number }>
+      }
       enteredRole: string
       organizationId: string
       reasonCode: string
@@ -1810,9 +1816,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       return transaction(pool, async (client) => {
         const enteredRole = productionEntryRole(input.enteredRole)
         const startedAt = requiredTimestamp(input.startedAt, "Downtime start")
-        const session = await client.query<{ started_at: Date; status: string }>(
+        const session = await client.query<{ session_reference: string; started_at: Date; status: string }>(
           `
-            SELECT started_at, status
+            SELECT session_reference, started_at, status
             FROM manufacturing.production_sessions
             WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
             FOR UPDATE
@@ -1827,6 +1833,49 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (startedAt < current.started_at) {
           throw new Error("Downtime must remain inside the production session.")
         }
+        const accident = input.accident
+        const description = accident
+          ? requiredText(accident.description, "What happened")
+          : ""
+        const lostUnitIds = accident?.lostUnitIds.map((id) => requiredText(id, "Unit ID")) ?? []
+        const consumables = accident?.consumables ?? []
+        if (lostUnitIds.length > 50 || consumables.length > 50 ||
+          new Set(lostUnitIds.map((id) => id.toLowerCase())).size !== lostUnitIds.length ||
+          new Set(consumables.map((item) => item.itemTypeId)).size !== consumables.length ||
+          consumables.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+          throw new Error("Select distinct lost Unit IDs and valid consumable quantities.")
+        }
+        const consumed = consumables.length
+          ? await client.query<{ assetName: string; id: string; typeCode: string; unit: string }>(
+              `SELECT id, type_code AS "typeCode", asset_name AS "assetName", unit
+               FROM store.item_types
+               WHERE organization_id = $1 AND id = ANY($2::uuid[])
+                 AND tracking_mode = 'CONSUMABLE' AND active`,
+              [input.organizationId, consumables.map((item) => item.itemTypeId)]
+            )
+          : null
+        if (consumed && consumed.rows.length !== consumables.length) {
+          throw new Error("An active Consumable Asset Code was not found.")
+        }
+        const lostUnits = []
+        for (const assetCode of lostUnitIds) {
+          lostUnits.push(await recordAssetLossInTransaction(client, {
+            actorUserId: input.actorUserId,
+            allowOccupiedToolingLoss: true,
+            assetCode,
+            organizationId: input.organizationId,
+            remark: `Production accident ${current.session_reference}: ${description}`,
+          }))
+        }
+        const accidentReport = accident ? {
+          description,
+          lostUnits,
+          consumables: consumables.map((item) => {
+            const type = consumed!.rows.find((row) => row.id === item.itemTypeId)!
+            return { typeCode: type.typeCode, assetName: type.assetName,
+              unit: type.unit, quantity: item.quantity }
+          }),
+        } : null
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.production_session_downtime_events (
@@ -1845,7 +1894,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             startedAt.toISOString(),
             enteredRole,
             input.actorUserId ?? null,
-            { ...input, enteredRole, startedAt: startedAt.toISOString() },
+            { ...input, enteredRole, startedAt: startedAt.toISOString(),
+              ...(accidentReport ? { accident: accidentReport } : {}) },
           ]
         )
         await queueDashboardRefresh(client, input.organizationId)
@@ -1936,12 +1986,26 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       return transaction(pool, async (client) => {
         const endOutcome = productionDowntimeEndOutcome(input.endOutcome)
         const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
-        const event = await client.query<{ id: string; started_at: Date }>(
+        const event = await client.query<{
+          floor_code: ProductionFloorCode
+          has_accident_loss: boolean
+          id: string
+          machine_id: string
+          operation_setup_id: string
+          started_at: Date
+          work_order_id: string
+        }>(
           `
-            SELECT event.id, event.started_at
+            SELECT event.id, event.started_at,
+              session.work_order_id, session.operation_setup_id, session.machine_id,
+              floor.code AS floor_code,
+              jsonb_array_length(COALESCE(event.source_payload->'accident'->'lostUnits', '[]'::jsonb)) > 0
+                AS has_accident_loss
             FROM manufacturing.production_session_downtime_events event
             JOIN manufacturing.production_sessions session
               ON session.id = event.production_session_id
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
             WHERE event.production_session_id = $1
               AND session.organization_id = $2
               AND event.ended_at IS NULL
@@ -1955,6 +2019,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!current) throw new Error("No open downtime was found.")
         if (endedAt <= current.started_at) {
           throw new Error("Downtime end must be after downtime start.")
+        }
+        if (endOutcome === "resolved" && current.has_accident_loss) {
+          await assertToolingAvailable(client, {
+            organizationId: input.organizationId,
+            setupId: current.operation_setup_id,
+            workOrderId: current.work_order_id,
+            machineId: current.machine_id,
+            floorCode: current.floor_code,
+          })
         }
         const durationMinutes = Math.max(
           Math.ceil((endedAt.getTime() - current.started_at.getTime()) / 60_000),
@@ -2668,6 +2741,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           if (!previous.ended_at || previous.end_outcome === "shift_end_unresolved" ||
             previous.source_payload.maintenanceTaskKey) {
             throw new ShopFloorConflictError("This downtime is linked to an active workflow and cannot be corrected here.")
+          }
+          if (change.action === "reverse" && previous.source_payload.accident) {
+            throw new ShopFloorConflictError("Accident downtime with posted Store losses cannot be reversed here.")
           }
           let updatedEvent: Record<string, unknown>
           if (change.action === "reverse") {
@@ -3831,6 +3907,43 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async readAccidentStoreOptions(organizationId: string) {
+      const [units, consumables] = await Promise.all([
+        pool.query<{
+          assetCode: string
+          assetName: string
+          holderName: string | null
+          status: string
+          storeCode: string
+          typeCode: string
+        }>(
+          `SELECT asset.asset_code AS "assetCode", item.type_code AS "typeCode",
+             item.asset_name AS "assetName", asset.status,
+             asset.current_holder_name AS "holderName", accountable.code AS "storeCode"
+           FROM store.assets asset
+           JOIN store.item_types item ON item.id = asset.item_type_id
+           JOIN store.accountable_stores accountable ON accountable.id = asset.accountable_store_id
+           WHERE asset.organization_id = $1 AND item.active
+             AND asset.status NOT IN ('LOST', 'SCRAPPED')
+           ORDER BY asset.asset_code`,
+          [organizationId]
+        ),
+        pool.query<{
+          assetName: string
+          id: string
+          typeCode: string
+          unit: string
+        }>(
+          `SELECT id, type_code AS "typeCode", asset_name AS "assetName", unit
+           FROM store.item_types
+           WHERE organization_id = $1 AND active AND tracking_mode = 'CONSUMABLE'
+           ORDER BY type_code`,
+          [organizationId]
+        ),
+      ])
+      return { units: units.rows, consumables: consumables.rows }
+    },
+
     async readProductionSessions(input: {
       endDate?: string
       limit?: number
@@ -3958,6 +4071,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 'breakdownLinked', NULLIF(
                   event.source_payload->>'maintenanceTaskKey', ''
                 ) IS NOT NULL,
+                'accident', event.source_payload->'accident',
                 'enteredRole', event.entered_role,
                 'isOpen', event.ended_at IS NULL
               ) ORDER BY event.started_at) AS rows

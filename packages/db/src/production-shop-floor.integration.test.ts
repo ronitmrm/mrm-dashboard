@@ -1719,6 +1719,71 @@ describe("production and shop-floor workflows", () => {
     await expect(start(jobs[1]!, machines[1]!)).resolves.toBeDefined()
   })
 
+  test("starts accident downtime, loses selected Unit ID, and only reports used consumables", async () => {
+    const machineNumber = `ACCIDENT-${suffix}`
+    await planning.upsertMachine({ machineNumber, organizationId, productionFloorCode: "cnc" })
+    const session = await pool.query<{ id: string }>(
+      `INSERT INTO manufacturing.production_sessions (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, operator_employee_id, production_date, shift, measurement_method,
+         started_at, piece_weight_grams, session_reference, daily_sequence,
+         machine_number_snapshot, job_card_number_snapshot, part_code_snapshot,
+         option_number_snapshot, setup_number_snapshot, operator_code_snapshot, operator_name_snapshot
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id, employee.id,
+         '2026-09-30', 'A', 'weight', '2026-09-30T08:00:00+05:30', 1,
+         $2 || '-20260930-01', 1, $2, $3, $4, 'CNC-1', '1', $5, 'Accident test operator'
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = 'CNC-1'
+       JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id AND setup.setup_number = 1
+       JOIN catalog.machines machine ON machine.organization_id = $1 AND machine.machine_number = $2
+       JOIN workforce.employees employee ON employee.organization_id = $1 AND employee.employee_code = $5
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $3 RETURNING id`,
+      [organizationId, machineNumber, cncJobCard, itemUid, firstOperator]
+    )
+    const store = createStoreRepository({ connectionString })
+    const category = await store.createAssetCategory({ organizationId, name: `Accident ${suffix}` })
+    const subcategory = await store.createAssetSubcategory({ organizationId, categoryId: category.id, name: "Tooling" })
+    const barName = await store.createAssetName({ organizationId, subcategoryId: subcategory.id, name: "Boring bar" })
+    const insertName = await store.createAssetName({ organizationId, subcategoryId: subcategory.id, name: "Insert" })
+    const bar = await store.createItemType({ organizationId, assetType: "NON_CONSUMABLE", identificationName: "Boring bar", unit: "Nos",
+      assetCategoryId: category.id, assetSubcategoryId: subcategory.id, assetNameId: barName.id })
+    const insert = await store.createItemType({ organizationId, assetType: "CONSUMABLE", identificationName: "Insert", unit: "Nos",
+      assetCategoryId: category.id, assetSubcategoryId: subcategory.id, assetNameId: insertName.id })
+    await store.close()
+    const unitId = `${bar.typeCode}-0001`
+    await pool.query(
+      `INSERT INTO store.assets (organization_id, item_type_id, asset_code, identification_name,
+         status, current_holder_type, accountable_store_id)
+       SELECT $1, $2, $3, 'Boring bar', 'AVAILABLE', 'STORE', id
+       FROM store.accountable_stores WHERE organization_id = $1 AND kind = 'MAIN'`,
+      [organizationId, bar.id, unitId]
+    )
+
+    const options = await repository.readAccidentStoreOptions(organizationId)
+    expect(options.units.some((unit) => unit.assetCode === unitId)).toBe(true)
+    expect(options.consumables.some((item) => item.id === insert.id)).toBe(true)
+    await repository.startProductionSessionDowntime({
+      accident: { description: "Wrong side clamped", lostUnitIds: [unitId],
+        consumables: [{ itemTypeId: insert.id, quantity: 2 }] },
+      enteredRole: "shop_floor", organizationId, reasonCode: "SETUP",
+      reasonName: "Setup problem", sessionId: session.rows[0]!.id,
+      startedAt: "2026-09-30T09:00:00+05:30",
+    })
+    const saved = await repository.readProductionSessions({ organizationId, productionFloorCode: "cnc", sessionId: session.rows[0]!.id })
+    expect(saved.rows[0]?.downtimeEvents).toMatchObject([{
+      accident: { description: "Wrong side clamped", lostUnits: [{ assetCode: unitId }],
+        consumables: [{ typeCode: insert.typeCode, quantity: 2 }] },
+    }])
+    const stock = await pool.query<{ status: string; lossCount: string; consumableMovements: string }>(
+      `SELECT asset.status,
+         (SELECT count(*) FROM store.stock_movements WHERE asset_id = asset.id AND movement_type = 'LOSS')::text AS "lossCount",
+         (SELECT count(*) FROM store.stock_movements WHERE item_type_id = $2)::text AS "consumableMovements"
+       FROM store.assets asset WHERE asset.asset_code = $1`,
+      [unitId, insert.id]
+    )
+    expect(stock.rows[0]).toEqual({ status: "LOST", lossCount: "1", consumableMovements: "0" })
+  })
+
   test("session downtime commits while a dashboard rebuild holds its refresh job", async () => {
     const machineNumber = `LATENCY-${suffix}`
     await planning.upsertMachine({

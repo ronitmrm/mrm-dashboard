@@ -960,6 +960,15 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "production-accident-store-options") {
+      return json(await withProductionRepository(
+        request,
+        "operations.production.write",
+        ({ organizationId, repository }) =>
+          repository.readAccidentStoreOptions(organizationId)
+      ))
+    }
+
     if (path === "production-break-schedule") {
       const floor = parseProductionFloorCode(search.get("floor"))
       if (!floor)
@@ -1842,7 +1851,9 @@ async function post(request: NextRequest, context: RouteContext) {
           savedText: `Bulk breakdown started on ${result.rowsUpdated} running sessions.`,
         })
       }
-      if (entryType === "production_session_downtime_start") {
+      if (entryType === "production_session_downtime_start" ||
+        entryType === "production_session_accident_start") {
+        const accident = plainRecord(payload.accident)
         const result = await withProductionRepository(
           request,
           "operations.production.write",
@@ -1857,6 +1868,18 @@ async function post(request: NextRequest, context: RouteContext) {
             })
             return repository.startProductionSessionDowntime({
               actorUserId,
+              ...(entryType === "production_session_accident_start" ? { accident: {
+                description: text(accident.description),
+                lostUnitIds: Array.isArray(accident.lostUnitIds)
+                  ? accident.lostUnitIds.filter((value): value is string => typeof value === "string")
+                  : [],
+                consumables: Array.isArray(accident.consumables)
+                  ? accident.consumables.map((value) => {
+                      const item = plainRecord(value)
+                      return { itemTypeId: text(item.itemTypeId), quantity: Number(item.quantity) }
+                    })
+                  : [],
+              } } : {}),
               enteredRole,
               organizationId,
               reasonCode: text(payload.reasonCode || payload.downtimeCode),
@@ -1869,7 +1892,9 @@ async function post(request: NextRequest, context: RouteContext) {
         return json({
           ...result,
           rowsUpdated: 1,
-          savedText: "Downtime started.",
+          savedText: entryType === "production_session_accident_start"
+            ? "Accident and downtime recorded. Selected Unit IDs removed from stock."
+            : "Downtime started.",
         })
       }
       if (entryType === "production_session_downtime_end") {
