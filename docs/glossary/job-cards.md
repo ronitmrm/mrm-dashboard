@@ -139,6 +139,11 @@ into the finish date, rather than invented wall-clock shift times. Machine
 queue reservations still use whole dates. Fridays and Planning Calendar
 holidays are excluded, and material and WIP availability constraints still apply.
 
+For CNC, the current planning Production Date changes at 06:00 IST, matching
+Shift C's end. Thursday work remains due after midnight through Friday 06:00;
+Friday's weekly off then lasts until Saturday 06:00. Recalculation must not
+roll that remaining Thursday work to Saturday or block its workflow at midnight.
+
 Shop Floor Status shows the recorded lifecycle of each setup on its assigned
 machine. Job Card Current Estimated Finish includes all remaining route setups,
 using the same cycle-based supply and remaining-work calculation. Forecast-only

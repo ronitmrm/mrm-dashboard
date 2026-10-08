@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest"
 import { buildLegacyDashboardSnapshot, stableMachineAssignmentCandidates } from "./legacy-dashboard-analysis"
+import { floorSourceFingerprint } from "./dashboard-floor-segments"
 
 afterEach(() => vi.useRealTimers())
 
@@ -40,6 +41,38 @@ function inputFor(good: number) {
     previousMachinePlanDetailRows: [{ jcNo: "A", partCode: "M5551", optionNumber: "1", setupNo: "2", routeMachine: "JT", machine: "CNC-2" }],
   }
 }
+
+test("keeps Thursday CNC planning available through Shift C until Friday 06:00", () => {
+  const input = inputFor(0)
+  input.productionEntries = []
+  input.dataEntries = input.dataEntries.filter(row => row.payload.setupNo !== "2")
+  input.dataEntries.find(row => row.entryType === "shop_floor_status")!.payload.stage = "raw_material_at_machine"
+  const plan = () => buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]
+
+  vi.setSystemTime(new Date("2026-10-08T22:00:00+05:30"))
+  const shiftFingerprint = floorSourceFingerprint(input, "shift-boundary", "cnc")
+  expect(plan()).toMatchObject({ plannedStartDate: "8-Oct-26", shopFloorTaskReady: true })
+  vi.setSystemTime(new Date("2026-10-09T05:59:59+05:30"))
+  expect(floorSourceFingerprint(input, "shift-boundary", "cnc")).toBe(shiftFingerprint)
+  expect(plan()).toMatchObject({ plannedStartDate: "8-Oct-26", shopFloorTaskReady: true, shopFloorTaskBlocker: "" })
+  vi.setSystemTime(new Date("2026-10-09T06:00:00+05:30"))
+  expect(floorSourceFingerprint(input, "shift-boundary", "cnc")).not.toBe(shiftFingerprint)
+  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: false })
+  vi.setSystemTime(new Date("2026-10-10T06:00:00+05:30"))
+  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: true })
+})
+
+test("keeps a future CNC plan blocked during the preceding overnight shift", () => {
+  const input = inputFor(0)
+  input.productionEntries = []
+  input.dataEntries = input.dataEntries.filter(row => row.entryType !== "shop_floor_status" && row.payload.setupNo !== "2")
+  input.dataEntries.find(row => row.entryType === "work_order")!.payload.rmInwardDate = "2026-10-10"
+  vi.setSystemTime(new Date("2026-10-09T05:59:59+05:30"))
+  expect(buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]).toMatchObject({
+    plannedStartDate: "10-Oct-26", shopFloorTaskReady: false,
+    shopFloorTaskBlocker: "Planned date not due until 10-Oct-26",
+  })
+})
 
 test("plans available WIP after an upstream setup completes below its order", () => {
   const input = inputFor(992)
