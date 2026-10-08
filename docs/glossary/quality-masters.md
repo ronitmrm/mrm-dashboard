@@ -10,6 +10,8 @@ Unit, part, route option, and setup as **Available** or **Not available**. An
 unrecorded setup displays Not available. Availability can be updated later without
 saving or changing inspection parameters; it does not block parameter entry,
 inspection, or production. Route edits retain the saved availability.
+Saving availability updates only this metadata and its displayed tag; it does
+not queue planning recalculation or change production dates.
 
 The Job Card Rejection view presents three separate dimensions: Rejection Type
 (the saved type), Rejection Reason (the saved remark/cause), and Defect (the saved

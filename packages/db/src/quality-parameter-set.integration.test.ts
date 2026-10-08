@@ -155,7 +155,7 @@ test("one changed parameter commits with one successor refresh while a rebuild h
   }
 })
 
-test("program availability saves separately by setup and survives route edits", async () => {
+test("program availability saves without planning refresh and survives route edits", async () => {
   const input = {
     organizationId,
     itemUid,
@@ -178,7 +178,10 @@ test("program availability saves separately by setup and survives route edits", 
       "SELECT setup_number, COALESCE(source_payload->'payload', source_payload)->'measuringProgramAvailable' AS available FROM manufacturing.operation_setups WHERE organization_id = $1 ORDER BY setup_number",
       [organizationId]
     )
+  const refreshJobsSql = "SELECT id, xmin::text AS version FROM derived.refresh_jobs WHERE organization_id = $1 ORDER BY id"
+  const jobsBefore = await pool.query<{ id: string; version: string }>(refreshJobsSql, [organizationId])
   await quality.saveMeasuringProgramAvailability({ ...input, available: true })
+  expect((await pool.query<{ id: string; version: string }>(refreshJobsSql, [organizationId])).rows).toEqual(jobsBefore.rows)
   const source = await pool.query<{
     source_id: string
     payload: Record<string, unknown>
