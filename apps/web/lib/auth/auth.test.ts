@@ -72,6 +72,63 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL Better Auth", () => {
+  it("blocks departed employee login and revokes their existing sessions", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const body = {
+      email: "employee-exit@mrmpl.test",
+      name: "Employee Exit",
+      password: "employee-exit-password",
+    }
+    try {
+      const user = await system.auth.api.signUpEmail({ body })
+      await pool.query(
+        `WITH organization AS (
+           INSERT INTO core.organizations (code, name) VALUES ('AUTH-EXIT', 'Employee Exit Test') RETURNING id
+         ), department AS (
+           INSERT INTO recruitment.departments (organization_id, code, name, source_system, source_table, source_id)
+           SELECT id, 'EXIT', 'Exit Test', 'test', 'departments', id::text FROM organization RETURNING id, organization_id
+         ), designation AS (
+           INSERT INTO recruitment.designations (organization_id, code, name, source_system, source_table, source_id)
+           SELECT id, 'EXIT', 'Exit Test', 'test', 'designations', id::text FROM organization RETURNING id
+         ), post AS (
+           INSERT INTO recruitment.posts (organization_id, department_id, designation_id, vacancy_number,
+             post_code, vacancy_code, employee_code, employee_name, status, last_working_date,
+             source_system, source_table, source_id)
+           SELECT department.organization_id, department.id, designation.id, '1', 'AUTH-EXIT-POST',
+             'AUTH-EXIT-VAC', 'AUTH-EXIT-EMP', 'Employee Exit', 'Resigned', current_date,
+             'test', 'posts', department.id::text FROM department CROSS JOIN designation
+         )
+         INSERT INTO identity.employee_links (user_id, organization_id, employee_code)
+         SELECT $1, id, 'AUTH-EXIT-EMP' FROM organization`,
+        [user.user.id]
+      )
+      const signedIn = await system.auth.api.signInEmail({ body, returnHeaders: true })
+      const headers = new Headers({ cookie: signedIn.headers.getSetCookie().map((cookie) => cookie.split(";", 1)[0]).join("; ") })
+      await expect(system.auth.api.getSession({ headers })).resolves.toMatchObject({ user: { id: user.user.id } })
+      await pool.query(
+        `INSERT INTO recruitment.posts (organization_id, department_id, designation_id, vacancy_number,
+           post_code, vacancy_code, employee_code, employee_name, status, source_system, source_table, source_id)
+         SELECT organization_id, department_id, designation_id, '2', 'AUTH-EXIT-OTHER', 'AUTH-EXIT-OTHER-VAC',
+           employee_code, employee_name, 'Occupied', 'test', 'posts', 'AUTH-EXIT-OTHER'
+         FROM recruitment.posts WHERE post_code = 'AUTH-EXIT-POST'`
+      )
+      await pool.query("UPDATE recruitment.posts SET last_working_date = current_date - 1 WHERE post_code = 'AUTH-EXIT-POST'")
+      await expect(system.auth.api.getSession({ headers })).resolves.toMatchObject({ user: { id: user.user.id } })
+      await pool.query("UPDATE recruitment.posts SET status = 'Vacant', employee_name = NULL, employee_code = NULL WHERE post_code = 'AUTH-EXIT-OTHER'")
+      await expect(system.auth.api.getSession({ headers })).resolves.toBeNull()
+      expect((await pool.query("SELECT id FROM identity.sessions WHERE user_id = $1", [user.user.id])).rowCount).toBe(0)
+      await expect(system.auth.api.signInEmail({ body })).rejects.toMatchObject({ status: "FORBIDDEN" })
+      expect((await pool.query("SELECT user_id FROM identity.employee_links WHERE user_id = $1", [user.user.id])).rowCount).toBe(1)
+    } finally {
+      await system.close()
+    }
+  })
+
   it("keeps session authorization in PostgreSQL with cookie caching disabled", async () => {
     const system = createAuthSystem({
       baseURL: "http://localhost:3001",

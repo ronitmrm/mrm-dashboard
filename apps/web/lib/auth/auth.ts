@@ -1,10 +1,13 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import {
   createDatabase,
+  createAuthorizationRepository,
   identitySchema,
 } from "@workspace/db"
 import { readRedisAccelerationEnvironment } from "@workspace/runtime/redis-acceleration"
 import { betterAuth } from "better-auth"
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
+import { deleteSessionCookie } from "better-auth/cookies"
 import { admin } from "better-auth/plugins"
 import type { Pool } from "pg"
 
@@ -27,14 +30,17 @@ function configureAuth({
   allowSignUp,
   baseURL,
   database,
+  pool,
   secret,
 }: {
   allowSignUp: boolean
   baseURL: string
   database: ReturnType<typeof createDatabase>["database"]
+  pool: Pool
   secret: string
 }) {
   const origin = new URL(baseURL).origin
+  const authorization = createAuthorizationRepository({ pool })
 
   return betterAuth({
     advanced: {
@@ -52,6 +58,31 @@ function configureAuth({
       disableSignUp: !allowSignUp,
       enabled: true,
       minPasswordLength: 6,
+    },
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session, ctx) => {
+            if (!(await authorization.hasActiveEmployment(session.userId))) {
+              await ctx?.context.internalAdapter.deleteUserSessions(session.userId)
+              throw new APIError("FORBIDDEN", { message: "This employee's company access has ended." })
+            }
+          },
+        },
+      },
+    },
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        const session = await getSessionFromCtx(ctx)
+        if (!session) return
+        if (!(await authorization.hasActiveEmployment(session.user.id))) {
+          await ctx.context.internalAdapter.deleteUserSessions(session.user.id)
+          deleteSessionCookie(ctx)
+          if (ctx.path === "/get-session") return ctx.json(null)
+          throw new APIError("UNAUTHORIZED", { message: "This employee's company access has ended." })
+        }
+        if (ctx.path === "/get-session") return ctx.json(session)
+      }),
     },
     plugins: [admin()],
     rateLimit: {
@@ -93,6 +124,7 @@ export function createAuthSystem({
     allowSignUp,
     baseURL,
     database: connection.database,
+    pool: connection.pool,
     secret,
   })
 

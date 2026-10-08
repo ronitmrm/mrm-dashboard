@@ -1,5 +1,19 @@
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
+const activeEmployeePostsSql = `active_employee_posts AS (
+  SELECT posts.id
+  FROM identity.employee_links
+  JOIN recruitment.posts
+    ON posts.organization_id = employee_links.organization_id
+   AND lower(btrim(posts.employee_code)) = lower(btrim(employee_links.employee_code))
+  WHERE employee_links.user_id = $1
+    AND (
+      posts.status = 'Occupied'
+      OR (posts.status = 'Appointed' AND posts.joining_date <= current_date)
+      OR (posts.status = 'Resigned' AND posts.last_working_date >= current_date)
+    )
+)`
+
 export function createAuthorizationRepository(
   options: RepositoryPoolOptions
 ) {
@@ -16,26 +30,7 @@ export function createAuthorizationRepository(
          FROM identity.permissions
          ${requestedFilter}
        ),
-       active_employee_posts AS (
-         SELECT posts.id
-         FROM identity.employee_links
-         JOIN recruitment.posts
-           ON posts.organization_id = employee_links.organization_id
-          AND lower(btrim(posts.employee_code)) =
-            lower(btrim(employee_links.employee_code))
-         WHERE employee_links.user_id = $1
-           AND (
-             posts.status = 'Occupied'
-             OR (
-               posts.status = 'Appointed'
-               AND posts.joining_date <= current_date
-             )
-             OR (
-               posts.status = 'Resigned'
-               AND posts.last_working_date >= current_date
-             )
-           )
-       ),
+       ${activeEmployeePostsSql},
        active_overrides AS (
          SELECT overrides.permission_id,
            bool_or(overrides.effect = 'deny') AS denied,
@@ -105,6 +100,16 @@ export function createAuthorizationRepository(
 
   return {
     close,
+
+    async hasActiveEmployment(userId: string) {
+      const result = await pool.query<{ active: boolean }>(
+        `WITH ${activeEmployeePostsSql}
+         SELECT NOT EXISTS (SELECT 1 FROM identity.employee_links WHERE user_id = $1)
+           OR EXISTS (SELECT 1 FROM active_employee_posts) AS active`,
+        [userId]
+      )
+      return result.rows[0]?.active === true
+    },
 
     async linkedEmployeeCode(userId: string, organizationId: string) {
       const result = await pool.query<{ employee_code: string }>(
