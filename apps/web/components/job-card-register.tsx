@@ -130,13 +130,11 @@ export function JobCardRegister({
             {
               label: "In Production",
               value: counts.inProduction,
-              description: "Readiness, setup, production or partial dispatch",
               tone: "information"
             },
             {
               label: "Production Complete",
               value: counts.productionComplete,
-              description: "Completed, not yet in dispatch stage",
               tone: "positive"
             },
             {
