@@ -1606,7 +1606,9 @@ describe("production and shop-floor workflows", () => {
     const result = await pool.query<{
       dispatch_events: string
       dispatched_pieces: string
+      outbox_events: string
       payload_quantity_matches: string
+      refresh_jobs: string
       reversal_reason: string
       reversed: boolean
     }>(
@@ -1623,14 +1625,22 @@ describe("production and shop-floor workflows", () => {
           (SELECT reversed_at IS NOT NULL FROM manufacturing.production_entries
             WHERE id = $2) AS reversed,
           (SELECT reversal_reason FROM manufacturing.production_entries
-            WHERE id = $2) AS reversal_reason
+            WHERE id = $2) AS reversal_reason,
+          (SELECT count(*) FROM derived.refresh_jobs
+            WHERE organization_id = $3 AND (queue_key = 'dashboard' OR queue_key LIKE 'dashboard:%')
+              AND status IN ('pending', 'running')) AS refresh_jobs,
+          (SELECT count(*) FROM derived.outbox_events
+            WHERE organization_id = $3
+              AND topic = 'dashboard.refresh.requested') AS outbox_events
       `,
-      [jobCardNumber, production.id]
+      [jobCardNumber, production.id, organizationId]
     )
     expect({ ...result.rows[0], dispatched_pieces: Number(result.rows[0]?.dispatched_pieces) }).toEqual({
       dispatch_events: "4",
       dispatched_pieces: 15,
+      outbox_events: "1",
       payload_quantity_matches: "4",
+      refresh_jobs: "1",
       reversal_reason: "Incorrect operator quantity",
       reversed: true,
     })
