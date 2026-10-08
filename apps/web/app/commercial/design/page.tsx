@@ -9,7 +9,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   OperationalTable,
@@ -21,6 +20,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -66,23 +66,18 @@ export default async function DesignPage({
         </TableBody></OperationalTable>
       </CardContent></SectionCard>:null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
-          tone="warning"
-          label="Pending Design"
-          value={summary.pendingDesign}
-        />
-        <MetricCard
-          tone="brand"
-          label="In Progress"
-          value={summary.inProgress}
-        />
-        <MetricCard
-          tone="information"
-          label="Open Design Tasks"
-          value={summary.openTasks}
-        />
-      </section>
+      <MetricSummary
+        scope="All design tasks · before table filters"
+        items={[
+          { tone: "warning", label: "Pending Design", value: summary.pendingDesign },
+          { tone: "brand", label: "In Progress", value: summary.inProgress },
+          {
+            tone: "information",
+            label: "Open Design Tasks",
+            value: summary.openTasks,
+          },
+        ]}
+      />
 
       <nav aria-label="Design task views" className="flex flex-wrap gap-2">
         <Button

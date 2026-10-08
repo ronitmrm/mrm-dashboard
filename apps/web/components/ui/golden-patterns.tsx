@@ -35,29 +35,25 @@ function MetricSummary({
   items,
   scope,
   className,
-  layout = "bounded",
 }: {
   items: readonly Pick<
     ComponentProps<typeof MetricCard>,
-    "label" | "value" | "description" | "tone" | "icon"
+    "label" | "value" | "description" | "tone" | "icon" | "action" | "onClick"
   >[]
   scope: string
   className?: string
-  layout?: "bounded" | "fill"
 }) {
   return (
     <section
       aria-label={scope}
-      className={cn("grid min-w-0 shrink-0 gap-2", className)}
+      className={cn(
+        "sticky top-[var(--header-height,0px)] z-20 grid w-full min-w-0 shrink-0 self-start gap-2 bg-background py-2",
+        className
+      )}
       data-slot="metric-summary"
     >
       <div
-        className={cn(
-          "grid min-w-0 gap-3",
-          layout === "fill"
-            ? "grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]"
-            : "grid-cols-[repeat(auto-fill,min(100%,16rem))]"
-        )}
+        className="grid max-h-[40dvh] min-w-0 grid-flow-col auto-cols-[min(100%,16rem)] gap-3 overflow-auto sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-[repeat(auto-fill,min(100%,16rem))]"
       >
         {items.map((item) => (
           <MetricCard

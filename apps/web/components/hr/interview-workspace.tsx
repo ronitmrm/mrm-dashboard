@@ -13,8 +13,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  MetricCard,
-  type MetricCardTone,
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -46,6 +44,7 @@ import { useMemo, useState } from "react"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
   formatIstDate,
   formatIstTime,
@@ -65,31 +64,6 @@ function formatSalary(value: number | null) {
     : `₹ ${new Intl.NumberFormat("en-IN", {
         maximumFractionDigits: 2,
       }).format(value)}`
-}
-
-function SummaryCards({
-  items,
-}: {
-  items: Array<{
-    icon: typeof CalendarClock
-    label: string
-    tone: MetricCardTone
-    value: number
-  }>
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-      {items.map(({ icon: Icon, label, tone, value }) => (
-        <MetricCard
-          icon={<Icon aria-hidden="true" />}
-          key={label}
-          label={label}
-          tone={tone}
-          value={value.toLocaleString("en-IN")}
-        />
-      ))}
-    </div>
-  )
 }
 
 export function InterviewScheduleBoard({
@@ -126,10 +100,11 @@ export function InterviewScheduleBoard({
 
   return (
     <>
-      <SummaryCards
+      <MetricSummary
+        scope="Loaded interview applications · date filter applies to pending interviews"
         items={[
           {
-            icon: CalendarClock,
+            icon: <CalendarClock aria-hidden="true" />,
             label: selectedDate
               ? "Interviews On Selected Date"
               : "All Pending Interviews",
@@ -137,19 +112,19 @@ export function InterviewScheduleBoard({
             tone: "information",
           },
           {
-            icon: ListTodo,
+            icon: <ListTodo aria-hidden="true" />,
             label: "Need Scheduling",
             value: awaitingSchedule.length,
             tone: "warning",
           },
           {
-            icon: ClipboardCheck,
+            icon: <ClipboardCheck aria-hidden="true" />,
             label: "All Scheduled",
             value: planned.length,
             tone: "brand",
           },
           {
-            icon: CheckCircle2,
+            icon: <CheckCircle2 aria-hidden="true" />,
             label: "Applications",
             value: interviews.length,
             tone: "accent",
@@ -285,17 +260,33 @@ export function InterviewResultsWorkspace({
       }}
       open={selectedRecord !== null}
     >
-      <SummaryCards
+      <MetricSummary
+        scope="Loaded interview records · before table filters"
         items={[
           {
-            icon: ClipboardCheck,
+            icon: <ClipboardCheck aria-hidden="true" />,
             label: "Completed Interviews",
             value: completed.length,
             tone: "information",
           },
-          { icon: CheckCircle2, label: "Approved", value: approved.length, tone: "positive" },
-          { icon: CalendarClock, label: "On Hold", value: held.length, tone: "warning" },
-          { icon: ListTodo, label: "Rejected", value: rejected.length, tone: "inactive" },
+          {
+            icon: <CheckCircle2 aria-hidden="true" />,
+            label: "Approved",
+            value: approved.length,
+            tone: "positive",
+          },
+          {
+            icon: <CalendarClock aria-hidden="true" />,
+            label: "On Hold",
+            value: held.length,
+            tone: "warning",
+          },
+          {
+            icon: <ListTodo aria-hidden="true" />,
+            label: "Rejected",
+            value: rejected.length,
+            tone: "inactive",
+          },
         ]}
       />
  <SectionCard>

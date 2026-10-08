@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
@@ -8,7 +9,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import {
  OperationalTable,
@@ -56,14 +56,22 @@ export default async function TechnicalReviewPage() {
         />
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard tone="warning" label="Pending Review" value={summary.pendingReview} />
-        <MetricCard tone="warning"
-          label="Need Clarification"
-          value={summary.needClarification}
-        />
-        <MetricCard tone="information" label="Open Review Tasks" value={summary.openReviewTasks} />
-      </section>
+      <MetricSummary
+        scope="All technical review tasks · before table filters"
+        items={[
+          { tone: "warning", label: "Pending Review", value: summary.pendingReview },
+          {
+            tone: "warning",
+            label: "Need Clarification",
+            value: summary.needClarification,
+          },
+          {
+            tone: "information",
+            label: "Open Review Tasks",
+            value: summary.openReviewTasks,
+          },
+        ]}
+      />
 
  <SectionCard>
         <CardHeader>

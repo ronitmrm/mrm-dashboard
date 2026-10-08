@@ -17,7 +17,6 @@ import {
 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
-import { MetricCard } from "@workspace/ui/components/card"
 import {
   OperationalTable,
   TableBody,
@@ -36,6 +35,7 @@ import {
   DataTableCard,
 } from "@/components/dashboard/dashboard-components"
 import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -134,27 +134,20 @@ export default async function CommercialPage() {
         title="Commercial Workflow Dashboard"
       />
 
-      <DashboardSection
-        description="A concise view of commercial volume, conversion, and work requiring attention."
-        title="Key Performance Indicators"
-      >
-        <DashboardGrid>
-          {stats.map((stat) => {
-            const Icon = stat.icon
-            return (
-              <MetricCard
-                action={<PinDashboardMetricButton metricId={stat.metricId} />}
-                description={stat.description}
-                icon={<Icon aria-hidden="true" />}
-                key={stat.label}
-                label={stat.label}
-                tone={stat.tone}
-                value={stat.value}
-              />
-            )
-          })}
-        </DashboardGrid>
-      </DashboardSection>
+      <MetricSummary
+        scope="Commercial workflow · all records, before table filters"
+        items={stats.map((stat) => {
+          const Icon = stat.icon
+          return {
+            action: <PinDashboardMetricButton metricId={stat.metricId} />,
+            description: stat.description,
+            icon: <Icon aria-hidden="true" />,
+            label: stat.label,
+            tone: stat.tone,
+            value: stat.value,
+          }
+        })}
+      />
 
       <DashboardSection
         description="Volume and queue comparisons using the same source definitions as before."

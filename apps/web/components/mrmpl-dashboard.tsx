@@ -57,7 +57,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
   type MetricCardTone,
 } from "@workspace/ui/components/card"
 import { Empty } from "@workspace/ui/components/empty"
@@ -3832,7 +3831,7 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
         title="Production Dashboard"
       />
 
-      <DashboardSection title="Key Performance Indicators">
+      <DashboardSection className="contents" title="Key Performance Indicators">
         <MetricSummary
           scope="Work-order volume and dispatch position across every production unit."
           items={[
@@ -17251,17 +17250,15 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
         <CardTitle>Next Tool / Fixture Number</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
-          {rows.map((row) => (
-            <MetricCard
-              description={`${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`}
-              key={str(row.category)}
-              label={str(row.category)}
-              tone="information"
-              value={str(row.recommendedNumber || row.nextNew)}
-            />
-          ))}
-        </section>
+        <MetricSummary
+          scope="Tool and fixture recommendations · current records"
+          items={rows.map((row) => ({
+            description: `${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`,
+            label: str(row.category),
+            tone: "information",
+            value: str(row.recommendedNumber || row.nextNew),
+          }))}
+        />
       </CardContent>
     </SectionCard>
   )
@@ -17906,17 +17903,15 @@ function TrackingSummary({
   tones?: MetricCardTone[]
 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
-      {items.map(([label, value, onClick], index) => (
-        <MetricCard
-          key={label}
-          label={label}
-          onClick={onClick}
-          tone={tones?.[index] ?? "information"}
-          value={value}
-        />
-      ))}
-    </div>
+    <MetricSummary
+      scope="Current view"
+      items={items.map(([label, value, onClick], index) => ({
+        label,
+        onClick,
+        tone: tones?.[index] ?? "information",
+        value,
+      }))}
+    />
   )
 }
 

@@ -1,3 +1,4 @@
+import { MetricSummary } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -10,7 +11,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  MetricCard,
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -127,20 +127,26 @@ export default async function QuoteDetailPage({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <MetricCard tone="information"
-              label="Rate Before Rejection"
-              value={`₹ ${money(quote.rateInr)}`}
-            />
-            <MetricCard tone="brand"
-              label="Total Inr"
-              value={`₹ ${money(quote.totalRateInr)}`}
-            />
-            <MetricCard tone="positive"
-              label="Approved Usd / Pc"
-              value={`$ ${money(quote.approvedPriceUsd)}`}
-            />
-          </div>
+          <MetricSummary
+            scope="Current quote · saved rates"
+            items={[
+              {
+                tone: "information",
+                label: "Rate Before Rejection",
+                value: `₹ ${money(quote.rateInr)}`,
+              },
+              {
+                tone: "brand",
+                label: "Total Inr",
+                value: `₹ ${money(quote.totalRateInr)}`,
+              },
+              {
+                tone: "positive",
+                label: "Approved Usd / Pc",
+                value: `$ ${money(quote.approvedPriceUsd)}`,
+              },
+            ]}
+          />
         </CardContent>
  </SectionCard>
 
