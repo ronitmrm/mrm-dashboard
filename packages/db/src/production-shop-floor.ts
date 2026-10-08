@@ -4886,6 +4886,134 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async readCompletedSetups(input: {
+      organizationId: string
+      productionFloorCode: string
+    }) {
+      const result = await pool.query<{
+        id: string; rowVersion: string; jobCardNumber: string; partCode: string
+        optionNumber: string; setupNumber: number; machineNumber: string; completedAt: Date
+      }>(`SELECT state.id, state.row_version::text AS "rowVersion",
+          work_order.job_card_number AS "jobCardNumber", item.uid AS "partCode",
+          route.route_code AS "optionNumber", setup.setup_number AS "setupNumber",
+          machine.machine_number AS "machineNumber", state.completed_at AS "completedAt"
+        FROM manufacturing.shop_floor_setup_state state
+        JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+        JOIN catalog.items item ON item.id = work_order.item_id
+        JOIN manufacturing.route_options route ON route.id = state.route_option_id
+        JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+        JOIN catalog.machines machine ON machine.id = state.machine_id
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        WHERE state.organization_id = $1 AND floor.code = $2
+          AND state.stage = 'item_complete' AND NOT state.active
+        ORDER BY state.completed_at DESC, state.id`,
+        [input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
+      return { rows: result.rows }
+    },
+
+    async reopenSetup(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: string
+      setupStateId: string
+      expectedRowVersion: number
+      reason: string
+    }) {
+      const reason = requiredText(input.reason, "Reopen reason")
+      return transaction(pool, async (client) => {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(state.machine_id::text))
+          FROM manufacturing.shop_floor_setup_state state
+          WHERE state.id = $1 AND state.organization_id = $2`, [input.setupStateId, input.organizationId])
+        const result = await client.query<{
+          id: string; machine_id: string; work_order_id: string; operation_setup_id: string
+          route_option_id: string
+          row_version: string; stage: string; active: boolean; completed_at: Date | null
+          source_payload: Record<string, unknown>; snapshot: Record<string, unknown>
+          context: Record<string, unknown>
+        }>(`SELECT state.*, to_jsonb(state) AS snapshot,
+            jsonb_build_object('jcNo', work_order.job_card_number, 'partCode', item.uid,
+              'setupNo', setup.setup_number::text, 'optionNumber', route.route_code,
+              'machine', machine.machine_number, 'productionFloorCode', floor.code) AS context
+          FROM manufacturing.shop_floor_setup_state state
+          JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+          JOIN catalog.items item ON item.id = work_order.item_id
+          JOIN manufacturing.route_options route ON route.id = state.route_option_id
+          JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+          JOIN catalog.machines machine ON machine.id = state.machine_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          WHERE state.id = $1 AND state.organization_id = $2 AND floor.code = $3
+          FOR UPDATE OF state, work_order`,
+          [input.setupStateId, input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
+        const state = result.rows[0]
+        if (!state || state.stage !== "item_complete" || state.active ||
+          Number(state.row_version) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Setup changed. Refresh the completed setups before reopening.")
+        }
+        const workOrder = await workOrderContext(client, input.organizationId, String(state.context.jcNo), input.productionFloorCode)
+        if (workOrder.route_option_id !== state.route_option_id) {
+          throw new ShopFloorConflictError("This setup belongs to an earlier route. Review the current route before reopening.")
+        }
+        const open = await client.query(`SELECT id FROM manufacturing.production_sessions
+          WHERE work_order_id = $1 AND operation_setup_id = $2 AND machine_id = $3
+            AND status = 'open' AND reversed_at IS NULL LIMIT 1`,
+          [state.work_order_id, state.operation_setup_id, state.machine_id])
+        if (open.rows[0]) throw new ShopFloorConflictError("Close the open production session before reopening this setup.")
+        // Keep the closed session consistent when its completion was the mistake.
+        const sessionId = typeof state.source_payload.sessionId === "string" ? state.source_payload.sessionId : ""
+        if (sessionId) {
+          const session = await client.query<{
+            id: string; production_entry_id: string; end_reason: string
+            source_payload: Record<string, unknown>; snapshot: Record<string, unknown>
+          }>(`SELECT session.id, session.production_entry_id, session.end_reason,
+              session.source_payload, to_jsonb(session) AS snapshot
+            FROM manufacturing.production_sessions session
+            WHERE session.id = $1 AND session.organization_id = $2
+              AND session.work_order_id = $3 AND session.operation_setup_id = $4
+              AND session.machine_id = $5 AND session.status = 'closed' AND session.reversed_at IS NULL
+            FOR UPDATE`, [sessionId, input.organizationId, state.work_order_id, state.operation_setup_id, state.machine_id])
+          const current = session.rows[0]
+          if (current?.end_reason === "item_complete") {
+            const payload = { ...current.source_payload, endReason: "manual_stop", correctionReason: reason, correctedAt: new Date().toISOString() }
+            await client.query(`UPDATE manufacturing.production_entries SET source_payload = $1 WHERE id = $2`, [payload, current.production_entry_id])
+            const corrected = await client.query<{ snapshot: Record<string, unknown> }>(`UPDATE manufacturing.production_sessions
+              SET end_reason = 'manual_stop', source_payload = $1, updated_at = now(), row_version = row_version + 1
+              WHERE id = $2 RETURNING to_jsonb(production_sessions) AS snapshot`, [payload, current.id])
+            await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+              target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
+              VALUES ($1, 'production.session.corrected', 'manufacturing', 'production_sessions', $2, $3, $4, $5, $6,
+                '{"correctionType":"setup_reopen"}', 'mrm-dashboard', 'production_session_correction', $7)`,
+              [input.organizationId, current.id, input.actorUserId ?? null, reason, current.snapshot, corrected.rows[0]!.snapshot, randomUUID()])
+          }
+        }
+        await client.query(`UPDATE manufacturing.shop_floor_stage_events
+          SET reversed_at = now(), reason = concat_ws(' · ', reason, $1::text)
+          WHERE setup_state_id = $2 AND to_stage = 'item_complete' AND reversed_at IS NULL
+            AND occurred_at = $3`, [reason, state.id, state.completed_at])
+        await client.query(`UPDATE manufacturing.setup_completion_events
+          SET reversed_at = now(), notes = concat_ws(' · ', notes, $1::text)
+          WHERE work_order_id = $2 AND operation_setup_id = $3 AND machine_id = $4
+            AND completed_at = $5 AND reversed_at IS NULL`,
+          [reason, state.work_order_id, state.operation_setup_id, state.machine_id, state.completed_at])
+        const payload = { ...state.context, stage: "planned", actionType: "Reopen Setup",
+          reason, reopenedAt: new Date().toISOString(), completedAt: null }
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(`UPDATE manufacturing.shop_floor_setup_state
+          SET stage = 'planned', active = false, completed_at = NULL, source_payload = $1,
+            updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+          WHERE id = $3 RETURNING to_jsonb(shop_floor_setup_state) AS snapshot`, [payload, input.actorUserId ?? null, state.id])
+        await client.query(`INSERT INTO manufacturing.shop_floor_stage_events (organization_id, setup_state_id,
+          from_stage, to_stage, machine_id, actor_user_id, reason, source_system, source_table, source_id, source_payload)
+          VALUES ($1, $2, 'item_complete', 'planned', $3, $4, $5, 'mrm-dashboard', 'shop_floor_status', $6, $7)`,
+          [input.organizationId, state.id, state.machine_id, input.actorUserId ?? null, reason, randomUUID(), payload])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+          target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
+          VALUES ($1, 'production.setup.reopened', 'manufacturing', 'shop_floor_setup_state', $2, $3, $4, $5, $6,
+            '{"returnedStage":"planned"}', 'mrm-dashboard', 'setup_reopen', $7)`,
+          [input.organizationId, state.id, input.actorUserId ?? null, reason, state.snapshot, updated.rows[0]!.snapshot, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: state.id, stage: "planned" as const }
+      })
+    },
+
     async recordSetupCompletion(input: {
       actorUserId?: string | null
       completedBy: string

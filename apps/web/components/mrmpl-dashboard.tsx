@@ -222,6 +222,7 @@ import {
   stalePlanningRefreshKey,
 } from "@/lib/planning-refresh-policy"
 import { plannerActionHistoryRows } from "@/lib/planner-action-history"
+import { ReopenSetupPlannerForm } from "@/components/reopen-setup-planner-form"
 import {
   machineIssueNeedsReview,
   openMachineIssues,
@@ -4031,6 +4032,11 @@ function PlannerDecisionConsole({
       onActionChange={setActiveAction}
       onViewChange={setActiveView}
       panels={{
+        setupReopen: (
+          <ReopenSetupPlannerForm floor={productionFloorFromLocation()} onSave={(setup, reason) =>
+            submitAction("setup-reopen", { setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion),
+              productionFloorCode: productionFloorFromLocation(), reason }, { throwOnError: true })} />
+        ),
         priority: (
           <PlannerPriorityForm
             productionControl={productionControl}

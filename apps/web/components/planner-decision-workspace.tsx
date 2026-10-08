@@ -12,6 +12,7 @@ import {
   PackageX,
   PlusCircle,
   Route,
+  RotateCcw,
   Wrench,
 } from "lucide-react"
 
@@ -32,6 +33,7 @@ export type PlannerDecisionAction =
   | "early-downstream"
   | "raw-material-rejection"
   | "route-change"
+  | "setup-reopen"
 
 export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
 
@@ -46,6 +48,7 @@ type PlannerDecisionPanels = {
   priority: ReactNode
   rawMaterialRejection: ReactNode
   routeChange: ReactNode
+  setupReopen: ReactNode
 }
 
 type PlannerDecisionWorkspaceProps = {
@@ -60,6 +63,13 @@ type PlannerDecisionWorkspaceProps = {
 }
 
 const actionChoices = [
+  {
+    key: "setup-reopen",
+    title: "Reopen Setup",
+    description: "Correct a setup marked Item Complete by mistake.",
+    detail: "Return it to Planned with a required reason and recorded history.",
+    icon: RotateCcw,
+  },
   {
     key: "priority",
     title: "Change Priority",
@@ -137,6 +147,7 @@ export function PlannerDecisionWorkspace({
         "early-downstream": panels.earlyDownstream,
         "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
+        "setup-reopen": panels.setupReopen,
       }[activeAction]
     : null
 

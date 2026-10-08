@@ -1218,6 +1218,18 @@ describe("production and shop-floor workflows", () => {
     })
     expect(events.rows.filter((row) => row.eventType === "session_correction"))
       .toHaveLength(3)
+
+    const completedSetup = (await repository.readCompletedSetups({ organizationId, productionFloorCode: "conventional" }))
+      .rows.find(row => row.jobCardNumber === firstJobCard && row.machineNumber === firstMachine)!
+    const reopen = { organizationId, productionFloorCode: "conventional", setupStateId: completedSetup.id,
+      expectedRowVersion: Number(completedSetup.rowVersion), reason: "Item Complete was entered by mistake." }
+    await repository.reopenSetup(reopen)
+    expect((await pool.query("SELECT stage, active, completed_at FROM manufacturing.shop_floor_setup_state WHERE id = $1", [completedSetup.id])).rows[0])
+      .toEqual({ stage: "planned", active: false, completed_at: null })
+    const reopenedSession = (await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", sessionId: session.id })).rows[0]
+    expect(reopenedSession).toMatchObject({ goodPieces: 61, totalPieces: 64, rejectedPieces: 3, endReason: "manual_stop" })
+    expect((await pool.query("SELECT count(*)::int AS count FROM audit.events WHERE target_id = $1 AND event_type = 'production.setup.reopened'", [completedSetup.id])).rows[0]).toEqual({ count: 1 })
+    await expect(repository.reopenSetup(reopen)).rejects.toThrow("Setup changed")
   })
 
   test("reverses mistaken downtime while moving a closed session end earlier", async () => {

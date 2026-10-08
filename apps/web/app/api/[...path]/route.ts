@@ -31,7 +31,7 @@ import {
 } from "../../../lib/auth/operational-entry-access"
 import { operationalEntryCapability } from "../../../lib/auth/operational-entry-capabilities"
 import { masterRecordCapability } from "../../../lib/auth/master-record-access"
-import { hasProductionFloorTaskCapability } from "../../../lib/auth/production-floor-task-capabilities"
+import { hasProductionFloorTaskCapability, productionFloorTaskCapabilities } from "../../../lib/auth/production-floor-task-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
@@ -930,6 +930,13 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "setup-reopen") {
+      const floor = requiredProductionFloor(search.get("floor"))
+      return json(await withProductionRepository(request,
+        productionFloorTaskCapabilities[floor].plan_override,
+        ({ organizationId, repository }) => repository.readCompletedSetups({ organizationId, productionFloorCode: floor })))
+    }
+
     if (path === "production-sessions") {
       return json(
         await withProductionRepository(
@@ -1347,6 +1354,18 @@ async function post(request: NextRequest, context: RouteContext) {
           rowsUpdated: 1,
         })
       )
+    }
+
+    if (path === "setup-reopen") {
+      const result = await withProductionRepository(request, "planning.override.write",
+        ({ actorUserId, organizationId, repository }) => repository.reopenSetup({
+          actorUserId, organizationId, productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+          setupStateId: requiredDashboardText(body.setupStateId, "Completed setup"),
+          expectedRowVersion: numeric(body.expectedRowVersion), reason: text(body.reason),
+        }))
+      return json(await withPlanningRefresh(request, path, body, {
+        ...result, message: "Setup reopened to Planned. Assign its remaining work through Planner Actions.", rowsUpdated: 1,
+      }))
     }
 
     if (path === "plan-override") {
@@ -2619,6 +2638,7 @@ const knownDashboardApiPaths = new Set([
   "machine-constraint-review",
   "mark-complete",
   "plan-override",
+  "setup-reopen",
   "planner-priority",
   "raw-material-rejection",
   "rm-inward-delete",

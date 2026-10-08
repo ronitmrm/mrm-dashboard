@@ -344,6 +344,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     input.currentShopFloorStatusRows ?? latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
+  const setupReopenRows = entryRows(byType, "shop_floor_status").filter(row => rowText(row, "actionType") === "Reopen Setup");
   const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
@@ -382,6 +383,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     maintenanceScheduleRows,
     maintenanceTaskRows,
     shopFloorStatusRows,
+    setupReopenRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
     routeRows,
@@ -468,6 +470,7 @@ function buildProductionAnalysis({
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
+  setupReopenRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
   routeRows,
@@ -519,6 +522,7 @@ function buildProductionAnalysis({
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
+  setupReopenRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
@@ -850,6 +854,7 @@ function buildProductionAnalysis({
     maintenanceScheduleRows,
     maintenanceTaskRows,
     shopFloorStatusRows,
+    setupReopenRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
     routeSelections,
@@ -1042,6 +1047,7 @@ function buildProductionControl({
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
+  setupReopenRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
   routeSelections,
@@ -1084,6 +1090,7 @@ function buildProductionControl({
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
+  setupReopenRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
   routeSelections: ActionRow[];
@@ -1479,6 +1486,8 @@ function buildProductionControl({
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
   const plannerActionLog = [
+    ...setupReopenRows
+      .map(row => ({ ...row, createdAt: row.reopenedAt, actionType: "Reopen Setup" })),
     ...plannerPriorities.map((row) => ({ ...row, actionType: "Priority" })),
     ...machineConstraints.map((row) => ({ ...row, actionType: "Machine Unavailable" })),
     ...planOverrides.map((row) => ({

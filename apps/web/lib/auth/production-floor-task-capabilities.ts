@@ -157,6 +157,7 @@ const directMutationTasks = {
   "machine-constraint-review": "machine_constraint",
   "mark-complete": "job_card_completion",
   "plan-override": "plan_override",
+  "setup-reopen": "plan_override",
   "planner-priority": "planner_priority",
   "raw-material-rejection": "raw_material_rejection",
   reschedule: "planner_recalculation",
