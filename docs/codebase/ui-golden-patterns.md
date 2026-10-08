@@ -61,8 +61,9 @@ currencies. One useful card is enough for a simple master. Forms, navigation-onl
 screens and individual record dossiers need no artificial totals. Preserve
 existing dashboard cards; do not duplicate them. Keep the summary in the same
 container as the content it summarizes, rather than a wrapper containing only
-the cards. Shared cards use `overflow-clip` so they do not create a competing
-scroll container. `OperationalTable` continues to own scrolling for its rows.
+the cards. Shared cards use `min-w-0` so wide tables cannot expand their grid or
+flex layout, and `overflow-clip` so they do not create a competing scroll
+container. `OperationalTable` continues to own scrolling for its rows.
 
 ## Operational tables
 
