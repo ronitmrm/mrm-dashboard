@@ -7,6 +7,7 @@ const autoRefreshActionPaths = new Set([
   "machine-constraint-review",
   "plan-override",
   "quality-parameter-set",
+  "quality-measuring-program",
   "raw-material-rejection",
   "work-order-cancellation",
   "route-change",
@@ -56,6 +57,7 @@ export function shouldQueuePlanningRefresh(path: string, body: Record<string, un
 }
 
 export function planningRefreshStatusMessage(autoRefresh: boolean, path = "", body: Record<string, unknown> = {}) {
+  if (path === "quality-measuring-program") return "Program availability refresh queued.";
   if (autoRefresh && productionMasterTableEntryTypes.some((entry) => entry === text(body.entryType))) return "Master table refresh queued.";
   if (autoRefresh) return "Planning recalculation queued.";
   if (isWorkflowProgressChange(path, body)) return "Planning recalculation not required for this workflow step.";

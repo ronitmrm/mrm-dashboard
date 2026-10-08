@@ -74,6 +74,7 @@ export function productionMasterSnapshot(
         "setupName",
         "machineFamily",
         "machineType",
+        "measuringProgramAvailable",
       ])
     if (master === "route") {
       lookup("setupNameMasterRows", ["setupName"])

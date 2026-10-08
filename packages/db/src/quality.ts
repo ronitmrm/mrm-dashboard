@@ -1670,6 +1670,42 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       )
     },
 
+    async saveMeasuringProgramAvailability(input: {
+      organizationId: string
+      productionFloorCode: string
+      itemUid: string
+      routeCode: string
+      operationSetupCode: string
+      available: boolean
+      actorUserId?: string | null
+    }) {
+      return transaction(pool, async (client) => {
+        const context = await routeAndSetupFor(
+          client,
+          input.organizationId,
+          input.itemUid,
+          input.routeCode,
+          input.operationSetupCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
+        )
+        const result = await client.query<{ id: string }>(
+          `UPDATE manufacturing.operation_setups
+           SET source_payload = CASE
+             WHEN jsonb_typeof(source_payload->'payload') = 'object'
+             THEN jsonb_set(source_payload, '{payload,measuringProgramAvailable}', to_jsonb($1::boolean))
+             ELSE jsonb_set(COALESCE(source_payload, '{}'::jsonb), '{measuringProgramAvailable}', to_jsonb($1::boolean))
+           END,
+             updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+           WHERE id = $3 AND organization_id = $4 AND active
+           RETURNING id`,
+          [input.available, input.actorUserId ?? null, context.operation_setup_id, input.organizationId]
+        )
+        if (!result.rows[0]) throw new Error("The selected setup is no longer available.")
+        await queueDashboardRefresh(client, input.organizationId)
+        return { ...result.rows[0], available: input.available }
+      })
+    },
+
     async saveParameterSet(definitions: ParameterDefinitionInput[]) {
       if (!definitions.length)
         throw new Error("No quality parameter changes were supplied.")

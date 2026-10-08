@@ -593,6 +593,41 @@ export async function executePostgresOperationalEntry(
   )
 }
 
+export async function savePostgresMeasuringProgramAvailability(
+  request: NextRequest,
+  input: {
+    partNo: string
+    optionNumber: string
+    setupNo: string
+    available: boolean
+    productionFloorCode: unknown
+  }
+) {
+  const productionFloorCode = requiredProductionFloor(input.productionFloorCode)
+  const actor = await authorizedActor(
+    request,
+    masterCapability("quality_parameter_master", "save", productionFloorCode)
+  )
+  return withPostgresRepository(
+    createQualityRepository(actor),
+    async (repository) =>
+      repository.saveMeasuringProgramAvailability({
+        organizationId: await repository.organizationIdForCode("MRMPL"),
+        productionFloorCode,
+        itemUid: input.partNo,
+        routeCode: input.optionNumber,
+        operationSetupCode: input.setupNo,
+        available: input.available,
+        actorUserId: actor.actorUserId,
+      }),
+    {
+      operation: "quality.measuring_program.write",
+      requestId: telemetryRequestId(request),
+      subsystem: "quality",
+    }
+  )
+}
+
 export async function savePostgresQualityParameterSet(
   request: NextRequest,
   changes: Array<{ payload: Record<string, unknown>; reviseParameter: boolean }>
