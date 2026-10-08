@@ -1701,7 +1701,6 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           [input.available, input.actorUserId ?? null, context.operation_setup_id, input.organizationId]
         )
         if (!result.rows[0]) throw new Error("The selected setup is no longer available.")
-        await queueDashboardRefresh(client, input.organizationId)
         return { ...result.rows[0], available: input.available }
       })
     },

@@ -1076,7 +1076,6 @@ async function post(request: NextRequest, context: RouteContext) {
       return json({
         ...result,
         savedText: "Measuring machine program availability saved.",
-        planningRefresh: { mode: "queued", ok: true },
       })
     }
 

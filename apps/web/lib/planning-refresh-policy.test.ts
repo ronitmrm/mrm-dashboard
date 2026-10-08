@@ -23,11 +23,11 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("master-delete")).toBe(true);
-    expect(shouldQueuePlanningRefresh("quality-measuring-program")).toBe(true);
-    expect(planningRefreshStatusMessage(true, "quality-measuring-program")).toBe("Program availability refresh queued.");
   });
 
   it("does not recalculate for workflow progress that does not move planning dates", () => {
+    expect(shouldQueuePlanningRefresh("quality-measuring-program")).toBe(false);
+    expect(planningRefreshStatusMessage(false, "quality-measuring-program")).toBe("Planning recalculation not required.");
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "raw_material_at_machine" } })).toBe(false);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "presetting" } })).toBe(false);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "setting" } })).toBe(false);
