@@ -767,6 +767,7 @@ async function plannerAssignmentMode(
   input: {
     fromMachineId: string
     operationSetupId: string
+    releasedAt?: string
     targetMachineId: string
     workOrderId: string
   }
@@ -779,6 +780,7 @@ async function plannerAssignmentMode(
         AND (operation_setup_id = $2 OR operation_setup_id IS NULL)
         AND target_machine_id = $3
         AND (source_machine_id = $4 OR source_machine_id IS NULL)
+        AND ($5::timestamptz IS NULL OR occurred_at >= $5)
         AND reversed_at IS NULL
       ORDER BY occurred_at DESC
       LIMIT 1
@@ -788,6 +790,7 @@ async function plannerAssignmentMode(
       input.operationSetupId,
       input.targetMachineId,
       input.fromMachineId,
+      input.releasedAt ?? null,
     ]
   )
   if (!result.rows[0]) return null
@@ -4596,9 +4599,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           id: string
           machine_id: string | null
           stage: string
+          active: boolean
+          updated_at: string
         }>(
           `
-            SELECT id, machine_id, stage
+            SELECT id, machine_id, stage, active, updated_at::text AS updated_at
             FROM manufacturing.shop_floor_setup_state
             WHERE work_order_id = $1 AND route_option_id = $2
               AND operation_setup_id = $3
@@ -4608,24 +4613,27 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [workOrder.work_order_id, workOrder.route_option_id, setupId, machineId]
         )
         const existingOnMachine = current.rows.find((row) => row.machine_id === machineId)
-        const otherMachineState = current.rows.find((row) => row.machine_id && row.machine_id !== machineId)
-        const assignmentMode = active && !existingOnMachine && otherMachineState?.machine_id
+        const earlierStageOnSameMachine = Boolean(existingOnMachine &&
+          (stageRanks.get(existingOnMachine.stage) ?? -1) > (stageRanks.get(stage) ?? -1))
+        const claimingMachine = active && !earlierStageOnSameMachine
+        // Released planner assignments remain history, not machine ownership.
+        const otherMachineState = current.rows.find((row) => row.active && row.machine_id && row.machine_id !== machineId)
+        const assignmentMode = claimingMachine && !existingOnMachine?.active && otherMachineState?.machine_id
           ? await plannerAssignmentMode(client, {
             fromMachineId: otherMachineState.machine_id,
             operationSetupId: setupId,
+            releasedAt: existingOnMachine?.updated_at,
             targetMachineId: machineId,
             workOrderId: workOrder.work_order_id,
           }) : null
-        if (active && otherMachineState && !existingOnMachine && !assignmentMode) {
-          throw new Error(
+        if (claimingMachine && otherMachineState && !existingOnMachine?.active && !assignmentMode) {
+          throw new ShopFloorConflictError(
             "This setup is already locked to another machine. Use the planner machine switch before moving it."
           )
         }
         const stateToUpdate = existingOnMachine
           ?? (assignmentMode === "move" ? otherMachineState : undefined)
-        const earlierStageOnSameMachine = Boolean(existingOnMachine &&
-          (stageRanks.get(existingOnMachine.stage) ?? -1) > (stageRanks.get(stage) ?? -1))
-        if (active && !earlierStageOnSameMachine) {
+        if (claimingMachine) {
           const occupied = await client.query<{
             id: string
             job_card_number: string
