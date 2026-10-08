@@ -200,6 +200,8 @@ export type RecruitmentEmployeeAssignmentRow = {
   employeeName: string
   employeeCode: string | null
   employeePhone: string | null
+  offerLetterId: string | null
+  offerLetterReference: string | null
   joinedOn: string | null
   probationDueOn: string | null
   probationRemark: string | null
@@ -3358,6 +3360,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employee_name: string
         employee_code: string | null
         employee_phone: string | null
+        offer_letter_id: string | null
+        offer_letter_reference: string | null
         joined_on: string | null
         probation_due_on: string | null
         probation_remark: string | null
@@ -3380,6 +3384,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              ELSE nullif(btrim(candidate.phone), '')
            END AS employee_phone,
            assignment.employee_code, assignment.joined_on::text,
+           offer.id AS offer_letter_id, offer.reference_number AS offer_letter_reference,
            assignment.probation_due_on::text, remark_event.reason AS probation_remark,
            assignment.legacy_probation_completed,
            legacy_event.recorded_on AS legacy_probation_recorded_on,
@@ -3405,6 +3410,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND combined.organization_id = assignment.organization_id
          LEFT JOIN recruitment.departments department ON department.id = post.department_id
          LEFT JOIN recruitment.designations designation ON designation.id = post.designation_id
+         LEFT JOIN LATERAL (
+           SELECT letter.id, letter.reference_number
+           FROM recruitment.employment_letters letter
+           WHERE letter.organization_id = assignment.organization_id
+             AND letter.application_id = assignment.application_id
+             AND letter.letter_type = 'offer'
+             AND letter.pdf_bytes IS NOT NULL
+           ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1
+         ) offer ON true
          LEFT JOIN LATERAL (
            SELECT event.occurred_at::date::text AS recorded_on
            FROM audit.events event
@@ -3447,6 +3461,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employeeName: row.employee_name,
         employeeCode: row.employee_code,
         employeePhone: row.employee_phone,
+        offerLetterId: row.offer_letter_id,
+        offerLetterReference: row.offer_letter_reference,
         joinedOn: row.joined_on,
         probationDueOn: row.probation_due_on,
         probationRemark: row.probation_remark,
