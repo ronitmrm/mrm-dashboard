@@ -5,6 +5,7 @@ import { unstable_rethrow } from "next/navigation"
 import { createStoreRepository } from "@workspace/db"
 import { storeUnitValue } from "@/lib/store-units"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
 
 import {
   csvValue,
@@ -62,27 +63,28 @@ function normalizedCsvDate(value: string, label: string) {
 export async function importStoreMasterCsvAction(formData: FormData) {
   const master = normalizeStoreMasterKey(formData.get("store_master"))
   await requireCapability(masterCapability(master, "import"), "/masters")
-  let imported = 0
+  let rowNumber = 2
   try {
     const rows = await readMasterCsv(formData.get("master_csv_file"))
-    const references = await readReferences(master)
-    for (const row of rows) {
-      const result = await importRow(
-        master,
-        resolveReferences(master, row, references)
-      )
-      if (result?.error) throw new Error(result.error)
-      imported += 1
-    }
+    await withCsvImportTransaction(async () => {
+      const references = await readReferences(master)
+      for (const [index, row] of rows.entries()) {
+        rowNumber = index + 2
+        const result = await importRow(
+          master,
+          resolveReferences(master, row, references)
+        )
+        if (result?.error) throw new Error(result.error)
+      }
+    })
   } catch (error) {
     unstable_rethrow(error)
     return {
-      error: `Row ${imported + 2}: ${error instanceof Error ? error.message : "Import failed."} ${imported} row(s) imported before stopping.`,
+      error: `Row ${rowNumber}: ${error instanceof Error ? error.message : "Import failed."} No rows were imported. Correct the file and upload it again.`,
     }
-  } finally {
-    revalidatePath("/store/masters")
-    revalidatePath("/")
   }
+  revalidatePath("/store/masters")
+  revalidatePath("/")
 }
 
 async function readReferences(master: StoreMasterKey) {

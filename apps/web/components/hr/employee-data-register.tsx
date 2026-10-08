@@ -26,7 +26,7 @@ export function EmployeeDataRegister({ assignments, canManage }: {
         </CardDescription>
       </CardHeader>
       <CardContent className="min-w-0">
-        <OperationalTable filterStorageKey="hr-employee-data" containerClassName="max-h-[36rem] rounded-md border">
+        <OperationalTable filterStorageKey="hr-employee-data" containerClassName="max-h-[max(20rem,calc(100svh-var(--header-height)-18rem))] rounded-md border">
           <TableHeader><TableRow>
             <TableHead>Employee ID</TableHead><TableHead>Employee Name</TableHead>
             <TableHead>Department / Combined ID</TableHead><TableHead>Designation</TableHead>

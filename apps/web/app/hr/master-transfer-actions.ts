@@ -15,6 +15,7 @@ import {
 } from "@/lib/hr-master-csv"
 import { csvValue, readMasterCsv } from "@/lib/master-data-csv"
 import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
 
 const hrPath = "/hr"
 
@@ -44,14 +45,18 @@ export async function importApprovedPostsCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       approvedPostInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(masterCapability("approved_posts", "create"))
-    for (const input of inputs) {
-      await context.repository.upsertPost({
-        ...input,
-        actorUserId: context.actorUserId,
-        organizationId: context.organizationId,
-      })
-    }
+    await withCsvImportTransaction(async () => {
+      context = await repositoryContext(
+        masterCapability("approved_posts", "create")
+      )
+      for (const input of inputs) {
+        await context.repository.upsertPost({
+          ...input,
+          actorUserId: context.actorUserId,
+          organizationId: context.organizationId,
+        })
+      }
+    })
     outcome = {
       success: `${inputs.length} approved post${inputs.length === 1 ? "" : "s"} imported successfully.`,
     }
@@ -71,70 +76,76 @@ export async function importApprovedPostsCsvAction(formData: FormData) {
 
 export async function importRecruitmentMastersCsvAction(formData: FormData) {
   return withCsvImportFeedback(async () => {
-  const kind =
-    formData.get("master_kind")?.toString() === "designation"
-      ? "designation"
-      : "department"
-  const rows = await readMasterCsv(formData.get("master_csv_file"))
-  const context = await repositoryContext(
-    masterCapability(kind, "save")
-  )
-  try {
-    for (const [index, row] of rows.entries()) {
-      const name = csvValue(row, "name", `${kind}_name`)
-      if (!name) throw new Error(`CSV row ${index + 2}: Name is required.`)
-      await context.repository.upsertMaster({
-        actorUserId: context.actorUserId,
-        kind,
-        name,
-        organizationId: context.organizationId,
-      })
-    }
-  } finally {
-    await context.repository.close()
-  }
-  revalidatePath(hrPath)
-  redirect(`${hrPath}?panel=mastersPanel&masterView=dataEntry&kind=${kind}`)
+    const kind =
+      formData.get("master_kind")?.toString() === "designation"
+        ? "designation"
+        : "department"
+    const rows = await readMasterCsv(formData.get("master_csv_file"))
+    await withCsvImportTransaction(async () => {
+      const context = await repositoryContext(masterCapability(kind, "save"))
+      try {
+        for (const [index, row] of rows.entries()) {
+          const name = csvValue(row, "name", `${kind}_name`)
+          if (!name) throw new Error(`CSV row ${index + 2}: Name is required.`)
+          await context.repository.upsertMaster({
+            actorUserId: context.actorUserId,
+            kind,
+            name,
+            organizationId: context.organizationId,
+          })
+        }
+      } finally {
+        await context.repository.close()
+      }
+    })
+    revalidatePath(hrPath)
+    redirect(`${hrPath}?panel=mastersPanel&masterView=dataEntry&kind=${kind}`)
   }, "Recruitment master CSV import failed.")
 }
 
 export async function importJobTemplatesCsvAction(formData: FormData) {
   return withCsvImportFeedback(async () => {
-  const rows = await readMasterCsv(formData.get("master_csv_file"))
-  const context = await repositoryContext(masterCapability("job_templates", "save"))
-  try {
-    for (const [index, row] of rows.entries()) {
-      const templateCode = csvValue(row, "template_code")
-      const name = csvValue(row, "name", "template_name")
-      const designationCode = csvValue(row, "designation_code")
-      if (!templateCode || !name || !designationCode) {
-        throw new Error(
-          `CSV row ${index + 2}: Template Code, Name and Designation Code are required.`
-        )
+    const rows = await readMasterCsv(formData.get("master_csv_file"))
+    await withCsvImportTransaction(async () => {
+      const context = await repositoryContext(
+        masterCapability("job_templates", "save")
+      )
+      try {
+        for (const [index, row] of rows.entries()) {
+          const templateCode = csvValue(row, "template_code")
+          const name = csvValue(row, "name", "template_name")
+          const designationCode = csvValue(row, "designation_code")
+          if (!templateCode || !name || !designationCode) {
+            throw new Error(
+              `CSV row ${index + 2}: Template Code, Name and Designation Code are required.`
+            )
+          }
+          await context.repository.upsertTemplate({
+            actorUserId: context.actorUserId,
+            combinedRoleId: csvValue(row, "combined_role_id") || null,
+            designationCode,
+            education: csvValue(row, "education") || null,
+            experienceRequirement:
+              csvValue(row, "experience_requirement") || null,
+            gender: csvValue(row, "gender") || null,
+            maximumSalary: csvValue(row, "maximum_salary") || null,
+            minimumSalary: csvValue(row, "minimum_salary") || null,
+            name,
+            organizationId: context.organizationId,
+            roleResponsibilities:
+              csvValue(row, "role_responsibilities") || null,
+            shiftEndTime: csvValue(row, "shift_end_time"),
+            shiftStartTime: csvValue(row, "shift_start_time"),
+            shiftType: csvValue(row, "shift_type"),
+            templateCode,
+          })
+        }
+      } finally {
+        await context.repository.close()
       }
-      await context.repository.upsertTemplate({
-        actorUserId: context.actorUserId,
-        combinedRoleId: csvValue(row, "combined_role_id") || null,
-        designationCode,
-        education: csvValue(row, "education") || null,
-        experienceRequirement: csvValue(row, "experience_requirement") || null,
-        gender: csvValue(row, "gender") || null,
-        maximumSalary: csvValue(row, "maximum_salary") || null,
-        minimumSalary: csvValue(row, "minimum_salary") || null,
-        name,
-        organizationId: context.organizationId,
-        roleResponsibilities: csvValue(row, "role_responsibilities") || null,
-        shiftEndTime: csvValue(row, "shift_end_time"),
-        shiftStartTime: csvValue(row, "shift_start_time"),
-        shiftType: csvValue(row, "shift_type"),
-        templateCode,
-      })
-    }
-  } finally {
-    await context.repository.close()
-  }
-  revalidatePath(hrPath)
-  redirect(`${hrPath}?panel=postMasterPanel&masterView=dataEntry`)
+    })
+    revalidatePath(hrPath)
+    redirect(`${hrPath}?panel=postMasterPanel&masterView=dataEntry`)
   }, "Job description template CSV import failed.")
 }
 
@@ -158,14 +169,16 @@ export async function importCandidatesCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       candidateInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(masterCapability("candidates", "save"))
-    for (const input of inputs) {
-      await context.repository.upsertCandidate({
-        ...input,
-        actorUserId: context.actorUserId,
-        organizationId: context.organizationId,
-      })
-    }
+    await withCsvImportTransaction(async () => {
+      context = await repositoryContext(masterCapability("candidates", "save"))
+      for (const input of inputs) {
+        await context.repository.upsertCandidate({
+          ...input,
+          actorUserId: context.actorUserId,
+          organizationId: context.organizationId,
+        })
+      }
+    })
     outcome = {
       success: `${inputs.length} candidate${inputs.length === 1 ? "" : "s"} imported successfully.`,
     }
@@ -203,40 +216,45 @@ export async function importCombinedRolesCsvAction(formData: FormData) {
     const inputs = rows.map((row, index) =>
       combinedRoleInputFromCsvRow(row, index + 2)
     )
-    context = await repositoryContext(masterCapability("combined_approved_posts", "create"))
-    const posts = await context.repository.listPosts(context.organizationId)
-    const postIdByCode = new Map(
-      posts.map((post) => [post.postCode.toUpperCase(), post.id])
-    )
-    const resolved = inputs.map((input, index) => {
-      const postIds = input.postCodes.map((postCode) => {
-        const postId = postIdByCode.get(postCode.toUpperCase())
-        if (!postId) {
+    const importedCount = await withCsvImportTransaction(async () => {
+      context = await repositoryContext(
+        masterCapability("combined_approved_posts", "create")
+      )
+      const posts = await context.repository.listPosts(context.organizationId)
+      const postIdByCode = new Map(
+        posts.map((post) => [post.postCode.toUpperCase(), post.id])
+      )
+      const resolved = inputs.map((input, index) => {
+        const postIds = input.postCodes.map((postCode) => {
+          const postId = postIdByCode.get(postCode.toUpperCase())
+          if (!postId) {
+            throw new Error(
+              `CSV row ${index + 2}: Approved Post ${postCode} was not found.`
+            )
+          }
+          return postId
+        })
+        const primaryPostId = postIdByCode.get(
+          input.primaryPostCode.toUpperCase()
+        )
+        if (!primaryPostId) {
           throw new Error(
-            `CSV row ${index + 2}: Approved Post ${postCode} was not found.`
+            `CSV row ${index + 2}: Primary Approved Post ${input.primaryPostCode} was not found.`
           )
         }
-        return postId
+        return { name: input.name, postIds, primaryPostId }
       })
-      const primaryPostId = postIdByCode.get(
-        input.primaryPostCode.toUpperCase()
-      )
-      if (!primaryPostId) {
-        throw new Error(
-          `CSV row ${index + 2}: Primary Approved Post ${input.primaryPostCode} was not found.`
-        )
+      for (const input of resolved) {
+        await context.repository.createCombinedRole({
+          ...input,
+          actorUserId: context.actorUserId,
+          organizationId: context.organizationId,
+        })
       }
-      return { name: input.name, postIds, primaryPostId }
+      return resolved.length
     })
-    for (const input of resolved) {
-      await context.repository.createCombinedRole({
-        ...input,
-        actorUserId: context.actorUserId,
-        organizationId: context.organizationId,
-      })
-    }
     outcome = {
-      success: `${resolved.length} combined approved-post role${resolved.length === 1 ? "" : "s"} imported successfully.`,
+      success: `${importedCount} combined approved-post role${importedCount === 1 ? "" : "s"} imported successfully.`,
     }
   } catch (error) {
     return {
@@ -274,7 +292,9 @@ export async function importEmployeeAssignmentsCsvAction(formData: FormData) {
       const assignment = employeeAssignmentInputFromCsvRow(row, index + 2)
       return assignment ? [assignment] : []
     })
-    context = await repositoryContext(masterCapability("employee_assignments", "import"))
+    context = await repositoryContext(
+      masterCapability("employee_assignments", "import")
+    )
     const result = await context.repository.bulkAssignEmployees({
       actorUserId: context.actorUserId,
       assignments,

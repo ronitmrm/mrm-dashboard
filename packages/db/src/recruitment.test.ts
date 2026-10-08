@@ -182,6 +182,23 @@ test("offer register keeps a joined outcome after the post changes", async () =>
   expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
 })
 
+test("employee assignments expose the generated offer retained for their own application", async () => {
+  const query = vi.fn().mockResolvedValue({ rows: [{
+    id: "assignment-1", offer_letter_id: "letter-1", offer_letter_reference: "OL-1",
+  }] })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+  await expect(repository.listEmployeeAssignments("org-1")).resolves.toMatchObject([
+    { id: "assignment-1", offerLetterId: "letter-1", offerLetterReference: "OL-1" },
+  ])
+  const [sql, values] = query.mock.calls[0]!
+  expect(values).toEqual(["org-1"])
+  expect(sql).toContain("letter.application_id = assignment.application_id")
+  expect(sql).toContain("letter.organization_id = assignment.organization_id")
+  expect(sql).toContain("letter.letter_type = 'offer'")
+  expect(sql).toContain("letter.pdf_bytes IS NOT NULL")
+  expect(sql).toContain("ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1")
+})
+
 test("removing a joined employee requires an actual end date and exit type", async () => {
   const query = vi.fn(async (statement: string) => ({ rows: statement.includes("SELECT id, employee_name, employee_code")
     ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
