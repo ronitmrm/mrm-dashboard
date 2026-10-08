@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { Pool, type PoolClient, type PoolConfig } from "pg"
 
 import { instrumentPostgresPool } from "./postgres-telemetry"
@@ -46,6 +47,12 @@ const managedDatabaseVariables: Array<{
 
 const localHosts = new Set(["127.0.0.1", "::1", "localhost"])
 const sharedManagedPools = new Map<string, Pool>()
+const repositoryTransaction = new AsyncLocalStorage<{
+  client: PoolClient
+  connectionString: string | undefined
+  sourcePool: Pool
+  pool: Pool
+}>()
 
 function isLocalPostgresUrl(value: string) {
   try {
@@ -180,6 +187,9 @@ export async function withTransaction<T>(
   pool: Pool,
   operation: (client: PoolClient) => Promise<T>
 ) {
+  const transaction = repositoryTransaction.getStore()
+  if (transaction?.pool === pool) return operation(transaction.client)
+
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
@@ -194,7 +204,45 @@ export async function withTransaction<T>(
   }
 }
 
+// Repositories opened during this operation share one client and one commit.
+export async function withRepositoryTransaction<T>(
+  options: RepositoryPoolOptions,
+  operation: () => Promise<T>
+) {
+  const { close, pool: sourcePool } = repositoryPool(options)
+  try {
+    return await withTransaction(sourcePool, async (client) => {
+      const pool = new Proxy(sourcePool, {
+        get(target, property) {
+          if (property === "query") return client.query.bind(client)
+          if (property === "connect") {
+            throw new Error("Repository transactions must use withTransaction.")
+          }
+          return Reflect.get(target, property, target)
+        },
+      })
+      return repositoryTransaction.run(
+        { client, connectionString: options.connectionString, sourcePool, pool },
+        operation
+      )
+    })
+  } finally {
+    await close()
+  }
+}
+
 export function repositoryPool(options: RepositoryPoolOptions) {
+  const transaction = repositoryTransaction.getStore()
+  if (
+    transaction &&
+    (options.pool
+      ? options.pool === transaction.sourcePool ||
+        options.pool === transaction.pool
+      : options.connectionString === transaction.connectionString)
+  ) {
+    return { close: async () => undefined, pool: transaction.pool }
+  }
+
   if (options.pool) {
     return {
       close: async () => undefined,

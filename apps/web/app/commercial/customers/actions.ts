@@ -9,6 +9,7 @@ import { externalMasterViewHref } from "@/lib/external-master-workspace"
 import { pageBounds } from "@/lib/page-bounds"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
   csvValue,
@@ -93,61 +94,68 @@ export async function createCustomerAction(formData: FormData) {
 
 export async function importCustomersCsvAction(formData: FormData) {
   return withCsvImportFeedback(async () => {
-  const rows = await readMasterCsv(formData.get("master_csv_file"))
-  await withCustomers(
-    "masters.universal.commercial_customers.import",
-    async (repository, actorUserId, organizationId) => {
-      for (const [index, row] of rows.entries()) {
-        await repository.createManaged({
-          actorUserId,
-          companyName: requiredCsv(row, index + 2, "company_name", "company"),
-          country: csvValue(row, "country") || null,
-          address: csvValue(row, "address") || null,
-          defaultBuyerName: requiredCsv(
-            row,
-            index + 2,
-            "default_buyer_name",
-            "buyer"
-          ),
-          defaultCurrency: requiredCsv(
-            row,
-            index + 2,
-            "default_currency",
-            "currency"
-          ),
-          defaultIncoterms: requiredCsv(
-            row,
-            index + 2,
-            "default_incoterms",
-            "incoterms"
-          ),
-          defaultPackagingTerms: requiredCsv(
-            row,
-            index + 2,
-            "default_packaging_terms",
-            "packaging"
-          ),
-          defaultPaymentTerms: requiredCsv(
-            row,
-            index + 2,
-            "default_payment_terms",
-            "payment_terms"
-          ),
-          defaultShipmentMode: requiredCsv(
-            row,
-            index + 2,
-            "default_shipment_mode",
-            "shipment_mode"
-          ),
-          email: csvValue(row, "email") || null,
-          organizationId,
-          phone: csvValue(row, "phone") || null,
-          status: csvValue(row, "status") || "Active",
-        })
-      }
-    }
-  )
-  revalidatePath(customersPath)
+    const rows = await readMasterCsv(formData.get("master_csv_file"))
+    await withCsvImportTransaction(() =>
+      withCustomers(
+        "masters.universal.commercial_customers.import",
+        async (repository, actorUserId, organizationId) => {
+          for (const [index, row] of rows.entries()) {
+            await repository.createManaged({
+              actorUserId,
+              companyName: requiredCsv(
+                row,
+                index + 2,
+                "company_name",
+                "company"
+              ),
+              country: csvValue(row, "country") || null,
+              address: csvValue(row, "address") || null,
+              defaultBuyerName: requiredCsv(
+                row,
+                index + 2,
+                "default_buyer_name",
+                "buyer"
+              ),
+              defaultCurrency: requiredCsv(
+                row,
+                index + 2,
+                "default_currency",
+                "currency"
+              ),
+              defaultIncoterms: requiredCsv(
+                row,
+                index + 2,
+                "default_incoterms",
+                "incoterms"
+              ),
+              defaultPackagingTerms: requiredCsv(
+                row,
+                index + 2,
+                "default_packaging_terms",
+                "packaging"
+              ),
+              defaultPaymentTerms: requiredCsv(
+                row,
+                index + 2,
+                "default_payment_terms",
+                "payment_terms"
+              ),
+              defaultShipmentMode: requiredCsv(
+                row,
+                index + 2,
+                "default_shipment_mode",
+                "shipment_mode"
+              ),
+              email: csvValue(row, "email") || null,
+              organizationId,
+              phone: csvValue(row, "phone") || null,
+              status: csvValue(row, "status") || "Active",
+            })
+          }
+        }
+      )
+    )
+    revalidatePath(customersPath)
   }, "Customer CSV import failed.")
 }
 export async function updateCustomerAction(formData: FormData) {

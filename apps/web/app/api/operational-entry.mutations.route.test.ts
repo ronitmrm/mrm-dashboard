@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("@/lib/csv-import-transaction", () => ({
+  withCsvImportTransaction: (operation: () => Promise<unknown>) => operation(),
+}))
+
 const dependencies = vi.hoisted(() => ({
   close: vi.fn(),
   getSession: vi.fn(),

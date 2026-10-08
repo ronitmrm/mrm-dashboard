@@ -1,4 +1,14 @@
-# CSV Import Deduplication
+# CSV Imports
+
+## All-or-nothing acceptance
+
+A CSV or spreadsheet upload is one transaction. Every row must pass field,
+reference, business-rule, and database validation before any imported changes
+are committed. If any row fails, the entire upload is rolled back, including
+earlier rows, audit records, generated master codes, and queued refresh work.
+The user corrects the reported error and uploads the complete file again.
+
+## Deduplication
 
 Every CSV or spreadsheet import keeps the first exact business row and skips
 later copies before validation or persistence. Differences in real fields—such
