@@ -239,6 +239,10 @@ export function plannerActionHistoryRows(
     }
     if (actionType === "Machine Switch" || actionType === "Early Downstream Setup") return machineSwitchHistoryRow(row)
     if (actionType === "Route Change") return routeChangeHistoryRow(row)
+    if (actionType === "Reopen Setup") return historyRow(row, actionType, {
+      "Job Card": text(row.jcNo), "Part Code": text(row.partCode), Setups: text(row.setupNo),
+      "Machine / Route": text(row.machine), Decision: "Returned to Planned",
+    })
     return historyRow(row, actionType || "Planner Action", {
       "Job Card": text(row.jobCardNumber) || text(row.jcNo) || emptyValue,
       "Part Code": text(row.partCode) || emptyValue,

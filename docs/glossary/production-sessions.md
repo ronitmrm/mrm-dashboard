@@ -142,6 +142,16 @@ An open session changes its displayed operational status to Closing Required as 
 
 ## Closed-session corrections
 
+A Planner may use **Reopen Setup** to correct a setup marked Item Complete in
+error. A reason is required. The action reverses the current completion evidence,
+clears the setup completion date, and returns that setup to **Planned**, inactive.
+If the completion came from an Item Complete production-session close, that
+session's close reason becomes Manual Stop; its times and quantities stay saved.
+The action records the actor and before/after evidence. It never takes a machine
+from another job. The Planner schedules the remaining work through the normal
+planning actions, then production starts a new session. Open sessions and a
+changed setup block the correction; refresh and review before retrying.
+
 A closed Production Session may be corrected without reopening it. Authorized
 users may correct its end time and method-specific output, add a missed bounded
 downtime interval, or add a missed rejection entry. Every closed-session
