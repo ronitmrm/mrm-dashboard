@@ -8,6 +8,9 @@ vi.mock("@/lib/store-master-selection", () => import("../../lib/store-master-sel
 vi.mock("@/lib/store-units", () => import("../../lib/store-units"))
 vi.mock("@/lib/auth/master-capabilities", () => ({ masterCapability: () => "store.import" }))
 vi.mock("@/lib/auth/auth", () => ({ readAuthEnvironment: () => ({ connectionString: "test" }) }))
+vi.mock("@/lib/csv-import-transaction", () => ({
+  withCsvImportTransaction: (operation: () => Promise<unknown>) => operation(),
+}))
 vi.mock("@workspace/db", () => ({
   createStoreRepository: () => ({
     organizationIdForCode: async () => "organization",
@@ -133,7 +136,7 @@ test("rejects an unknown classification before saving the row", async () => {
   expect(save).not.toHaveBeenCalled()
 })
 
-test("reports a rejected row and stops instead of losing duplicate feedback", async () => {
+test("reports a rejected row with whole-file retry feedback", async () => {
   save
     .mockResolvedValueOnce(undefined)
     .mockResolvedValueOnce({ error: "This entry already exists." })
@@ -141,7 +144,7 @@ test("reports a rejected row and stops instead of losing duplicate feedback", as
     upload("Non Consumable,Chair\nNon Consumable,Chair\nConsumable,Oil")
   )
   expect(result?.error).toBe(
-    "Row 3: This entry already exists. 1 row(s) imported before stopping."
+    "Row 3: This entry already exists. No rows were imported. Correct the file and upload it again."
   )
   expect(save).toHaveBeenCalledTimes(2)
 })

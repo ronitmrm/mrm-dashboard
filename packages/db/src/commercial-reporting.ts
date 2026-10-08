@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient, QueryResult } from "pg"
 
 import { boundedResult, selectorSearchTerm } from "./commercial-bounds"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import { repositoryPool, withTransaction, type RepositoryPoolOptions } from "./postgres-runtime"
 
 const threadStandardRules = [
   { pattern: /\b(?:UNC|UNEF|UNF|UN|UNR)\b/i, standard: "ANSI/ASME B1.1" },
@@ -1375,9 +1375,7 @@ export function createCommercialReportingRepository(
       const material = input.material.trim()
       const temperature = input.temperature.trim()
       const applications = input.applications.trim()
-      const client = await pool.connect()
-      try {
-        await client.query("BEGIN")
+      return withTransaction(pool, async (client) => {
         const current = await client.query<{
           category: string
           sub_category: string
@@ -1543,14 +1541,8 @@ export function createCommercialReportingRepository(
             AND profiles.organization_id = $2`,
           [input.profileId, input.organizationId]
         )
-        await client.query("COMMIT")
         return websiteRow(result.rows[0]!)
-      } catch (error) {
-        await client.query("ROLLBACK")
-        throw error
-      } finally {
-        client.release()
-      }
+      })
     },
   }
 }

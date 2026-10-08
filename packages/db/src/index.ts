@@ -252,6 +252,7 @@ export {
   type DatabaseResponsibility,
   type RepositoryPoolOptions,
   validateManagedPostgresUrl,
+  withRepositoryTransaction,
 } from "./postgres-runtime"
 export {
   calculateCasting,

@@ -14,6 +14,7 @@ import { validateProductionBreaks } from "@workspace/db/production-breaks"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
 import {
   activeProductionWorker,
   signedInEmployee,
@@ -2132,7 +2133,7 @@ async function post(request: NextRequest, context: RouteContext) {
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
       }
-      const inserted = await withProductionRepository(
+      const inserted = await withCsvImportTransaction(() => withProductionRepository(
         request,
         scope.capability,
         async ({ actorUserId, organizationId, repository }) => {
@@ -2174,7 +2175,7 @@ async function post(request: NextRequest, context: RouteContext) {
           }
           return count
         }
-      )
+      ))
       return json(
         await withPlanningRefresh(request, path, body, {
           inserted,
@@ -2264,8 +2265,10 @@ async function post(request: NextRequest, context: RouteContext) {
           )
           if (capability) await authorizedDashboardSession(request, capability)
         }
-        await importAutoCodedMasterRows(entryType, importedRows, (payload) =>
-          executePostgresOperationalEntry(request, entryType, payload, "import")
+        await withCsvImportTransaction(() =>
+          importAutoCodedMasterRows(entryType, importedRows, (payload) =>
+            executePostgresOperationalEntry(request, entryType, payload, "import")
+          )
         )
         return json(
           await withPlanningRefresh(request, path, body, {
@@ -2315,7 +2318,7 @@ async function post(request: NextRequest, context: RouteContext) {
           )
           if (capability) await authorizedDashboardSession(request, capability)
         }
-        const inserted = await withPlanningRepository(
+        const inserted = await withCsvImportTransaction(() => withPlanningRepository(
           request,
           entryType === "work_order"
             ? operationalEntryWriteScope(
@@ -2364,11 +2367,11 @@ async function post(request: NextRequest, context: RouteContext) {
                   )
                 }
               },
-              entryType === "machine_master" ? 4 : 1
+              1
             )
             return importedRows.length
           }
-        )
+        ))
         return json(
           await withPlanningRefresh(request, path, body, {
             inserted,

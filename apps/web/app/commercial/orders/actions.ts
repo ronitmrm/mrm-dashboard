@@ -17,6 +17,7 @@ import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
@@ -116,9 +117,10 @@ export async function importPurchaseOrderCsvAction(formData: FormData) {
     ordersPath
   )
   const connectionString = readAuthEnvironment().connectionString
+  let purchaseOrderId = ""
+  await withCsvImportTransaction(async () => {
   const customers = createCustomerRepository({ connectionString })
   const orders = createCommercialOrdersRepository({ connectionString })
-  let purchaseOrderId = ""
   try {
     const input = parsePurchaseOrderCsvRows(
       await readMasterCsv(
@@ -156,6 +158,7 @@ export async function importPurchaseOrderCsvAction(formData: FormData) {
     await customers.close()
     await orders.close()
   }
+  })
   revalidatePath(ordersPath)
   redirect(`${ordersPath}/${purchaseOrderId}`)
   }, "Purchase Order CSV import failed.")
