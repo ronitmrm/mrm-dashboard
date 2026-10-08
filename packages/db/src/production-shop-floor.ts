@@ -3459,6 +3459,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `WITH latest AS (
              SELECT payload FROM derived.dashboard_floor_read_models
              WHERE organization_id = $1 AND production_floor_code = $2
+               AND publication_version = (
+                 SELECT version FROM derived.dashboard_read_model_heads
+                 WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+               )
              ORDER BY publication_version DESC LIMIT 1
            ), control AS (
              SELECT payload->'productionControl' AS data FROM latest

@@ -4042,11 +4042,23 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
     : [...sortedMachines.slice(afterIndex + 1), ...sortedMachines.slice(0, afterIndex + 1)];
   const tailMoves: Array<{ row: Record<string, unknown>; machine: string; start: string; end: string }> = [];
   const movableRows = details.filter(row => isMovablePlannedRow(row) && !row.toolingPlanBlocked);
+  const setupKeys = new Set(details.map(scheduleRowKey));
+  const compatibleMachineKeys = new Map<string, Set<string>>();
+  const compatibleWith = (row: Record<string, unknown>, machine: string) => {
+    const family = rowText(row, "routeMachine", "machine");
+    const type = rowText(row, "machineType");
+    const key = JSON.stringify([family, type]);
+    let compatible = compatibleMachineKeys.get(key);
+    if (!compatible) {
+      compatible = new Set(activePhysicalMachineRows(family, type, masterRows).map(candidate => canonicalKey(candidate.machine)));
+      compatibleMachineKeys.set(key, compatible);
+    }
+    return compatible.has(canonicalKey(machine));
+  };
   for (const [machine, machineRows] of machines) {
     const candidateRows = movableRows.filter(row => canonicalKey(rowText(row, "machine")) !== canonicalKey(machine)
       && !familyIdleGapRejectedForMachine(row, machine)
-      && activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), masterRows)
-        .some(candidate => canonicalKey(candidate.machine) === canonicalKey(machine)));
+      && compatibleWith(row, machine));
     if (!candidateRows.length) continue;
     const targetWindows = machineUnavailableWindowsFor(machineUnavailableWindows, machine);
     const canUseGap = (row: Record<string, unknown>, start: string) => {
@@ -4064,7 +4076,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
       const leadingGapEnd = firstStart ? addDays(firstStart, -1, planningCalendar) : "";
       const leadingCandidate = leadingFamilyIdleGapCandidate(details, {
         targetMachine: machine,
-        machineRows: masterRows,
+        compatibleWith, setupKeys,
         targetMachineType: rowText(first, "machineType"),
         gapEnd: leadingGapEnd,
         excludedKeys: new Set([scheduleRowKey(first)]),
@@ -4088,7 +4100,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
 
       const candidate = familyIdleGapCandidate(details, {
         targetMachine: machine,
-        machineRows: masterRows,
+        compatibleWith, setupKeys,
         targetMachineType: rowText(current, "machineType"),
         gapStart,
         gapDays,
@@ -4112,10 +4124,10 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
         const gapStart = maxDateValue(tailStart, queueReadyDate(row));
         const gapEnd = addDays(parseDate(rowText(row, "plannedProductionStartDate")), -1, planningCalendar);
         return gapEnd >= gapStart && isFamilyIdleGapCandidate(row, {
-          targetMachine: machine, machineRows: masterRows, targetMachineType: "",
+          targetMachine: machine, compatibleWith, setupKeys, targetMachineType: "",
           gapStart, gapDays: plannedProductionDays(gapStart, gapEnd, planningCalendar),
           excludedKeys: new Set(), planningCalendar,
-        }) && canUseGap(row, gapStart) && !setupAlreadyOnMachine(details, row, machine)
+        }) && canUseGap(row, gapStart) && !setupAlreadyOnMachine(setupKeys, row, machine)
           && !machineUnavailablePlacementRejectsGapCandidate(details, row, machine);
       })
       .sort((a, b) => safeNumber(b.plannerPriorityScore) - safeNumber(a.plannerPriorityScore)
@@ -4153,14 +4165,23 @@ function moveToFamilyIdleGap(row: Record<string, unknown>, machine: string, star
   row.familyIdleGapReason = `Moved from ${fromMachine} to fill ${machine} idle gap from ${dateLabel(start)} to ${dateLabel(end)}`;
 }
 
+type FamilyIdleGapContext = {
+  targetMachine: string;
+  compatibleWith: (row: Record<string, unknown>, machine: string) => boolean;
+  setupKeys: ReadonlySet<string>;
+  targetMachineType: string;
+  excludedKeys: Set<string>;
+  planningCalendar: PlanningCalendar;
+};
+
 function familyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
-  gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  gap: FamilyIdleGapContext & { gapStart: string; gapDays: number },
   candidates: Array<Record<string, unknown>>,
 ) {
   return candidates
     .filter((row) => isFamilyIdleGapCandidate(row, gap))
-    .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
+    .filter((row) => !setupAlreadyOnMachine(gap.setupKeys, row, gap.targetMachine))
     .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
     .sort((a, b) =>
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
@@ -4172,13 +4193,13 @@ function familyIdleGapCandidate(
 
 function leadingFamilyIdleGapCandidate(
   details: Array<Record<string, unknown>>,
-  gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar },
+  gap: FamilyIdleGapContext & { gapEnd: string },
   candidates: Array<Record<string, unknown>>,
 ) {
   if (!gap.gapEnd) return undefined;
   return candidates
     .filter((row) => isLeadingFamilyIdleGapCandidate(row, gap))
-    .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
+    .filter((row) => !setupAlreadyOnMachine(gap.setupKeys, row, gap.targetMachine))
     .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
     .sort((a, b) =>
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
@@ -4194,14 +4215,14 @@ function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<st
   const candidateOnTarget = { ...candidate, machine: targetMachine };
   return details.some((row) => canonicalKey(rowText(row, "machine")) === targetMachineKey && machineUnavailablePlacesRowBefore(row, candidateOnTarget));
 }
-function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
+function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: FamilyIdleGapContext & { gapEnd: string }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
   if (row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
-  if (!activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), gap.machineRows).some((machine) => canonicalKey(machine.machine) === canonicalKey(gap.targetMachine))) return false;
+  if (!gap.compatibleWith(row, gap.targetMachine)) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   const readyDate = maxDateValue(queueReadyDate(row), addDays(plantIsoDate(new Date()), 0, gap.planningCalendar));
@@ -4215,14 +4236,14 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { ta
   return durationDays > 0 && gapDays > 0 && durationDays <= gapDays;
 }
 
-function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; machineRows: Array<Record<string, unknown>>; targetMachineType: string; gapStart: string; gapDays: number; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
+function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: FamilyIdleGapContext & { gapStart: string; gapDays: number }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
   if (row.toolingPlanBlocked) return false;
   if (!isMovablePlannedRow(row)) return false;
   const currentMachine = rowText(row, "machine");
   if (!currentMachine || currentMachine === gap.targetMachine) return false;
-  if (!activePhysicalMachineRows(rowText(row, "routeMachine", "machine"), rowText(row, "machineType"), gap.machineRows).some((machine) => canonicalKey(machine.machine) === canonicalKey(gap.targetMachine))) return false;
+  if (!gap.compatibleWith(row, gap.targetMachine)) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   if (!currentStart || currentStart <= gap.gapStart) return false;
@@ -4298,9 +4319,9 @@ function machineTypeCompatible(sourceType: string, targetType: string) {
   return !source || !target || source === target;
 }
 
-function setupAlreadyOnMachine(details: Array<Record<string, unknown>>, candidate: Record<string, unknown>, targetMachine: string) {
+function setupAlreadyOnMachine(setupKeys: ReadonlySet<string>, candidate: Record<string, unknown>, targetMachine: string) {
   const key = [rowText(candidate, "jcNo"), canonicalKey(rowText(candidate, "partCode")), rowText(candidate, "optionNumber"), rowText(candidate, "setupNo"), canonicalKey(targetMachine)].join("|");
-  return details.some((row) => scheduleRowKey(row) === key);
+  return setupKeys.has(key);
 }
 
 function scheduleRowKey(row: Record<string, unknown>) {
@@ -4433,8 +4454,25 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
     byMachine.set(machine, rows);
   }
 
+  // A waiting row's scheduling fields stay fixed in this pass; only its
+  // tooling date changes. Reuse the exact comparator until that date changes.
+  const queueOrderCache = new WeakMap<Record<string, unknown>, WeakMap<Record<string, unknown>, {
+    aToolingDate: unknown; bToolingDate: unknown; order: number;
+  }>>();
+  const compareQueueRows = (a: Record<string, unknown>, b: Record<string, unknown>) => {
+    let comparisons = queueOrderCache.get(a);
+    const cached = comparisons?.get(b);
+    if (cached && cached.aToolingDate === a.toolingNextAvailableDate && cached.bToolingDate === b.toolingNextAvailableDate) return cached.order;
+    const order = machineQueueSort(a, b);
+    if (!comparisons) {
+      comparisons = new WeakMap();
+      queueOrderCache.set(a, comparisons);
+    }
+    comparisons.set(b, { aToolingDate: a.toolingNextAvailableDate, bToolingDate: b.toolingNextAvailableDate, order });
+    return order;
+  };
   const queues = [...byMachine.values()].map(rows => ({
-    queue: applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort)), nextDate: "", previousKey: "",
+    queue: applyMachineUnavailableQueuePlacementOrder([...rows].sort(compareQueueRows)), nextDate: "", previousKey: "",
   }));
   const knownHolders = new Map<string, number>();
   for (const row of details) if (toolingHeld(row)) {
@@ -4456,15 +4494,46 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   for (const row of details) for (const code of requiredToolingCodesFromPlan(row)) {
     if (!slots.has(code)) slots.set(code, Array.from({ length: Math.max(0, toolingCapacity(row, code) - (unplannedHolders.get(code) ?? 0)) }, () => ""));
   }
+  // Waiting rows only acquire a different tooling date when one of their
+  // required slots changes. Rebuild these dependencies for every settle pass.
+  const waitingRows = new Set(queues.flatMap(item => item.queue));
+  const toolingDependents = new Map<string, Set<Record<string, unknown>>>();
+  for (const row of waitingRows) for (const code of requiredToolingCodesFromPlan(row)) {
+    const dependents = toolingDependents.get(code) ?? new Set<Record<string, unknown>>();
+    dependents.add(row);
+    toolingDependents.set(code, dependents);
+  }
+  const changedToolingRows = new Set(waitingRows);
+  type QueueCandidate = {
+    item: (typeof queues)[number]; row: Record<string, unknown>;
+    held?: boolean; sortDate?: string;
+  };
+  const queueCandidates = new Map<(typeof queues)[number], QueueCandidate>();
+  const queueByRow = new Map(queues.flatMap(item => item.queue.map(row => [row, item] as const)));
+  const candidateHeld = (candidate: QueueCandidate) => candidate.held ??= toolingHeld(candidate.row);
+  const candidateDate = (candidate: QueueCandidate) => candidate.sortDate ??= maxDateValue(
+    queueReadyDate(candidate.row), candidate.item.nextDate, toolingReadyDate(candidate.row, slots),
+  );
   while (queues.some(item => item.queue.length)) {
-    for (const item of queues) for (const row of item.queue) row.toolingNextAvailableDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
-    const candidates = queues.filter(item => item.queue.length).map(item => ({ item,
-      row: takeNextMachineQueueRow([...item.queue], item.nextDate, item.previousKey),
-    }));
-    candidates.sort((a,b) => Number(toolingHeld(b.row)) - Number(toolingHeld(a.row)) ||
-      maxDateValue(queueReadyDate(a.row), a.item.nextDate, toolingReadyDate(a.row, slots)).localeCompare(maxDateValue(queueReadyDate(b.row), b.item.nextDate, toolingReadyDate(b.row, slots))) || machineQueueSort(a.row,b.row));
+    for (const row of changedToolingRows) {
+      row.toolingNextAvailableDate = toolingHeld(row) ? "" : toolingReadyDate(row, slots);
+      queueCandidates.delete(queueByRow.get(row)!);
+    }
+    changedToolingRows.clear();
+    const candidates = queues.filter(item => item.queue.length).map(item => {
+      let candidate = queueCandidates.get(item);
+      if (!candidate) {
+        candidate = { item, row: takeNextMachineQueueRow([...item.queue], item.nextDate, item.previousKey) };
+        queueCandidates.set(item, candidate);
+      }
+      return candidate;
+    });
+    candidates.sort((a,b) => Number(candidateHeld(b)) - Number(candidateHeld(a)) ||
+      candidateDate(a).localeCompare(candidateDate(b)) || compareQueueRows(a.row,b.row));
     const { item, row } = candidates[0]!;
+    queueCandidates.delete(item);
     item.queue.splice(item.queue.indexOf(row), 1);
+    waitingRows.delete(row);
     if (row.toolingPlanBlocked) continue;
     let machineNextDate = item.nextDate;
     {
@@ -4526,7 +4595,16 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       if (!shopFloorRowIsComplete(row) && (toolingHeld(row) || safeNumber(row.pendingGoodQty) > 0)) {
         for (const code of requiredToolingCodesFromPlan(row)) {
           const resourceSlots = slots.get(code)!;
-          if (resourceSlots.length) { resourceSlots[0] = machineNextDate; resourceSlots.sort(); }
+          if (resourceSlots.length) {
+            const previousDate = resourceSlots[0];
+            resourceSlots[0] = machineNextDate;
+            resourceSlots.sort();
+            if (resourceSlots[0] !== previousDate) {
+              for (const dependent of toolingDependents.get(code) ?? []) {
+                if (waitingRows.has(dependent)) changedToolingRows.add(dependent);
+              }
+            }
+          }
         }
       }
     }
@@ -6479,8 +6557,14 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+const normalizedHeaderCache = new Map<string, string>();
 function normalizeHeader(value: string) {
-  return value.toUpperCase().replace(/\s+/g, " ").trim();
+  const cached = normalizedHeaderCache.get(value);
+  if (cached !== undefined) return cached;
+  const normalized = value.toUpperCase().replace(/\s+/g, " ").trim();
+  if (normalizedHeaderCache.size >= 1024) normalizedHeaderCache.clear();
+  normalizedHeaderCache.set(value, normalized);
+  return normalized;
 }
 
 function cleanText(value: unknown) {

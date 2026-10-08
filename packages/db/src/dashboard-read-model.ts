@@ -801,6 +801,10 @@ async function buildDashboardReadModel(
         LEFT JOIN LATERAL (
           SELECT payload FROM derived.dashboard_floor_read_models
           WHERE organization_id = $1 AND production_floor_code = floor.code
+            AND publication_version = (
+              SELECT version FROM derived.dashboard_read_model_heads
+              WHERE organization_id = $1 ORDER BY version DESC LIMIT 1
+            )
           ORDER BY publication_version DESC LIMIT 1
         ) model ON true
       )
