@@ -1162,7 +1162,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         </>
       )
     case "probationRemindersPanel":
-      return <ProbationEndReminders assignments={props.employeeAssignments} canManageEmployees={props.canManageEmployees} />
+      return <ProbationEndReminders assignments={props.employeeAssignments} canManageEmployees={props.canManageEmployees} canViewOfferLetters={props.canViewOfferLetters} />
     case "employeeAssignmentHistoryPanel":
       return <EmployeeAssignmentHistory assignments={props.employeeAssignments} />
     case "conversationLogsPanel":

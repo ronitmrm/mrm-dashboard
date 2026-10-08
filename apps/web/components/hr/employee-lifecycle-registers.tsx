@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
 import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
@@ -65,9 +66,11 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
 export function ProbationEndReminders({
   assignments,
   canManageEmployees,
+  canViewOfferLetters,
 }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
   canManageEmployees: boolean
+  canViewOfferLetters: boolean
 }) {
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
@@ -118,6 +121,7 @@ export function ProbationEndReminders({
                 <TableHeader><TableRow>
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
                   <TableHead>Phone Number</TableHead>
+                  <TableHead>Offer Letter</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
                   <TableHead>Joined</TableHead><TableHead>Probation Ends</TableHead>
                   <TableHead>Reminder</TableHead><TableHead>Latest Remark</TableHead>
@@ -130,6 +134,17 @@ export function ProbationEndReminders({
                       <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                       <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                       <TableCell className="whitespace-nowrap">{assignment.employeePhone ?? "—"}</TableCell>
+                      <TableCell data-filter-value={canViewOfferLetters ? assignment.offerLetterReference ?? "—" : "—"}>
+                        {canViewOfferLetters && assignment.offerLetterId ? (
+                          <Button asChild size="sm" variant="outline">
+                            <AttachmentViewerLink
+                              fileName={`${assignment.offerLetterReference}-offer-letter.pdf`}
+                              href={`/hr/employment-letters/${assignment.offerLetterId}/download`}
+                              mediaType="application/pdf"
+                            >{assignment.offerLetterReference ?? "View Offer Letter"}</AttachmentViewerLink>
+                          </Button>
+                        ) : "—"}
+                      </TableCell>
                       <TableCell>{assignment.department ?? "—"}</TableCell>
                       <TableCell>{assignment.designation ?? "—"}</TableCell>
                       <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
@@ -139,7 +154,7 @@ export function ProbationEndReminders({
                       {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
                     </TableRow>
                   })}
-                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 10 : 9}>
+                  {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 11 : 10}>
                     <StandardState title="No Open Probation Tasks" description="Joined assignments appear here until probation is completed or the employee leaves." />
                   </TableCell></TableRow> : null}
                 </TableBody>
