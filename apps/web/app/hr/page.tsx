@@ -20,6 +20,10 @@ import { MetricCard } from "@workspace/ui/components/card"
 import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
 import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
+import { ActionToolbar } from "@/components/ui/golden-patterns"
+import { DataDownloadButton } from "@/components/data-download-button"
+import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
+import { importEmployeeDataCsvAction } from "./employees/actions"
 
 import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -217,11 +221,17 @@ export default async function HrRecruitmentPage({
   return (
     <div className="flex flex-col gap-6">
       <section className="grid gap-2">
-        <div className="flex items-center gap-2">
-          <BriefcaseBusiness className="size-5 text-primary" />
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Hr Recruitment
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BriefcaseBusiness className="size-5 text-primary" />
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Hr Recruitment
+            </h2>
+          </div>
+          {activeItem.panelId === "employeeDataPanel" ? <ActionToolbar>
+            <DataDownloadButton href="/hr/employees/export.csv" label="Download CSV" />
+            {masterControls.import ? <MasterDataCsvImportButton action={importEmployeeDataCsvAction} /> : null}
+          </ActionToolbar> : null}
         </div>
       </section>
 

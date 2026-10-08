@@ -1855,10 +1855,15 @@ test("employee data retains personal details across rejoining and separates each
     })
     expect((await repository.get(representativeOrganizationId, firstId))?.term.shift).toBe("Day")
     expect((await repository.get(representativeOrganizationId, secondId))?.term.salary).toBe("25000")
-    await expect(repository.save({
-      actorUserId: null, organizationId: representativeOrganizationId,
-      assignmentId: randomUUID(), personal, term: secondTerm,
-    })).rejects.toThrow("A confirmed joined assignment with an Employee ID is required.")
+    expect(await repository.listDetails(representativeOrganizationId, [firstId, secondId])).toEqual(expect.arrayContaining([
+      { assignmentId: firstId, personal, term: firstTerm },
+      { assignmentId: secondId, personal, term: secondTerm },
+    ]))
+    await expect(repository.saveMany([
+      { actorUserId: null, organizationId: representativeOrganizationId, assignmentId: firstId, personal, term: secondTerm },
+      { actorUserId: null, organizationId: representativeOrganizationId, assignmentId: randomUUID(), personal, term: secondTerm },
+    ])).rejects.toThrow("A confirmed joined assignment with an Employee ID is required.")
+    expect((await repository.get(representativeOrganizationId, firstId))?.term.shift).toBe("Day")
   } finally {
     await repository.close()
   }

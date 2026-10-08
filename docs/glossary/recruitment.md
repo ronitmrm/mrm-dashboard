@@ -208,6 +208,12 @@ link to the earlier person; names alone never establish identity.
 Concurrent post assignments for the same Employee ID belong to one employment
 term while any of those posts remains occupied. Releasing one post as Role Changed
 does not start a new term; a later join after all posts have ended does.
+Employee Data displays the Combined Code for combined roles instead of listing
+every member department. Its CSV contains one row per employment term. Assignment
+ID and Employee ID identify the existing term; uploads edit personal and term
+details only. Personal details must agree across CSV rows for the same Employee
+ID. Blank detail cells clear saved values; identity and employment dates are not
+editable through this CSV. The entire upload is saved together or rejected.
 
 When a combined job is split, an employee who stays employed may stop covering
 one standalone Approved Post. HR records a Role Changed date for that post only.

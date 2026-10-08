@@ -191,6 +191,7 @@ export type RecruitmentOfferOutcomeRow = {
 
 export type RecruitmentEmployeeAssignmentRow = {
   id: string
+  combinedVacancyCode: string | null
   personalDetailsSaved: boolean
   termDetailsSaved: boolean
   postCode: string
@@ -3347,6 +3348,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ): Promise<RecruitmentEmployeeAssignmentRow[]> {
       const result = await pool.query<{
         id: string
+        combined_vacancy_code: string | null
         personal_details_saved: boolean
         term_details_saved: boolean
         post_code: string
@@ -3366,6 +3368,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         appointment_letter_issued_on: string | null
       }>(
         `SELECT assignment.id, assignment.post_code,
+           combined.vacancy_code AS combined_vacancy_code,
            profile.employee_code IS NOT NULL AS personal_details_saved,
            term.assignment_id IS NOT NULL AS term_details_saved,
            department.name AS department, designation.name AS designation,
@@ -3385,6 +3388,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            ON term.organization_id = assignment.organization_id
              AND term.assignment_id = assignment.id
          LEFT JOIN recruitment.posts post ON post.id = assignment.post_id
+         LEFT JOIN recruitment.combined_roles combined
+           ON combined.id = post.combined_role_id
+             AND combined.organization_id = assignment.organization_id
          LEFT JOIN recruitment.departments department ON department.id = post.department_id
          LEFT JOIN recruitment.designations designation ON designation.id = post.designation_id
          LEFT JOIN LATERAL (
@@ -3420,6 +3426,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       )
       return result.rows.map((row) => ({
         id: row.id,
+        combinedVacancyCode: row.combined_vacancy_code,
         personalDetailsSaved: row.personal_details_saved,
         termDetailsSaved: row.term_details_saved,
         postCode: row.post_code,

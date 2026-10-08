@@ -33,6 +33,14 @@ export type EmployeeDataRecord = {
   termSaved: boolean
 }
 
+type EmployeeDataSaveInput = {
+  actorUserId: string | null
+  organizationId: string
+  assignmentId: string
+  personal: EmployeePersonalDetails
+  term: EmployeeTermDetails
+}
+
 function detailValues<const T extends readonly string[]>(fields: T, value: Record<string, unknown> | null): Record<T[number], string> {
   return Object.fromEntries(fields.map((field) => [field, typeof value?.[field] === "string" ? value[field] : ""])) as Record<T[number], string>
 }
@@ -132,21 +140,15 @@ async function employeeAssignment(client: Pool | PoolClient, organizationId: str
 
 export function createEmployeeDataRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
-  return {
-    async get(organizationId: string, assignmentId: string) {
-      return employeeAssignment(pool, organizationId, assignmentId)
-    },
-    async save(input: {
-      actorUserId: string | null
-      organizationId: string
-      assignmentId: string
-      personal: EmployeePersonalDetails
-      term: EmployeeTermDetails
-    }) {
+  async function saveMany(inputs: EmployeeDataSaveInput[]) {
+    const cleaned = inputs.map((input) => {
       const personal = cleanDetails(employeePersonalFields, input.personal)
       const term = cleanDetails(employeeTermFields, input.term)
       validateDetails(personal, term)
-      await withTransaction(pool, async (client) => {
+      return { ...input, personal, term }
+    })
+    await withTransaction(pool, async (client) => {
+      for (const input of cleaned) {
         const assignment = await client.query<{ employee_code: string | null }>(
           `SELECT employee_code FROM recruitment.employee_post_assignments
            WHERE organization_id = $1 AND id = $2 FOR UPDATE`,
@@ -163,14 +165,14 @@ export function createEmployeeDataRepository(options: RepositoryPoolOptions) {
            VALUES ($1, $2, $3::jsonb)
            ON CONFLICT (organization_id, employee_code)
            DO UPDATE SET details = EXCLUDED.details, updated_at = now()`,
-          [input.organizationId, employeeCode, JSON.stringify(personal)]
+          [input.organizationId, employeeCode, JSON.stringify(input.personal)]
         )
         await client.query(
           `INSERT INTO recruitment.employee_term_details (assignment_id, organization_id, details)
            VALUES ($1, $2, $3::jsonb)
            ON CONFLICT (assignment_id)
            DO UPDATE SET details = EXCLUDED.details, updated_at = now()`,
-          [anchorId, input.organizationId, JSON.stringify(term)]
+          [anchorId, input.organizationId, JSON.stringify(input.term)]
         )
         await client.query(
           `INSERT INTO audit.events (
@@ -181,8 +183,41 @@ export function createEmployeeDataRepository(options: RepositoryPoolOptions) {
              'mrm-dashboard', 'employee_data', gen_random_uuid()::text)`,
           [input.organizationId, input.assignmentId, input.actorUserId]
         )
-      })
+      }
+    })
+  }
+  return {
+    async get(organizationId: string, assignmentId: string) {
+      return employeeAssignment(pool, organizationId, assignmentId)
     },
+    async listDetails(organizationId: string, assignmentIds: string[]) {
+      if (!assignmentIds.length) return []
+      const result = await pool.query<{
+        id: string
+        personal: Record<string, unknown> | null
+        term: Record<string, unknown> | null
+      }>(
+        `SELECT assignment.id, profile.details AS personal, term.details AS term
+         FROM recruitment.employee_post_assignments assignment
+         LEFT JOIN recruitment.employee_profiles profile
+           ON profile.organization_id = assignment.organization_id
+             AND profile.employee_code = btrim(assignment.employee_code)
+         LEFT JOIN recruitment.employee_term_details term
+           ON term.organization_id = assignment.organization_id
+             AND term.assignment_id = assignment.id
+         WHERE assignment.organization_id = $1 AND assignment.id = ANY($2::uuid[])`,
+        [organizationId, assignmentIds]
+      )
+      return result.rows.map((row) => ({
+        assignmentId: row.id,
+        personal: detailValues(employeePersonalFields, row.personal),
+        term: detailValues(employeeTermFields, row.term),
+      }))
+    },
+    async save(input: EmployeeDataSaveInput) {
+      await saveMany([input])
+    },
+    saveMany,
     async close() {
       await close()
     },
