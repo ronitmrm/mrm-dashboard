@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { readRecordHistory } from "@/lib/record-history"
+
 type RecordBody = Record<string, unknown>
 
 // Shared by the session register and quality restart queue. Only changed
@@ -9,7 +11,8 @@ type RecordBody = Record<string, unknown>
 export function useConditionalRecords(
   url: string | null,
   onChanged?: (body: RecordBody) => void,
-  onDenied?: () => void
+  onDenied?: () => void,
+  loadAllRows = false
 ) {
   const [result, setResult] = useState<{
     url: string | null
@@ -59,12 +62,19 @@ export function useConditionalRecords(
         const requestUrl = new URL(url, window.location.origin)
         if (revision)
           requestUrl.searchParams.set("knownSourceRevision", revision)
-        const response = await fetch(requestUrl, {
+        let response = await fetch(requestUrl, {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal,
         })
-        const body = (await response.json().catch(() => ({}))) as RecordBody
+        let body = (await response.json().catch(() => ({}))) as RecordBody
+        if (loadAllRows && response.ok && body.notModified !== true) {
+          const history = await readRecordHistory(
+            requestUrl, response, body, controller.signal
+          )
+          response = history.response
+          body = history.body
+        }
         if (controller.signal.aborted) return
         if (!response.ok) {
           const accessDenied =
@@ -145,7 +155,7 @@ export function useConditionalRecords(
       window.removeEventListener("online", refresh)
       reconcile.current = () => undefined
     }
-  }, [url])
+  }, [url, loadAllRows])
   const refresh = useCallback(() => reconcile.current(), [])
   return {
     ...(result.url === url

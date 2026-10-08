@@ -4101,7 +4101,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             AND ($4::date IS NULL OR session.production_date >= $4::date)
             AND ($5::date IS NULL OR session.production_date <= $5::date)
             AND ($6::text IS NULL OR session.status = $6)
-          ORDER BY session.started_at DESC, machine.machine_number
+          ORDER BY session.started_at DESC, machine.machine_number, session.id
           LIMIT $7 OFFSET $8
         `,
         [
