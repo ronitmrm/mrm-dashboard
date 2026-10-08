@@ -984,7 +984,7 @@ async function buildDashboardReadModel(
     return floorSourceFingerprint({
       sourceInput, corrections: prepared.floorCorrections,
       sourceCoverage: source.sourceCoverageByFloor[floorCode],
-    }, context.builderVersion ?? dashboardSegmentBuilderVersion)
+    }, context.builderVersion ?? dashboardSegmentBuilderVersion, floorCode)
   }
   const changedFloors = new Set(productionFloors.filter(floor =>
     context.forceRefresh || !previousSegments.get(floor.code)?.segment_id

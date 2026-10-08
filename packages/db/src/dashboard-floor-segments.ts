@@ -1,17 +1,15 @@
 import { createHash } from "node:crypto"
 import type { PoolClient } from "pg"
 import type { ProductionFloorCode } from "./production-floors"
+import { planningProductionDate } from "./planning-rules"
 
 type JsonRecord = Record<string, unknown>
 
 // Bump when planning/output semantics or the segment input schema changes.
-export const dashboardSegmentBuilderVersion = "floor-planning-1"
-const plantDate = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
-})
+export const dashboardSegmentBuilderVersion = "floor-planning-2"
 
-export function floorSourceFingerprint(input: unknown, builderVersion: string) {
-  const serialized = JSON.stringify({ builderVersion, plantDate: plantDate.format(new Date()), input },
+export function floorSourceFingerprint(input: unknown, builderVersion: string, productionFloorCode?: ProductionFloorCode) {
+  const serialized = JSON.stringify({ builderVersion, plantDate: planningProductionDate(productionFloorCode), input },
     (_key, value: unknown) => {
       if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof Date) return value
       return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))

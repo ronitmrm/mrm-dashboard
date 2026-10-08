@@ -1,3 +1,13 @@
+import { productionShiftAt } from "./production-session-domain";
+
+const plantDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+export function planningProductionDate(productionFloorCode: string | undefined, instant = new Date()) {
+  return productionShiftAt(productionFloorCode ?? "", instant)?.productionDate ?? plantDate.format(instant);
+}
+
 export function machineTypeForFamily(
   rows: readonly Record<string, unknown>[],
   family: unknown
