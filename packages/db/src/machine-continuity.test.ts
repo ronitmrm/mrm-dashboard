@@ -42,10 +42,11 @@ function inputFor(good: number) {
   }
 }
 
-test("keeps Thursday CNC planning available through Shift C until Friday 06:00", () => {
+test("allows setup starts on weekly and festive offs while finish forecasts skip them", () => {
   const input = inputFor(0)
   input.productionEntries = []
   input.dataEntries = input.dataEntries.filter(row => row.payload.setupNo !== "2")
+  input.dataEntries.find(row => row.entryType === "work_order")!.payload.orderPcs = 600
   input.dataEntries.find(row => row.entryType === "shop_floor_status")!.payload.stage = "raw_material_at_machine"
   const plan = () => buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]
 
@@ -57,9 +58,13 @@ test("keeps Thursday CNC planning available through Shift C until Friday 06:00",
   expect(plan()).toMatchObject({ plannedStartDate: "8-Oct-26", shopFloorTaskReady: true, shopFloorTaskBlocker: "" })
   vi.setSystemTime(new Date("2026-10-09T06:00:00+05:30"))
   expect(floorSourceFingerprint(input, "shift-boundary", "cnc")).not.toBe(shiftFingerprint)
-  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: false })
+  // An unstarted setup is also available on the off; this is not a stage override.
+  input.dataEntries = input.dataEntries.filter(row => row.entryType !== "shop_floor_status")
+  expect(plan()).toMatchObject({ plannedStartDate: "9-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "10-Oct-26" })
+  input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-10-10", reason: "Festive off" }, createdAt: "2026-10-08T06:00:00Z" })
+  expect(plan()).toMatchObject({ plannedStartDate: "9-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "11-Oct-26" })
   vi.setSystemTime(new Date("2026-10-10T06:00:00+05:30"))
-  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: true })
+  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "11-Oct-26" })
 })
 
 test("keeps a future CNC plan blocked during the preceding overnight shift", () => {
