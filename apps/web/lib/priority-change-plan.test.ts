@@ -31,7 +31,7 @@ describe("priorityChangePlan", () => {
       row({ jcNo: "C", machine: "M1", plannedProductionStartDate: "21-Sept-26", plannedProductionEndDate: "23-Sept-26" }),
     ] };
     const preview = () => { const plan = priorityChangePlan(source, "P", "A"); return priorityPlanStepWindows(plan.steps, {}).get(plan.steps[0]!.key); };
-    expect(preview()).toEqual({ startDate: "27-Sept-26", endDate: "28-Sept-26" });
+    expect(preview()).toEqual({ startDate: "25-Sept-26", endDate: "28-Sept-26" });
     allocation.F1 = 2;
     expect(preview()).toEqual({ startDate: "21-Sept-26", endDate: "22-Sept-26" });
     allocation.F1 = 0;
@@ -83,7 +83,7 @@ describe("priorityChangePlan", () => {
       ["3", "SA705"],
     ]);
     expect(windows.get(plan.steps[0]!.key)).toMatchObject({ startDate: "16-July-26", endDate: "16-July-26" });
-    expect(windows.get(plan.steps[1]!.key)?.startDate).toBe("18-July-26");
+    expect(windows.get(plan.steps[1]!.key)?.startDate).toBe("17-July-26");
     expect(windows.get(plan.steps[2]!.key)?.startDate).toBe("19-July-26");
   });
 
@@ -158,7 +158,7 @@ describe("priorityChangePlan", () => {
       [setupThree.key]: m61SetupThree.key,
     });
 
-    expect(firstPosition.get(setupTwo.key)?.startDate).toBe("18-July-26");
+    expect(firstPosition.get(setupTwo.key)?.startDate).toBe("17-July-26");
     expect(secondPosition.get(setupTwo.key)?.startDate).toBe("26-July-26");
     expect(currentPosition.get(setupTwo.key)?.startDate).toBe("27-July-26");
     expect(currentPosition.get(setupThree.key)?.startDate).toBe("29-July-26");

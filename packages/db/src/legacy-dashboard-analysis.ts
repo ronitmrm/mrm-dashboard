@@ -3261,7 +3261,8 @@ function machinePlanDetails(
       : allRoutes;
     const rmInwardDate = rowText(row, "rmInwardDate");
     const dispatchDeadlineDate = dispatchTargetDate(rmInwardDate, planningCalendar);
-    let operationReadyDate = addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar);
+    // Offs reduce forecast capacity, never material or setup-start readiness.
+    let operationReadyDate = parseDate(rmInwardDate) || rmInwardDate;
     let operationReadyCanPullForward = true;
     let routePlanningBlocked = false;
     for (const [routeIndex, route] of routes.entries()) {
@@ -3350,9 +3351,9 @@ function machinePlanDetails(
         ? parseDate(rowText(override, "createdAt"))
         : "";
       const readyDateForAssignment = earlyDownstream
-        ? addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar)
+        ? currentPlanningProductionDate(planningCalendar)
         : maxDateValue(
-            operationReadyDate || addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar),
+            operationReadyDate || parseDate(rmInwardDate) || rmInwardDate,
             moveDecisionDate,
           );
       const breakdownInterruption = machineUnavailableInterruptionForSetup(machineUnavailableWindows, {
@@ -3498,7 +3499,6 @@ function machinePlanDetails(
         setupOrderPcs,
         assignedMachines,
         interruption: setupInterruption,
-        planningCalendar,
       });
       const fallbackMachineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
       const plannerParallelRemainingPcs = Math.max(setupOrderPcs - setupGoodQty, 0);
@@ -3570,11 +3570,11 @@ function machinePlanDetails(
         const itemComplete = effectiveStage === "item_complete";
         const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
-        const staticBaseReadyDate = addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar);
+        const staticBaseReadyDate = parseDate(rmInwardDate) || rmInwardDate;
         const baseSetupDate = splitRole === "remaining_moved_to_alternate_machine"
           ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption?.window.fromDate ?? "")
           : splitRole === "remaining_delayed_on_same_machine"
-            ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window, planningCalendar) : "")
+            ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window) : "")
             : readyDateForAssignment;
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
@@ -3605,7 +3605,7 @@ function machinePlanDetails(
           machinePlannedQty.set(machineKeyValue, (machinePlannedQty.get(machineKeyValue) ?? 0) + remainingMachineQty);
         }
         const machineReleaseDate = itemComplete ? actualCompletionDate || plannedProductionEndDate : plannedProductionEndDate;
-        if (machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate, planningCalendar)));
+        if (machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate)));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward || earlyDownstream, plannedStartDate, planningCalendar);
         if (earlyDownstream && physicalWipQty <= 0 && effectiveStage === "quality_approval") {
           taskReadiness.ready = false;
@@ -3721,7 +3721,7 @@ function machinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : earlyDownstream ? "Planner-approved early downstream setup" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same working date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added compatible machine overrides only that minimum-run split rule`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday and manual planning holidays affect finish forecasts only; setup starts may use off dates; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same calendar date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added compatible machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3755,7 +3755,7 @@ function machinePlanDetails(
       const bufferReadyDate = plannedWipBufferReadyDate(bufferArgs);
       const recordedWipReady = actualWipBufferAvailable(bufferArgs);
       operationReadyDate = recordedWipReady
-        ? addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar)
+        ? currentPlanningProductionDate(planningCalendar)
         : maxDateValue(operationReadyDate, bufferReadyDate || maxDateValue(...routeProductionEndDates));
       operationReadyCanPullForward = recordedWipReady;
     }
@@ -4098,9 +4098,9 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
         gapEnd: leadingGapEnd,
         excludedKeys: new Set([scheduleRowKey(first)]),
         planningCalendar,
-      }, candidateRows.filter(row => canUseGap(row, maxDateValue(queueReadyDate(row), addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar)))));
+      }, candidateRows.filter(row => canUseGap(row, maxDateValue(queueReadyDate(row), currentPlanningProductionDate(planningCalendar)))));
       if (leadingCandidate) {
-        const gapStart = maxDateValue(queueReadyDate(leadingCandidate), addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar));
+        const gapStart = maxDateValue(queueReadyDate(leadingCandidate), currentPlanningProductionDate(planningCalendar));
         moveToFamilyIdleGap(leadingCandidate, machine, gapStart, leadingGapEnd, machineUnavailableWindows);
         return machine;
       }
@@ -4108,7 +4108,7 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
     for (let index = 0; index < sorted.length - 1; index += 1) {
       const current = sorted[index]!;
       const next = sorted[index + 1]!;
-      const gapStart = maxDateValue(addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar), nextMachineAvailableDate(parseDate(rowText(current, "plannedProductionEndDate", "setupPlannedDate", "plannedDate")) || "", planningCalendar));
+      const gapStart = maxDateValue(currentPlanningProductionDate(planningCalendar), nextMachineAvailableDate(parseDate(rowText(current, "plannedProductionEndDate", "setupPlannedDate", "plannedDate")) || ""));
       const nextStart = parseDate(rowText(next, "setupPlannedDate", "plannedDate"));
       const gapEnd = nextStart ? addDays(nextStart, -1, planningCalendar) : "";
       if (!gapStart || !gapEnd || gapEnd < gapStart) continue;
@@ -4133,8 +4133,8 @@ function balanceMachineFamilyIdleGaps(details: Array<Record<string, unknown>>, p
     // Bound each proposed move by its old start, then let the normal scheduler
     // validate WIP, shared tools and unavailable windows before retaining it.
     const tailStart = maxDateValue(
-      addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar),
-      ...sorted.map(row => nextMachineAvailableDate(parseDate(rowText(row, "plannedProductionEndDate")), planningCalendar)),
+      currentPlanningProductionDate(planningCalendar),
+      ...sorted.map(row => nextMachineAvailableDate(parseDate(rowText(row, "plannedProductionEndDate")))),
     );
     const tailCandidate = candidateRows
       .filter(row => {
@@ -4242,7 +4242,7 @@ function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: Fami
   if (!gap.compatibleWith(row, gap.targetMachine)) return false;
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
-  const readyDate = maxDateValue(queueReadyDate(row), addDays(currentPlanningProductionDate(gap.planningCalendar), 0, gap.planningCalendar));
+  const readyDate = maxDateValue(queueReadyDate(row), currentPlanningProductionDate(gap.planningCalendar));
   if (!currentStart || !readyDate || currentStart <= readyDate || readyDate > gap.gapEnd) return false;
   const durationDays = plannedProductionDays(
     parseDate(rowText(row, "setupPlannedDate", "plannedDate")),
@@ -4264,7 +4264,7 @@ function isFamilyIdleGapCandidate(row: Record<string, unknown>, gap: FamilyIdleG
   if (!machineTypeCompatible(rowText(row, "machineType"), gap.targetMachineType)) return false;
   const currentStart = parseDate(rowText(row, "setupPlannedDate", "plannedDate"));
   if (!currentStart || currentStart <= gap.gapStart) return false;
-  const readyDate = maxDateValue(queueReadyDate(row), addDays(currentPlanningProductionDate(gap.planningCalendar), 0, gap.planningCalendar));
+  const readyDate = maxDateValue(queueReadyDate(row), currentPlanningProductionDate(gap.planningCalendar));
   if (!readyDate || readyDate > gap.gapStart) return false;
   const durationDays = plannedProductionDays(
     parseDate(rowText(row, "setupPlannedDate", "plannedDate")),
@@ -4399,7 +4399,7 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
         : "";
       const groupEndDate = maxDateValue(...productionEndDates);
       operationReadyDate = nextGroup?.rows.some((row) => planningMeta(row).canPullForward)
-        ? addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar)
+        ? currentPlanningProductionDate(planningCalendar)
         : maxDateValue(groupReadyDate, earlyReadyDate || bufferReadyDate || groupEndDate);
       previousSetupEndDate = maxDateValue(previousSetupEndDate, groupEndDate);
     }
@@ -4424,7 +4424,7 @@ function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, plan
 }
 
 function earlyDownstreamWipDate(upstreamRows: Array<Record<string, unknown>>, availableWipQty: number, planningCalendar: PlanningCalendar) {
-  const today = addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar);
+  const today = currentPlanningProductionDate(planningCalendar);
   if (availableWipQty > 0) return today;
   const nextSupplyStart = upstreamRows
     .filter((row) => !shopFloorRowIsComplete(row))
@@ -4604,8 +4604,8 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       // Completed work has already released the machine, including today.
       // Forecast/running work still reserves its full planned production day.
       const releasedDate = shopFloorRowIsComplete(row)
-        ? addDays(maxDateValue(plannedProductionEndDate || plannedStartDate, currentPlanningProductionDate(planningCalendar)), 0, planningCalendar)
-        : nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar);
+        ? maxDateValue(plannedProductionEndDate || plannedStartDate, currentPlanningProductionDate(planningCalendar))
+        : nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate);
       machineNextDate = maxDateValue(machineNextDate, releasedDate);
       item.nextDate = machineNextDate;
       item.previousKey = scheduleRowKey(row);
@@ -4899,7 +4899,7 @@ function staleUnstartedForecastStartDate(row: Record<string, unknown>, planningC
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
   if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return "";
 
-  const today = addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar);
+  const today = currentPlanningProductionDate(planningCalendar);
   const materialReadyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate", "plannedStartDate", "plannedDate"));
   return materialReadyDate && today && materialReadyDate < today ? today : "";
 }
@@ -4909,7 +4909,7 @@ function unenteredProductionForecastStartDate(row: Record<string, unknown>, plan
   if (actualProductionStartDate(meta)) return "";
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
 
-  const today = addDays(currentPlanningProductionDate(planningCalendar), 0, planningCalendar);
+  const today = currentPlanningProductionDate(planningCalendar);
   if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return today;
   return staleUnstartedForecastStartDate(row, planningCalendar);
 }
@@ -4953,9 +4953,9 @@ function lockedProductionStartDate(row: Record<string, unknown>) {
   return parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn", "plannedProductionStartDate")) || "";
 }
 
-function nextMachineAvailableDate(dateValue: string, planningCalendar: PlanningCalendar) {
+function nextMachineAvailableDate(dateValue: string) {
   const date = parseDate(dateValue);
-  return date ? addDays(date, 1, planningCalendar) : "";
+  return date ? addCalendarDays(date, 1) : "";
 }
 
 function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineNextDate: string, previousKey: string) {
@@ -5466,7 +5466,7 @@ function machineUnavailableProductionDelay(
     const window = firstOverlappingMachineUnavailableWindow(windows, adjustedStartDate, adjustedEndDate);
     if (!window) break;
     matchedWindow = window;
-    const resumeDate = machineUnavailableResumeDate(window, planningCalendar);
+    const resumeDate = machineUnavailableResumeDate(window);
     if (!resumeDate || resumeDate <= adjustedStartDate) break;
     adjustedStartDate = resumeDate;
     adjustedEndDate = plannedProductionEnd(adjustedStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar);
@@ -5486,7 +5486,7 @@ function machineUnavailableRemainingProductionEnd(
   planningCalendar: PlanningCalendar,
 ) {
   const meta = planningMeta(row);
-  const resumeDate = machineUnavailableResumeDate(window, planningCalendar);
+  const resumeDate = machineUnavailableResumeDate(window);
   if (!resumeDate) return "";
   const remainingQty = Math.max((meta.orderPcs ?? 0) - (meta.productionActual?.actualQty ?? 0), 0);
   if (!remainingQty) return "";
@@ -5496,12 +5496,10 @@ function machineUnavailableSplitPlan({
   setupOrderPcs,
   assignedMachines,
   interruption,
-  planningCalendar,
 }: {
   setupOrderPcs: number;
   assignedMachines: string[];
   interruption?: MachineUnavailableSetupInterruption;
-  planningCalendar: PlanningCalendar;
 }): MachineUnavailableSplitPlan | undefined {
   if (!interruption || !assignedMachines.length) return undefined;
   const producedMachineKey = canonicalKey(interruption.machine);
@@ -5530,7 +5528,7 @@ function machineUnavailableSplitPlan({
     remainingMachineKeys.add(producedMachineKey);
     assignments.push({ machine: interruption.machine, role: "remaining_delayed_on_same_machine", orderPcs: remainingQty });
   }
-  const actualDate = addDays(interruption.window.fromDate, 0, planningCalendar);
+  const actualDate = interruption.window.fromDate;
   const producedActualByMachine = new Map<string, PlanningProductionActual>();
   if (actualDate && producedQty > 0) {
     producedActualByMachine.set(producedMachineKey, {
@@ -5570,8 +5568,8 @@ function firstOverlappingMachineUnavailableWindow(windows: MachineUnavailableWin
   return windows.find((window) => window.fromDate <= window.toDate && start <= window.toDate && end >= window.fromDate);
 }
 
-function machineUnavailableResumeDate(window: MachineUnavailableWindow, planningCalendar: PlanningCalendar) {
-  return addDays(window.toDate, 1, planningCalendar);
+function machineUnavailableResumeDate(window: MachineUnavailableWindow) {
+  return addCalendarDays(window.toDate, 1);
 }
 
 function machineUnavailableCanMoveSetupDate(row: Record<string, unknown>) {
@@ -6292,7 +6290,7 @@ function feasibleMachineAssignmentStart(
     const end = plannedProductionEnd(start, context.orderPcs, context.cycle, undefined, context.planningCalendar);
     const overlapping = firstOverlappingMachineUnavailableWindow(windows, start, end);
     if (!overlapping) break;
-    const resumeDate = machineUnavailableResumeDate(overlapping, context.planningCalendar);
+    const resumeDate = machineUnavailableResumeDate(overlapping);
     if (!resumeDate || resumeDate <= start) break;
     start = resumeDate;
   }

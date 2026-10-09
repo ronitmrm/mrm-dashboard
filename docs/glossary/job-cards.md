@@ -136,13 +136,18 @@ CNC-01 has 22.5 productive machine hours per working day: three shifts of
 7 hours 30 minutes each. Other Production Floors retain 8 productive hours.
 Finish estimates retain fractional working days, shown as productive hours
 into the finish date, rather than invented wall-clock shift times. Machine
-queue reservations still use whole dates. Fridays and Planning Calendar
-holidays are excluded, and material and WIP availability constraints still apply.
+queue reservations still use whole dates. Friday weekly offs and Planning Calendar
+holidays are excluded from forecast production capacity and setup/Job Card finish
+dates only. They do not prevent planning, setup preparation, or a setup start.
+Setup start dates retain their calendar dates, including offs. Material and WIP
+availability, active machine ownership, tooling, reviewed queue order, and explicit
+machine-unavailable constraints still apply.
 
 For CNC, the current planning Production Date changes at 06:00 IST, matching
 Shift C's end. Thursday work remains due after midnight through Friday 06:00;
-Friday's weekly off then lasts until Saturday 06:00. Recalculation must not
-roll that remaining Thursday work to Saturday or block its workflow at midnight.
+Friday's weekly off then lasts until Saturday 06:00 for finish forecasting.
+Recalculation must not roll setup starts to Saturday or block their workflow
+because of midnight, a weekly off, or a Planning Calendar holiday.
 
 Shop Floor Status shows the recorded lifecycle of each setup on its assigned
 machine. Job Card Current Estimated Finish includes all remaining route setups,

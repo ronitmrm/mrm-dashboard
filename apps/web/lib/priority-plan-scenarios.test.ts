@@ -47,15 +47,16 @@ describe("priorityPlanWindow", () => {
     });
   });
 
-  it("respects a downstream minimum start from the previous setup", () => {
+  it("retains a downstream start on Friday and skips festive offs in its finish", () => {
     expect(priorityPlanWindow({
       targetStartDate: "5-July-26",
       targetEndDate: "5-July-26",
       blockers: [],
       minimumStartDate: "17-July-26",
+      holidays: ["18-July-26"],
     })).toEqual({
-      startDate: "18-July-26",
-      endDate: "18-July-26",
+      startDate: "17-July-26",
+      endDate: "19-July-26",
     });
   });
   it("waits behind a queued blocker that the planner keeps ahead", () => {

@@ -49,10 +49,6 @@ export function priorityPlanWindow({
 
   const holidayDates = new Set(holidays.map(normalizedDate).filter((date) => date !== undefined).map(Number));
   const workday = (date: Date) => isPlanningWorkday(date) && !holidayDates.has(Number(date));
-  const nextWorkday = (date: Date) => {
-    while (!workday(date)) date = addCalendarDays(date, 1);
-    return date;
-  };
   let durationDays = 0;
   for (let day = targetStart; day <= (targetEnd ?? targetStart); day = addCalendarDays(day, 1)) {
     if (workday(day)) durationDays += 1;
@@ -72,11 +68,11 @@ export function priorityPlanWindow({
   const earliestPreemptedStart = minDate(...preempted.map((blocker) => blocker.start).filter(Boolean) as Date[]);
   const blockingEnd = maxDate(...notPreempted.map((blocker) => blocker.end).filter(Boolean) as Date[]);
   const earliestStart = minDate(targetStart, earliestPreemptedStart) ?? targetStart;
-  let start = nextWorkday(maxDate(
+  let start = maxDate(
     earliestStart,
     blockingEnd ? addCalendarDays(blockingEnd, 1) : undefined,
     normalizedDate(minimumStartDate),
-  ) ?? targetStart);
+  ) ?? targetStart;
   const releasedKeys = new Set(preempted.map((blocker) => blocker.key));
   const reservations = toolingReservations.filter((row) => !releasedKeys.has(row.key)).map((row) => ({
     ...row, start: normalizedDate(row.startDate), end: normalizedDate(row.endDate),
@@ -86,11 +82,11 @@ export function priorityPlanWindow({
     return { startDate: "", endDate: "" };
   }
   let end = start;
-  // Check the whole run, including reservations that begin after the candidate start.
+  // Tooling remains reserved on offs; only production capacity skips those dates.
   for (;;) {
     end = start;
     let conflictEnd: Date | undefined;
-    for (let remaining = durationDays; remaining > 0; end = nextWorkday(addCalendarDays(end, 1))) {
+    for (let remaining = durationDays; remaining > 0; end = addCalendarDays(end, 1)) {
       for (const [code, capacity] of Object.entries(toolingCapacity)) {
         const occupied = reservations.filter((row) => row.codes.includes(code) && row.start! <= end && row.end! >= end);
         if (occupied.length >= capacity) {
@@ -98,10 +94,11 @@ export function priorityPlanWindow({
           break;
         }
       }
-      if (conflictEnd || --remaining === 0) break;
+      if (conflictEnd) break;
+      if (workday(end) && --remaining === 0) break;
     }
     if (!conflictEnd) break;
-    start = nextWorkday(addCalendarDays(conflictEnd, 1));
+    start = addCalendarDays(conflictEnd, 1);
   }
   return { startDate: dateLabel(start), endDate: dateLabel(end) };
 }

@@ -239,11 +239,11 @@ The company-wide operational record for physical machines. Its machine list open
 _Avoid_: Editing Machine Master inside the Machine Workspace, duplicate machine-history storage, Production-floor-specific machine registers.
 
 **Factory Planning Holiday**:
-A non-working date applied to Conventional, CNC, and Forging production-floor planning.
+A date excluded from forecast production capacity and finish dates for Conventional, CNC, and Forging. It does not block planning or setup starts.
 _Avoid_: Re-entering the same factory holiday separately for each floor.
 
 **Production-Floor Planning Holiday**:
-A non-working date applied only to one selected production floor while other floors remain available for planning.
+A date excluded from forecast production capacity and finish dates for one selected Production Floor. It does not block planning or setup starts.
 _Avoid_: Department holiday.
 
 **Defect / Downtime Reason**:

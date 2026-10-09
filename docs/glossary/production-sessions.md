@@ -254,7 +254,8 @@ until Friday 06:00; the weekly off lasts until Saturday 06:00. For example,
 8-Oct Shift C runs from 8-Oct 22:00 to 9-Oct 06:00, retaining 8-Oct as its
 Production Date. CNC planning and planned-date task readiness use this same
 06:00 boundary, including when a Planning Calendar holiday follows a working
-day. Forecasts still exclude Friday and holiday Production Dates.
+day. Finish forecasts still exclude Friday and holiday Production Dates; those
+offs do not block planning, setup preparation, or setup starts.
 
 Start Session pre-fills the selected shift's scheduled start. End Session pre-fills that session's scheduled shift end. Both remain editable for exceptions; for example, Conventional starts at 08:30 and ends at 20:00.
 
