@@ -254,14 +254,16 @@ Personal use issues it to the requesting employee and records that person as
 the physical holder. A Store stock request asks Main Store to transfer
 accountability to a specified Quality or production Store. Only a person with
 Store request submission permission and request permission for that receiving Store can
-submit this request. A serialized Store stock request names one exact Unit ID;
-a Consumable Store stock request names an Asset Code and quantity. Submission
-does not move stock. Main Store fulfills a Store stock request with a recorded
-accountability or quantity transfer; the receiving Store then controls later
+submit this request. A serialized Store stock request names exact Unit IDs;
+a Consumable Store stock request names an Asset Code and quantity. A requester
+who enters a quantity of serialized units selects that many distinct Unit IDs.
+Submission does not move stock. Main Store fulfills a Store stock request with
+a recorded accountability or quantity transfer; the receiving Store then controls later
 movement and consumption. Each fulfillment records the request and actor in
-the shared company ledger. A Unit ID can be requested and transferred only
-one at a time per request line; one Store stock request may contain multiple
-Asset Codes. Consumable quantities may be fulfilled in parts.
+the shared company ledger. Each Unit ID is requested and transferred on its
+own line under one Request Number; a Store stock request may contain multiple
+Unit IDs of the same Asset Code and multiple Asset Codes. Consumable quantities
+may be fulfilled in parts.
 
 A Repair Purchase Order may create a pending Store Request on behalf of a
 selected Department for one unit of the same Asset Code when reassignment is
