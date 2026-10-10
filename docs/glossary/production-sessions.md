@@ -313,6 +313,18 @@ Session efficiency compares total produced pieces, including rejected pieces,
 with that target: `total produced / target quantity × 100`. It may exceed 100%
 and is unavailable when the target quantity is zero.
 
+Planning Control lists each closed, non-reversed Production Session whose
+completed output gives efficiency strictly above 100%, across the full history
+of the selected Production Unit. Sessions awaiting weight and sessions with no
+positive target are excluded. These are informational flags: output, session
+closure, setup progress and planning calculations continue without approval.
+
+The planner closes a flag by saving a non-blank comment describing the review
+or action taken. The session then leaves the open flagged list, even if its
+efficiency remains above 100%. The comment, planner and closure time remain in
+the session timeline. Closure changes no production quantities or targets and
+remains recorded through later session corrections.
+
 Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
 
 Saving an approved machine move, parallel-machine target stop, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.

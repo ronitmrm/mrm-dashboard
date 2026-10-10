@@ -1211,6 +1211,19 @@ describe("production and shop-floor workflows", () => {
       targetPieces: 50,
       totalPieces: 64,
     })
+    const flagQuery = { organizationId, productionFloorCode: "conventional", sessionId: session.id, efficiencyFlagsOnly: true }
+    expect((await repository.readProductionSessions(flagQuery)).rows).toHaveLength(1)
+    const flagState = await repository.readProductionSessionState(flagQuery)
+    const closeFlag = { organizationId, productionFloorCode: "conventional", sessionId: session.id,
+      expectedRowVersion: Number(register.rows[0]!.rowVersion), comment: "Output and cycle time reviewed; no correction needed." }
+    await expect(repository.closeProductionSessionEfficiencyFlag({ ...closeFlag, comment: " " }))
+      .rejects.toThrow("Closure comment is required")
+    await repository.closeProductionSessionEfficiencyFlag(closeFlag)
+    expect((await repository.readProductionSessions(flagQuery)).rows).toHaveLength(0)
+    const refreshedFlags = await repository.readProductionSessionState({ ...flagQuery, knownSourceRevision: flagState.sourceRevision })
+    expect(refreshedFlags).toMatchObject({ notModified: false, rows: [] })
+    expect((await repository.readProductionSessions({ ...flagQuery, efficiencyFlagsOnly: false })).rows[0])
+      .toMatchObject({ totalPieces: 64, goodPieces: 61, rejectedPieces: 3, targetPieces: 50 })
     const events = await repository.readProductionSessionEvents({
       organizationId,
       productionFloorCode: "conventional",
@@ -1218,6 +1231,9 @@ describe("production and shop-floor workflows", () => {
     })
     expect(events.rows.filter((row) => row.eventType === "session_correction"))
       .toHaveLength(3)
+    expect(events.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "efficiency_flag_closed", reasonName: closeFlag.comment, enteredRole: "planner" }),
+    ]))
 
     const completedSetup = (await repository.readCompletedSetups({ organizationId, productionFloorCode: "conventional" }))
       .rows.find(row => row.jobCardNumber === firstJobCard && row.machineNumber === firstMachine)!
@@ -1228,6 +1244,7 @@ describe("production and shop-floor workflows", () => {
       .toEqual({ stage: "planned", active: false, completed_at: null })
     const reopenedSession = (await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", sessionId: session.id })).rows[0]
     expect(reopenedSession).toMatchObject({ goodPieces: 61, totalPieces: 64, rejectedPieces: 3, endReason: "manual_stop" })
+    expect(reopenedSession?.efficiencyFlagReview).toMatchObject({ comment: closeFlag.comment })
     expect((await pool.query("SELECT count(*)::int AS count FROM audit.events WHERE target_id = $1 AND event_type = 'production.setup.reopened'", [completedSetup.id])).rows[0]).toEqual({ count: 1 })
     await expect(repository.reopenSetup(reopen)).rejects.toThrow("Setup changed")
   })

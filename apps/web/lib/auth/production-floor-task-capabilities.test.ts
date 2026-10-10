@@ -19,6 +19,12 @@ describe("production floor task capabilities", () => {
   })
 
   it("resolves direct dashboard actions to the exact floor task", () => {
+    expect(productionFloorTaskForMutation("production-session-efficiency-flag-close", {
+      productionFloorCode: "cnc",
+    })).toMatchObject({
+      capability: "operations.floors.cnc.planning_control.planner_workflow_resolution.write",
+      legacyCapability: "operations.shop_floor.write",
+    })
     expect(
       productionFloorTaskForMutation("planner-priority", {
         productionFloorCode: "conventional",

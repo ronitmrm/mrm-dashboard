@@ -1356,6 +1356,17 @@ async function post(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "production-session-efficiency-flag-close") {
+      const result = await withProductionRepository(request, "operations.shop_floor.write",
+        ({ actorUserId, organizationId, repository }) => repository.closeProductionSessionEfficiencyFlag({
+          actorUserId, organizationId, productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+          sessionId: requiredDashboardText(body.sessionId, "Production session"),
+          expectedRowVersion: numeric(body.expectedRowVersion),
+          comment: requiredDashboardText(body.comment, "Closure comment"),
+        }))
+      return json({ ...result, message: "Efficiency flag closed. Comment saved in the session timeline." })
+    }
+
     if (path === "setup-reopen") {
       const result = await withProductionRepository(request, "planning.override.write",
         ({ actorUserId, organizationId, repository }) => repository.reopenSetup({
@@ -2639,6 +2650,7 @@ const knownDashboardApiPaths = new Set([
   "mark-complete",
   "plan-override",
   "setup-reopen",
+  "production-session-efficiency-flag-close",
   "planner-priority",
   "raw-material-rejection",
   "rm-inward-delete",

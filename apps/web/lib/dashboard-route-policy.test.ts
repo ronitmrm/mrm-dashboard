@@ -35,6 +35,9 @@ describe("dashboard route policy", () => {
     expect(dashboardMutationCapabilities("attendance")).toEqual([
       "operations.attendance.write",
     ])
+    expect(dashboardMutationCapabilities("production-session-efficiency-flag-close")).toEqual([
+      "operations.shop_floor.write",
+    ])
     expect(dashboardMutationCapabilities("data-import")).toContain(
       "quality.hourly.write"
     )
