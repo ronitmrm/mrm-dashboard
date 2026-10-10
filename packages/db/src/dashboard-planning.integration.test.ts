@@ -1406,7 +1406,10 @@ describe("dashboard planning writes", () => {
         setupNumber: 1,
         toMachineNumber: targetMachine,
       })
-    ).rejects.toThrow("active setup")
+    ).rejects.toMatchObject({
+      status: 409,
+      message: `${targetMachine} is assigned to Job Card ${blockingJobCard}, Setup 1. Approve its stop in the target machine review and close any open Production Session before moving this setup.`,
+    })
 
     await repository.recordPlanOverride({
       fromMachineNumber: sourceMachine,

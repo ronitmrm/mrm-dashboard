@@ -5327,7 +5327,7 @@ function PartMachineSwitchPlannerForm({
   submitAction,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
 }) {
   const plannedRows = useMemo(
     () =>
@@ -5465,8 +5465,12 @@ function PartMachineSwitchPlannerForm({
   )
   const targetInterruptionRows = useMemo(
     () =>
-      partMachineSwitchTargetInterruptionRows(queueReviewGroups, selectedRows),
-    [queueReviewGroups, selectedRows]
+      plannedRows.filter((row) =>
+        machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
+        parallelTargetRowIsActive(row) &&
+        !selectedRows.some((selected) => machineIssueRowKey(selected) === machineIssueRowKey(row))
+      ),
+    [plannedRows, selectedRows, toMachine]
   )
   const canReview =
     Boolean(
@@ -5482,7 +5486,10 @@ function PartMachineSwitchPlannerForm({
     reviewReady &&
     selectedRows.length > 0 &&
     !switchConflicts.length &&
-    queueReviewConfirmed
+    queueReviewConfirmed &&
+    targetInterruptionRows.every(
+      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+    )
 
   function updateField(
     setter: Dispatch<SetStateAction<string>>,
@@ -5514,8 +5521,10 @@ function PartMachineSwitchPlannerForm({
             : "",
         reason: `Planner replacing conflicting machine switch with ${target} setup ${setupNo} to ${toMachine}`,
         correctedBy: "Planner",
-      })
+      }, { throwOnError: true })
       setResolvedConflictIds((current) => new Set([...current, targetId]))
+    } catch {
+      // submitAction displays the error; keep the conflict for another review.
     } finally {
       setIsSubmitting(false)
     }
@@ -5551,7 +5560,7 @@ function PartMachineSwitchPlannerForm({
         interruptedSetups,
         queuePlacements,
         reason,
-      })
+      }, { throwOnError: true })
       setSelectedItem("")
       setTarget("")
       setSetupNo("")
@@ -5563,6 +5572,8 @@ function PartMachineSwitchPlannerForm({
       setResolvedConflictIds(new Set())
       setReviewReady(false)
       setQueueReviewConfirmed(false)
+    } catch {
+      // submitAction displays the error; preserve the reviewed move for correction.
     } finally {
       setIsSubmitting(false)
     }
@@ -5749,11 +5760,11 @@ function PartMachineSwitchPlannerForm({
             <div className="grid gap-2 rounded-md border bg-background p-3">
               <div>
                 <div className="text-sm font-medium">
-                  Target Machine Running Setup
+                  Target Machine Active Setup
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Choose Whether To Stop It. If Selected, Close Its Production
-                  Session Normally Before Saving.
+                  Approve Its Stop Before Moving This Setup. Close Any Open
+                  Production Session Normally Before Saving.
                 </div>
               </div>
               {targetInterruptionRows.map((row) => {
@@ -5792,20 +5803,27 @@ function PartMachineSwitchPlannerForm({
                           : "Do Not Stop / Click To Stop"}
                       </Button>
                       {selected ? (
-                        <StatusBadge value="Session close required" />
+                        <StatusBadge
+                          value={machineIssueRowNeedsProducedQty(row)
+                            ? "Session close required"
+                            : "Stop approved"}
+                        />
                       ) : null}
                     </div>
                   </div>
                 )
               })}
               {targetInterruptionRows.some(
-                (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+                (row) =>
+                  selectedTargetInterruptions[machineIssueRowKey(row)] &&
+                  machineIssueRowNeedsProducedQty(row)
               ) ? (
                 <PlannerSessionSettlementNotice
                   mode="close"
                   rows={targetInterruptionRows.filter(
                     (row) =>
-                      selectedTargetInterruptions[machineIssueRowKey(row)]
+                      selectedTargetInterruptions[machineIssueRowKey(row)] &&
+                      machineIssueRowNeedsProducedQty(row)
                   )}
                   sessionRows={asArray(productionControl.productionCardRows)}
                 />
@@ -18768,32 +18786,6 @@ function parallelTargetRowIsActive(row: DashboardPayload) {
     !planningRowIsShiftedAfterBreakdown(row) &&
     machineIssueRowIsLocked(row)
 }
-function partMachineSwitchTargetInterruptionRows(
-  groups: MachineConstraintQueueReviewGroup[],
-  selectedRows: DashboardPayload[]
-) {
-  const selectedKeys = new Set(selectedRows.map(machineIssueRowKey))
-  const rows: DashboardPayload[] = []
-  const seen = new Set<string>()
-  for (const group of groups.filter(
-    (candidate) => candidate.kind === "destination"
-  )) {
-    for (const row of group.rows) {
-      const key = machineIssueRowKey(row)
-      if (
-        !key ||
-        selectedKeys.has(key) ||
-        seen.has(key) ||
-        !machineIssueRowNeedsProducedQty(row)
-      )
-        continue
-      seen.add(key)
-      rows.push(row)
-    }
-  }
-  return rows
-}
-
 function machineIssueRowNeedsProducedQty(row: DashboardPayload) {
   if (shopFloorItemIsFinished(row)) return false
   const runningStatus = str(row.runningStatus).toLowerCase()
