@@ -327,10 +327,12 @@ function OperationalTable({
     if (applicableFilters !== filters) setFilters(applicableFilters)
     if (applicableSort !== sort) setSort(applicableSort)
     setFilterHosts((current) => {
-      const currentHosts = Object.values(current)
+      const currentHosts = Object.entries(current)
       const nextHosts = Object.values(nextFilterHosts)
       return currentHosts.length === nextHosts.length &&
-        currentHosts.every((host, index) => host === nextHosts[index])
+        currentHosts.every(
+          ([index, host]) => host === nextFilterHosts[Number(index)]
+        )
         ? current
         : nextFilterHosts
     })
