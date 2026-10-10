@@ -10,7 +10,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
@@ -114,11 +113,6 @@ export function PlanningControlReview({
     <SectionCard>
       <CardHeader>
         <CardTitle>Planning Review</CardTitle>
-        <CardDescription>
-          Review session flags above 100% efficiency and production entries missing
-          operator assignment or machine start. Add a comment to close a session
-          flag, or resolve the missing workflow. Session comments remain in the timeline.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {delivery.loading ? (
@@ -150,11 +144,6 @@ export function PlanningControlReview({
           <OperationalTable
             filterStorageKey={`planning-control-review-${floor}`}
             containerClassName="max-h-[70vh] rounded-lg border"
-            toolbarStart={
-              <span className="text-sm text-muted-foreground">
-                {quantity.format(sessions.length)} session flags · {quantity.format(workflows.length)} workflow exceptions · Full session history
-              </span>
-            }
           >
             <TableHeader>
               <TableRow>

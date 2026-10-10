@@ -252,10 +252,13 @@ test("actual finish carries completed final work across an equivalent route chan
   const input = {
     workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
     dataEntries: [
-      entry("work_order", { jcNo: "P2266", partCode: "M2164B", optionNumber: "1", orderPcs: 50 }),
+      entry("work_order", { jcNo: "P2266", partCode: "M2164B", optionNumber: "1", orderPcs: 50, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
       entry("route", { ...setup, optionNumber: "1" }),
       entry("route", { partNo: "M2164B", setupNo: "2", setupName: "Face", machineFamily: "T25", optionNumber: "1" }),
       entry("route", { ...setup, optionNumber: "2" }),
+      entry("machine_master", { machineNo: "CNC-12", machineType: "CNC", machineFamily: "T25", status: "Active" }),
+      entry("cycle", { ...setup, optionNumber: "2", cycleTime: 60 }),
+      entry("tooling", { ...setup, optionNumber: "2" }),
     ],
     productionEntries: [{ jobCard: "P2266", partCode: "M2164B", optionNumber: "1", setupNo: "1", machine: "CNC-12", machineType: "CNC", operatorId: "OP1", prodDate: "2026-10-01", outputQty: 100, actualQty: 100, rejectQty: 0, targetQty: 50 }],
     routeSelections: [{ jobCardNumber: "P2266", routeCode: "1", createdAt }],
@@ -265,8 +268,17 @@ test("actual finish carries completed final work across an equivalent route chan
   const control = buildLegacyDashboardSnapshot(input).productionControl
 
   expect(control.workOrders[0]).toMatchObject({ optionNumber: "2", routeStatus: "Route change plan", finalSetupNumber: "1", finalSetupGoodPieces: 100, dispatchedPieces: 0, dispatchAvailablePieces: 100 })
-  expect(control).toMatchObject({ allWorkOrderGaps: [], masterGaps: [] })
+  expect(control).toMatchObject({ allWorkOrderGaps: [], masterGaps: [], machinePlanDetailRows: [], workflowExceptionRows: [] })
   expect(control.productionDashboardRows[0]).toMatchObject({ actualFinishDate: "1-Oct-26", dispatchAvailablePieces: 100 })
+
+  const unrecordedNewRouteWorkflow = buildLegacyDashboardSnapshot({
+    ...input,
+    routeChanges: [{ ...input.routeChanges[0]!, remainingSetups: [{ setupNumber: 1, plan: true, quantity: 50 }] }],
+    productionEntries: [{ ...input.productionEntries[0]!, optionNumber: "2" }],
+  }).productionControl
+  expect(unrecordedNewRouteWorkflow).toMatchObject({ workflowExceptionRows: [
+    expect.objectContaining({ jcNo: "P2266", optionNumber: "2", rawProductionWithoutWorkflow: true }),
+  ] })
 
   const newRouteStateWithoutOutput = buildLegacyDashboardSnapshot({
     ...input,

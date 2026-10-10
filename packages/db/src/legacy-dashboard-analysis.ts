@@ -1823,9 +1823,10 @@ function projectedRouteDispatchDate({
   if (!partCode || !optionNumber || optionNumber === "Not selected") return physicalPlanEndDate;
 
   const allRoutes = routeGroups.get([canonicalKey(partCode), optionNumber].join("|")) ?? [];
-  const remainingSetups = routeChangeRemainingPlan(workOrder).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
+  const routeChangeRemainingSetups = routeChangeRemainingPlan(workOrder);
+  const remainingSetups = routeChangeRemainingSetups.filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
   const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));
-  const routes = remainingSetups.length
+  const routes = routeChangeRemainingSetups.length
     ? allRoutes.filter((route) => remainingQtyBySetup.has(canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber))))
     : allRoutes;
   if (!routes.length) return physicalPlanEndDate;
@@ -3253,10 +3254,11 @@ function machinePlanDetails(
     if (!isMaterialPlanningReady(row)) continue;
     if (rowText(row, "optionSource") === "Route change" && rowText(row, "planningBlocker") !== "All checks ready") continue;
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
-    const remainingSetups = routeChangeRemainingPlan(row).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
+    const routeChangeRemainingSetups = routeChangeRemainingPlan(row);
+    const remainingSetups = routeChangeRemainingSetups.filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
     const remainingQtyBySetup = new Map(remainingSetups.map((setup) => [canonicalKey(setup.setupNo), setup.quantity]));
     const allRoutes = routeGroups.get(routeKeyValue) ?? [];
-    const routes = remainingSetups.length
+    const routes = routeChangeRemainingSetups.length
       ? allRoutes.filter((route) => remainingQtyBySetup.has(canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber))))
       : allRoutes;
     const rmInwardDate = rowText(row, "rmInwardDate");
