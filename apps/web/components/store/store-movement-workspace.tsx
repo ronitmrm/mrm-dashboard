@@ -68,10 +68,22 @@ export function StoreMovementWorkspace({
   vendors: React.ComponentProps<typeof StoreMovementForm>["vendors"]
 }) {
   const [action, setAction] = useState<"PHYSICAL" | "QUANTITY" | "ACCOUNTABILITY">("PHYSICAL")
+  const [formOpen, setFormOpen] = useState(Boolean(initialUnitId))
   const otherStores = stores.filter((store) => store.code !== "MAIN")
 
   return (
+    <>
+      <Button
+        aria-expanded={formOpen}
+        className="w-fit"
+        onClick={() => setFormOpen((open) => !open)}
+        type="button"
+        variant={formOpen ? "outline" : "default"}
+      >
+        {formOpen ? "Close Movement Form" : "Record Movement"}
+      </Button>
     <FormSection
+      className={formOpen ? undefined : "hidden"}
       description="Choose what is moving. Physical movement changes where a Unit ID is held; a Store transfer changes which Store is responsible."
       title="Record Movement"
       width="standard"
@@ -163,5 +175,6 @@ export function StoreMovementWorkspace({
         </TransferForm>
       ) : null}
     </FormSection>
+    </>
   )
 }
