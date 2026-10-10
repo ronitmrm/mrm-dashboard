@@ -22,6 +22,9 @@ export function StoreStorageLocationField({
   name = "destination_location_id",
   storage,
   storeCode,
+  compact = false,
+  onValueChange,
+  value,
 }: {
   id: string
   itemTypeId: string
@@ -29,6 +32,9 @@ export function StoreStorageLocationField({
   name?: string
   storage: StoreStorageLocations
   storeCode: string
+  compact?: boolean
+  onValueChange?: (value: string) => void
+  value?: string
 }) {
   const locations = storage.locations.filter(
     (location) => location.storeCode.toLowerCase() === storeCode.toLowerCase()
@@ -45,13 +51,17 @@ export function StoreStorageLocationField({
 
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel className={compact ? "sr-only" : undefined} htmlFor={id}>
+        {label}
+      </FieldLabel>
       <NativeSelect
-        defaultValue={defaultId}
+        defaultValue={onValueChange ? undefined : defaultId}
         id={id}
         key={`${storeCode}-${itemTypeId}-${defaultId}`}
         name={name}
+        onValueChange={onValueChange}
         required
+        value={onValueChange ? (value ?? defaultId) : undefined}
       >
         <NativeSelectOption disabled value="">
           Select storage location
@@ -62,11 +72,13 @@ export function StoreStorageLocationField({
           </NativeSelectOption>
         ))}
       </NativeSelect>
-      <FieldDescription>
-        {existing
-          ? "Existing item location selected. Change it for this receipt if needed."
-          : "Choose where this item will be stored in the receiving Store."}
-      </FieldDescription>
+      {!compact ? (
+        <FieldDescription>
+          {existing
+            ? "Existing item location selected. Change it for this receipt if needed."
+            : "Choose where this item will be stored in the receiving Store."}
+        </FieldDescription>
+      ) : null}
     </Field>
   )
 }
