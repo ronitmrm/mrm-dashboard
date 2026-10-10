@@ -19,6 +19,7 @@ import {
   type DepartmentStoreActionState,
 } from "@/app/department-store/actions"
 import { FormGrid, FormSection } from "@/components/ui/golden-patterns"
+import { StoreStorageLocationField } from "./store-storage-location-field"
 
 type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepository>["listStoreWorkspace"]>>
 type StoreAction = (
@@ -105,7 +106,7 @@ function DestinationFields({
 
 export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
 
-export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], store, stores, today, vendors }: {
+export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], storageLocations, store, stores, today, vendors }: {
   action: DepartmentStoreAction
   assets: Workspace["assets"]
   consumables: Workspace["consumables"]
@@ -115,6 +116,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   recorderId: string
   selectedItemIds?: string[]
   store: Workspace["store"]
+  storageLocations: Workspace["storageLocations"]
   stores: Workspace["stores"]
   today: string
   vendors: Array<{ code: string; id: string; name: string }>
@@ -130,6 +132,9 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
     selectedItemIds.includes(item.itemTypeId) && Number(item.availableQuantity) > 0
   )
   const [replacementSetId, setReplacementSetId] = useState("")
+  const [transferItemId, setTransferItemId] = useState("")
+  const [transferAssetCode, setTransferAssetCode] = useState("")
+  const [destinationStoreCode, setDestinationStoreCode] = useState("")
   const [transferMode, setTransferMode] = useState<"quantity" | "physical">(
     action === "physical" ? "physical" : "quantity"
   )
@@ -145,19 +150,23 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
       </SelectField>
       {transferMode === "quantity" ? <ActionForm key="quantity" action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
         <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Consumable Asset Code" name="item_type_id" required>
+          <SelectField label="Consumable Asset Code" name="item_type_id" required
+            value={transferItemId} onValueChange={setTransferItemId}>
             <NativeSelectOption value="">Select an available item</NativeSelectOption>
             {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
               {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required>
+          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required
+            value={destinationStoreCode} onValueChange={setDestinationStoreCode}>
             <NativeSelectOption value="">Select Store</NativeSelectOption>
             {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
               {destination.name}
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
+          <StoreStorageLocationField id="quantity-transfer-location" itemTypeId={transferItemId}
+            storage={storageLocations} storeCode={destinationStoreCode} />
           <TextField label="Remark" name="remark" />
         </FormGrid>
       </ActionForm> : <ActionForm key="physical" action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
@@ -179,19 +188,24 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
       width="wide">
       <ActionForm action={transferDepartmentAssetAction} storeCode={store.code} submitLabel="Transfer Accountability">
         <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Unit ID" name="asset_code" required>
+          <SelectField label="Unit ID" name="asset_code" required
+            value={transferAssetCode} onValueChange={setTransferAssetCode}>
             <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
             {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
               {asset.assetCode} · {asset.assetName}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required>
+          <SelectField label={store.kind === "MAIN" ? "Receiving Store" : "Receiving Main Store"} name="destination_store_code" required
+            value={destinationStoreCode} onValueChange={setDestinationStoreCode}>
             <NativeSelectOption value="">Select Store</NativeSelectOption>
             {otherStores.map((destination) => <NativeSelectOption key={destination.id} value={destination.code}>
               {destination.name}
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Reason / handover note" name="remark" />
+          <StoreStorageLocationField id="asset-transfer-location"
+            itemTypeId={assets.find((asset) => asset.assetCode === transferAssetCode)?.itemTypeId ?? ""}
+            storage={storageLocations} storeCode={destinationStoreCode} />
         </FormGrid>
       </ActionForm>
     </FormSection> : null}

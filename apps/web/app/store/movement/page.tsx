@@ -135,6 +135,7 @@ export default async function StoreMovementPage({
 
       {canMove ? (
         <StoreMovementWorkspace
+          storageLocations={data.workspace.storageLocations}
           assets={canTransfer ? data.workspace.assets : []}
           canTransfer={canTransfer}
           consumables={canTransfer ? data.workspace.consumables : []}

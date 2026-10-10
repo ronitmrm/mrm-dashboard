@@ -111,6 +111,8 @@ export type StoreMasterData = {
     id: string
     locationType: string
     name: string
+    storeCode: string
+    storeName: string
   }>
   masters: {
     assetNames: Array<{
@@ -565,7 +567,7 @@ function masterRows(
     case "LOCATION":
       return data.locations.map((location) => ({
         code: location.code,
-        details: location.locationType,
+        details: `${location.storeName} · ${location.locationType}`,
         key: location.id,
         kind: "store_location",
         name: location.name,
@@ -574,6 +576,7 @@ function masterRows(
           location_code: location.code,
           location_name: location.name,
           location_type: location.locationType,
+          store_code: location.storeCode,
           master_id: location.id,
         },
       }))
@@ -749,6 +752,15 @@ function masterForm(
             value={defaults.master_id ?? ""}
           />
           <FieldGroup className="grid gap-4 md:grid-cols-3">
+            <SelectField
+              defaultValue={defaults.store_code ?? "MAIN"}
+              disabled={editing}
+              label="Accountable Store"
+              name="store_code"
+              options={Array.from(new Map(data.locations.map((location) => [
+                location.storeCode, { label: location.storeName, value: location.storeCode },
+              ])).values())}
+            />
             <TextField
               defaultValue={defaults.location_code}
               label="Code"

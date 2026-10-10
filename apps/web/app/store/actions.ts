@@ -225,6 +225,7 @@ export async function createStoreLocationAction(formData: FormData) {
                 | "UNIT",
               name: requiredText(formData, "location_name"),
               organizationId,
+              storeCode: optionalText(formData, "store_code") ?? "MAIN",
             })
       }
     )
@@ -899,6 +900,7 @@ export async function fulfillStoreTransferRequestAction(formData: FormData) {
   const transfers = createDepartmentStoreRepository({ pool: getWebPostgresPool() })
   const common = {
     actorUserId: session.user.id,
+    destinationLocationId: requiredText(formData, "destination_location_id"),
     destinationStoreCode: requiredText(formData, "destination_store_code"),
     movedBy: session.user.name?.trim() || session.user.email,
     organizationId,
@@ -942,6 +944,7 @@ export async function confirmStoreTransferBatchAction(formData: FormData) {
     destinationStoreCode,
     lines: requisitionIds.map((requisitionId, index) => ({
       assetCode: assetCodes[index]!, requisitionId,
+      destinationLocationId: requiredText(formData, `destination_location_${requisitionId}`),
     })),
     movedBy: session.user.name?.trim() || session.user.email,
     organizationId,
@@ -1039,21 +1042,15 @@ export async function receiveStoreStockAction(formData: FormData) {
           uploadId: guaranteeUploadId,
         })
       }
-      const [requestContext, location] = await Promise.all([
-        repository.requisitionRequestContext({
-          organizationId,
-          userId: actorUserId,
-        }),
-        repository.ensurePrimaryStoreLocation({
-          actorUserId,
-          organizationId,
-        }),
-      ])
+      const requestContext = await repository.requisitionRequestContext({
+        organizationId,
+        userId: actorUserId,
+      })
       const received = await repository.receiveStock({
         actorUserId,
         billDate: optionalText(formData, "bill_date"),
         billNumber: optionalText(formData, "bill_number"),
-        locationId: location.id,
+        locationId: requiredText(formData, "location_id"),
         organizationId,
         purchaseOrderLineId,
         quantity: positiveNumber(formData, "quantity"),
@@ -1107,21 +1104,17 @@ export async function receiveRemainingStoreStockBatchAction(
           uploadId: guaranteeUploadId,
         })
       }
-      const [requestContext, location] = await Promise.all([
-        repository.requisitionRequestContext({
-          organizationId,
-          userId: actorUserId,
-        }),
-        repository.ensurePrimaryStoreLocation({
-          actorUserId,
-          organizationId,
-        }),
-      ])
+      const requestContext = await repository.requisitionRequestContext({
+        organizationId,
+        userId: actorUserId,
+      })
       const received = await repository.receiveRemainingStockBatch({
         actorUserId,
         billDate: optionalText(formData, "bill_date"),
         billNumber: optionalText(formData, "bill_number"),
-        locationId: location.id,
+        lineLocationIds: Object.fromEntries(purchaseOrderLineIds.map((id) => [
+          id, requiredText(formData, `location_${id}`),
+        ])),
         organizationId,
         purchaseOrderId,
         purchaseOrderLineIds,

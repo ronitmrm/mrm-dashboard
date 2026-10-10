@@ -102,6 +102,7 @@ export async function transferDepartmentQuantityAction(
       ...context,
       sourceStoreCode: context.storeCode,
       destinationStoreCode: required(formData, "destination_store_code"),
+      destinationLocationId: required(formData, "destination_location_id"),
       itemTypeId: required(formData, "item_type_id"),
       quantity: quantity(formData),
       remark: optional(formData, "remark"),
@@ -154,6 +155,7 @@ export async function transferDepartmentAssetAction(
       ...context,
       sourceStoreCode: context.storeCode,
       destinationStoreCode: required(formData, "destination_store_code"),
+      destinationLocationId: required(formData, "destination_location_id"),
       assetCode: required(formData, "asset_code"),
       remark: optional(formData, "remark"),
     }), "store.asset_movement.write", "/store/movement", true

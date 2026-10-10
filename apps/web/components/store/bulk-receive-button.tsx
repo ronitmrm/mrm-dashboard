@@ -13,14 +13,17 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { StoreStorageLocationField, type StoreStorageLocations } from "./store-storage-location-field"
 
 type Selection = {
+  lineIds: string[]
   count: number
   orderNumber: string
   purchaseOrderId: string
 }
 
 const emptySelection: Selection = {
+  lineIds: [],
   count: 0,
   orderNumber: "",
   purchaseOrderId: "",
@@ -42,6 +45,7 @@ function selectedReceipt(formId: string): Selection {
   const first = lines[0]
   return first
     ? {
+        lineIds: lines.map((line) => line.value),
         count: lines.length,
         orderNumber: first.dataset.selectionGroupLabel ?? "",
         purchaseOrderId: first.dataset.selectionGroup ?? "",
@@ -53,10 +57,14 @@ export function BulkReceiveButton({
   action,
   formId,
   receivedBy,
+  lines,
+  storageLocations,
 }: {
   action: (data: FormData) => void | Promise<unknown>
   formId: string
   receivedBy: string
+  lines: Array<{ id: string; itemTypeId: string; label: string }>
+  storageLocations: StoreStorageLocations
 }) {
   const [open, setOpen] = React.useState(false)
   const [selection, setSelection] = React.useState(emptySelection)
@@ -145,6 +153,17 @@ export function BulkReceiveButton({
             value={selection.purchaseOrderId}
           />
           <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            {lines.filter((line) => selection.lineIds.includes(line.id)).map((line) => (
+              <StoreStorageLocationField
+                id={`bulk-receipt-location-${line.id}`}
+                itemTypeId={line.itemTypeId}
+                key={line.id}
+                label={`${line.label} · Storage Location`}
+                name={`location_${line.id}`}
+                storage={storageLocations}
+                storeCode="MAIN"
+              />
+            ))}
             <p className="text-sm text-muted-foreground sm:col-span-2">
               Each Unit ID warranty end is calculated after its Installation Date is recorded.
             </p>

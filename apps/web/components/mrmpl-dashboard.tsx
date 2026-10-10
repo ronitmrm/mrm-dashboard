@@ -460,7 +460,7 @@ const storeMasterCsvColumns = {
     "rated_load",
     "unit",
   ],
-  LOCATION: ["location_code", "location_name", "location_type"],
+  LOCATION: ["location_code", "location_name", "location_type", "store_code"],
   MAKE_MODEL: ["make_model"],
   SUBCATEGORY: ["asset_category", "asset_subcategory_name"],
   SUPPLIER: [

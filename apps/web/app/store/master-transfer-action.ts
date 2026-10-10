@@ -220,6 +220,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
           location_code: ["code"],
           location_name: ["name"],
           location_type: ["type"],
+          store_code: ["accountable_store_code"],
         })
       )
     case "SUPPLIER":

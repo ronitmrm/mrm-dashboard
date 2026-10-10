@@ -33,6 +33,7 @@ import {
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { BulkReceiveButton } from "@/components/store/bulk-receive-button"
 import { StoreReceiptUnitFields } from "@/components/store/store-receipt-unit-fields"
+import { StoreStorageLocationField } from "@/components/store/store-storage-location-field"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { MetricSummary } from "@/components/ui/golden-patterns"
@@ -66,7 +67,7 @@ export default async function StoreOrdersPage() {
   const departments = createDepartmentStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const [allOrders, requestContext, equipmentUnits] = await (async () => {
+  const [allOrders, requestContext, equipmentUnits, storageLocations] = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const mainStore = await departments.getStoreByCode(organizationId, "MAIN")
     return Promise.all([
@@ -83,6 +84,8 @@ export default async function StoreOrdersPage() {
       canManage
         ? repository.listConnectedEquipmentUnits(organizationId)
         : Promise.resolve([]),
+      canManage ? repository.listStorageLocations(organizationId)
+        : Promise.resolve({ defaults: [], locations: [] }),
     ])
   })().finally(async () => {
     await departments.close()
@@ -163,6 +166,11 @@ export default async function StoreOrdersPage() {
                   action={receiveRemainingStoreStockBatchAction}
                   formId={bulkReceiptFormId}
                   receivedBy={receivedBy}
+                  lines={data.filter((order) => order.orderType === "GOODS").map((order) => ({
+                    id: order.id, itemTypeId: order.itemTypeId!,
+                    label: `${order.typeCode} · ${order.itemName}`,
+                  }))}
+                  storageLocations={storageLocations}
                 />
               ) : null
             }
@@ -301,6 +309,13 @@ export default async function StoreOrdersPage() {
                                   value={order.id}
                                 />
                                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                                  <StoreStorageLocationField
+                                    id={`receipt-location-${order.id}`}
+                                    itemTypeId={order.itemTypeId!}
+                                    name="location_id"
+                                    storage={storageLocations}
+                                    storeCode="MAIN"
+                                  />
                                   <Field>
                                     <FieldLabel htmlFor={`receipt-received-by-${order.id}`}>
                                       Received By

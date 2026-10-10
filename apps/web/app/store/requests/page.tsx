@@ -33,6 +33,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { BulkAllocationButton } from "@/components/store/bulk-allocation-button"
 import { StoreTransferConfirmation } from "@/components/store/store-transfer-confirmation"
+import { StoreStorageLocationField } from "@/components/store/store-storage-location-field"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
@@ -61,14 +62,16 @@ export default async function StoreRequestsPage() {
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const { requests, transferChoices } = await (async () => {
+  const { requests, transferChoices, storageLocations } = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     const requests = (await repository.listRequisitions({ organizationId })).rows
     const transferChoices = requests.some((request) =>
       request.fulfillmentKind === "STORE_TRANSFER" &&
       request.trackingMode === "SERIALIZED" && request.status === "Pending")
       ? await repository.listStoreTransferUnitChoices(organizationId) : []
-    return { requests, transferChoices }
+    const storageLocations = canManage ? await repository.listStorageLocations(organizationId)
+      : { defaults: [], locations: [] }
+    return { requests, transferChoices, storageLocations }
   })().finally(() => repository.close())
   const transferGroups = new Map<string, typeof requests>()
   for (const request of requests) {
@@ -137,6 +140,7 @@ export default async function StoreRequestsPage() {
                       (!unit.reservedRequestId || lines.some((own) =>
                         own.id === unit.reservedRequestId))))}
                   destinationStoreCode={lines[0]!.receivingStoreCode!}
+                  storageLocations={storageLocations}
                   lines={lines.map((line) => ({
                     id: line.id,
                     itemTypeId: line.itemTypeId,
@@ -335,6 +339,12 @@ export default async function StoreRequestsPage() {
                                   <form action={fulfillStoreTransferRequestAction} className="grid gap-3">
                                     <input name="requisition_id" type="hidden" value={request.id} />
                                     <input name="destination_store_code" type="hidden" value={request.receivingStoreCode ?? ""} />
+                                    <StoreStorageLocationField
+                                      id={`transfer-location-${request.id}`}
+                                      itemTypeId={request.itemTypeId}
+                                      storage={storageLocations}
+                                      storeCode={request.receivingStoreCode ?? ""}
+                                    />
                                     {request.requestedUnitCode ? (
                                       <>
                                         <Input aria-label="Unit ID" readOnly value={request.requestedUnitCode} />
