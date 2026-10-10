@@ -156,7 +156,9 @@ downstream work does not reserve a machine or bypass actual-WIP readiness withou
 the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
 An approved route change sets the selected route and the remaining setup
-quantities for future planning. If any selected setup lacks required masters,
+quantities for future planning. A saved route with zero remaining setup quantity
+still exists; it does not create a Route Master gap. Setup readiness checks apply
+to the setups with remaining planned quantity. If any such setup lacks required masters,
 Part Readiness lists the gaps and the changed Job Card receives no new machine
 plan until the selected route is ready. A Move Setup decision uses the target
 machine from its decision date onward; an outage that ended before that decision
