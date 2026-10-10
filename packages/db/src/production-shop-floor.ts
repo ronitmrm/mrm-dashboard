@@ -30,6 +30,7 @@ import {
   calculateProductionSessionOutput,
   formatProductionSessionReference,
   productionDowntimeEndOutcome,
+  productionSessionEfficiency,
   productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
@@ -3878,6 +3879,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       startDate?: string
       endDate?: string
       status?: "closed" | "open"
+      efficiencyFlagsOnly?: boolean
       limit?: number
       offset?: number
       includeEvents?: boolean
@@ -3892,13 +3894,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             JOIN catalog.machines machine ON machine.id = session.machine_id
             JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
             WHERE session.organization_id = $1 AND floor.code = $2
-              AND session.status = 'open' AND session.reversed_at IS NULL)
+              AND session.status = 'open' AND session.reversed_at IS NULL
+              AND NOT $3::boolean)
             THEN floor(extract(epoch FROM transaction_timestamp()) / 60)::text END AS bucket`,
-          [input.organizationId, floor])
+          [input.organizationId, floor, input.efficiencyFlagsOnly ?? false])
         const sourceRevision = await readDashboardSourceRevision(client, input.organizationId, floor,
           ["sessions", "productionEntries", "employee", "machine_master", "route", "work_order", "production_break_schedule"], {
             sessionId: input.sessionId, startDate: input.startDate, endDate: input.endDate,
-            status: input.status, limit: input.limit, offset: input.offset,
+            status: input.status, efficiencyFlagsOnly: input.efficiencyFlagsOnly,
+            limit: input.limit, offset: input.offset,
             includeEvents: input.includeEvents, grants: input.identity, minute: clock.rows[0]!.bucket,
           })
         if (input.knownSourceRevision === sourceRevision)
@@ -3948,6 +3952,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     async readProductionSessions(input: {
+      efficiencyFlagsOnly?: boolean
       endDate?: string
       limit?: number
       offset?: number
@@ -3988,18 +3993,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.quantity_good AS "goodPieces",
             session.quantity_rejected AS "rejectedPieces",
             session.source_payload AS "sessionPayload",
-            CASE
-              WHEN production_entry.source_payload ? 'targetQty'
-                THEN (production_entry.source_payload->>'targetQty')::bigint
-              WHEN session.cycle_time_seconds > 0 THEN floor(
-                GREATEST(
-                  floor(extract(epoch FROM (COALESCE(session.ended_at, now()) - session.started_at)) / 60)
-                    - COALESCE(downtime.minutes, 0),
-                  0
-                ) * 60 / session.cycle_time_seconds
-              )::bigint
-              ELSE 0
-            END AS "targetPieces",
+            target.pieces AS "targetPieces",
+            session.source_payload->'efficiencyFlagReview' AS "efficiencyFlagReview",
             session.job_card_number_snapshot AS "jobCardNumber",
             session.part_code_snapshot AS "partCode",
             session.option_number_snapshot AS "optionNumber",
@@ -4082,6 +4077,20 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             WHERE event.production_session_id = session.id
               AND event.reversed_at IS NULL
           ) downtime ON true
+          CROSS JOIN LATERAL (
+            SELECT CASE
+              WHEN production_entry.source_payload ? 'targetQty'
+                THEN (production_entry.source_payload->>'targetQty')::bigint
+              WHEN session.cycle_time_seconds > 0 THEN floor(
+                GREATEST(
+                  floor(extract(epoch FROM (COALESCE(session.ended_at, now()) - session.started_at)) / 60)
+                    - COALESCE(downtime.minutes, 0),
+                  0
+                ) * 60 / session.cycle_time_seconds
+              )::bigint
+              ELSE 0
+            END AS pieces
+          ) target
           LEFT JOIN LATERAL (
             SELECT jsonb_agg(jsonb_build_object(
               'id', event.id,
@@ -4104,6 +4113,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             AND ($4::date IS NULL OR session.production_date >= $4::date)
             AND ($5::date IS NULL OR session.production_date <= $5::date)
             AND ($6::text IS NULL OR session.status = $6)
+            AND (NOT $9::boolean OR (
+              session.status = 'closed'
+              AND NOT (session.measurement_method = 'weight' AND session.gross_weight_kg IS NULL)
+              AND target.pieces > 0 AND session.total_pieces > target.pieces
+              AND NULLIF(btrim(session.source_payload->'efficiencyFlagReview'->>'comment'), '') IS NULL
+            ))
           ORDER BY session.started_at DESC, machine.machine_number, session.id
           LIMIT $7 OFFSET $8
         `,
@@ -4116,6 +4131,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           input.status || null,
           limit,
           offset,
+          input.efficiencyFlagsOnly ?? false,
         ]
       )
       const numericKeys = [
@@ -4227,7 +4243,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               session.job_card_number_snapshot, session.part_code_snapshot,
               session.option_number_snapshot, session.setup_number_snapshot,
               session.operator_code_snapshot, session.operator_name_snapshot,
-              'session_correction', correction.occurred_at,
+              CASE WHEN correction.source_table = 'production_session_efficiency_flag'
+                THEN 'efficiency_flag_closed' ELSE 'session_correction' END,
+              correction.occurred_at,
               correction.occurred_at, NULL::timestamptz, NULL::integer,
               correction.metadata->>'correctionType', correction.reason,
               NULL::integer, actor.name,
@@ -4243,7 +4261,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             WHERE correction.target_schema = 'manufacturing'
               AND correction.target_table = 'production_sessions'
               AND correction.event_type LIKE 'production.session.%'
-              AND correction.source_table = 'production_session_correction'
+              AND correction.source_table IN ('production_session_correction', 'production_session_efficiency_flag')
               AND session.reversed_at IS NULL
 
             UNION ALL
@@ -4883,6 +4901,62 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         await queueDashboardRefresh(client, input.organizationId)
         return { id: result.rows[0]!.id, ok: true, remainingAvailablePieces: availablePieces - input.quantity }
+      })
+    },
+
+    async closeProductionSessionEfficiencyFlag(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: string
+      sessionId: string
+      expectedRowVersion: number
+      comment: string
+    }) {
+      const comment = requiredText(input.comment, "Closure comment")
+      const floor = normalizeProductionFloorCode(input.productionFloorCode)
+      return transaction(pool, async (client) => {
+        const locked = await client.query<{ snapshot: Record<string, unknown> }>(
+          `SELECT to_jsonb(session) AS snapshot
+           FROM manufacturing.production_sessions session
+           JOIN catalog.machines machine ON machine.id = session.machine_id
+           JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+           WHERE session.id = $1 AND session.organization_id = $2 AND floor.code = $3
+             AND session.reversed_at IS NULL
+           FOR UPDATE OF session`,
+          [input.sessionId, input.organizationId, floor]
+        )
+        const current = (await this.readProductionSessions({
+          organizationId: input.organizationId, productionFloorCode: floor,
+          sessionId: input.sessionId, efficiencyFlagsOnly: true,
+        }, client)).rows[0]
+        if (!locked.rows[0] || !current || Number(current.rowVersion) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Session flag changed. Refresh the flags before closing it.")
+        }
+        const review = {
+          comment, closedAt: new Date().toISOString(), closedByUserId: input.actorUserId ?? null,
+          totalPieces: Number(current.totalPieces), targetPieces: Number(current.targetPieces),
+          efficiency: productionSessionEfficiency({
+            totalPieces: Number(current.totalPieces), targetPieces: Number(current.targetPieces),
+          }),
+        }
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE manufacturing.production_sessions
+           SET source_payload = source_payload || jsonb_build_object('efficiencyFlagReview', $1::jsonb),
+             updated_at = now(), row_version = row_version + 1
+           WHERE id = $2 RETURNING to_jsonb(production_sessions) AS snapshot`,
+          [JSON.stringify(review), input.sessionId]
+        )
+        await client.query(
+          `INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+             target_id, actor_user_id, reason, before_state, after_state, metadata,
+             source_system, source_table, source_id)
+           VALUES ($1, 'production.session.efficiency_flag_closed', 'manufacturing', 'production_sessions',
+             $2, $3, $4, $5, $6, '{"enteredRole":"planner"}',
+             'mrm-dashboard', 'production_session_efficiency_flag', $7)`,
+          [input.organizationId, input.sessionId, input.actorUserId ?? null, comment,
+            locked.rows[0].snapshot, updated.rows[0]!.snapshot, randomUUID()]
+        )
+        return { id: input.sessionId, ok: true }
       })
     },
 

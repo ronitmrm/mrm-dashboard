@@ -102,6 +102,7 @@ import {
 } from "@/components/dashboard/dashboard-components"
 
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import { ProductionSessionEfficiencyFlags } from "@/components/production-session-efficiency-flags"
 import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvClientImportButton,
@@ -16901,12 +16902,24 @@ function PlanningControlPanel({
   productionFloorCode: ProductionFloorCode
   payload: DashboardPayload
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
 }) {
   const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers)
 
   return (
     <section className="grid gap-4">
+      <ProductionSessionEfficiencyFlags
+        key={productionFloorCode}
+        floor={productionFloorCode}
+        onClose={(session, comment) =>
+          submitAction("production-session-efficiency-flag-close", {
+            productionFloorCode,
+            sessionId: String(session.id),
+            expectedRowVersion: Number(session.rowVersion),
+            comment,
+          }, { throwOnError: true })
+        }
+      />
       <PlannerWorkflowExceptionPanel
         rows={asArray(productionControl.workflowExceptionRows)}
         submitAction={submitAction}

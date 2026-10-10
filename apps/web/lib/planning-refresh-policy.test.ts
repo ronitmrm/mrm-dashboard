@@ -26,6 +26,8 @@ describe("planning refresh policy", () => {
   });
 
   it("does not recalculate for workflow progress that does not move planning dates", () => {
+    expect(shouldQueuePlanningRefresh("production-session-efficiency-flag-close")).toBe(false);
+    expect(planningRefreshStatusMessage(false, "production-session-efficiency-flag-close")).toBe("Planning recalculation not required.");
     expect(shouldQueuePlanningRefresh("quality-measuring-program")).toBe(false);
     expect(planningRefreshStatusMessage(false, "quality-measuring-program")).toBe("Planning recalculation not required.");
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "raw_material_at_machine" } })).toBe(false);
