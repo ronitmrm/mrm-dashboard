@@ -62,12 +62,13 @@ export async function GET(request: Request) {
       )
     }
     if (master === "LOCATION") {
-      const rows = await repository.listLocations(organizationId)
+      const rows = await repository.listLocations(organizationId, { allStores: true })
       return masterCsvResponse(
         rows.map((row) => ({
           Code: row.code,
           Name: row.name,
           Type: row.locationType,
+          Store_Code: row.storeCode,
         })),
         "store-location-master.csv"
       )

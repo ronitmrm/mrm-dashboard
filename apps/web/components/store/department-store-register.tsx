@@ -80,6 +80,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       />
       {canWrite && action ? <DepartmentStoreForms action={action} assets={accountableAssets}
         consumables={consumables} departments={departments} gaugeSets={gaugeSets}
+        storageLocations={workspace.storageLocations}
         machines={machines} recorderId={recorderId} selectedItemIds={selectedItemIds} store={store}
         stores={stores} today={today} vendors={vendors} /> : null}
       <SectionCard>
@@ -154,7 +155,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>Consumable</TableCell><TableCell>{item.availableQuantity} {item.unit}</TableCell>
                 <TableCell>{item.companyQuantity} {item.unit}</TableCell>
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
-                <TableCell>{store.name}</TableCell>
+                <TableCell>{item.storageLocations || "—"}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {accountableAssets.map((asset) => <TableRow key={asset.assetCode}>

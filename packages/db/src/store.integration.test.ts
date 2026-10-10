@@ -1027,7 +1027,12 @@ describe("Store requests", () => {
   })
 
   test("bulk receives selected lines from one Purchase Order under shared receipt details", async () => {
-    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const location = await store.createLocation({
+      code: `RECEIPT-RACK-A-${suffix}`, name: "Receipt Rack A", organizationId,
+    })
+    const otherLocation = await store.createLocation({
+      code: `RECEIPT-RACK-B-${suffix}`, name: "Receipt Rack B", organizationId,
+    })
     const supplier = await store.createSupplier({
       name: `Bulk Receipt Supplier ${suffix}`,
       organizationId,
@@ -1041,7 +1046,7 @@ describe("Store requests", () => {
     })
     const secondItem = await store.createItemType({
       ...(await createClassification("Bulk Receipt Two")),
-      assetType: "CONSUMABLE",
+      assetType: "NON_CONSUMABLE",
       identificationName: `Bulk Receipt Two ${suffix}`,
       organizationId,
       unit: "Nos",
@@ -1090,7 +1095,7 @@ describe("Store requests", () => {
     const result = await store.receiveRemainingStockBatch({
       billDate: "2026-09-20",
       billNumber: "BULK-BILL-100",
-      locationId: location.id,
+      lineLocationIds: { [secondOrderLine.id]: otherLocation.id },
       organizationId,
       purchaseOrderId: created.orders[0]!.id,
       purchaseOrderLineIds: orderLines.map((line) => line.id),
@@ -1121,6 +1126,52 @@ describe("Store requests", () => {
       purchaseOrderId: created.orders[0]!.id,
       warrantyDates: ["2027-09-20", "2027-09-20"],
     })
+    const receiptLocations = await pool.query<{ itemTypeId: string; locationId: string }>(
+      `SELECT DISTINCT movement.item_type_id AS "itemTypeId", movement.location_id AS "locationId"
+       FROM store.stock_movements movement JOIN store.receipt_lines line
+         ON line.id = movement.receipt_line_id WHERE line.receipt_id = $1`,
+      [result.receiptId]
+    )
+    expect(receiptLocations.rows).toEqual(expect.arrayContaining([
+      { itemTypeId: firstItem.id, locationId: location.id },
+      { itemTypeId: secondItem.id, locationId: otherLocation.id },
+    ]))
+    const qualityRack = await store.createLocation({
+      code: `QUALITY-RACK-A-${suffix}`, name: "Quality Rack A", organizationId, storeCode: "QUALITY",
+    })
+    const qualityOverride = await store.createLocation({
+      code: `QUALITY-RACK-B-${suffix}`, name: "Quality Rack B", organizationId, storeCode: "QUALITY",
+    })
+    const quantityTransfer = { destinationStoreCode: "QUALITY", itemTypeId: firstItem.id,
+      organizationId, quantity: 1, sourceStoreCode: "MAIN" }
+    await expect(departmentStore.transferQuantity({ ...quantityTransfer,
+      destinationLocationId: location.id })).rejects.toThrow("receiving Store")
+    await departmentStore.transferQuantity({ ...quantityTransfer, destinationLocationId: qualityRack.id })
+    await departmentStore.transferQuantity(quantityTransfer)
+    await departmentStore.transferQuantity({ ...quantityTransfer, destinationLocationId: qualityOverride.id })
+    const qualityBalances = await pool.query<{ locationId: string; quantity: string }>(
+      `SELECT location_id AS "locationId", sum(quantity)::text AS quantity
+       FROM store.stock_movements WHERE item_type_id = $1 AND location_id = ANY($2::uuid[])
+       GROUP BY location_id`, [firstItem.id, [qualityRack.id, qualityOverride.id]]
+    )
+    expect(qualityBalances.rows).toEqual(expect.arrayContaining([
+      { locationId: qualityRack.id, quantity: "2.000" },
+      { locationId: qualityOverride.id, quantity: "1.000" },
+    ]))
+    for (const [index, assetCode] of result.assetCodes.slice(0, 3).entries()) {
+      await departmentStore.transferAssetAccountability({ assetCode, destinationStoreCode: "QUALITY",
+        destinationLocationId: index === 0 ? qualityRack.id : index === 2 ? qualityOverride.id : undefined,
+        organizationId, sourceStoreCode: "MAIN" })
+    }
+    const units = (await departmentStore.listStoreWorkspace({ organizationId, storeCode: "QUALITY" })).assets
+    expect(units.filter((unit) => result.assetCodes.slice(0, 2).includes(unit.assetCode))
+      .map((unit) => unit.holderName)).toEqual(["Quality Rack A", "Quality Rack A"])
+    expect(units.find((unit) => unit.assetCode === result.assetCodes[2])?.holderName).toBe("Quality Rack B")
+    expect((await store.listStorageLocations(organizationId)).defaults).toEqual(expect.arrayContaining([
+      { itemTypeId: secondItem.id, locationId: otherLocation.id, storeCode: "MAIN" },
+      { itemTypeId: firstItem.id, locationId: qualityOverride.id, storeCode: "QUALITY" },
+      { itemTypeId: secondItem.id, locationId: qualityOverride.id, storeCode: "QUALITY" },
+    ]))
     expect(await store.listPurchaseOrders(organizationId)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

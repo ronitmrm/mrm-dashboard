@@ -18,6 +18,7 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 import { storeItemCodeSeries, storeUnitId } from "./store-item-codes"
+import { listStoreStorageLocations, resolveStoreStorageLocation } from "./store-storage-locations"
 import { createStoreCalibrationRepository } from "./store-calibration"
 import { isWarrantyDayCount, warrantyEndDate, warrantyPeriodDays } from "./store-warranty"
 
@@ -539,6 +540,7 @@ export async function authorizeStoreReceiptArtifactTarget(
 }
 
 type StoreReceiptLineInput = {
+  locationId?: string | null
   manufacturerSerialNumbers?: string[]
   purchaseOrderLineId: string
   quantity: number | "remaining"
@@ -557,7 +559,7 @@ type StoreReceiptInput = {
   billNumber?: string | null
   expectedPurchaseOrderId?: string
   lines: StoreReceiptLineInput[]
-  locationId: string
+  locationId?: string | null
   organizationId: string
   receivedBy?: string | null
   warrantyPeriod?: string | null
@@ -607,10 +609,12 @@ async function receiveStockWithClient(
      FROM store.locations location
      JOIN store.accountable_stores accountable
        ON accountable.id = location.accountable_store_id
-     WHERE location.id = $1 AND location.organization_id = $2
+     WHERE location.organization_id = $1
        AND location.location_type = 'STORE' AND location.active
-       AND accountable.organization_id = $2 AND accountable.kind = 'MAIN'`,
-    [input.locationId, input.organizationId]
+       AND accountable.organization_id = $1 AND accountable.kind = 'MAIN'
+       AND accountable.active
+     LIMIT 1`,
+    [input.organizationId]
   )
   if (!destination.rows[0]) {
     throw new Error("Goods must be received into an active Main Store location.")
@@ -717,6 +721,15 @@ async function receiveStockWithClient(
     }
     return { ...row, lineInput, quantity }
   })
+  const lineLocations = new Map<string, Awaited<ReturnType<typeof resolveStoreStorageLocation>>>()
+  for (const line of preparedLines) {
+    lineLocations.set(line.id, await resolveStoreStorageLocation(client, {
+      itemTypeId: line.item_type_id,
+      locationId: line.lineInput.locationId ?? input.locationId,
+      organizationId: input.organizationId,
+      storeId: destination.rows[0].accountableStoreId,
+    }))
+  }
   const receiptNumber = await nextDocumentNumber(client, {
     counterKey: "RECEIPT",
     organizationId: input.organizationId,
@@ -737,7 +750,7 @@ async function receiveStockWithClient(
       receiptNumber,
       preparedLines[0]!.id,
       purchaseOrderId,
-      input.locationId,
+      lineLocations.get(preparedLines[0]!.id)!.id,
       preparedLines[0]!.supplier_id,
       input.billNumber?.trim() || null,
       input.billDate ?? null,
@@ -765,6 +778,7 @@ async function receiveStockWithClient(
   const receivedLines = []
   const nextAssetNumberByItem = new Map<string, number>()
   for (const orderLine of preparedLines) {
+    const location = lineLocations.get(orderLine.id)!
     const unitDetails = orderLine.lineInput.unitDetails
     const connectedStabilizerId = await stabilizerAssetId(
       client,
@@ -829,7 +843,7 @@ async function receiveStockWithClient(
             unitDetails?.manufacturerSerialNumber?.trim() ||
               orderLine.lineInput.manufacturerSerialNumbers?.[index]?.trim() ||
               null,
-            input.locationId,
+            location.id,
             destination.rows[0].accountableStoreId,
             warrantyEndDate(unitDetails?.installedOn, warrantyDays),
             warrantyPeriod,
@@ -859,7 +873,7 @@ async function receiveStockWithClient(
             input.organizationId,
             orderLine.item_type_id,
             asset.rows[0]!.id,
-            input.locationId,
+            location.id,
             receiptLine.rows[0]!.id,
             input.receivedBy?.trim() || null,
             input.actorUserId ?? null,
@@ -891,7 +905,7 @@ async function receiveStockWithClient(
         [
           input.organizationId,
           orderLine.item_type_id,
-          input.locationId,
+          location.id,
           receiptLine.rows[0]!.id,
           orderLine.quantity,
           input.receivedBy?.trim() || null,
@@ -2065,6 +2079,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       locationType?: "DEPARTMENT" | "STORE" | "UNIT"
       name: string
       organizationId: string
+      storeCode?: string
     }) {
       return withTransaction(pool, async (client) => {
         const result = await client.query<{ id: string; inserted: boolean }>(
@@ -2076,7 +2091,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ) SELECT $1, $2, $3, $4, accountable.id, $5, $5
               FROM store.accountable_stores accountable
               WHERE accountable.organization_id = $1
-                AND accountable.kind = 'MAIN'
+                AND lower(accountable.code) = lower($6) AND accountable.active
             ON CONFLICT (organization_id, lower(code))
             DO UPDATE SET name = EXCLUDED.name,
               location_type = EXCLUDED.location_type,
@@ -2092,6 +2107,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             requiredText(input.name, "Location name"),
             input.locationType ?? "STORE",
             input.actorUserId ?? null,
+            input.storeCode ?? "MAIN",
           ]
         )
         rejectDuplicateMaster(
@@ -2099,7 +2115,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           result.rows[0]?.inserted === false
         )
         if (!result.rows[0]) {
-          throw new Error("Location code belongs to another accountable store.")
+          throw new Error("Store was not found or Location code belongs to another Store.")
         }
         return result.rows[0]!
       })
@@ -2117,10 +2133,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
          SET name = $1, location_type = $2, updated_by_user_id = $3,
            updated_at = now()
          WHERE id = $4 AND organization_id = $5
-           AND accountable_store_id = (
-             SELECT accountable.id FROM store.accountable_stores accountable
-             WHERE accountable.organization_id = $5 AND accountable.kind = 'MAIN'
-           )
+           AND ($2 = 'STORE' OR NOT EXISTS (
+             SELECT 1 FROM store.accountable_stores accountable
+             WHERE accountable.default_location_id = store.locations.id
+           ))
          RETURNING id`,
         [
           requiredText(input.name, "Location name"),
@@ -2134,26 +2150,34 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0]
     },
 
-    async listLocations(organizationId: string) {
+    async listLocations(organizationId: string, options?: { allStores?: boolean }) {
       const result = await pool.query<{
         code: string
         id: string
         locationType: string
         name: string
+        storeCode: string
+        storeName: string
       }>(
         `
           SELECT location.id, location.code, location.name,
-            location.location_type AS "locationType"
+            location.location_type AS "locationType",
+            accountable.code AS "storeCode", accountable.name AS "storeName"
           FROM store.locations location
           JOIN store.accountable_stores accountable
             ON accountable.id = location.accountable_store_id
           WHERE location.organization_id = $1 AND location.active
-            AND accountable.organization_id = $1 AND accountable.kind = 'MAIN'
+            AND accountable.organization_id = $1 AND accountable.active
+            AND ($2 OR accountable.kind = 'MAIN')
           ORDER BY location.name
         `,
-        [organizationId]
+        [organizationId, options?.allStores ?? false]
       )
       return result.rows
+    },
+
+    listStorageLocations(organizationId: string) {
+      return listStoreStorageLocations(pool, organizationId)
     },
 
     async listMovementDepartments(organizationId: string) {
@@ -4820,7 +4844,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       billDate?: string | null
       billNumber?: string | null
-      locationId: string
+      locationId?: string | null
       manufacturerSerialNumbers?: string[]
       organizationId: string
       purchaseOrderLineId: string
@@ -4858,7 +4882,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       billDate?: string | null
       billNumber?: string | null
-      locationId: string
+      locationId?: string | null
+      lineLocationIds?: Record<string, string>
       organizationId: string
       purchaseOrderId: string
       purchaseOrderLineIds: string[]
@@ -4886,6 +4911,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           billNumber: input.billNumber,
           expectedPurchaseOrderId: input.purchaseOrderId,
           lines: purchaseOrderLineIds.map((purchaseOrderLineId) => ({
+            locationId: input.lineLocationIds?.[purchaseOrderLineId],
             purchaseOrderLineId,
             quantity: "remaining",
           })),

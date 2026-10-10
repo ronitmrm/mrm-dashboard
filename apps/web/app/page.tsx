@@ -229,7 +229,7 @@ export default async function Page({
                 ? repository.listItemTypes(organizationId)
                 : Promise.resolve([]),
               selectedStoreMaster === "LOCATION"
-                ? repository.listLocations(organizationId)
+                ? repository.listLocations(organizationId, { allStores: true })
                 : Promise.resolve([]),
               selectedStoreMaster === "SUPPLIER" || itemReferences
                 ? repository.listSuppliers(organizationId)

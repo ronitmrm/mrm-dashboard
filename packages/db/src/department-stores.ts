@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg"
+import { listStoreStorageLocations, resolveStoreStorageLocation } from "./store-storage-locations"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { productionFloorFromDepartment } from "./production-floors"
@@ -711,7 +712,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       )
       const store = storeResult.rows[0]
       if (!store) throw new Error("Accountable Store was not found.")
-      const [stores, consumables, serializedTotals, assets, gaugeSets, movements] =
+      const [stores, consumables, serializedTotals, assets, gaugeSets, movements, storageLocations] =
         await Promise.all([
         pool.query<AccountableStore>(
           `SELECT accountable.id, accountable.code, accountable.name,
@@ -736,6 +737,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           companyQuantity: string
           itemTypeId: string
           makeModel: string
+          storageLocations: string
           typeCode: string
           unit: string
         }>(
@@ -744,6 +746,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             item.asset_subcategory AS "assetSubcategory",
             item.asset_name AS "assetName", make_model.name AS "makeModel",
             item.unit,
+            COALESCE((SELECT string_agg(storage.name, ', ' ORDER BY storage.name)
+              FROM store.locations storage
+              WHERE storage.organization_id = $1 AND storage.accountable_store_id = $2
+                AND storage.active AND storage.location_type = 'STORE'
+                AND (SELECT COALESCE(sum(balance.quantity), 0)
+                  FROM store.stock_movements balance
+                  WHERE balance.organization_id = $1 AND balance.item_type_id = item.id
+                    AND balance.asset_id IS NULL AND balance.location_id = storage.id) > 0
+            ), '') AS "storageLocations",
             trim_scale(COALESCE(sum(movement.quantity) FILTER (
               WHERE location.accountable_store_id = $2), 0))::text
               AS "availableQuantity",
@@ -942,9 +953,11 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            ORDER BY "occurredAt" DESC LIMIT 300`,
           [input.organizationId, store.id]
         ),
+        listStoreStorageLocations(pool, input.organizationId),
       ])
       return {
         store,
+        storageLocations,
         stores: stores.rows,
         consumables: consumables.rows,
         serializedTotals: serializedTotals.rows,
@@ -1081,6 +1094,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
     },
 
     async transferQuantity(input: MutationIdentity & {
+      destinationLocationId?: string | null
       destinationStoreCode: string
       itemTypeId: string
       quantity: number
@@ -1109,6 +1123,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           throw new Error("Transfer through Main Store before sending stock to another Store.")
         }
         await lockConsumable(client, input.organizationId, input.itemTypeId)
+        const destinationLocation = await resolveStoreStorageLocation(client, {
+          itemTypeId: input.itemTypeId,
+          locationId: input.destinationLocationId,
+          organizationId: input.organizationId,
+          storeId: destination.id,
+        })
         const operationId = await insertOperation(client, {
           ...input,
           destinationStoreId: destination.id,
@@ -1126,12 +1146,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           fromCode: source.code,
           fromName: source.name,
           itemTypeId: input.itemTypeId,
-          locationId: destination.defaultLocationId,
+          locationId: destinationLocation.id,
           movementType: "TRANSFER_IN",
           operationId,
           quantity,
-          toCode: destination.code,
-          toName: destination.name,
+          toCode: destinationLocation.code,
+          toName: destinationLocation.name,
         })
         if (request) {
           await completeStoreTransferRequest(client, input, quantity, request)
@@ -1187,6 +1207,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
 
     async transferAssetAccountability(input: MutationIdentity & {
       assetCode: string
+      destinationLocationId?: string | null
       destinationStoreCode: string
       sourceStoreCode: string
     }, transactionClient?: PoolClient) {
@@ -1301,16 +1322,13 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           }
         }
         const destinationLocation = physicalHandover
-          ? await client.query<{ code: string; name: string }>(
-            `SELECT code, name FROM store.locations
-             WHERE organization_id = $1 AND id = $2
-               AND accountable_store_id = $3 AND active`,
-            [input.organizationId, destination.defaultLocationId, destination.id]
-          )
+          ? await resolveStoreStorageLocation(client, {
+            itemTypeId: unit.itemTypeId,
+            locationId: input.destinationLocationId,
+            organizationId: input.organizationId,
+            storeId: destination.id,
+          })
           : null
-        if (physicalHandover && !destinationLocation?.rows[0]) {
-          throw new Error("Destination Store location was not found.")
-        }
         await client.query(
           `UPDATE store.assets SET accountable_store_id = $1,
             current_location_id = CASE WHEN $2 THEN $3 ELSE current_location_id END,
@@ -1319,9 +1337,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             current_holder_name = CASE WHEN $2 THEN $5 ELSE current_holder_name END,
             updated_at = now(), updated_by_user_id = $6
            WHERE id = $7`,
-          [destination.id, physicalHandover, destination.defaultLocationId,
-            destinationLocation?.rows[0]?.code ?? null,
-            destinationLocation?.rows[0]?.name ?? null,
+          [destination.id, physicalHandover, destinationLocation?.id ?? null,
+            destinationLocation?.code ?? null,
+            destinationLocation?.name ?? null,
             input.actorUserId ?? null,
             unit.id]
         )
@@ -1329,7 +1347,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           for (const movement of [
             { locationId: unit.currentLocationId ?? source.defaultLocationId,
               movementType: "TRANSFER_OUT", quantity: -1 },
-            { locationId: destination.defaultLocationId,
+            { locationId: destinationLocation!.id,
               movementType: "TRANSFER_IN", quantity: 1 },
           ]) {
             await client.query(
@@ -1344,8 +1362,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
               [input.organizationId, unit.itemTypeId, unit.id,
                 movement.locationId, movement.movementType, movement.quantity,
                 unit.currentHolderReference, unit.currentHolderName,
-                destinationLocation?.rows[0]?.code,
-                destinationLocation?.rows[0]?.name,
+                destinationLocation?.code,
+                destinationLocation?.name,
                 input.movedBy?.trim() || null, input.remark?.trim() || null,
                 input.actorUserId ?? null, input.requisitionId ?? null]
             )
@@ -1363,7 +1381,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
 
     async transferRequestedAssetsBatch(input: MutationIdentity & {
       destinationStoreCode: string
-      lines: Array<{ assetCode: string; requisitionId: string }>
+      lines: Array<{ assetCode: string; destinationLocationId?: string | null; requisitionId: string }>
     }) {
       if (!input.lines.length || input.lines.length > 500) {
         throw new Error("Select 1 to 500 requested physical units.")
@@ -1472,6 +1490,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           await this.transferAssetAccountability({
             ...input,
             assetCode: codes[index]!,
+            destinationLocationId: input.lines[index]!.destinationLocationId,
             requisitionId: requestId,
             sourceStoreCode: "MAIN",
           }, client)

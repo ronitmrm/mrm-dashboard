@@ -118,6 +118,15 @@ the Accountable Store. For example, a compressor accountable to Main Store can
 be physically at a CNC machine; Main Store remains responsible until a formal
 transfer to CNC Store. Company ownership persists through internal transfers.
 
+**Store Storage Location**: An active Store location belongs to one Accountable
+Store and is maintained in Location Master (for example, a rack or bin). Every
+goods receipt line and incoming Store transfer selects its own receiving
+location. The same Asset Code can use different locations in different Stores.
+The selector defaults to the most recently used location where that Asset Code
+is currently stored in the receiving Store; when none exists, it uses that
+Store's default location. The storekeeper can change it for the incoming stock
+without relocating earlier stock. A location from another Store is rejected.
+
 **Store Balance**: Unused quantity of one Consumable at one accountable store.
 An internal transfer decreases the source balance and increases the destination
 balance by the same amount. Available to issue is the local unreserved balance;
@@ -227,7 +236,7 @@ workspace. Purchase Order entry and goods receipt are not separate workspaces.
 Purchase Order. It may contain one or more selected open goods lines from that
 order; each line inherits its Store Item Type and agreed unit price and cannot
 exceed its remaining quantity. Bulk receipt receives every selected line's full
-remaining quantity into the primary Store in one atomic operation. Supplier Bill
+remaining quantity into its selected Main Store location in one atomic operation. Supplier Bill
 Number, Supplier Bill Date, and an optional warranty / guarantee document belong
 to the receipt header, while a common Warranty / Guarantee Until date is copied
 to every selected receipt line and its Physical Assets. A receipt selection can

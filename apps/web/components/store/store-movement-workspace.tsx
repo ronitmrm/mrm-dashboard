@@ -14,6 +14,7 @@ import {
 } from "@/app/department-store/actions"
 import { FormSection } from "@/components/ui/golden-patterns"
 import { StoreMovementForm } from "./store-movement-form"
+import { StoreStorageLocationField, type StoreStorageLocations } from "./store-storage-location-field"
 
 type MovementUnit = React.ComponentProps<typeof StoreMovementForm>["units"][number]
 type Store = { code: string; id: string; name: string }
@@ -46,10 +47,11 @@ export function StoreMovementWorkspace({
   machines,
   performer,
   stores,
+  storageLocations,
   units,
   vendors,
 }: {
-  assets: { assetCode: string; assetName: string; status: string }[]
+  assets: { assetCode: string; assetName: string; itemTypeId: string; status: string }[]
   canTransfer: boolean
   consumables: {
     assetName: string
@@ -64,11 +66,15 @@ export function StoreMovementWorkspace({
   machines: React.ComponentProps<typeof StoreMovementForm>["machines"]
   performer: string
   stores: Store[]
+  storageLocations: StoreStorageLocations
   units: MovementUnit[]
   vendors: React.ComponentProps<typeof StoreMovementForm>["vendors"]
 }) {
   const [action, setAction] = useState<"PHYSICAL" | "QUANTITY" | "ACCOUNTABILITY">("PHYSICAL")
   const [formOpen, setFormOpen] = useState(Boolean(initialUnitId))
+  const [itemTypeId, setItemTypeId] = useState("")
+  const [assetCode, setAssetCode] = useState("")
+  const [destinationStoreCode, setDestinationStoreCode] = useState("")
   const otherStores = stores.filter((store) => store.code !== "MAIN")
 
   return (
@@ -117,7 +123,8 @@ export function StoreMovementWorkspace({
         <TransferForm action={transferDepartmentQuantityAction} label="Transfer Quantity">
           <Field>
             <FieldLabel htmlFor="quantity-item">Consumable Asset Code</FieldLabel>
-            <NativeSelect id="quantity-item" name="item_type_id" required>
+            <NativeSelect id="quantity-item" name="item_type_id" required
+              value={itemTypeId} onValueChange={setItemTypeId}>
               <NativeSelectOption value="">Select an available item</NativeSelectOption>
               {consumables.filter((item) => Number(item.availableQuantity) > 0).map((item) => (
                 <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
@@ -128,7 +135,8 @@ export function StoreMovementWorkspace({
           </Field>
           <Field>
             <FieldLabel htmlFor="quantity-destination">Receiving Store</FieldLabel>
-            <NativeSelect id="quantity-destination" name="destination_store_code" required>
+            <NativeSelect id="quantity-destination" name="destination_store_code" required
+              value={destinationStoreCode} onValueChange={setDestinationStoreCode}>
               <NativeSelectOption value="">Select Store</NativeSelectOption>
               {otherStores.map((store) => (
                 <NativeSelectOption key={store.id} value={store.code}>{store.name}</NativeSelectOption>
@@ -139,6 +147,8 @@ export function StoreMovementWorkspace({
             <FieldLabel htmlFor="quantity-amount">Quantity</FieldLabel>
             <Input id="quantity-amount" min="0.001" name="quantity" required step="0.001" type="number" />
           </Field>
+          <StoreStorageLocationField id="main-quantity-transfer-location" itemTypeId={itemTypeId}
+            storage={storageLocations} storeCode={destinationStoreCode} />
           <Field>
             <FieldLabel htmlFor="quantity-remark">Remark</FieldLabel>
             <Input id="quantity-remark" name="remark" />
@@ -150,7 +160,8 @@ export function StoreMovementWorkspace({
         <TransferForm action={transferDepartmentAssetAction} label="Transfer Responsibility">
           <Field>
             <FieldLabel htmlFor="accountability-unit">Unit ID</FieldLabel>
-            <NativeSelect id="accountability-unit" name="asset_code" required>
+            <NativeSelect id="accountability-unit" name="asset_code" required
+              value={assetCode} onValueChange={setAssetCode}>
               <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
               {assets.filter((asset) => asset.status !== "SCRAPPED" && asset.status !== "LOST").map((asset) => (
                 <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
@@ -161,7 +172,8 @@ export function StoreMovementWorkspace({
           </Field>
           <Field>
             <FieldLabel htmlFor="accountability-destination">Receiving Store</FieldLabel>
-            <NativeSelect id="accountability-destination" name="destination_store_code" required>
+            <NativeSelect id="accountability-destination" name="destination_store_code" required
+              value={destinationStoreCode} onValueChange={setDestinationStoreCode}>
               <NativeSelectOption value="">Select Store</NativeSelectOption>
               {otherStores.map((store) => (
                 <NativeSelectOption key={store.id} value={store.code}>{store.name}</NativeSelectOption>
@@ -172,6 +184,9 @@ export function StoreMovementWorkspace({
             <FieldLabel htmlFor="accountability-remark">Reason / handover note</FieldLabel>
             <Input id="accountability-remark" name="remark" />
           </Field>
+          <StoreStorageLocationField id="main-asset-transfer-location"
+            itemTypeId={assets.find((asset) => asset.assetCode === assetCode)?.itemTypeId ?? ""}
+            storage={storageLocations} storeCode={destinationStoreCode} />
         </TransferForm>
       ) : null}
     </FormSection>
