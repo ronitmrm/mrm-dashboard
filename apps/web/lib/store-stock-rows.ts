@@ -35,14 +35,15 @@ export function storeStockRows<T extends StoreStockItem>(
     else unitsByItem.set(unit.itemTypeId, [unit])
   }
   return items.flatMap((item) => {
+    const withUnit = (quantity: string) => `${quantity} ${item.unit}`
     if (item.trackingMode !== "SERIALIZED") {
       return [
         {
           ...item,
           actionItem: true,
           assignedQuantity: "—",
-          availableQuantity: `${item.availableStock} ${item.unit}`,
-          companyQuantity: `${item.companyOnHand} ${item.unit}`,
+          availableQuantity: withUnit(item.availableStock),
+          companyQuantity: withUnit(item.companyOnHand),
           displayedCode: item.typeCode,
           locationHolder:
             Number(item.availableStock) > 0 ? item.storageLocations : "—",
@@ -58,11 +59,11 @@ export function storeStockRows<T extends StoreStockItem>(
       {
         ...item,
         actionItem: true,
-        assignedQuantity: String(
-          units.filter((unit) => unit.status === "ASSIGNED").length
+        assignedQuantity: withUnit(
+          String(units.filter((unit) => unit.status === "ASSIGNED").length)
         ),
-        availableQuantity: item.availableStock,
-        companyQuantity: item.companyOnHand,
+        availableQuantity: withUnit(item.availableStock),
+        companyQuantity: withUnit(item.companyOnHand),
         displayedCode: item.typeCode,
         locationHolder: "—",
         physicalUnit: null,
@@ -72,9 +73,15 @@ export function storeStockRows<T extends StoreStockItem>(
       ...units.map((physicalUnit) => ({
         ...item,
         actionItem: false,
-        assignedQuantity: physicalUnit.status === "ASSIGNED" ? "1" : "0",
-        availableQuantity: physicalUnit.isAvailableToIssueHere ? "1" : "0",
-        companyQuantity: ["SCRAPPED", "LOST"].includes(physicalUnit.status) ? "0" : "1",
+        assignedQuantity: withUnit(
+          physicalUnit.status === "ASSIGNED" ? "1" : "0"
+        ),
+        availableQuantity: withUnit(
+          physicalUnit.isAvailableToIssueHere ? "1" : "0"
+        ),
+        companyQuantity: withUnit(
+          ["SCRAPPED", "LOST"].includes(physicalUnit.status) ? "0" : "1"
+        ),
         displayedCode: physicalUnit.assetCode,
         locationHolder:
           physicalUnit.locationName ??
