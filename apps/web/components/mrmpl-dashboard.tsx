@@ -102,7 +102,8 @@ import {
 } from "@/components/dashboard/dashboard-components"
 
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
-import { ProductionSessionEfficiencyFlags } from "@/components/production-session-efficiency-flags"
+import { PlanningControlReview } from "@/components/planning-control-review"
+import { plannerWorkflowResolutionPayload } from "@/lib/planner-workflow-resolution"
 import { DataDownloadButton } from "@/components/data-download-button"
 import {
   MasterDataCsvClientImportButton,
@@ -16926,9 +16927,10 @@ function PlanningControlPanel({
 
   return (
     <section className="grid gap-4">
-      <ProductionSessionEfficiencyFlags
+      <PlanningControlReview
         key={productionFloorCode}
         floor={productionFloorCode}
+        workflowRows={asArray(productionControl.workflowExceptionRows)}
         onClose={(session, comment) =>
           submitAction("production-session-efficiency-flag-close", {
             productionFloorCode,
@@ -16937,116 +16939,21 @@ function PlanningControlPanel({
             comment,
           }, { throwOnError: true })
         }
-      />
-      <PlannerWorkflowExceptionPanel
-        rows={asArray(productionControl.workflowExceptionRows)}
-        submitAction={submitAction}
+        onResolve={(row) => {
+          const payload = plannerWorkflowResolutionPayload(row, productionFloorCode)
+          return submitAction("data-entry", {
+            entryType: "shop_floor_status",
+            productionFloorCode,
+            key: dataEntryKey("shop_floor_status", payload),
+            payload,
+          }, { throwOnError: true })
+        }}
       />
       {(productionFloorCode === "conventional" ||
         productionFloorCode === "conventional-02") && (
         <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
       )}
     </section>
-  )
-}
-
-function PlannerWorkflowExceptionPanel({
-  rows,
-  submitAction,
-}: {
-  rows: DashboardPayload[]
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
-}) {
-  async function resolveWorkflow(row: DashboardPayload) {
-    const payload = {
-      jcNo: jobCardNumber(row),
-      partCode: itemCode(row),
-      optionNumber: displayValue(row.optionNumber),
-      setupNo: displayValue(row.setupNo),
-      setupName: displayValue(row.setupName),
-      machine: displayValue(row.machine),
-      machineType: displayValue(row.machineType),
-      stage: "operator_started",
-      stageLabel: "Operator assigned and machine started",
-      role: "Planner",
-      doneBy: "Planner",
-      worker:
-        displayValue(row.shopFloorWorker) !== "-"
-          ? displayValue(row.shopFloorWorker)
-          : "",
-      remark: "Resolved from raw production entry.",
-      completedAt: new Date().toISOString(),
-    }
-    await submitAction("data-entry", {
-      entryType: "shop_floor_status",
-      key: dataEntryKey("shop_floor_status", payload),
-      payload,
-    })
-  }
-
-  return (
-    <SectionCard
-      className={rows.length ? "border-[var(--color-warning)]/30" : ""}
-    >
-      <CardHeader>
-        <CardTitle>Workflow Exceptions</CardTitle>
-        <CardDescription>
-          Raw Production Exists, But The Machinist Task Workflow Has Not
-          Recorded Operator Assignment And Machine Start.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {rows.length ? (
-          <div className="min-w-0 rounded-lg border">
-            <OperationalTable containerClassName="max-h-80">
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead>Machine</TableHead>
-                  <TableHead>Item Setup</TableHead>
-                  <TableHead>Raw Production</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, index) => (
-                  <TableRow key={`${shopFloorPlanKey(row)}-${index}`}>
-                    <TableCell className="font-medium">
-                      {displayValue(row.machine)}
-                    </TableCell>
-                    <TableCell>
-                      <ShopFloorItemSummary row={row} tone="next" />
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {formatNumber(numValue(row, "rawRows"))} Row
-                        {numValue(row, "rawRows") === 1 ? "" : "s"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Output {displayValue(row.rawOutputQty, true)} / Actual{" "}
-                        {displayValue(row.rawActualQty, true)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void resolveWorkflow(row)}
-                      >
-                        <CheckCircle2 className="size-4" />
-                        Resolve Workflow
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </OperationalTable>
-          </div>
-        ) : (
-          <EmptyRowsMessage>No Workflow Exceptions Found</EmptyRowsMessage>
-        )}
-      </CardContent>
-    </SectionCard>
   )
 }
 

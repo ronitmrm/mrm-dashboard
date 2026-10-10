@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { plannerWorkflowResolutionPayload } from "../../lib/planner-workflow-resolution"
 
 vi.mock("@/lib/csv-import-transaction", () => ({
   withCsvImportTransaction: (operation: () => Promise<unknown>) => operation(),
@@ -228,6 +229,29 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.recordShopFloorStage).toHaveBeenCalledWith(
       expect.objectContaining({ payload: expect.objectContaining({
         doneBy: "System Administrator", doneByEmployeeCode: null,
+      }) })
+    )
+  })
+
+  it("resolves a workflow exception under the signed-in planner", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.shop_floor.write",
+      "operations.floors.cnc.planning_control.planner_workflow_resolution.write",
+    ])
+    dependencies.signedInPerformer.mockResolvedValue({ code: "42", name: "Planner One" })
+    dependencies.recordShopFloorStage.mockResolvedValue({ ok: true })
+    const payload = plannerWorkflowResolutionPayload({
+      jcNo: "P2046", partCode: "M2164B", optionNumber: "2", setupNo: "1",
+      machine: "CNC-9", machineType: "CNC", shopFloorWorker: "Worker Seven",
+    }, "cnc")
+
+    expect((await post("data-entry", {
+      entryType: "shop_floor_status", productionFloorCode: "cnc", payload,
+    })).status).toBe(200)
+    expect(dependencies.recordShopFloorStage).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({
+        doneBy: "Planner One", doneByEmployeeCode: "42", role: "Planner",
+        worker: "Worker Seven", productionFloorCode: "cnc", stage: "operator_started",
       }) })
     )
   })
