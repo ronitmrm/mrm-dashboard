@@ -17,6 +17,7 @@ import {
   workOrderIdentityMatches,
 } from "./planning-rules"
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
+import { ShopFloorConflictError } from "./production-shop-floor"
 import { rawMaterialRejectionBalance } from "./rejection-domain"
 import {
   normalizeProductionFloorCode,
@@ -456,7 +457,7 @@ async function settledPlannerInterruptions(
           }
         : null,
     })
-    if (requirement.blocked) throw new Error(requirement.message)
+    if (requirement.blocked) throw new ShopFloorConflictError(requirement.message)
     settled.push({
       ...interruption,
       finishedQuantity: Number(state?.finished_quantity ?? 0),
@@ -2682,7 +2683,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             })
           )
         ) {
-          throw new Error("Target machine is locked by another active setup.")
+          throw new ShopFloorConflictError(
+            `${input.toMachineNumber} is assigned to Job Card ${targetLock.rows[0].job_card_number}, Setup ${targetLock.rows[0].setup_number}. Approve its stop in the target machine review and close any open Production Session before moving this setup.`
+          )
         }
         const routeOptionId = await currentPlanningRouteOptionId(client, {
           itemId: workOrder.item_id,
