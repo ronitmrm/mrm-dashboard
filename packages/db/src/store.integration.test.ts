@@ -2718,6 +2718,12 @@ describe("Store requests", () => {
     })
     expect((await departmentStore.getAssetAccountability(organizationId, assetCode))?.accountableStoreCode)
       .toBe("cnc")
+    expect((await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" }))
+      .assets.find((asset) => asset.assetCode === assetCode)).toMatchObject({
+        assetCategory: `Store Transfer Route Category ${suffix}`,
+        assetSubcategory: `Store Transfer Route Subcategory ${suffix}`,
+        makeModel: "Unspecified",
+      })
   })
 
   test("records one Unit ID loss against its accountable Store", async () => {
@@ -2784,6 +2790,8 @@ describe("Store requests", () => {
     })
     expect(allocations).toContainEqual(expect.objectContaining({
       accountableStoreCode: "MAIN", assetCode, departmentName,
+      assetCategory: "Furniture", assetSubcategory: "Chairs",
+      makeModel: "Unspecified",
     }))
     const cncStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
     expect(cncStock.assets.some((asset) => asset.assetCode === assetCode)).toBe(false)
@@ -2829,6 +2837,9 @@ describe("Store requests", () => {
     })
     expect(cnc.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
       availableQuantity: "0", companyQuantity: "0",
+      assetCategory: `Company Movement Category ${suffix}`,
+      assetSubcategory: `Company Movement Subcategory ${suffix}`,
+      makeModel: "Unspecified",
     })
     expect(company.movements).toHaveLength(4)
     expect(company.movements).toEqual(expect.arrayContaining([

@@ -720,21 +720,28 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           [input.organizationId]
         ),
         pool.query<{
+          assetCategory: string
           assetName: string
+          assetSubcategory: string
           availableQuantity: string
           companyQuantity: string
           itemTypeId: string
+          makeModel: string
           typeCode: string
           unit: string
         }>(
           `SELECT item.id AS "itemTypeId", item.type_code AS "typeCode",
-            item.asset_name AS "assetName", item.unit,
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName", make_model.name AS "makeModel",
+            item.unit,
             trim_scale(COALESCE(sum(movement.quantity) FILTER (
               WHERE location.accountable_store_id = $2), 0))::text
               AS "availableQuantity",
             trim_scale(COALESCE(sum(movement.quantity), 0))::text
               AS "companyQuantity"
            FROM store.item_types item
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            LEFT JOIN store.stock_movements movement
              ON movement.organization_id = item.organization_id
              AND movement.item_type_id = item.id
@@ -742,7 +749,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            LEFT JOIN store.locations location ON location.id = movement.location_id
            WHERE item.organization_id = $1
              AND item.tracking_mode = 'CONSUMABLE' AND item.active
-           GROUP BY item.id
+           GROUP BY item.id, make_model.name
            ORDER BY item.type_code`,
           [input.organizationId, store.id]
         ),
@@ -781,19 +788,25 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         pool.query<{
           accountableStoreCode: string
           assetCode: string
+          assetCategory: string
           assetName: string
+          assetSubcategory: string
           availableHere: boolean
           holderName: string | null
           holderType: string
           inGaugeSet: boolean
           isGauge: boolean
           itemTypeId: string
+          makeModel: string
           manufacturerSerialNumber: string | null
           status: string
           typeCode: string
         }>(
           `SELECT asset.asset_code AS "assetCode", asset.item_type_id AS "itemTypeId",
-            item.type_code AS "typeCode", item.asset_name AS "assetName",
+            item.type_code AS "typeCode",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName", make_model.name AS "makeModel",
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
             COALESCE(asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
@@ -808,6 +821,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             accountable.code AS "accountableStoreCode"
            FROM store.assets asset
            JOIN store.item_types item ON item.id = asset.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            JOIN store.accountable_stores accountable
              ON accountable.id = asset.accountable_store_id
            LEFT JOIN store.locations location ON location.id = asset.current_location_id
@@ -1022,14 +1036,19 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         accountableStoreCode: string
         accountableStoreName: string
         assetCode: string
+        assetCategory: string
         assetName: string
+        assetSubcategory: string
         departmentName: string
         holderReference: string | null
+        makeModel: string
         status: string
         typeCode: string
       }>(
         `SELECT asset.asset_code AS "assetCode", item.type_code AS "typeCode",
-           item.asset_name AS "assetName",
+           item.asset_category AS "assetCategory",
+           item.asset_subcategory AS "assetSubcategory",
+           item.asset_name AS "assetName", make_model.name AS "makeModel",
            asset.current_holder_reference AS "holderReference",
            COALESCE(asset.current_holder_name, asset.current_holder_reference, 'Unknown')
              AS "departmentName",
@@ -1037,6 +1056,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            accountable.name AS "accountableStoreName", asset.status
          FROM store.assets asset
          JOIN store.item_types item ON item.id = asset.item_type_id
+         JOIN store.make_models make_model ON make_model.id = item.make_model_id
          JOIN store.accountable_stores accountable
            ON accountable.id = asset.accountable_store_id
          WHERE asset.organization_id = $1

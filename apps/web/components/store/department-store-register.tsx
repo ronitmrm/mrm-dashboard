@@ -132,7 +132,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
           >
             <TableHeader><TableRow>
               {selectMode ? <TableHead>Select</TableHead> : null}
-              <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead><TableHead>Item</TableHead>
+              <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead>
+              <TableHead>Asset Category</TableHead><TableHead>Asset Subcategory</TableHead>
+              <TableHead>Asset Name</TableHead><TableHead>Make/Model</TableHead>
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
               <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
               <TableHead>Physical holder</TableHead>
@@ -144,7 +146,11 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                   aria-label={`Select ${item.typeCode} for use`} form={selectionFormId}
                   name="item_type_id" type="checkbox" value={item.itemTypeId} /> : "—"}</TableCell> : null}
                 <TableCell className="font-medium">{item.typeCode}</TableCell>
-                <TableCell>—</TableCell><TableCell>{item.assetName}</TableCell>
+                <TableCell>—</TableCell>
+                <TableCell>{item.assetCategory}</TableCell>
+                <TableCell>{item.assetSubcategory}</TableCell>
+                <TableCell>{item.assetName}</TableCell>
+                <TableCell>{item.makeModel}</TableCell>
                 <TableCell>Consumable</TableCell><TableCell>{item.availableQuantity} {item.unit}</TableCell>
                 <TableCell>{item.companyQuantity} {item.unit}</TableCell>
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
@@ -158,7 +164,11 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell className="font-medium">{asset.typeCode}</TableCell>
                 <TableCell><Link className="text-primary underline-offset-4 hover:underline"
                   href={`/department-store/assets/${encodeURIComponent(asset.assetCode)}?store=${encodeURIComponent(store.code)}`}>
-                  {asset.assetCode}</Link></TableCell><TableCell>{asset.assetName}</TableCell>
+                  {asset.assetCode}</Link></TableCell>
+                <TableCell>{asset.assetCategory}</TableCell>
+                <TableCell>{asset.assetSubcategory}</TableCell>
+                <TableCell>{asset.assetName}</TableCell>
+                <TableCell>{asset.makeModel}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"}</TableCell>
                 <TableCell>1</TableCell>
                 <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
@@ -168,13 +178,17 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               {otherStoreAllocations.map((asset) => <TableRow key={asset.assetCode}>
                 {selectMode ? <TableCell>—</TableCell> : null}
                 <TableCell className="font-medium">{asset.typeCode}</TableCell>
-                <TableCell>{asset.assetCode}</TableCell><TableCell>{asset.assetName}</TableCell>
+                <TableCell>{asset.assetCode}</TableCell>
+                <TableCell>{asset.assetCategory}</TableCell>
+                <TableCell>{asset.assetSubcategory}</TableCell>
+                <TableCell>{asset.assetName}</TableCell>
+                <TableCell>{asset.makeModel}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>0</TableCell>
                 <TableCell>1</TableCell><TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.departmentName}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{asset.accountableStoreName}</TableCell> : null}
               </TableRow>)}
-              {!stockCount ? <TableRow><TableCell colSpan={(selectMode ? 9 : 8) + (store.kind === "PRODUCTION" ? 1 : 0)}>
+              {!stockCount ? <TableRow><TableCell colSpan={(selectMode ? 12 : 11) + (store.kind === "PRODUCTION" ? 1 : 0)}>
                 {store.kind === "PRODUCTION" ? "No stock or Department allocations recorded." : "No stock accountable to this Store."}
               </TableCell></TableRow> : null}
             </TableBody>
