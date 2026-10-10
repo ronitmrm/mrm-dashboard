@@ -1759,7 +1759,7 @@ describe("production and shop-floor workflows", () => {
     await expect(start(jobs[1]!, machines[1]!)).resolves.toBeDefined()
   })
 
-  test("starts accident downtime, loses selected Unit ID, and only reports used consumables", async () => {
+  test("records accidents with optional Store items and remarks", async () => {
     const machineNumber = `ACCIDENT-${suffix}`
     await planning.upsertMachine({ machineNumber, organizationId, productionFloorCode: "cnc" })
     const session = await pool.query<{ id: string }>(
@@ -1799,6 +1799,22 @@ describe("production and shop-floor workflows", () => {
       [organizationId, bar.id, unitId]
     )
 
+    await repository.startProductionSessionDowntime({
+      accident: { description: "Part slipped without damage", remarks: "  Checked; nothing broken.  ",
+        lostUnitIds: [], consumables: [] },
+      enteredRole: "shop_floor", organizationId, reasonCode: "SETUP",
+      reasonName: "Setup problem", sessionId: session.rows[0]!.id,
+      startedAt: "2026-09-30T08:30:00+05:30",
+    })
+    const noDamage = await repository.readProductionSessions({ organizationId, productionFloorCode: "cnc", sessionId: session.rows[0]!.id })
+    expect(noDamage.rows[0]?.downtimeEvents).toMatchObject([{
+      accident: { description: "Part slipped without damage", remarks: "Checked; nothing broken.",
+        lostUnits: [], consumables: [] },
+    }])
+    await repository.endProductionSessionDowntime({
+      endOutcome: "resolved", endedAt: "2026-09-30T08:35:00+05:30",
+      organizationId, sessionId: session.rows[0]!.id,
+    })
     const options = await repository.readAccidentStoreOptions(organizationId)
     expect(options.units.some((unit) => unit.assetCode === unitId)).toBe(true)
     expect(options.consumables.some((item) => item.id === insert.id)).toBe(true)
@@ -1811,6 +1827,9 @@ describe("production and shop-floor workflows", () => {
     })
     const saved = await repository.readProductionSessions({ organizationId, productionFloorCode: "cnc", sessionId: session.rows[0]!.id })
     expect(saved.rows[0]?.downtimeEvents).toMatchObject([{
+      accident: { description: "Part slipped without damage", remarks: "Checked; nothing broken.",
+        lostUnits: [], consumables: [] },
+    }, {
       accident: { description: "Wrong side clamped", lostUnits: [{ assetCode: unitId }],
         consumables: [{ typeCode: insert.typeCode, quantity: 2 }] },
     }])
