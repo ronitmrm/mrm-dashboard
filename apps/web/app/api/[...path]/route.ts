@@ -1900,6 +1900,7 @@ async function post(request: NextRequest, context: RouteContext) {
               actorUserId,
               ...(entryType === "production_session_accident_start" ? { accident: {
                 description: text(accident.description),
+                remarks: text(accident.remarks),
                 lostUnitIds: Array.isArray(accident.lostUnitIds)
                   ? accident.lostUnitIds.filter((value): value is string => typeof value === "string")
                   : [],
@@ -1923,7 +1924,7 @@ async function post(request: NextRequest, context: RouteContext) {
           ...result,
           rowsUpdated: 1,
           savedText: entryType === "production_session_accident_start"
-            ? "Accident and downtime recorded. Selected Unit IDs removed from stock."
+            ? "Accident and downtime recorded."
             : "Downtime started.",
         })
       }

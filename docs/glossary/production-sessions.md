@@ -208,7 +208,9 @@ Downtime starts with a coded reason and start time. A new downtime entry default
 
 An Accident is a downtime started on a running session with an existing downtime
 reason and a required account of what happened. The report may identify multiple
-lost Non Consumable Unit IDs and already used Consumables. Saving the accident
+lost Non Consumable Unit IDs and already used Consumables; both lists are optional
+and may be empty when nothing was broken or lost. Optional remarks provide
+additional context and remain visible in the saved report. Saving the accident
 and its Unit ID losses is atomic: each lost Unit ID leaves company stock once and
 keeps its Store history. Listed Consumables are evidence only; their earlier use
 already reduced stock, so the accident does not post another debit. The accident

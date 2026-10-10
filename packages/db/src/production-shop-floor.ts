@@ -1807,6 +1807,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       actorUserId?: string | null
       accident?: {
         description: string
+        remarks?: string
         lostUnitIds: string[]
         consumables: Array<{ itemTypeId: string; quantity: number }>
       }
@@ -1873,6 +1874,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const accidentReport = accident ? {
           description,
+          remarks: accident.remarks?.trim() || null,
           lostUnits,
           consumables: consumables.map((item) => {
             const type = consumed!.rows.find((row) => row.id === item.itemTypeId)!
