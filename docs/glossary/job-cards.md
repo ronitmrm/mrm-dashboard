@@ -157,7 +157,10 @@ the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
 An approved route change sets the selected route and the remaining setup
 quantities for future planning. A saved route with zero remaining setup quantity
-still exists; it does not create a Route Master gap. Setup readiness checks apply
+still exists; it does not create a Route Master gap or new machine work. An
+explicit remaining-setup plan with no positive planned quantity creates no machine
+plan or finish forecast; completed production and workflow remain historical.
+Setup readiness checks apply
 to the setups with remaining planned quantity. If any such setup lacks required masters,
 Part Readiness lists the gaps and the changed Job Card receives no new machine
 plan until the selected route is ready. A Move Setup decision uses the target
