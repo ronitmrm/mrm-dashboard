@@ -321,6 +321,11 @@ of the selected Production Unit. Sessions awaiting weight and sessions with no
 positive target are excluded. These are informational flags: output, session
 closure, setup progress and planning calculations continue without approval.
 
+Planning Control displays these flags and raw-production workflow exceptions in
+one Planning Review table. Each entry states **Session flag** or **Workflow
+exception**. Resolving a workflow exception records the signed-in authorized
+planner as the performer of the operator-started task.
+
 The planner closes a flag by saving a non-blank comment describing the review
 or action taken. The session then leaves the open flagged list, even if its
 efficiency remains above 100%. The comment, planner and closure time remain in
