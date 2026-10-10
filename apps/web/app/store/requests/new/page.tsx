@@ -11,10 +11,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
+import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import {
  OperationalTable,
   TableBody,
@@ -26,7 +23,11 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
-import { StoreRequestPurposeFields } from "@/components/store/store-request-purpose-fields"
+import { StoreRequestItemRows } from "@/components/store/store-request-item-rows"
+import {
+  StoreRequestKindProvider,
+  StoreRequestPurposeFields,
+} from "@/components/store/store-request-purpose-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
@@ -149,11 +150,12 @@ export default async function NewStoreRequestPage({
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
             <CardDescription>
-              A responsibility request names one exact Unit ID, or a consumable
-              Asset Code and quantity. For use, Main Store can choose a Unit ID.
+              A responsibility request selects each physical Unit ID for the
+              requested quantity. For use, Main Store can choose a Unit ID.
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <StoreRequestKindProvider initialKind={initialKind}>
             <form action={createStoreRequisitionBatchAction}>
               <FieldGroup className="grid gap-4 md:grid-cols-2">
                 <StoreRequestIdentityFields
@@ -162,7 +164,6 @@ export default async function NewStoreRequestPage({
                 />
                 <StoreRequestPurposeFields
                   canUse={requestPolicy.departmentOptions.length > 0}
-                  initialKind={initialKind}
                   initialStoreCode={initialStoreCode}
                   stores={requestableStores}
                 />
@@ -193,78 +194,7 @@ export default async function NewStoreRequestPage({
               </FieldGroup>
 
               <div className="mt-6 rounded-md border min-w-0">
- <OperationalTable>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item Code</TableHead>
-                      <TableHead>Identification</TableHead>
-                      <TableHead>Current Stock</TableHead>
-                      <TableHead className="min-w-52">Requested Unit ID</TableHead>
-                      <TableHead className="w-48">Requested Quantity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          {item.typeCode}
-                          <input
-                            name="item_type_id"
-                            type="hidden"
-                            value={item.id}
-                          />
-                        </TableCell>
-                        <TableCell>{item.identificationName}</TableCell>
-                        <TableCell>
-                          {item.availableStock} {item.unit}
-                        </TableCell>
-                        <TableCell>
-                          {item.trackingMode === "SERIALIZED" ? (
-                            <NativeSelect
-                              aria-label={`Requested Unit ID for ${item.typeCode}`}
-                              defaultValue=""
-                              name="requested_unit_id"
-                            >
-                              <NativeSelectOption value="">
-                                Any Unit ID / Store selects
-                              </NativeSelectOption>
-                              {data.physicalUnits
-                                .filter(
-                                  (unit) =>
-                                    unit.itemTypeId === item.id &&
-                                    unit.isMainAccountable && unit.status !== "SCRAPPED" && unit.status !== "LOST"
-                                )
-                                .map((unit) => (
-                                  <NativeSelectOption key={unit.id} value={unit.id}>
-                                    {unit.assetCode} · {unit.status}
-                                  </NativeSelectOption>
-                                ))}
-                            </NativeSelect>
-                          ) : (
-                            <>
-                              Not applicable
-                              <input
-                                name="requested_unit_id"
-                                type="hidden"
-                                value=""
-                              />
-                            </>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            aria-label={`Requested quantity for ${item.typeCode}`}
-                            min={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
-                            name="quantity"
-                            required
-                            step={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
-                            type="number"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
- </OperationalTable>
+                <StoreRequestItemRows items={data.items} physicalUnits={data.physicalUnits} />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -276,6 +206,7 @@ export default async function NewStoreRequestPage({
                 </Button>
               </div>
             </form>
+            </StoreRequestKindProvider>
           </CardContent>
  </SectionCard>
       )}

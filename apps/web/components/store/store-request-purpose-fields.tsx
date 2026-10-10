@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { createContext, useContext, useState, type ReactNode } from "react"
 
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
@@ -8,20 +8,44 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 
-type RequestKind = "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER"
+export type RequestKind = "DEPARTMENT_USE" | "PERSON_USE" | "STORE_TRANSFER"
+
+const RequestKindContext = createContext<{
+  kind: RequestKind
+  setKind: (kind: RequestKind) => void
+} | null>(null)
+
+export function StoreRequestKindProvider({
+  children,
+  initialKind,
+}: {
+  children: ReactNode
+  initialKind: RequestKind
+}) {
+  const [kind, setKind] = useState<RequestKind>(initialKind)
+  return (
+    <RequestKindContext.Provider value={{ kind, setKind }}>
+      {children}
+    </RequestKindContext.Provider>
+  )
+}
+
+export function useStoreRequestKind() {
+  const context = useContext(RequestKindContext)
+  if (!context) throw new Error("Store request kind is unavailable.")
+  return context
+}
 
 export function StoreRequestPurposeFields({
   canUse,
-  initialKind,
   initialStoreCode,
   stores,
 }: {
   canUse: boolean
-  initialKind: RequestKind
   initialStoreCode: string
   stores: Array<{ code: string; name: string }>
 }) {
-  const [kind, setKind] = useState<RequestKind>(initialKind)
+  const { kind, setKind } = useStoreRequestKind()
 
   return (
     <>
@@ -62,7 +86,7 @@ export function StoreRequestPurposeFields({
       ) : null}
       <p className="text-xs text-muted-foreground md:col-span-2">
         {kind === "STORE_TRANSFER"
-          ? "Request one exact Unit ID or a consumable quantity. Main Store transfers responsibility when it fulfills this request."
+          ? "For Non Consumables, select one distinct Unit ID per requested unit. Main Store transfers responsibility when it fulfills the request."
           : kind === "PERSON_USE"
             ? "The item will be issued to you; Main Store keeps responsibility for returnable equipment."
             : "The item will be issued to your Department; Main Store keeps responsibility for returnable equipment."}

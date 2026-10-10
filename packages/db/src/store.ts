@@ -1559,11 +1559,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         throw new Error("Select at least one coded Store item.")
       }
       const itemTypeIds = input.items.map(({ itemTypeId }) => itemTypeId)
-      if (new Set(itemTypeIds).size !== itemTypeIds.length) {
-        throw new Error(
-          "Each coded Store item can appear only once per request."
-        )
-      }
+      const uniqueItemTypeIds = [...new Set(itemTypeIds)]
       const department = requiredText(input.department, "Department")
       const requestedBy = requiredText(input.requestedBy, "Requested by")
       const fulfillmentKind = input.fulfillmentKind ?? "DEPARTMENT_USE"
@@ -1604,16 +1600,32 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           SELECT id, tracking_mode FROM store.item_types
           WHERE organization_id = $1 AND active AND id = ANY($2::uuid[])
         `,
-        [input.organizationId, itemTypeIds]
+        [input.organizationId, uniqueItemTypeIds]
       )
-      if (itemTypes.rowCount !== itemTypeIds.length) {
+      if (itemTypes.rowCount !== uniqueItemTypeIds.length) {
         throw new Error("One or more selected Store items are unavailable.")
       }
       const trackingModeById = new Map(itemTypes.rows.map((item) => [item.id, item.tracking_mode]))
+      const seenItemTypeIds = new Set<string>()
+      const duplicateItemTypeIds = itemTypeIds.filter((id) => {
+        if (seenItemTypeIds.has(id)) return true
+        seenItemTypeIds.add(id)
+        return false
+      })
+      if (duplicateItemTypeIds.length &&
+        (fulfillmentKind !== "STORE_TRANSFER" || duplicateItemTypeIds.some((id) =>
+          trackingModeById.get(id) !== "SERIALIZED"))) {
+        throw new Error("Only distinct Unit IDs may share an Asset Code in one Store request.")
+      }
       if (fulfillmentKind === "STORE_TRANSFER" && input.items.some((item) =>
         trackingModeById.get(item.itemTypeId) === "SERIALIZED" &&
         (item.quantity !== 1 || !item.requestedUnitId))) {
         throw new Error("A Store responsibility request needs one exact Unit ID.")
+      }
+      const requestedUnitIds = input.items.flatMap((item) =>
+        item.requestedUnitId?.trim() ? [item.requestedUnitId.trim()] : [])
+      if (new Set(requestedUnitIds).size !== requestedUnitIds.length) {
+        throw new Error("Select each physical Unit ID only once per request.")
       }
       const requestNumber = await nextDocumentNumber(client, {
         counterKey: "REQUISITION",
