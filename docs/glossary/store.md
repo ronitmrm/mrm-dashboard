@@ -260,7 +260,8 @@ does not move stock. Main Store fulfills a Store stock request with a recorded
 accountability or quantity transfer; the receiving Store then controls later
 movement and consumption. Each fulfillment records the request and actor in
 the shared company ledger. A Unit ID can be requested and transferred only
-one at a time; Consumable quantities may be fulfilled in parts.
+one at a time per request line; one Store stock request may contain multiple
+Asset Codes. Consumable quantities may be fulfilled in parts.
 
 A Repair Purchase Order may create a pending Store Request on behalf of a
 selected Department for one unit of the same Asset Code when reassignment is

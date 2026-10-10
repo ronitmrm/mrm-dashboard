@@ -2635,6 +2635,13 @@ describe("Store requests", () => {
       organizationId,
       unit: "Nos",
     })
+    const consumable = await store.createItemType({
+      ...(await createClassification("Store Transfer Consumable")),
+      assetType: "CONSUMABLE",
+      identificationName: `Store Transfer Consumable ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
     const receipt = await store.receiveStock({
       locationId: location.id,
       organizationId,
@@ -2647,12 +2654,16 @@ describe("Store requests", () => {
     const request = await store.createRequisitionBatch({
       department: "CNC Store",
       fulfillmentKind: "STORE_TRANSFER",
-      items: [{ itemTypeId: item.id, quantity: 1, requestedUnitId: requestedUnit.id }],
+      items: [
+        { itemTypeId: item.id, quantity: 1, requestedUnitId: requestedUnit.id },
+        { itemTypeId: consumable.id, quantity: 2 },
+      ],
       locationId: location.id,
       organizationId,
       receivingStoreCode: "cnc",
       requestedBy: "CNC Store Representative",
     })
+    expect(request.lineIds).toHaveLength(2)
     await expect(departmentStore.transferAssetAccountability({
       assetCode: otherUnit,
       destinationStoreCode: "cnc",

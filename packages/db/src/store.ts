@@ -1570,9 +1570,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       if (!["DEPARTMENT_USE", "PERSON_USE", "STORE_TRANSFER"].includes(fulfillmentKind)) {
         throw new Error("Choose a valid request purpose.")
       }
-      if (fulfillmentKind === "STORE_TRANSFER" && input.items.length !== 1) {
-        throw new Error("Request one Asset Code at a time for a Store transfer.")
-      }
       const receivingStore = fulfillmentKind === "STORE_TRANSFER"
         ? await client.query<{ id: string }>(
             `SELECT id FROM store.accountable_stores
@@ -1612,9 +1609,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       if (itemTypes.rowCount !== itemTypeIds.length) {
         throw new Error("One or more selected Store items are unavailable.")
       }
-      if (fulfillmentKind === "STORE_TRANSFER" &&
-        itemTypes.rows[0]?.tracking_mode === "SERIALIZED" &&
-        (input.items[0]?.quantity !== 1 || !input.items[0]?.requestedUnitId)) {
+      const trackingModeById = new Map(itemTypes.rows.map((item) => [item.id, item.tracking_mode]))
+      if (fulfillmentKind === "STORE_TRANSFER" && input.items.some((item) =>
+        trackingModeById.get(item.itemTypeId) === "SERIALIZED" &&
+        (item.quantity !== 1 || !item.requestedUnitId))) {
         throw new Error("A Store responsibility request needs one exact Unit ID.")
       }
       const requestNumber = await nextDocumentNumber(client, {
