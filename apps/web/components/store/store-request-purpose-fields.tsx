@@ -86,7 +86,7 @@ export function StoreRequestPurposeFields({
       ) : null}
       <p className="text-xs text-muted-foreground md:col-span-2">
         {kind === "STORE_TRANSFER"
-          ? "For Non Consumables, select one distinct Unit ID per requested unit. Main Store transfers responsibility when it fulfills the request."
+          ? "For Non Consumables, enter a quantity. Main Store reviews the FIFO Unit IDs before transferring responsibility."
           : kind === "PERSON_USE"
             ? "The item will be issued to you; Main Store keeps responsibility for returnable equipment."
             : "The item will be issued to your Department; Main Store keeps responsibility for returnable equipment."}

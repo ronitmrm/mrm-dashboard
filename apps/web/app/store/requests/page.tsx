@@ -32,6 +32,7 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { BulkAllocationButton } from "@/components/store/bulk-allocation-button"
+import { StoreTransferConfirmation } from "@/components/store/store-transfer-confirmation"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
@@ -41,6 +42,7 @@ import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import {
   cancelStoreRequisitionAction,
+  confirmStoreTransferBatchAction,
   fulfillStoreTransferRequestAction,
   issueRemainingStoreRequisitionBatchAction,
   issueStoreRequisitionAction,
@@ -59,10 +61,23 @@ export default async function StoreRequestsPage() {
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const requests = await (async () => {
+  const { requests, transferChoices } = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return (await repository.listRequisitions({ organizationId })).rows
+    const requests = (await repository.listRequisitions({ organizationId })).rows
+    const transferChoices = requests.some((request) =>
+      request.fulfillmentKind === "STORE_TRANSFER" &&
+      request.trackingMode === "SERIALIZED" && request.status === "Pending")
+      ? await repository.listStoreTransferUnitChoices(organizationId) : []
+    return { requests, transferChoices }
   })().finally(() => repository.close())
+  const transferGroups = new Map<string, typeof requests>()
+  for (const request of requests) {
+    if (request.fulfillmentKind !== "STORE_TRANSFER" ||
+      request.trackingMode !== "SERIALIZED" || request.status !== "Pending") continue
+    const group = transferGroups.get(request.requestNumber) ?? []
+    group.push(request)
+    transferGroups.set(request.requestNumber, group)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,6 +113,42 @@ export default async function StoreRequestsPage() {
           },
         ]}
       />
+
+      {canManage && transferGroups.size ? (
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>Confirm Store Unit Assignments</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <p className="text-sm text-muted-foreground">
+              FIFO proposals place units without an acquisition date first,
+              then the oldest dated units. Change any selection before confirming.
+              Units reserved for another open request are excluded.
+            </p>
+            {[...transferGroups].map(([requestNumber, lines]) => (
+              <div className="grid gap-3 border-t pt-4" key={requestNumber}>
+                <div className="font-medium">
+                  {requestNumber} · {lines[0]!.receivingStoreName}
+                </div>
+                <StoreTransferConfirmation
+                  action={confirmStoreTransferBatchAction}
+                  choices={transferChoices.filter((unit) =>
+                    lines.some((line) => line.itemTypeId === unit.itemTypeId &&
+                      (!unit.reservedRequestId || lines.some((own) =>
+                        own.id === unit.reservedRequestId))))}
+                  destinationStoreCode={lines[0]!.receivingStoreCode!}
+                  lines={lines.map((line) => ({
+                    id: line.id,
+                    itemTypeId: line.itemTypeId,
+                    requestedUnitCode: line.requestedUnitCode,
+                    typeCode: line.typeCode,
+                  }))}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </SectionCard>
+      ) : null}
 
       <SectionCard>
         <CardHeader>

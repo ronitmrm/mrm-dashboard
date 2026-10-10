@@ -1,7 +1,5 @@
 "use client"
 
-import { useState } from "react"
-
 import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import {
@@ -32,66 +30,33 @@ type PhysicalUnit = {
   status: string
 }
 
-function RequestItemRow({ item, physicalUnits }: {
+function RequestItemRow({ item, physicalUnits, transferAvailableCount }: {
   item: RequestItem
   physicalUnits: PhysicalUnit[]
+  transferAvailableCount: number
 }) {
   const { kind } = useStoreRequestKind()
-  const [quantity, setQuantity] = useState("")
-  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([])
   const units = physicalUnits.filter((unit) =>
     unit.itemTypeId === item.id && unit.isMainAccountable &&
     unit.status !== "SCRAPPED" && unit.status !== "LOST")
   const exactUnitTransfer = kind === "STORE_TRANSFER" && item.trackingMode === "SERIALIZED"
-  const unitCount = Number(quantity)
-  const selectionCount = exactUnitTransfer && Number.isInteger(unitCount) && unitCount > 0
-    ? Math.min(unitCount, units.length) : 0
 
   return (
     <TableRow>
       <TableCell className="font-medium">
         {item.typeCode}
-        {!exactUnitTransfer ? <input name="item_type_id" type="hidden" value={item.id} /> : null}
+        <input name="item_type_id" type="hidden" value={item.id} />
       </TableCell>
       <TableCell>{item.identificationName}</TableCell>
       <TableCell>{item.availableStock} {item.unit}</TableCell>
       <TableCell>
         {exactUnitTransfer ? (
-          <div className="grid gap-2">
-            {Array.from({ length: selectionCount }, (_, index) => (
-              <div className="grid gap-1" key={index}>
-                <label className="text-xs" htmlFor={`${item.id}-unit-${index}`}>
-                  Physical Unit {index + 1}
-                </label>
-                <NativeSelect
-                  id={`${item.id}-unit-${index}`}
-                  name="requested_unit_id"
-                  onValueChange={(value) => setSelectedUnitIds((current) => {
-                    const next = [...current]
-                    next[index] = value
-                    return next
-                  })}
-                  required
-                  value={selectedUnitIds[index] ?? ""}
-                >
-                  <NativeSelectOption disabled value="">Select Unit ID</NativeSelectOption>
-                  {units.map((unit) => (
-                    <NativeSelectOption
-                      disabled={selectedUnitIds.some((selected, position) =>
-                        position !== index && selected === unit.id)}
-                      key={unit.id}
-                      value={unit.id}
-                    >
-                      {unit.assetCode} · {unit.status}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <input name="item_type_id" type="hidden" value={item.id} />
-                <input name="quantity" type="hidden" value="1" />
-              </div>
-            ))}
-            {!selectionCount ? <span>Enter a quantity to select Unit IDs.</span> : null}
-          </div>
+          <>
+            <span className="text-sm text-muted-foreground">
+              {transferAvailableCount} unreserved Main Store Unit IDs · assigned by FIFO on submission
+            </span>
+            <input name="requested_unit_id" type="hidden" value="" />
+          </>
         ) : item.trackingMode === "SERIALIZED" ? (
           <NativeSelect aria-label={`Requested Unit ID for ${item.typeCode}`}
             defaultValue="" name="requested_unit_id">
@@ -112,23 +77,22 @@ function RequestItemRow({ item, physicalUnits }: {
       <TableCell>
         <Input
           aria-label={`Requested quantity for ${item.typeCode}`}
-          max={exactUnitTransfer ? units.length : undefined}
+          max={exactUnitTransfer ? transferAvailableCount : undefined}
           min={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
-          name={exactUnitTransfer ? undefined : "quantity"}
-          onChange={(event) => setQuantity(event.target.value)}
+          name="quantity"
           required
           step={item.trackingMode === "SERIALIZED" ? "1" : "0.001"}
           type="number"
-          value={quantity}
         />
       </TableCell>
     </TableRow>
   )
 }
 
-export function StoreRequestItemRows({ items, physicalUnits }: {
+export function StoreRequestItemRows({ items, physicalUnits, transferAvailableCounts }: {
   items: RequestItem[]
   physicalUnits: PhysicalUnit[]
+  transferAvailableCounts: Record<string, number>
 }) {
   return (
     <OperationalTable>
@@ -143,7 +107,8 @@ export function StoreRequestItemRows({ items, physicalUnits }: {
       </TableHeader>
       <TableBody>
         {items.map((item) => (
-          <RequestItemRow item={item} key={item.id} physicalUnits={physicalUnits} />
+          <RequestItemRow item={item} key={item.id} physicalUnits={physicalUnits}
+            transferAvailableCount={transferAvailableCounts[item.id] ?? 0} />
         ))}
       </TableBody>
     </OperationalTable>

@@ -62,9 +62,12 @@ export default async function NewStoreRequestPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, physicalUnits, requestContext, stores, myRequests] = await Promise.all([
+    const [items, physicalUnits, transferChoices, requestContext, stores, myRequests] = await Promise.all([
       repository.listItemTypes(organizationId),
       repository.listStockPhysicalUnits(organizationId, "COMPANY"),
+      selectedIds.length
+        ? repository.listStoreTransferUnitChoices(organizationId)
+        : Promise.resolve([]),
       repository.requisitionRequestContext({
         organizationId,
         userId: session.user.id,
@@ -80,6 +83,15 @@ export default async function NewStoreRequestPage({
         return item ? [item] : []
       }),
       physicalUnits,
+      transferAvailableCounts: transferChoices.reduce<Record<string, number>>(
+        (counts, unit) => {
+          if (!unit.reservedRequestId) {
+            counts[unit.itemTypeId] = (counts[unit.itemTypeId] ?? 0) + 1
+          }
+          return counts
+        },
+        {}
+      ),
       requestContext,
       stores,
       myRequests: myRequests.rows.slice(0, 30),
@@ -150,8 +162,8 @@ export default async function NewStoreRequestPage({
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
             <CardDescription>
-              A responsibility request selects each physical Unit ID for the
-              requested quantity. For use, Main Store can choose a Unit ID.
+              Enter the quantity. For Store stock, available physical Unit IDs
+              are reserved by FIFO; Main Store can confirm or change them.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -194,7 +206,8 @@ export default async function NewStoreRequestPage({
               </FieldGroup>
 
               <div className="mt-6 rounded-md border min-w-0">
-                <StoreRequestItemRows items={data.items} physicalUnits={data.physicalUnits} />
+                <StoreRequestItemRows items={data.items} physicalUnits={data.physicalUnits}
+                  transferAvailableCounts={data.transferAvailableCounts} />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">

@@ -921,6 +921,36 @@ export async function fulfillStoreTransferRequestAction(formData: FormData) {
   redirect("/store/requests")
 }
 
+export async function confirmStoreTransferBatchAction(formData: FormData) {
+  const requisitionIds = formData.getAll("requisition_id")
+    .map((value) => value.toString().trim())
+  const assetCodes = formData.getAll("asset_code")
+    .map((value) => value.toString().trim())
+  if (!requisitionIds.length || requisitionIds.length !== assetCodes.length) {
+    throw new Error("Select one physical Unit ID for each request line.")
+  }
+  const session = await requireStoreAction("store.requests.issue", "/store/requests")
+  const repository = createStoreRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const organizationId = await repository.organizationIdForCode("MRMPL")
+    .finally(() => repository.close())
+  const transfers = createDepartmentStoreRepository({ pool: getWebPostgresPool() })
+  const destinationStoreCode = requiredText(formData, "destination_store_code")
+  await transfers.transferRequestedAssetsBatch({
+    actorUserId: session.user.id,
+    destinationStoreCode,
+    lines: requisitionIds.map((requisitionId, index) => ({
+      assetCode: assetCodes[index]!, requisitionId,
+    })),
+    movedBy: session.user.name?.trim() || session.user.email,
+    organizationId,
+  })
+  revalidateStore()
+  revalidatePath(accountableStoreHref(destinationStoreCode))
+  redirect("/store/requests")
+}
+
 export async function issueStoreRequisitionAction(formData: FormData) {
   await withStore(
     "store.requests.issue",
