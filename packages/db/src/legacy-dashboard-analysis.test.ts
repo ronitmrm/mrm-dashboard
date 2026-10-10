@@ -264,7 +264,8 @@ test("actual finish carries completed final work across an equivalent route chan
   }
   const control = buildLegacyDashboardSnapshot(input).productionControl
 
-  expect(control.workOrders[0]).toMatchObject({ optionNumber: "2", finalSetupNumber: "1", finalSetupGoodPieces: 100, dispatchedPieces: 0, dispatchAvailablePieces: 100 })
+  expect(control.workOrders[0]).toMatchObject({ optionNumber: "2", routeStatus: "Route change plan", finalSetupNumber: "1", finalSetupGoodPieces: 100, dispatchedPieces: 0, dispatchAvailablePieces: 100 })
+  expect(control).toMatchObject({ allWorkOrderGaps: [], masterGaps: [] })
   expect(control.productionDashboardRows[0]).toMatchObject({ actualFinishDate: "1-Oct-26", dispatchAvailablePieces: 100 })
 
   const newRouteStateWithoutOutput = buildLegacyDashboardSnapshot({

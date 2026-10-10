@@ -1231,7 +1231,7 @@ function buildProductionControl({
     const rawMaterialRejection = rawMaterialRejectionByJc.get(canonicalKey(jcNo));
     const routeStatus = !effectiveOption && optionNumbers.length > 1
       ? "Select option"
-      : selectedRoutes.length
+      : allSelectedRoutes.length
         ? (routeChange ? "Route change plan" : (optionNumber || selectedOptionNumber ? "Ready" : "Auto single option"))
         : "Route master missing";
     const routeReadiness = selectedRoutes.map((route) => {
