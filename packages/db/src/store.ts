@@ -1099,6 +1099,12 @@ async function issueRequisitionWithClient(
           AND asset.accountable_store_id = $5
           AND asset.current_holder_type = 'STORE'
           AND asset.status = 'AVAILABLE'
+           AND NOT EXISTS (
+             SELECT 1 FROM store.requisitions reserved
+             WHERE reserved.requested_asset_id = asset.id
+               AND reserved.status IN ('Pending', 'Partially Issued')
+               AND reserved.id <> $6
+           )
           AND NOT EXISTS (
             SELECT 1 FROM store.repair_purchase_order_items repair_item
             JOIN store.purchase_orders purchase_order
@@ -1118,6 +1124,7 @@ async function issueRequisitionWithClient(
         row.item_type_id,
         row.location_id,
         row.accountable_store_id,
+        input.requisitionId,
       ]
     )
     if (selectedAssets.rows.length !== quantity) {
@@ -1619,13 +1626,76 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }
       if (fulfillmentKind === "STORE_TRANSFER" && input.items.some((item) =>
         trackingModeById.get(item.itemTypeId) === "SERIALIZED" &&
-        (item.quantity !== 1 || !item.requestedUnitId))) {
-        throw new Error("A Store responsibility request needs one exact Unit ID.")
+        (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 500 ||
+          (item.requestedUnitId && item.quantity !== 1)))) {
+        throw new Error("Request 1 to 500 whole physical units per Asset Code.")
       }
       const requestedUnitIds = input.items.flatMap((item) =>
         item.requestedUnitId?.trim() ? [item.requestedUnitId.trim()] : [])
       if (new Set(requestedUnitIds).size !== requestedUnitIds.length) {
         throw new Error("Select each physical Unit ID only once per request.")
+      }
+      // Serialize reservations with Store transfers, and use the unique open-unit
+      // index as a second guard against competing request submissions.
+      await lockToolingAllocation(client, input.organizationId)
+      const reservedItems: StoreRequisitionBatchInput["items"] = []
+      for (const item of input.items) {
+        if (fulfillmentKind !== "STORE_TRANSFER" ||
+          trackingModeById.get(item.itemTypeId) !== "SERIALIZED" ||
+          item.requestedUnitId?.trim()) {
+          reservedItems.push(item)
+          continue
+        }
+        const units = await client.query<{ id: string }>(
+          `SELECT asset.id
+           FROM store.assets asset
+           JOIN store.accountable_stores accountable
+             ON accountable.id = asset.accountable_store_id
+             AND accountable.organization_id = asset.organization_id
+             AND accountable.kind = 'MAIN'
+           JOIN store.locations location
+             ON location.id = asset.current_location_id
+             AND location.accountable_store_id = accountable.id
+             AND location.location_type = 'STORE'
+             AND location.active
+           WHERE asset.organization_id = $1 AND asset.item_type_id = $2
+             AND asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
+             AND asset.id <> ALL($4::uuid[])
+             AND NOT EXISTS (
+               SELECT 1 FROM store.requisitions reserved
+               WHERE reserved.requested_asset_id = asset.id
+                 AND reserved.status IN ('Pending', 'Partially Issued')
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM store.repair_purchase_order_items repair
+               JOIN store.purchase_orders purchase_order
+                 ON purchase_order.id = repair.purchase_order_id
+               WHERE repair.asset_id = asset.id AND repair.status = 'Open'
+                 AND purchase_order.status = 'Open'
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM store.calibration_visits visit
+               WHERE visit.asset_id = asset.id
+                 AND visit.status IN ('OPEN', 'DISPATCHED', 'RETURNED')
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM store.gauge_set_memberships membership
+               JOIN store.gauge_sets gauge_set
+                 ON gauge_set.id = membership.gauge_set_id AND gauge_set.active
+               WHERE membership.asset_id = asset.id AND membership.removed_at IS NULL
+             )
+           ORDER BY asset.acquired_on NULLS FIRST, asset.created_at, asset.asset_code
+           LIMIT $3 FOR UPDATE OF asset`,
+          [input.organizationId, item.itemTypeId, item.quantity,
+            [...requestedUnitIds, ...reservedItems.flatMap((reserved) =>
+              reserved.requestedUnitId ? [reserved.requestedUnitId] : [])]]
+        )
+        if (units.rows.length !== item.quantity) {
+          throw new Error("Not enough unreserved physical units in Main Store for this request.")
+        }
+        reservedItems.push(...units.rows.map((unit) => ({
+          itemTypeId: item.itemTypeId, quantity: 1, requestedUnitId: unit.id,
+        })))
       }
       const requestNumber = await nextDocumentNumber(client, {
         counterKey: "REQUISITION",
@@ -1659,7 +1729,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         ]
       )
       const lineIds: string[] = []
-      for (const [index, item] of input.items.entries()) {
+      for (const [index, item] of reservedItems.entries()) {
         const requestedUnitId = item.requestedUnitId?.trim() || null
         if (requestedUnitId) {
           if (item.quantity !== 1) {
@@ -4417,6 +4487,56 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             AND ($2 = 'COMPANY' OR accountable.kind = 'MAIN')
           ORDER BY asset.asset_code`,
         [organizationId, scope]
+      )
+      return result.rows
+    },
+
+    async listStoreTransferUnitChoices(organizationId: string) {
+      const result = await pool.query<{
+        acquiredOn: string | null
+        assetCode: string
+        itemTypeId: string
+        reservedRequestId: string | null
+      }>(
+        `SELECT asset.asset_code AS "assetCode",
+           asset.item_type_id AS "itemTypeId",
+           asset.acquired_on::text AS "acquiredOn",
+           reserved.id AS "reservedRequestId"
+         FROM store.assets asset
+         JOIN store.accountable_stores accountable
+           ON accountable.id = asset.accountable_store_id
+           AND accountable.organization_id = asset.organization_id
+           AND accountable.kind = 'MAIN'
+         JOIN store.locations location
+           ON location.id = asset.current_location_id
+           AND location.accountable_store_id = accountable.id
+           AND location.location_type = 'STORE'
+           AND location.active
+         LEFT JOIN store.requisitions reserved
+           ON reserved.requested_asset_id = asset.id
+           AND reserved.status IN ('Pending', 'Partially Issued')
+         WHERE asset.organization_id = $1
+           AND asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
+           AND NOT EXISTS (
+             SELECT 1 FROM store.repair_purchase_order_items repair
+             JOIN store.purchase_orders purchase_order
+               ON purchase_order.id = repair.purchase_order_id
+             WHERE repair.asset_id = asset.id AND repair.status = 'Open'
+               AND purchase_order.status = 'Open'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM store.calibration_visits visit
+             WHERE visit.asset_id = asset.id
+               AND visit.status IN ('OPEN', 'DISPATCHED', 'RETURNED')
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM store.gauge_set_memberships membership
+             JOIN store.gauge_sets gauge_set
+               ON gauge_set.id = membership.gauge_set_id AND gauge_set.active
+             WHERE membership.asset_id = asset.id AND membership.removed_at IS NULL
+           )
+         ORDER BY asset.acquired_on NULLS FIRST, asset.created_at, asset.asset_code`,
+        [organizationId]
       )
       return result.rows
     },

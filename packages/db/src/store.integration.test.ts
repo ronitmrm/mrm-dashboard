@@ -2715,6 +2715,80 @@ describe("Store requests", () => {
     expect(transfer.rows[0]).toEqual({ code: "cnc", requisition_id: request.lineIds[0] })
   })
 
+  test("reserves FIFO units across Store requests and transfers an edited set together", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [organizationId]
+    )
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const item = await store.createItemType({
+      ...(await createClassification("FIFO Store Responsibility")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `FIFO Request ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 4, "100.00")).id,
+      quantity: 4,
+    })
+    await pool.query(
+      `UPDATE store.assets SET acquired_on = CASE asset_code
+         WHEN $2 THEN NULL WHEN $3 THEN DATE '2023-01-01'
+         WHEN $4 THEN DATE '2024-01-01' ELSE DATE '2025-01-01' END
+       WHERE organization_id = $1 AND asset_code = ANY($5::text[])`,
+      [organizationId, ...receipt.assetCodes.slice(0, 3), receipt.assetCodes]
+    )
+    const request = (quantity: number) => store.createRequisitionBatch({
+      department: "CNC Store",
+      fulfillmentKind: "STORE_TRANSFER",
+      items: [{ itemTypeId: item.id, quantity }],
+      locationId: location.id,
+      organizationId,
+      receivingStoreCode: "cnc",
+      requestedBy: "CNC Store Representative",
+    })
+    const first = await request(2)
+    const second = await request(1)
+    const assigned = await pool.query<{ assetCode: string; id: string }>(
+      `SELECT request.id, asset.asset_code AS "assetCode"
+       FROM store.requisitions request
+       JOIN store.assets asset ON asset.id = request.requested_asset_id
+       WHERE request.id = ANY($1::uuid[]) ORDER BY request.request_number`,
+      [[...first.lineIds, ...second.lineIds]]
+    )
+    expect(assigned.rows.map((row) => row.assetCode)).toEqual(
+      receipt.assetCodes.slice(0, 3)
+    )
+    const choices = await store.listStoreTransferUnitChoices(organizationId)
+    expect(choices.find((unit) => unit.assetCode === receipt.assetCodes[2])
+      ?.reservedRequestId).toBe(second.lineIds[0])
+    await expect(departmentStore.transferRequestedAssetsBatch({
+      destinationStoreCode: "cnc",
+      lines: [
+        { requisitionId: first.lineIds[0]!, assetCode: receipt.assetCodes[0]! },
+        { requisitionId: first.lineIds[1]!, assetCode: receipt.assetCodes[2]! },
+      ],
+      organizationId,
+    })).rejects.toThrow("reserved for another request")
+    await departmentStore.transferRequestedAssetsBatch({
+      destinationStoreCode: "cnc",
+      lines: [
+        { requisitionId: first.lineIds[0]!, assetCode: receipt.assetCodes[0]! },
+        { requisitionId: first.lineIds[1]!, assetCode: receipt.assetCodes[3]! },
+      ],
+      organizationId,
+    })
+    const rows = (await store.listRequisitions({ organizationId })).rows
+    expect(first.lineIds.map((id) => rows.find((row) => row.id === id)?.status))
+      .toEqual(["Fulfilled", "Fulfilled"])
+    expect(rows.find((row) => row.id === second.lineIds[0])?.status).toBe("Pending")
+  })
+
   test("routes a Unit ID between department Stores through Main", async () => {
     await pool.query(
       `INSERT INTO manufacturing.production_floors (organization_id, code, name)

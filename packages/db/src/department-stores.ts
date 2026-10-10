@@ -423,6 +423,15 @@ async function moveOwnedAsset(
   )
   const asset = result.rows[0]
   if (!asset) throw new Error("Unit ID was not found.")
+  const reservation = await client.query(
+    `SELECT 1 FROM store.requisitions
+     WHERE requested_asset_id = $1
+       AND status IN ('Pending', 'Partially Issued') LIMIT 1`,
+    [asset.id]
+  )
+  if (reservation.rows[0]) {
+    throw new Error("This Unit ID is reserved for an open Store request.")
+  }
   if (asset.accountId !== input.store.id) {
     throw new Error("This Unit ID is accountable to another Store.")
   }
@@ -1079,6 +1088,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
     }) {
       const quantity = positiveQuantity(input.quantity)
       return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
         const request = await storeTransferRequest(client, input)
         if (request && (input.sourceStoreCode !== "MAIN" ||
           request.trackingMode !== "CONSUMABLE" ||
@@ -1179,14 +1189,14 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       assetCode: string
       destinationStoreCode: string
       sourceStoreCode: string
-    }) {
-      return withTransaction(pool, async (client) => {
+    }, transactionClient?: PoolClient) {
+      const transfer = async (client: PoolClient) => {
+        await lockToolingAllocation(client, input.organizationId)
         const request = await storeTransferRequest(client, input)
         if (request && (input.sourceStoreCode !== "MAIN" ||
           request.trackingMode !== "SERIALIZED")) {
           throw new Error("This request is not for a Main Store Unit ID.")
         }
-        await lockToolingAllocation(client, input.organizationId)
         const asset = await client.query<{
           accountableStoreId: string
           currentHolderName: string | null
@@ -1210,6 +1220,16 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         )
         const unit = asset.rows[0]
         if (!unit) throw new Error("Unit ID was not found.")
+        const reservedByAnotherRequest = await client.query(
+          `SELECT 1 FROM store.requisitions
+           WHERE requested_asset_id = $1
+             AND status IN ('Pending', 'Partially Issued')
+             AND id IS DISTINCT FROM $2::uuid LIMIT 1`,
+          [unit.id, input.requisitionId ?? null]
+        )
+        if (reservedByAnotherRequest.rows[0]) {
+          throw new Error("This Unit ID is reserved for another open Store request.")
+        }
         if (request && (request.requestedAssetId !== unit.id ||
           request.itemTypeId !== unit.itemTypeId ||
           Number(request.requestedQuantity) - Number(request.issuedQuantity) !== 1)) {
@@ -1337,6 +1357,126 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { assetCode: input.assetCode, destinationStoreCode: destination.code }
+      }
+      return transactionClient ? transfer(transactionClient) : withTransaction(pool, transfer)
+    },
+
+    async transferRequestedAssetsBatch(input: MutationIdentity & {
+      destinationStoreCode: string
+      lines: Array<{ assetCode: string; requisitionId: string }>
+    }) {
+      if (!input.lines.length || input.lines.length > 500) {
+        throw new Error("Select 1 to 500 requested physical units.")
+      }
+      const requestIds = input.lines.map((line) => requiredText(line.requisitionId, "Request line"))
+      const codes = input.lines.map((line) => requiredText(line.assetCode, "Unit ID"))
+      if (new Set(requestIds).size !== requestIds.length ||
+        new Set(codes.map((code) => code.toLowerCase())).size !== codes.length) {
+        throw new Error("Select each request line and physical Unit ID only once.")
+      }
+      return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
+        const requests = await client.query<{
+          headerId: string
+          id: string
+          itemTypeId: string
+          requestedAssetId: string | null
+          status: string
+        }>(
+          `SELECT request.id, request.request_header_id AS "headerId",
+             request.item_type_id AS "itemTypeId",
+             request.requested_asset_id AS "requestedAssetId", request.status
+           FROM store.requisitions request
+           JOIN store.requisition_headers header
+             ON header.id = request.request_header_id
+           JOIN store.item_types item ON item.id = request.item_type_id
+           WHERE request.organization_id = $1 AND request.id = ANY($2::uuid[])
+             AND header.fulfillment_kind = 'STORE_TRANSFER'
+             AND item.tracking_mode = 'SERIALIZED'
+           ORDER BY request.id FOR UPDATE OF request`,
+          [input.organizationId, requestIds]
+        )
+        if (requests.rows.length !== requestIds.length ||
+          requests.rows.some((request) => request.status !== "Pending" ||
+            !request.requestedAssetId ||
+            request.headerId !== requests.rows[0]!.headerId)) {
+          throw new Error("Select all open physical units from one Store request.")
+        }
+        const openCount = await client.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM store.requisitions request
+           JOIN store.item_types item ON item.id = request.item_type_id
+           WHERE request.request_header_id = $1
+             AND request.status IN ('Pending', 'Partially Issued')
+             AND item.tracking_mode = 'SERIALIZED'`,
+          [requests.rows[0]!.headerId]
+        )
+        if (openCount.rows[0]!.count !== requestIds.length) {
+          throw new Error("Confirm every open physical Unit ID on this request together.")
+        }
+        const assets = await client.query<{
+          assetCode: string
+          id: string
+          itemTypeId: string
+        }>(
+          `SELECT asset.id, asset.asset_code AS "assetCode",
+             asset.item_type_id AS "itemTypeId"
+           FROM store.assets asset
+           JOIN store.accountable_stores accountable
+             ON accountable.id = asset.accountable_store_id
+             AND accountable.organization_id = asset.organization_id
+             AND accountable.kind = 'MAIN'
+           JOIN store.locations location
+             ON location.id = asset.current_location_id
+             AND location.accountable_store_id = accountable.id
+             AND location.location_type = 'STORE' AND location.active
+           WHERE asset.organization_id = $1
+             AND lower(asset.asset_code) = ANY($2::text[])
+             AND asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
+           ORDER BY asset.id FOR UPDATE OF asset`,
+          [input.organizationId, codes.map((code) => code.toLowerCase())]
+        )
+        if (assets.rows.length !== codes.length) {
+          throw new Error("A selected Unit ID is no longer available in Main Store.")
+        }
+        const requestById = new Map(requests.rows.map((request) => [request.id, request]))
+        const assetByCode = new Map(assets.rows.map((asset) => [asset.assetCode.toLowerCase(), asset]))
+        for (const [index, requestId] of requestIds.entries()) {
+          if (requestById.get(requestId)!.itemTypeId !==
+            assetByCode.get(codes[index]!.toLowerCase())?.itemTypeId) {
+            throw new Error("Select a Unit ID belonging to the requested Asset Code.")
+          }
+        }
+        const heldElsewhere = await client.query(
+          `SELECT 1 FROM store.requisitions
+           WHERE requested_asset_id = ANY($1::uuid[])
+             AND status IN ('Pending', 'Partially Issued')
+             AND id <> ALL($2::uuid[]) LIMIT 1`,
+          [assets.rows.map((asset) => asset.id), requestIds]
+        )
+        if (heldElsewhere.rows[0]) {
+          throw new Error("A selected Unit ID is reserved for another request.")
+        }
+        await client.query(
+          `UPDATE store.requisitions SET requested_asset_id = NULL
+           WHERE id = ANY($1::uuid[])`, [requestIds]
+        )
+        for (const [index, requestId] of requestIds.entries()) {
+          await client.query(
+            `UPDATE store.requisitions SET requested_asset_id = $2,
+               updated_at = now(), updated_by_user_id = $3 WHERE id = $1`,
+            [requestId, assetByCode.get(codes[index]!.toLowerCase())!.id,
+              input.actorUserId ?? null]
+          )
+        }
+        for (const [index, requestId] of requestIds.entries()) {
+          await this.transferAssetAccountability({
+            ...input,
+            assetCode: codes[index]!,
+            requisitionId: requestId,
+            sourceStoreCode: "MAIN",
+          }, client)
+        }
+        return { transferred: requestIds.length }
       })
     },
 

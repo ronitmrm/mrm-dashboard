@@ -254,9 +254,15 @@ Personal use issues it to the requesting employee and records that person as
 the physical holder. A Store stock request asks Main Store to transfer
 accountability to a specified Quality or production Store. Only a person with
 Store request submission permission and request permission for that receiving Store can
-submit this request. A serialized Store stock request names exact Unit IDs;
-a Consumable Store stock request names an Asset Code and quantity. A requester
-who enters a quantity of serialized units selects that many distinct Unit IDs.
+submit this request. A serialized Store stock requester enters an Asset Code and
+quantity without choosing physical Unit IDs. At submission, the system reserves
+that many eligible Main Store Unit IDs, placing units with no Acquisition Date
+first, then the oldest Acquisition Date, with Unit ID record time and code
+as tie breakers. An open exact-unit request reserves its Unit ID, so a later
+request cannot select it. Cancelling or fulfilling the line releases that
+reservation. Main Store reviews the proposed units and may replace them with
+other unreserved, eligible units before confirming the transfer. A Consumable
+Store stock request names an Asset Code and quantity.
 Submission does not move stock. Main Store fulfills a Store stock request with
 a recorded accountability or quantity transfer; the receiving Store then controls later
 movement and consumption. Each fulfillment records the request and actor in
