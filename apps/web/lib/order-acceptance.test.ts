@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest"
+import { proposalContext } from "./order-acceptance-context"
 import {
   calculateProposal,
   type PlanningContext,
@@ -39,6 +40,62 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("keeps machines and schedules routes with equivalent family capitalization", () => {
+    const routes = ["JL", "Jl"].map((machineFamily, index) => ({
+      partNo: String(index),
+      optionNumber: "1",
+      setupNo: "1",
+      machineFamily,
+    }))
+    const { context, resolve } = proposalContext({
+      readModelVersion: 1,
+      productionControl: {
+        routeMasterRows: routes,
+        cycleMasterRows: routes.map((route) => ({ ...route, totalTime: 3600 })),
+        machinePlanningRows: [
+          { machine: "CNC-1", machineFamily: "Jl", status: "Active" },
+        ],
+      },
+    })
+    const lines = routes.map((route) =>
+      resolve({
+        id: route.partNo,
+        part: route.partNo,
+        option: "1",
+        quantity: 1,
+        rmDate: "",
+      })
+    )
+    expect(context.machines).toEqual([{ id: "CNC-1", family: "JL" }])
+    const plan = calculateProposal({ ...input, lines }, context, lines)
+    expect(plan.blockers).toEqual([])
+    expect(plan.lines.map((line) => line.selected)).toEqual([true, true])
+  })
+  test("ignores Available constraints while retaining active outages", () => {
+    const { context } = proposalContext({
+      productionControl: {
+        routeMasterRows: [{ machineFamily: "JL" }],
+        machinePlanningRows: [{ machine: "CNC-1", machineFamily: "JL" }],
+        machineConstraints: [
+          {
+            machineNumber: "CNC-1",
+            status: "Available",
+            unavailableFrom: "2026-09-01",
+          },
+          {
+            machineNumber: "CNC-1",
+            status: "Unavailable",
+            unavailableFrom: "2026-09-14",
+            unavailableTo: "2026-09-15",
+          },
+        ],
+      },
+    })
+    expect(context.blockers).toEqual([])
+    expect(context.reservations).toEqual([
+      { machine: "CNC-1", start: "2026-09-14", end: "2026-09-15" },
+    ])
+  })
   test("protects existing work and selects more complete lines while ignoring tentative RM dates", () => {
     const lines = [line("large", 7), line("small-1", 3), line("small-2", 3)]
     const plan = calculateProposal(
