@@ -152,6 +152,12 @@ from another job. The Planner schedules the remaining work through the normal
 planning actions, then production starts a new session. Open sessions and a
 changed setup block the correction; refresh and review before retrying.
 
+Historical output and recorded Machine Start evidence survive reopening or
+releasing a setup. They do not make its current Planned state Running, reserve
+its former machine, or create a missing-start workflow exception. Preparation
+for a later run follows the current saved stage; historical output cannot
+complete that run's Machine Start task.
+
 A closed Production Session may be corrected without reopening it. Authorized
 users may correct its end time and method-specific output, add a missed bounded
 downtime interval, or add a missed rejection entry. Every closed-session
