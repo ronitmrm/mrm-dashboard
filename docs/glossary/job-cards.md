@@ -166,6 +166,12 @@ Part Readiness lists the gaps and the changed Job Card receives no new machine
 plan until the selected route is ready. A Move Setup decision uses the target
 machine from its decision date onward; an outage that ended before that decision
 does not block the move.
+A confirmed Move Setup queue may place work on a machine with an active setup.
+The current target setup keeps its machine ownership and continues; moved work
+waits at the selected position among future queued setups. Keeping the target
+setup running does not require closing its Production Session. An explicit Stop
+choice still requires settling that setup's session before releasing its machine.
+Running work on the source machine must also be settled before it is moved.
 Subsequent Planner Actions, Setup Checklists, Production Sessions, production
 entries, and dispatch resolve setup identity from the latest active Change Route
 before any earlier route choice. Interruption checks must inspect the session on

@@ -2672,9 +2672,23 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (assignmentMode === "early_downstream" && targetLock.rows[0]) {
           throw new Error("Target machine is not idle. Finish or move its active setup first.")
         }
+        const queuedMove = assignmentMode === "move" && Boolean(
+          input.setupNumber && input.queuePlacements?.some((placement) =>
+            interruptionMatches({
+              jobCardNumber: placement.targetJobCardNumber,
+              machineNumber: placement.targetMachineNumber,
+              setupNumber: placement.targetSetupNumber,
+            }, {
+              jobCardNumber: input.jobCardNumber,
+              machineNumber: input.toMachineNumber,
+              setupNumber: input.setupNumber ?? 0,
+            })
+          )
+        )
         if (
           targetLock.rows[0] &&
           targetLock.rows[0].work_order_id !== workOrder.id &&
+          !queuedMove &&
           !interruptedSetups.some((interruption) =>
             interruptionMatches(interruption, {
               jobCardNumber: targetLock.rows[0]!.job_card_number,

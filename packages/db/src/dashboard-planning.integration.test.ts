@@ -1285,7 +1285,7 @@ describe("dashboard planning writes", () => {
     }))
   })
 
-  test("requires target interruption and releases the stopped setup for parallel and move", async () => {
+  test("keeps queued move targets running and releases approved parallel or move interruptions", async () => {
     const moveItemUid = `MOVE-${suffix}`
     const movingJobCard = `MOVE-${suffix}-1`
     const blockingJobCard = `MOVE-${suffix}-2`
@@ -1410,6 +1410,30 @@ describe("dashboard planning writes", () => {
       status: 409,
       message: `${targetMachine} is assigned to Job Card ${blockingJobCard}, Setup 1. Approve its stop in the target machine review and close any open Production Session before moving this setup.`,
     })
+
+    const targetBeforeQueue = await pool.query(
+      "SELECT active, stage, row_version FROM manufacturing.shop_floor_setup_state WHERE work_order_id=$1 AND machine_id=$2",
+      [row.work_order_id, row.machine_id]
+    )
+    await repository.recordPlanOverride({
+      fromMachineNumber: sourceMachine,
+      jobCardNumber: movingJobCard,
+      organizationId,
+      queuePlacements: [{
+        targetJobCardNumber: movingJobCard,
+        targetMachineNumber: targetMachine,
+        targetSetupNumber: 1,
+        queueBeforeSetups: [],
+      }],
+      reason: "Queue after the active target setup",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
+    const targetAfterQueue = await pool.query(
+      "SELECT active, stage, row_version FROM manufacturing.shop_floor_setup_state WHERE work_order_id=$1 AND machine_id=$2",
+      [row.work_order_id, row.machine_id]
+    )
+    expect(targetAfterQueue.rows).toEqual(targetBeforeQueue.rows)
 
     await repository.recordPlanOverride({
       fromMachineNumber: sourceMachine,
