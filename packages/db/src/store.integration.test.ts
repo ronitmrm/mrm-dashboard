@@ -1843,6 +1843,10 @@ describe("Store requests", () => {
     expect(assetMovements.find((movement) =>
       movement.assetCode === assetCodes[0] && movement.movementType === "ISSUE"
     )).toEqual(expect.objectContaining({
+      assetCategory: `Operator Chair Category ${suffix}`,
+      assetSubcategory: `Operator Chair Subcategory ${suffix}`,
+      assetName: `Operator Chair Asset ${suffix}`,
+      makeModel: "Unspecified",
       department: "Production",
       fromHolder: "STORE / Asset Store",
       toHolder: "DEPARTMENT / Production",
@@ -3000,6 +3004,15 @@ describe("Store requests", () => {
       makeModel: "Unspecified",
     })
     expect(company.movements).toHaveLength(4)
+    for (const movement of [...main.movements, ...cnc.movements, ...company.movements]
+      .filter((row) => row.typeCode === item.typeCode)) {
+      expect(movement).toMatchObject({
+        assetCategory: `Company Movement Category ${suffix}`,
+        assetSubcategory: `Company Movement Subcategory ${suffix}`,
+        assetName: `Company Movement Asset ${suffix}`,
+        makeModel: "Unspecified",
+      })
+    }
     expect(company.movements).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "RECEIPT", quantity: "+10", storeName: main.store.name }),
       expect.objectContaining({ kind: "TRANSFER_OUT", quantity: "-10", storeName: main.store.name }),

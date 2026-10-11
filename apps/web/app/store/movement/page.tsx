@@ -105,8 +105,12 @@ export default async function StoreMovementPage({
   const movedUnitId = firstValue(params.moved)
   const requestedUnitId = firstValue(params.unitId)
   const movements = canViewStock ? data.companyMovements?.movements ?? [] : data.unitMovements.map((movement) => ({
+    assetCategory: movement.assetCategory,
+    assetName: movement.assetName,
+    assetSubcategory: movement.assetSubcategory,
     from: movement.fromHolder,
     kind: movement.movementType,
+    makeModel: movement.makeModel,
     occurredAt: movement.movedAt,
     performedBy: movement.movedBy,
     quantity: null,
@@ -175,6 +179,10 @@ export default async function StoreMovementPage({
                 <TableHead>Recorded at</TableHead>
                 <TableHead>Item / Unit ID</TableHead>
                 <TableHead>Asset Code</TableHead>
+                <TableHead>Asset Category</TableHead>
+                <TableHead>Asset Subcategory</TableHead>
+                <TableHead>Make/Model</TableHead>
+                <TableHead>Asset Name</TableHead>
                 {canViewStock ? <TableHead>Store</TableHead> : null}
                 <TableHead>Movement</TableHead>
                 <TableHead>Quantity</TableHead>
@@ -198,6 +206,10 @@ export default async function StoreMovementPage({
                     ) : movement.subjectCode}
                   </TableCell>
                   <TableCell>{movement.typeCode}</TableCell>
+                  <TableCell>{movement.assetCategory}</TableCell>
+                  <TableCell>{movement.assetSubcategory}</TableCell>
+                  <TableCell>{movement.makeModel}</TableCell>
+                  <TableCell>{movement.assetName}</TableCell>
                   {canViewStock ? <TableCell>{movement.storeName}</TableCell> : null}
                   <TableCell><StatusBadge value={movementLabel(movement.kind)} /></TableCell>
                   <TableCell>{movement.quantity ?? "—"}</TableCell>
@@ -210,7 +222,7 @@ export default async function StoreMovementPage({
               ))}
               {!movements.length ? (
                 <TableRow>
-                  <TableCell className="h-24 text-center text-muted-foreground" colSpan={canViewStock ? 11 : 9}>
+                  <TableCell className="h-24 text-center text-muted-foreground" colSpan={canViewStock ? 15 : 13}>
                     No movements recorded.
                   </TableCell>
                 </TableRow>

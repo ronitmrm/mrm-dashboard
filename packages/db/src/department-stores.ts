@@ -886,8 +886,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           [input.organizationId, store.id]
         ),
         pool.query<{
+          assetCategory: string
+          assetName: string
+          assetSubcategory: string
           from: string | null
           kind: string
+          makeModel: string
           occurredAt: string
           performedBy: string | null
           quantity: string
@@ -900,6 +904,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           `SELECT movement.moved_at::text AS "occurredAt",
             COALESCE(asset.asset_code, item.type_code) AS "subjectCode",
             item.type_code AS "typeCode", asset.asset_code AS "unitId",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName", make_model.name AS "makeModel",
             trim_scale(movement.quantity)::text AS quantity,
             concat_ws(' / ', movement.from_holder_type,
               movement.from_holder_name) AS "from",
@@ -910,6 +917,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            FROM store.stock_movements movement
            JOIN store.locations location ON location.id = movement.location_id
            JOIN store.item_types item ON item.id = movement.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            LEFT JOIN store.assets asset ON asset.id = movement.asset_id
            WHERE movement.organization_id = $1
              AND movement.department_stock_operation_id IS NULL
@@ -918,11 +926,14 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            UNION ALL
            SELECT operation.created_at::text, item.type_code,
              item.type_code, NULL::text,
+             item.asset_category, item.asset_subcategory,
+             item.asset_name, make_model.name,
              trim_scale(operation.quantity)::text,
              source.name, destination.name, operation.operation_type,
              movement.moved_by, operation.remark
            FROM store.department_stock_operations operation
            JOIN store.item_types item ON item.id = operation.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            JOIN store.accountable_stores source
              ON source.id = operation.source_store_id
            LEFT JOIN store.accountable_stores destination
@@ -937,12 +948,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
                OR operation.destination_store_id = $2)
            UNION ALL
            SELECT transfer.transferred_at::text, asset.asset_code,
-             item.type_code, asset.asset_code, '1',
+             item.type_code, asset.asset_code,
+             item.asset_category, item.asset_subcategory,
+             item.asset_name, make_model.name, '1',
              source.name, destination.name, 'ACCOUNTABILITY_TRANSFER',
              transfer.transferred_by, transfer.remark
            FROM store.asset_accountability_transfers transfer
            JOIN store.assets asset ON asset.id = transfer.asset_id
            JOIN store.item_types item ON item.id = asset.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            JOIN store.accountable_stores source
              ON source.id = transfer.source_store_id
            JOIN store.accountable_stores destination
@@ -975,8 +989,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       const page = Math.max(1, Math.trunc(input.page ?? 1))
       const pageSize = 100
       const result = await pool.query<{
+        assetCategory: string
+        assetName: string
+        assetSubcategory: string
         from: string | null
         kind: string
+        makeModel: string
         occurredAt: string
         performedBy: string | null
         quantity: string
@@ -992,6 +1010,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            SELECT movement.id, movement.moved_at AS occurred_at,
              COALESCE(asset.asset_code, item.type_code) AS subject_code,
              item.type_code, asset.asset_code AS unit_id,
+             item.asset_category, item.asset_subcategory,
+             item.asset_name, make_model.name AS make_model,
              CASE WHEN movement.asset_id IS NULL
                THEN CASE WHEN movement.quantity > 0 THEN '+' ELSE '' END ||
                  trim_scale(movement.quantity)::text
@@ -1011,18 +1031,22 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            JOIN store.accountable_stores accountable
              ON accountable.id = location.accountable_store_id
            JOIN store.item_types item ON item.id = movement.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            LEFT JOIN store.assets asset ON asset.id = movement.asset_id
            LEFT JOIN store.department_stock_operations operation
              ON operation.id = movement.department_stock_operation_id
            WHERE movement.organization_id = $1
            UNION ALL
            SELECT transfer.id, transfer.transferred_at,
-             asset.asset_code, item.type_code, asset.asset_code, '1',
+             asset.asset_code, item.type_code, asset.asset_code,
+             item.asset_category, item.asset_subcategory,
+             item.asset_name, make_model.name, '1',
              source.name, destination.name, 'ACCOUNTABILITY_TRANSFER',
              transfer.transferred_by, transfer.remark, source.name, NULL::text
            FROM store.asset_accountability_transfers transfer
            JOIN store.assets asset ON asset.id = transfer.asset_id
            JOIN store.item_types item ON item.id = asset.item_type_id
+           JOIN store.make_models make_model ON make_model.id = item.make_model_id
            JOIN store.accountable_stores source
              ON source.id = transfer.source_store_id
            JOIN store.accountable_stores destination
@@ -1032,6 +1056,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
          SELECT occurred_at::text AS "occurredAt",
            subject_code AS "subjectCode", type_code AS "typeCode",
            unit_id AS "unitId", quantity,
+           asset_category AS "assetCategory", asset_subcategory AS "assetSubcategory",
+           asset_name AS "assetName", make_model AS "makeModel",
            from_holder AS "from", to_holder AS "to", kind,
            performed_by AS "performedBy", remark,
            store_name AS "storeName", used_on AS "usedOn"
