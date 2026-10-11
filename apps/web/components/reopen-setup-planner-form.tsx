@@ -68,7 +68,7 @@ export function ReopenSetupPlannerForm({ floor, onSave }: {
     <form onSubmit={submit} className="grid gap-4" aria-busy={loading || saving}>
       {loading ? <StandardState variant="loading" title="Loading completed setups" description="Checking the latest saved setup status." /> : null}
       {error ? <StandardState variant="error" title="Could not complete the action" description={error} action={<Button type="button" variant="outline" disabled={saving} onClick={() => setRefresh(value => value + 1)}>Refresh setups</Button>} /> : null}
-      {!loading && !error && !setups.length ? <StandardState title="No completed setups" description="Completed setups in this Production Unit will appear here." /> : null}
+      {!loading && !error && !setups.length ? <StandardState title="No eligible completed setups" description="Setups with final dispatch or a later completed setup cannot reopen. Partial dispatch alone does not block reopening." /> : null}
       {saved ? <p role="status" className="text-sm">{saved}</p> : null}
       {setups.length ? <>
         <div className="grid gap-1.5">
@@ -77,6 +77,7 @@ export function ReopenSetupPlannerForm({ floor, onSave }: {
             <option value="">Select completed setup</option>
             {setups.map(setup => <option key={setup.id} value={setup.id}>{setup.jobCardNumber} / {setup.partCode} · Option {setup.optionNumber} · Setup {setup.setupNumber} · {setup.machineNumber}</option>)}
           </SearchableSelect>
+          <p className="text-sm text-muted-foreground">Only setups without final dispatch or a later completed setup are listed. Partial dispatch alone does not block reopening.</p>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="setup-reopen-reason">Reason for reopening</Label>

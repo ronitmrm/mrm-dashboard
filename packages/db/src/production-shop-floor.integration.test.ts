@@ -1249,6 +1249,51 @@ describe("production and shop-floor workflows", () => {
     await expect(repository.reopenSetup(reopen)).rejects.toThrow("Setup changed")
   })
 
+  test("only reopens the latest completed setup until final dispatch", async () => {
+    const jobCardNumber = `REOPEN-${suffix}`
+    await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+      workOrderNumber: jobCardNumber })
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+    const states = await pool.query<{ id: string; setup_number: number }>(
+      `INSERT INTO manufacturing.shop_floor_setup_state (organization_id, work_order_id,
+         route_option_id, operation_setup_id, machine_id, stage, active, completed_at,
+         source_system, source_table, source_id, source_payload)
+       SELECT $1, work_order.id, route.id, setup.id, machine.id, 'item_complete', false, now(),
+         'test', 'reopen-eligibility', $2 || ':' || setup.setup_number, '{}'::jsonb
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = '1'
+       JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id
+       JOIN catalog.machines machine ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $2
+       RETURNING id, (SELECT setup_number FROM manufacturing.operation_setups WHERE id = operation_setup_id)`,
+      [organizationId, jobCardNumber, firstMachine])
+    const first = states.rows.find(row => row.setup_number === 1)!
+    const final = states.rows.find(row => row.setup_number === 2)!
+    const list = async () => (await repository.readCompletedSetups({ organizationId, productionFloorCode: "conventional" }))
+      .rows.filter(row => row.jobCardNumber === jobCardNumber).map(row => row.id)
+    const reopen = (id: string) => repository.reopenSetup({ organizationId, productionFloorCode: "conventional",
+      setupStateId: id, expectedRowVersion: 1, reason: "Completion entered incorrectly." })
+    await repository.recordSetupCompletion({ jobCardNumber, machineNumber: firstMachine,
+      operationSetupCode: "2", organizationId, completedBy: "Quality" })
+    expect(await list()).toEqual([final.id])
+    await expect(reopen(first.id)).rejects.toThrow("later setup")
+    await repository.recordProductionEntry({ jobCardNumber, machineNumber: firstMachine,
+      operationSetupCode: "2", organizationId, productionDate: "2026-10-11",
+      quantityGood: 10, quantityRejected: 0, sourceId: `reopen-output:${suffix}`, payload: {} })
+    await repository.recordDispatchApproval({ approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 4 })
+    expect(await list()).toEqual([final.id])
+    await repository.recordDispatchApproval({ approvedBy: "Dispatch lead", jobCardNumber, organizationId, quantity: 6 })
+    expect(await list()).toEqual([])
+    await expect(reopen(final.id)).rejects.toThrow("final dispatch")
+    expect((await pool.query("SELECT stage FROM manufacturing.shop_floor_setup_state WHERE id = ANY($1::uuid[])",
+      [[first.id, final.id]])).rows).toEqual([{ stage: "item_complete" }, { stage: "item_complete" }])
+    await pool.query(`UPDATE manufacturing.dispatch_approval_events SET reversed_at = now()
+      WHERE work_order_id = (SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2)
+        AND quantity = 6`, [organizationId, jobCardNumber])
+    await reopen(final.id)
+    expect(await list()).toEqual([first.id])
+  })
+
   test("corrects open and completed session starts while retaining output and reference history", async () => {
     const jobCardNumber = `FLOOR-JC-${suffix}-START-CORRECT`
     const machineNumber = `FLOOR-MC-${suffix}-START-CORRECT`
