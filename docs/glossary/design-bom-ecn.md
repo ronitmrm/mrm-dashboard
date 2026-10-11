@@ -71,6 +71,16 @@ Drawing Revisions, including release/effective date, ECN or Initial Release,
 reason, raiser, uploader, Design approval, linked BOM revision, and separate
 view/download actions.
 
+**Printed Drawing Holding**: The number of physical copies of one Drawing
+Revision held by one production unit, with their internal storage location.
+Drawing History has a separate tab for Conventional-01, Conventional-02,
+CNC-01, and Forging. An unrecorded count is unknown; a saved zero confirms
+that the unit holds no copies. Positive counts require a location. Counts
+may be recorded for a Legacy Drawing Baseline before its digital file is
+uploaded. A new Drawing Revision starts unrecorded; earlier holdings remain
+attached to their original revision. Updating holdings does not revise or
+release a drawing. Save Drawing History permission controls these updates.
+
 **Customer Drawings for a Quote**: Design explicitly selects or uploads the
 drawings intended for the customer in the Design Task's Customer Drawings tab.
 Working files are not automatically shared. For each quoted part, these selected

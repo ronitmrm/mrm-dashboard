@@ -1,167 +1,107 @@
-import Link from "next/link"
-
-import { createProductPortfolioRepository } from "@workspace/db"
-import { Badge } from "@workspace/ui/components/badge"
-import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
-import {
- OperationalTable,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
+  createPrintedDrawingHoldingsRepository,
+  createProductPortfolioRepository,
+} from "@workspace/db"
+import { parseProductionFloorCode } from "@workspace/db/production-floors"
 
-import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { DataDownloadButton } from "@/components/data-download-button"
+import { DrawingRegister } from "@/components/commercial/drawing-register"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
+import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 
 const drawingHistoryPath = "/commercial/drawing-history"
 
-export default async function DrawingHistoryPage() {
-  await requireCapability("pricing.drawing_history.read", drawingHistoryPath)
-  const repository = createProductPortfolioRepository({
-    connectionString: readAuthEnvironment().connectionString,
+export default async function DrawingHistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ unit?: string }>
+}) {
+  const session = await requireCapability(
+    "pricing.drawing_history.read",
+    drawingHistoryPath
+  )
+  const unit =
+    parseProductionFloorCode((await searchParams).unit) ?? "conventional"
+  const connectionString = readAuthEnvironment().connectionString
+  const repository = createProductPortfolioRepository({ connectionString })
+  const holdingsRepository = createPrintedDrawingHoldingsRepository({
+    connectionString,
   })
-  const revisions = await repository
-    .listDrawingRevisionsForOrganization("MRMPL")
-    .finally(() => repository.close())
+  const [revisions, holdings, grants] = await Promise.all([
+    repository
+      .listDrawingRevisionsForOrganization("MRMPL")
+      .finally(() => repository.close()),
+    holdingsRepository
+      .listForOrganization("MRMPL", { floor: unit })
+      .finally(() => holdingsRepository.close()),
+    listGrantedCapabilities(session.user.id, [
+      commercialTaskCapabilities.updateDrawingHistory,
+    ]),
+  ])
+  const holdingsByDrawing = new Map(
+    holdings.map((holding) => [holding.drawingId, holding])
+  )
   const rows = revisions.filter(
     (revision) => revision.current || revision.pendingUpload
   )
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       <MetricSummary
         scope="Current drawing register · before table filters"
         items={[
           {
             label: "Products",
             value: new Set(rows.map((row) => row.uid)).size,
-            tone: "information"
+            tone: "information",
           },
           {
             label: "Current Drawings",
             value: rows.filter((row) => row.current && !row.pendingUpload)
               .length,
-            tone: "positive"
+            tone: "positive",
           },
           {
             label: "Pending Upload",
             value: rows.filter((row) => row.pendingUpload).length,
-            tone: "warning"
-          }
+            tone: "warning",
+          },
         ]}
       />
- <SectionCard>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>Drawing Register</CardTitle>
-              <CardDescription>
-                Current released drawings and legacy records awaiting their
-                drawing upload.
-              </CardDescription>
-            </div>
-            <DataDownloadButton href={`${drawingHistoryPath}/export.xlsx`} />
-          </div>
-        </CardHeader>
- </SectionCard>
-
- <SectionCard>
-        <CardHeader>
-          <CardTitle>Drawing Records</CardTitle>
-          <CardDescription>{rows.length} Products.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-2xl border min-w-0">
- <OperationalTable excelFilters>
-              <TableHeader>
-                <TableRow>
-                  <TableHead data-filterable="true">Product UID</TableHead>
-                  <TableHead data-filterable="true">Part</TableHead>
-                  <TableHead data-filterable="true">Drawing No.</TableHead>
-                  <TableHead data-filterable="true">Revision</TableHead>
-                  <TableHead data-filterable="true">Status</TableHead>
-                  <TableHead data-filterable="true">Effective</TableHead>
-                  <TableHead data-filterable="true">ECN</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length ? (
-                  rows.map((row) => {
-                    const fileHref = `${drawingHistoryPath}/${encodeURIComponent(row.uid)}/file/${row.revision}`
-                    return (
-                      <TableRow key={row.drawingId}>
-                        <TableCell className="font-mono">{row.uid}</TableCell>
-                        <TableCell>{row.itemDescription}</TableCell>
-                        <TableCell className="font-mono">
-                          {row.drawingNumber}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{row.revision}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {row.pendingUpload
-                            ? "Pending Drawing Upload"
-                            : row.status}
-                        </TableCell>
-                        <TableCell>{row.effectiveOn || "—"}</TableCell>
-                        <TableCell>
-                          {row.pendingUpload
-                            ? "Legacy Baseline"
-                            : row.ecnNumber || "Initial Design"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {row.fileName ? (
-                              <Button asChild size="sm" variant="outline">
-                                <AttachmentViewerLink
-                                  fileName={row.fileName}
-                                  href={fileHref}
-                                  mediaType={row.mediaType}
-                                >
-                                  View
-                                </AttachmentViewerLink>
-                              </Button>
-                            ) : null}
-                            <Button asChild size="sm" variant="ghost">
-                              <Link
-                                href={`${drawingHistoryPath}/${encodeURIComponent(row.uid)}`}
-                              >
-                                History
-                              </Link>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      className="h-32 text-center text-muted-foreground"
-                      colSpan={8}
-                    >
-                      No drawing records.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
- </OperationalTable>
-          </div>
-        </CardContent>
- </SectionCard>
+      <PageHeader
+        title="Drawing Register"
+        description="Current drawings and legacy records awaiting upload. Select a production unit to record its printed copies and internal storage location."
+        actions={
+          <DataDownloadButton
+            href={`${drawingHistoryPath}/export.xlsx?unit=${unit}`}
+          />
+        }
+      />
+      <DrawingRegister
+        unit={unit}
+        canUpdate={grants.includes(
+          commercialTaskCapabilities.updateDrawingHistory
+        )}
+        rows={rows.map((row) => ({
+          drawingId: row.drawingId,
+          uid: row.uid,
+          itemDescription: row.itemDescription,
+          drawingNumber: row.drawingNumber,
+          revision: row.revision,
+          pendingUpload: row.pendingUpload,
+          status: row.status,
+          effectiveOn: row.effectiveOn,
+          ecnNumber: row.ecnNumber,
+          fileName: row.fileName,
+          mediaType: row.mediaType,
+          holding: holdingsByDrawing.get(row.drawingId) ?? null,
+        }))}
+      />
     </div>
   )
 }
