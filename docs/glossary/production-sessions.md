@@ -178,6 +178,12 @@ Shop Floor Status, machine running indicators, task queues and Planner priority
 previews all follow this current stage. Past quantities do not make a Planned
 or preparing setup a currently running item.
 
+A Change Priority preview keeps an already-running target setup on its current
+machine with its actual production start. Only unstarted downstream setups wait
+for the previous setup's forecast finish. Running setups continue against
+available WIP; their finish forecast may extend to the upstream finish, but
+their start and open Production Session are not reset by the priority review.
+
 A closed Production Session may be corrected without reopening it. Authorized
 users may correct its end time and method-specific output, add a missed bounded
 downtime interval, or add a missed rejection entry. Every closed-session
