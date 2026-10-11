@@ -7,6 +7,7 @@ export type ProductionSessionDetailAction =
   | "accident"
   | "downtimeEnd"
   | "correctClose"
+  | "correctStart"
   | "rejection"
   | "lateDowntime"
   | "lateRejection"
@@ -30,6 +31,10 @@ export function ProductionSessionDetailActions({
   if (closed) {
     return (
       <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => onAction("correctStart")}>
+          <Pencil />
+          Correct start date / time
+        </Button>
         <Button onClick={() => onAction("correctClose")}>
           <Pencil />
           {session.outputPending === true
@@ -51,6 +56,10 @@ export function ProductionSessionDetailActions({
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => onAction("correctStart")}>
+          <Pencil />
+          Correct start date / time
+        </Button>
         <Button
           disabled={hasOpenDowntime && !hasOpenBreakdownDowntime}
           title={

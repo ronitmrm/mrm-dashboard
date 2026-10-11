@@ -17,7 +17,7 @@ const dependencies = vi.hoisted(() => ({
   upsertCycleStandard: vi.fn(),
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
-  reverseProductionSession: vi.fn(),
+  correctProductionSessionStart: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
   recordDispatchApproval: vi.fn(),
@@ -48,7 +48,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
-    reverseProductionSession: dependencies.reverseProductionSession,
+    correctProductionSessionStart: dependencies.correctProductionSessionStart,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
     recordShopFloorStage: dependencies.recordShopFloorStage,
     recordDispatchApproval: dependencies.recordDispatchApproval,
@@ -175,30 +175,6 @@ describe("production entry mutation API authorization", () => {
     )
   })
 
-  it("lets a floor-authorized Planner delete a session with the signed-in audit actor", async () => {
-    dependencies.listAllGrantedCapabilities.mockResolvedValue([
-      "planning.override.write", "operations.floors.cnc.planner_actions.plan_override.write",
-    ])
-    dependencies.reverseProductionSession.mockResolvedValue({ ok: true })
-    expect((await post("production-session-delete", {
-      sessionId: "session-1", expectedRowVersion: 2, reason: "Entered by mistake", productionFloorCode: "cnc",
-    })).status).toBe(200)
-    expect(dependencies.reverseProductionSession).toHaveBeenCalledWith({
-      actorUserId: "entry-writer", organizationId: "organization-1", sessionId: "session-1",
-      expectedRowVersion: 2, reason: "Entered By Mistake", productionFloorCode: "cnc",
-    })
-  })
-
-  it("rejects deletion when the Planner has permission only for another floor", async () => {
-    dependencies.listAllGrantedCapabilities.mockResolvedValue([
-      "planning.override.write", "operations.floors.conventional.planner_actions.plan_override.write",
-    ])
-    expect((await post("production-session-delete", {
-      sessionId: "session-1", expectedRowVersion: 2, reason: "Entered by mistake", productionFloorCode: "cnc",
-    })).status).toBe(403)
-    expect(dependencies.reverseProductionSession).not.toHaveBeenCalled()
-  })
-
   it("uses the signed-in employee for dispatch approval", async () => {
     dependencies.listAllGrantedCapabilities.mockResolvedValue([
       "operations.dispatch.write",
@@ -215,6 +191,42 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.recordDispatchApproval).toHaveBeenCalledWith(
       expect.objectContaining({ approvedBy: "Planner One", actorUserId: "entry-writer", quantity: 24 })
     )
+  })
+
+  it("corrects a session start using its floor recording permission and signed-in actor", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write",
+      "operations.floors.cnc.production_sessions.production_recording.write",
+    ])
+    dependencies.correctProductionSessionStart.mockResolvedValue({ id: "session-1", ok: true })
+    const body = {
+      entryType: "production_session_correct", productionFloorCode: "cnc",
+      payload: { productionFloorCode: "cnc", correctionType: "start", sessionId: "session-1",
+        enteredRole: "authorized_staff", expectedRowVersion: 2,
+        startedAt: "2026-09-29T03:30:00Z", correctionReason: "Wrong start date" },
+    }
+    expect((await post("data-entry", body)).status).toBe(200)
+    expect(dependencies.correctProductionSessionStart).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", sessionId: "session-1",
+      productionFloorCode: "cnc",
+      enteredRole: "authorized_staff", expectedRowVersion: 2,
+      startedAt: "2026-09-29T03:30:00Z", correctionReason: "Wrong Start Date",
+    })
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.production.write", "operations.floors.conventional.production_sessions.production_recording.write",
+    ])
+    dependencies.correctProductionSessionStart.mockClear()
+    expect((await post("data-entry", body)).status).toBe(403)
+    expect(dependencies.correctProductionSessionStart).not.toHaveBeenCalled()
+  })
+
+  it("no longer exposes session deletion even to a Planner", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "planning.override.write", "operations.floors.cnc.planner_actions.plan_override.write",
+    ])
+    expect((await post("production-session-delete", {
+      sessionId: "session-1", expectedRowVersion: 2, reason: "Entered by mistake", productionFloorCode: "cnc",
+    })).status).toBe(404)
   })
 
   it("records Setting under the signed-in programmer and rejects another person", async () => {

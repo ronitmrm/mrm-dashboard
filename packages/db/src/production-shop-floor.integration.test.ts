@@ -1249,45 +1249,66 @@ describe("production and shop-floor workflows", () => {
     await expect(repository.reopenSetup(reopen)).rejects.toThrow("Setup changed")
   })
 
-  test("deletes a mistaken closed session and its output without releasing its setup", async () => {
-    const jobCardNumber = `FLOOR-JC-${suffix}-DELETE`
-    const machineNumber = `FLOOR-MC-${suffix}-DELETE`
+  test("corrects open and completed session starts while retaining output and reference history", async () => {
+    const jobCardNumber = `FLOOR-JC-${suffix}-START-CORRECT`
+    const machineNumber = `FLOOR-MC-${suffix}-START-CORRECT`
     await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
       sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
     await planning.upsertMachine({ machineNumber, organizationId })
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
       payload: { doneBy: "Machinist", partCode: itemUid }, stage: "operator_started" })
-    const session = await repository.startProductionSession({ cycleTimeSeconds: 60, jobCardNumber, machineNumber,
-      measurementMethod: "weight", operationSetupCode: "1", operatorCode: firstOperator, organizationId,
-      pieceWeightGrams: 15.4, startCount: 0, productionDate: "2026-08-15", shift: "Day", startedAt: "2026-08-15T08:30:00+05:30" })
-    await repository.startProductionSessionDowntime({ sessionId: session.id, organizationId,
-      startedAt: "2026-08-15T08:35:00+05:30",
-      enteredRole: "shop_floor", reasonCode: "VIBRATION", reasonName: "Vibration" })
-    await repository.endProductionSessionDowntime({ sessionId: session.id, organizationId,
-      endedAt: "2026-08-15T08:36:00+05:30", endOutcome: "resolved" })
-    await repository.recordProductionSessionRejection({ sessionId: session.id, organizationId, quantity: 1,
-      enteredRole: "quality", typeCode: "PROC", typeName: "Process", reasonCode: "BURR", reasonName: "Burr",
-      remarkCode: "REJ", remarkName: "Reject" })
-    await repository.closeProductionSession({ sessionId: session.id, organizationId, grossWeightKg: 0.154, crateCount: 0, crateWeightKg: 0,
-      endedAt: "2026-08-15T08:40:00+05:30", endReason: "manual_stop" })
-    const row = (await repository.readProductionSessions({ organizationId, sessionId: session.id })).rows[0]!
+    const start = { cycleTimeSeconds: 60, jobCardNumber, machineNumber, measurementMethod: "weight",
+      operationSetupCode: "1", operatorCode: firstOperator, organizationId, pieceWeightGrams: 15.4 }
+    const first = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
+    const read = async (sessionId: string) =>
+      (await repository.readProductionSessions({ organizationId, sessionId })).rows[0]!
+    const original = await read(first.id)
+    const correct = async (sessionId: string, startedAt: string) => repository.correctProductionSessionStart({
+      organizationId, productionFloorCode: "conventional", sessionId, startedAt,
+      expectedRowVersion: Number((await read(sessionId)).rowVersion),
+      correctionReason: "Start date/time was entered incorrectly.",
+    })
+    await correct(first.id, "2026-08-14T08:30:00+05:30")
+    const open = await read(first.id)
+    expect(open).toMatchObject({ status: "open", sessionReference: original.sessionReference,
+      goodPieces: 0, shift: "General" })
+    expect((open.startedAt as Date).toISOString()).toBe("2026-08-14T03:00:00.000Z")
+    await repository.closeProductionSession({ sessionId: first.id, organizationId, grossWeightKg: 0.154,
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop" })
+    const second = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
+    expect((await read(second.id)).sessionReference).toBe(`${machineNumber.toUpperCase()}-20260815-02`)
+    await repository.recordProductionSessionDowntime({ sessionId: second.id, organizationId,
+      startedAt: "2026-08-15T09:10:00+05:30", endedAt: "2026-08-15T09:10:30+05:30",
+      enteredRole: "shop_floor", reasonCode: "POWER", reasonName: "Power failure" })
+    await repository.closeProductionSession({ sessionId: second.id, organizationId, grossWeightKg: 0.154,
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-15T10:00:00+05:30", endReason: "item_complete" })
+    const before = await read(second.id)
     const stateQuery = `SELECT to_jsonb(state) AS state FROM manufacturing.shop_floor_setup_state state
       WHERE state.machine_id = (SELECT machine_id FROM manufacturing.production_sessions WHERE id = $1)`
-    const before = (await pool.query(stateQuery, [session.id])).rows
-    const input = { organizationId, productionFloorCode: "conventional", sessionId: session.id,
-      expectedRowVersion: Number(row.rowVersion), reason: "Session entered by mistake." }
-    await expect(repository.reverseProductionSession({ ...input, expectedRowVersion: 0 })).rejects.toThrow("Session changed")
-    await repository.reverseProductionSession(input)
-    expect((await repository.readProductionSessions({ organizationId, sessionId: session.id })).rows).toEqual([])
-    expect((await readCanonicalDashboardSource(pool, organizationId)).productionEntries.some(entry => entry.sessionId === session.id)).toBe(false)
-    expect((await pool.query(stateQuery, [session.id])).rows).toEqual(before)
-    expect((await repository.readProductionSessionForDeletion({ organizationId, productionFloorCode: "conventional",
-      sessionReference: String(row.sessionReference) })).rows[0]).toMatchObject({ reversalReason: input.reason, goodPieces: "9" })
-    expect((await repository.readProductionSessionEvents({ organizationId, sessionId: session.id })).rows)
-      .toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "session_deleted", reasonName: input.reason })]))
-    expect((await pool.query(`SELECT count(*)::int AS count FROM audit.events
-      WHERE source_table = 'production_session_reversal' AND metadata->>'sessionId' = $1`, [session.id])).rows[0]).toEqual({ count: 4 })
-    await expect(repository.reverseProductionSession(input)).rejects.toThrow("already deleted")
+    const state = (await pool.query(stateQuery, [second.id])).rows
+    await correct(second.id, "2026-08-15T09:00:00+05:30")
+    const after = await read(second.id)
+    expect(after).toMatchObject({ status: "closed", endReason: "item_complete", goodPieces: before.goodPieces,
+      rejectedPieces: before.rejectedPieces, totalPieces: before.totalPieces, endedAt: before.endedAt,
+      sessionReference: before.sessionReference })
+    expect(after.runtimeMinutes).toBe(59)
+    expect(after.targetPieces).toBe(59)
+    expect((await pool.query(stateQuery, [second.id])).rows).toEqual(state)
+    const entry = (await pool.query(`SELECT started_at, production_date::text, quantity_good, source_payload
+      FROM manufacturing.production_entries WHERE id = (SELECT production_entry_id
+        FROM manufacturing.production_sessions WHERE id = $1)`, [second.id])).rows[0]!
+    expect(entry.started_at).toEqual(after.startedAt)
+    expect(entry.production_date).toBe("2026-08-15")
+    expect(Number(entry.quantity_good)).toBe(before.goodPieces)
+    expect(entry.source_payload).toMatchObject({ startTime: "2026-08-15T03:30:00.000Z", runtimeMinutes: 59, targetQty: 59 })
+    const audit = (await pool.query(`SELECT before_state, after_state, reason FROM audit.events
+      WHERE target_id = $1 AND metadata->>'correctionType' = 'start_details'`, [second.id])).rows
+    expect(audit).toHaveLength(1)
+    expect(audit[0]!.reason).toBe("Start date/time was entered incorrectly.")
+    expect(new Date(audit[0]!.before_state.started_at)).toEqual(before.startedAt)
+    expect(new Date(audit[0]!.after_state.started_at)).toEqual(after.startedAt)
+    await expect(correct(second.id, "2026-08-14T09:00:00+05:30")).rejects.toThrow("overlap")
+    expect((await read(second.id)).startedAt).toEqual(after.startedAt)
   })
 
   test("reverses mistaken downtime while moving a closed session end earlier", async () => {

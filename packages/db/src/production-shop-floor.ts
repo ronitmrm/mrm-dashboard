@@ -239,6 +239,19 @@ async function readSessionDowntime(
   }))
 }
 
+async function nextSessionSequence(client: PoolClient, machineId: string, productionDate: string) {
+  // References retain their issued date after a start correction; never reuse them.
+  const result = await client.query<{ value: string }>(`
+    SELECT (GREATEST(
+      COALESCE(max(daily_sequence) FILTER (WHERE production_date = $2::text::date), 0),
+      COALESCE(max(substring(session_reference from '-([0-9]+)$')::integer)
+        FILTER (WHERE substring(session_reference from '-([0-9]{8})-[0-9]+$') = replace($2::text, '-', '')), 0)
+    ) + 1)::text AS value
+    FROM manufacturing.production_sessions WHERE machine_id = $1`,
+    [machineId, productionDate])
+  return Number(result.rows[0]!.value)
+}
+
 function productionMeasurementMethod(value: string) {
   if (value !== "weight" && value !== "counter") {
     throw new Error("Production measurement method must be weight or counter.")
@@ -1397,15 +1410,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           )
         }
 
-        const dailySequenceResult = await client.query<{ value: string }>(
-          `
-            SELECT (COALESCE(max(daily_sequence), 0) + 1)::text AS value
-            FROM manufacturing.production_sessions
-            WHERE machine_id = $1 AND production_date = $2
-          `,
-          [machineId, shiftContext.productionDate]
-        )
-        const dailySequence = Number(dailySequenceResult.rows[0]!.value)
+        const dailySequence = await nextSessionSequence(client, machineId, shiftContext.productionDate)
         const snapshot = await client.query<{
           job_card_number: string
           machine_number: string
@@ -2613,6 +2618,113 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           rejectedPieces: output.rejectedPieces,
           totalPieces: output.totalPieces,
         }
+      })
+    },
+
+    async correctProductionSessionStart(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: string
+      sessionId: string
+      startedAt: string
+      expectedRowVersion: number
+      correctionReason: string
+      enteredRole?: string
+    }) {
+      const startedAt = requiredTimestamp(input.startedAt, "Session start")
+      const reason = requiredText(input.correctionReason, "Correction reason")
+      const enteredRole = productionEntryRole(input.enteredRole ?? "authorized_staff")
+      if (enteredRole === "machinist") throw new Error("Machinist cannot correct a production session.")
+      if (startedAt > new Date()) throw new Error("Session start cannot be in the future.")
+      return transaction(pool, async client => {
+        await lockProductionSessionMachine(client, input)
+        const result = await client.query<{
+          machine_id: string; production_entry_id: string; started_at: Date; ended_at: Date | null
+          production_date: string; daily_sequence: number; cycle_time_seconds: string
+          production_floor_code: ProductionFloorCode; row_version: string
+          source_payload: Record<string, unknown>; snapshot: Record<string, unknown>
+        }>(`SELECT session.machine_id, session.production_entry_id, session.started_at, session.ended_at,
+            session.production_date::text, session.daily_sequence, session.cycle_time_seconds,
+            session.row_version, session.source_payload, floor.code AS production_floor_code,
+            to_jsonb(session) AS snapshot
+          FROM manufacturing.production_sessions session
+          JOIN catalog.machines machine ON machine.id = session.machine_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          WHERE session.id = $1 AND session.organization_id = $2 AND floor.code = $3
+            AND session.reversed_at IS NULL
+          FOR UPDATE OF session`, [input.sessionId, input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
+        const current = result.rows[0]
+        if (!current || Number(current.row_version) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start.")
+        }
+        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
+          throw new Error("Quality can correct production sessions only in CNC.")
+        }
+        if (current.ended_at && startedAt > current.ended_at) {
+          throw new Error("Session start cannot be after session end.")
+        }
+        const shift = productionShiftAt(current.production_floor_code, startedAt)
+        if (!shift) throw new Error("Session start must be within a production shift.")
+        const neighbours = await client.query<{
+          started_at: Date; ended_at: Date | null
+        }>(`(SELECT started_at, ended_at FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at <= $3
+            ORDER BY started_at DESC, created_at DESC, id DESC LIMIT 1)
+          UNION ALL
+          (SELECT started_at, ended_at FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at >= $3
+            ORDER BY started_at, created_at, id LIMIT 1)`,
+          [current.machine_id, input.sessionId, current.started_at.toISOString()])
+        for (const neighbour of neighbours.rows) {
+          const overlaps = neighbour.started_at <= current.started_at
+            ? !neighbour.ended_at || startedAt < neighbour.ended_at
+            : startedAt >= neighbour.started_at || !current.ended_at || current.ended_at > neighbour.started_at
+          if (overlaps) throw new ShopFloorConflictError("Corrected start would overlap or change the order of machine sessions.")
+        }
+        const downtime = await client.query<{ started_at: Date; ended_at: Date | null; duration_minutes: number | null }>(`
+          SELECT started_at, ended_at, duration_minutes FROM manufacturing.production_session_downtime_events
+          WHERE production_session_id = $1 AND reversed_at IS NULL`, [input.sessionId])
+        if (downtime.rows.some(event => event.started_at < startedAt)) {
+          throw new ShopFloorConflictError("Session start cannot be after recorded downtime. Correct the downtime separately first.")
+        }
+        const intervals = downtime.rows.flatMap(event => event.ended_at
+          ? [{ startedAt: event.started_at, endedAt: event.ended_at }] : [])
+        const timing = current.ended_at ? productionSessionTiming({
+          startedAt, endedAt: current.ended_at,
+          breaks: savedBreaks(current.source_payload) ?? [],
+          cycleTimeSeconds: Number(current.cycle_time_seconds), downtime: intervals,
+          downtimeMinutes: downtime.rows.reduce((total, event) => total + Number(event.duration_minutes ?? 0), 0),
+        }) : null
+        const dailySequence = current.production_date === shift.productionDate
+          ? current.daily_sequence : await nextSessionSequence(client, current.machine_id, shift.productionDate)
+        const sourcePayload = {
+          ...current.source_payload,
+          startedAt: startedAt.toISOString(), startTime: startedAt.toISOString(),
+          productionDate: shift.productionDate, prodDate: shift.productionDate, shift: shift.shift,
+          dailySequence, correctionReason: reason, correctedAt: new Date().toISOString(),
+          ...(timing ? { runtimeMinutes: timing.runtimeMinutes, targetQty: timing.targetPieces,
+            breakMinutes: timing.breakMinutes, additionalBreakMinutes: timing.additionalBreakMinutes } : {}),
+        }
+        await client.query(`UPDATE manufacturing.production_entries
+          SET started_at = $1, production_date = $2::date, shift = $3, source_payload = $4
+          WHERE id = $5 AND organization_id = $6`,
+          [startedAt.toISOString(), shift.productionDate, shift.shift, sourcePayload,
+            current.production_entry_id, input.organizationId])
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(`
+          UPDATE manufacturing.production_sessions
+          SET started_at = $1, production_date = $2::date, shift = $3, source_payload = $4,
+            daily_sequence = $5, updated_at = now(), row_version = row_version + 1
+          WHERE id = $6 RETURNING to_jsonb(production_sessions) AS snapshot`,
+          [startedAt.toISOString(), shift.productionDate, shift.shift, sourcePayload, dailySequence, input.sessionId])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+          target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
+          VALUES ($1, 'production.session.corrected', 'manufacturing', 'production_sessions', $2, $3, $4, $5, $6,
+            jsonb_build_object('correctionType', 'start_details', 'enteredRole', $7::text),
+            'mrm-dashboard', 'production_session_correction', $8)`,
+          [input.organizationId, input.sessionId, input.actorUserId ?? null, reason,
+            current.snapshot, updated.rows[0]!.snapshot, enteredRole, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: input.sessionId, ok: true }
       })
     },
 
@@ -5231,109 +5343,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { id: completion.rows[0]!.id, ok: true }
-      })
-    },
-
-    async readProductionSessionForDeletion(input: {
-      organizationId: string
-      productionFloorCode: string
-      sessionReference: string
-    }) {
-      const result = await pool.query<{
-        id: string; rowVersion: string; sessionReference: string; status: string
-        jobCardNumber: string; partCode: string; machineNumber: string; setupNumber: string
-        startedAt: Date; endedAt: Date | null; endReason: string | null
-        totalPieces: string; goodPieces: string; rejectedPieces: string
-        reversedAt: Date | null; reversalReason: string | null
-        requiresSetupReopen: boolean
-      }>(`SELECT session.id, session.row_version::text AS "rowVersion",
-          session.session_reference AS "sessionReference", session.status,
-          session.job_card_number_snapshot AS "jobCardNumber", session.part_code_snapshot AS "partCode",
-          session.machine_number_snapshot AS "machineNumber", session.setup_number_snapshot AS "setupNumber",
-          session.started_at AS "startedAt", session.ended_at AS "endedAt", session.end_reason AS "endReason",
-          session.total_pieces::text AS "totalPieces", session.quantity_good::text AS "goodPieces",
-          session.quantity_rejected::text AS "rejectedPieces",
-          session.reversed_at AS "reversedAt", session.reversal_reason AS "reversalReason",
-          EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state state
-            WHERE state.organization_id = session.organization_id AND state.stage = 'item_complete'
-              AND state.source_payload->>'sessionId' = session.id::text) AS "requiresSetupReopen"
-        FROM manufacturing.production_sessions session
-        JOIN catalog.machines machine ON machine.id = session.machine_id
-        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-        WHERE session.organization_id = $1 AND floor.code = $2 AND session.session_reference = $3`,
-        [input.organizationId, normalizeProductionFloorCode(input.productionFloorCode),
-          requiredText(input.sessionReference, "Session reference").toUpperCase()])
-      return { rows: result.rows }
-    },
-
-    async reverseProductionSession(input: {
-      actorUserId?: string | null
-      organizationId: string
-      productionFloorCode: string
-      sessionId: string
-      expectedRowVersion: number
-      reason: string
-    }) {
-      const reason = requiredText(input.reason, "Deletion reason")
-      return transaction(pool, async client => {
-        await lockProductionSessionMachine(client, input)
-        const session = await client.query<{
-          id: string; production_entry_id: string | null; row_version: string
-          status: string; end_reason: string | null; completes_setup: boolean
-        }>(`SELECT session.id, session.production_entry_id, session.row_version,
-            session.status, session.end_reason,
-            EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state state
-              WHERE state.organization_id = session.organization_id AND state.stage = 'item_complete'
-                AND state.source_payload->>'sessionId' = session.id::text) AS completes_setup
-          FROM manufacturing.production_sessions session
-          JOIN catalog.machines machine ON machine.id = session.machine_id
-          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-          WHERE session.id = $1 AND session.organization_id = $2 AND floor.code = $3
-            AND session.reversed_at IS NULL FOR UPDATE OF session`,
-          [input.sessionId, input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
-        const current = session.rows[0]
-        if (!current || Number(current.row_version) !== input.expectedRowVersion) {
-          throw new ShopFloorConflictError("Session changed or was already deleted. Review the session again.")
-        }
-        if (current.status !== "closed") throw new ShopFloorConflictError("Close the production session before deleting it.")
-        if (current.end_reason === "item_complete" || current.completes_setup) {
-          throw new ShopFloorConflictError("Use Reopen Setup to correct Item Complete before deleting this session.")
-        }
-        const dependencies = await client.query(`SELECT 1 FROM manufacturing.production_session_downtime_events
-          WHERE production_session_id = $1 AND reversed_at IS NULL
-            AND (source_payload ? 'accident' OR NULLIF(source_payload->>'maintenanceTaskKey', '') IS NOT NULL)
-          LIMIT 1`, [input.sessionId])
-        if (dependencies.rows.length) {
-          throw new ShopFloorConflictError("Review accident or Maintenance records before deleting this session.")
-        }
-        const reversalId = randomUUID()
-        // Reverse only this session's records. Setup ownership and recorded workflow are separate.
-        const records = [
-          { table: "production_sessions", filter: "id", id: input.sessionId, extra: ", updated_at = now(), row_version = row_version + 1", event: "production.session.reversed" },
-          { table: "production_entries", filter: "id", id: current.production_entry_id, extra: "", event: "production.entry.reversed" },
-          { table: "production_session_downtime_events", filter: "production_session_id", id: input.sessionId, extra: ", updated_at = now()", event: "production.session.downtime_reversed" },
-          { table: "production_session_rejection_events", filter: "production_session_id", id: input.sessionId, extra: "", event: "production.session.rejection_reversed" },
-        ] as const
-        for (const record of records) {
-          if (!record.id) continue
-          await client.query(`WITH before AS (
-              SELECT id, to_jsonb(row) AS snapshot FROM manufacturing.${record.table} row
-              WHERE ${record.filter} = $1 AND organization_id = $2 AND reversed_at IS NULL FOR UPDATE
-            ), updated AS (
-              UPDATE manufacturing.${record.table} row
-              SET reversed_at = now(), reversal_reason = $3${record.extra}
-              FROM before WHERE row.id = before.id RETURNING row.id, to_jsonb(row) AS snapshot
-            ) INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
-              target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
-            SELECT $2, $4, 'manufacturing', $5, updated.id, $6, $3, before.snapshot, updated.snapshot,
-              jsonb_build_object('sessionId', $7::text, 'enteredRole', 'planner'),
-              'mrm-dashboard', 'production_session_reversal', concat($8::text, ':', updated.id)
-            FROM updated JOIN before ON before.id = updated.id`,
-            [record.id, input.organizationId, reason, record.event, record.table,
-              input.actorUserId ?? null, input.sessionId, reversalId])
-        }
-        await queueDashboardRefresh(client, input.organizationId)
-        return { id: input.sessionId, ok: true }
       })
     },
 

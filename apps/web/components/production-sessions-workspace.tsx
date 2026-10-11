@@ -610,7 +610,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
   )
   const actualNow = istDateTimeInputValue(new Date())
   const [startAt, setStartAt] = useState(
-    action === "lateDowntime" && text(target?.startedAt)
+    (action === "lateDowntime" || action === "correctStart") && text(target?.startedAt)
       ? istDateTimeInputValue(text(target?.startedAt))
       : text(target?.carriedStartAt)
       ? istDateTimeInputValue(text(target?.carriedStartAt))
@@ -641,6 +641,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
   const departmentRoles = signedInRoles.filter((candidate) =>
     action === "end" ||
     action === "correctClose" ||
+    action === "correctStart" ||
     action === "downtime" || action === "accident" ||
     action === "lateDowntime" ||
     candidate === "shop_floor" ||
@@ -736,6 +737,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator?.code, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: startAtIso, cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: pieceWeight })
     if (action === "end") onSave("production_session_close", { sessionId, enteredRole: role, endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined })
     if (action === "correctClose") onSave("production_session_correct", { sessionId, correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined, downtimeCorrection })
+    if (action === "correctStart") onSave("production_session_correct", { sessionId, correctionType: "start", correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), startedAt: startAtIso })
     if (action === "downtime") onSave("production_session_downtime_start", { sessionId, enteredRole: role, startedAt: startAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label || text(target.carriedReasonName) })
     if (action === "accident") onSave("production_session_accident_start", { sessionId, enteredRole: role, startedAt: startAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label, accident: { description: accidentDescription.trim(), remarks: accidentRemarks.trim(), lostUnitIds, consumables: usedConsumables } })
     if (action === "lateDowntime") onSave("production_session_downtime", { sessionId, correctionReason, enteredRole: role, startedAt: startAtIso, endedAt: endAtIso, reasonCode: reason, reasonName: selectedDowntimeReason?.label })
@@ -746,6 +748,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
   }
   const weightCloseIsValid = (!hasGrossWeight && !hasCrateCount && !hasCrateWeight) || (hasGrossWeight && hasCrateCount && hasCrateWeight)
   const valid = action === "start" ? Boolean(signedInStarter && operator && startAtIso && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount)))
+    : action === "correctStart" ? Boolean(role && correctionReason.trim() && startAtIso)
     : action === "end" ? Boolean(role && endAtIso && endReason && (method === "counter" ? endCount : weightCloseIsValid))
     : action === "correctClose" ? Boolean(role && correctionReason && endAtIso && endReason && (method === "counter" ? endCount : ((hasGrossWeight && hasCrateCount && hasCrateWeight) || (outputPending(target) && downtimeCorrection && !hasGrossWeight && !hasCrateCount && !hasCrateWeight))) && (downtimeChange === "none" || (selectedDowntime && (downtimeChange === "reverse" || (istDateTimeInputToIso(downtimeStart) && istDateTimeInputToIso(downtimeEnd) && correctedDowntimeReason)))))
     : action === "downtime" ? Boolean(reason && startAtIso && role)
@@ -756,6 +759,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     : action === "lateRejection" ? Boolean(correctionReason && typeCode && reason && remark && number(quantity) > 0)
     : false
   const sheetTitle = action === "downtime" ? "Start downtime"
+    : action === "correctStart" ? "Correct start date / time"
     : action === "accident" ? "Record accident"
     : action === "lateDowntime" ? "Add missed downtime"
     : action === "downtimeEnd" ? "Close downtime"
@@ -764,6 +768,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     : action === "correctClose" ? outputPending(target) ? downtimeCorrection ? "Correct downtime" : "Complete session weight" : "Correct closed session"
     : `${titleCase(action)} production session`
   const saveLabel = action === "downtime" ? "Start downtime"
+    : action === "correctStart" ? "Save correction"
     : action === "accident" ? "Record accident and start downtime"
     : action === "lateDowntime" ? "Add downtime"
     : action === "downtimeEnd" ? "Close downtime"
@@ -773,6 +778,12 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     : `Save ${titleCase(action)}`
   return <Sheet open={Boolean(action)} onOpenChange={onOpenChange}><StandardDrawerContent side="right" title={sheetTitle} description={`${machine(target)} · ${job(target)} · ${part(target)} · Setup ${setup(target)}`} className="!w-full overflow-y-auto sm:!max-w-2xl"><div className="grid min-w-0 gap-4 px-6 [&_[data-slot=searchable-select]]:w-full">
     {action !== "start" ? <Field label="Entered by"><Input readOnly value={signedInPerson ? [signedInPerson.code, signedInPerson.name].filter(Boolean).join(" · ") : "Signed-in account name required"} /></Field> : null}
+    {action === "correctStart" ? <>
+      <IstDateTimeField label="Start date / time (IST)" value={startAt} onChange={setStartAt} />
+      <EntryRoleField label="Entry role" roles={allowedRoles} value={role} onChange={setSelectedRole} />
+      <Field label="Correction reason"><Textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Explain why the start date or time was wrong" /></Field>
+      <p className="text-sm text-muted-foreground">Shift and Production Date follow the corrected start. Production quantities, end time and Item Complete status stay unchanged. Runtime, target and efficiency are recalculated; the original Session Reference remains in history.</p>
+    </> : null}
     {action === "start" ? <>
       <Field label="Started by">
         <Input readOnly value={signedInStarter

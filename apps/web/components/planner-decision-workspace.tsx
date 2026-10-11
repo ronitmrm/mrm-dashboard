@@ -13,7 +13,6 @@ import {
   PlusCircle,
   Route,
   RotateCcw,
-  Trash2,
   Wrench,
 } from "lucide-react"
 
@@ -35,7 +34,6 @@ export type PlannerDecisionAction =
   | "raw-material-rejection"
   | "route-change"
   | "setup-reopen"
-  | "session-delete"
 
 export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
 
@@ -51,7 +49,6 @@ type PlannerDecisionPanels = {
   rawMaterialRejection: ReactNode
   routeChange: ReactNode
   setupReopen: ReactNode
-  sessionDelete: ReactNode
 }
 
 type PlannerDecisionWorkspaceProps = {
@@ -66,13 +63,6 @@ type PlannerDecisionWorkspaceProps = {
 }
 
 const actionChoices = [
-  {
-    key: "session-delete",
-    title: "Delete Production Session",
-    description: "Remove a production session entered by mistake.",
-    detail: "Review its output and record the reason; audit history remains available.",
-    icon: Trash2,
-  },
   {
     key: "setup-reopen",
     title: "Reopen Setup",
@@ -158,7 +148,6 @@ export function PlannerDecisionWorkspace({
         "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
         "setup-reopen": panels.setupReopen,
-        "session-delete": panels.sessionDelete,
       }[activeAction]
     : null
 
