@@ -174,6 +174,9 @@ releasing a setup. They do not make its current Planned state Running, reserve
 its former machine, or create a missing-start workflow exception. Preparation
 for a later run follows the current saved stage; historical output cannot
 complete that run's Machine Start task.
+Shop Floor Status, machine running indicators, task queues and Planner priority
+previews all follow this current stage. Past quantities do not make a Planned
+or preparing setup a currently running item.
 
 A closed Production Session may be corrected without reopening it. Authorized
 users may correct its end time and method-specific output, add a missed bounded

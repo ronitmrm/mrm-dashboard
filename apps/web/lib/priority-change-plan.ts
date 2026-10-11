@@ -1,4 +1,5 @@
 import { dateSortValue } from "./dashboard-view-model";
+import { shopFloorRowIsProductionCurrent } from "./shop-floor-workflow";
 import { nextCalendarDateLabel, priorityPlanWindow, type PriorityPlanWindow, type PriorityPlanWindowBlocker, type PriorityToolingReservation } from "./priority-plan-scenarios";
 
 export type DashboardPayload = Record<string, unknown>;
@@ -208,7 +209,7 @@ function priorityPlanBlocker(row: DashboardPayload): PriorityPlanBlocker {
 }
 
 function priorityPlanBlockerState(row: DashboardPayload): PriorityPlanBlocker["state"] {
-  if (shopFloorItemIsCurrent(row)) return "running";
+  if (shopFloorRowIsProductionCurrent(row)) return "running";
   const runningStatus = str(row.runningStatus).toLowerCase();
   const stageIndex = shopFloorStageIndex(str(row.shopFloorStage));
   if (runningStatus === "setup complete" || stageIndex >= 0) return "started_not_running";
@@ -233,7 +234,7 @@ function machinePlanDisplaySort(a: DashboardPayload, b: DashboardPayload) {
 
 function shopFloorDisplayBucket(row: DashboardPayload) {
   if (shopFloorItemIsFinished(row)) return 2;
-  if (shopFloorItemIsCurrent(row)) return 0;
+  if (shopFloorRowIsProductionCurrent(row)) return 0;
   return 1;
 }
 
@@ -246,14 +247,6 @@ function shopFloorPlanSort(a: DashboardPayload, b: DashboardPayload) {
 function shopFloorItemIsFinished(row: DashboardPayload) {
   return str(row.shopFloorStage) === "item_complete"
     || str(row.runningStatus).toLowerCase() === "complete";
-}
-
-function shopFloorItemIsCurrent(row: DashboardPayload) {
-  return ["operator_started", "worker_start"].includes(str(row.shopFloorStage))
-    || str(row.runningStatus).toLowerCase() === "running"
-    || Number(row.rawRows) > 0
-    || Number(row.rawOutputQty) > 0
-    || Number(row.rawActualQty) > 0;
 }
 
 function shopFloorStageIndex(stage: string) {

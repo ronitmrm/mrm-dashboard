@@ -39,6 +39,17 @@ export function shopFloorRowIsExplicitlyStopped(row: Record<string, unknown>) {
   )
 }
 
+export function shopFloorRowIsProductionCurrent(row: Record<string, unknown>) {
+  const stage = normalizeShopFloorStage(row.shopFloorStage)
+  if (stage) return stage === "operator_started"
+  return (
+    String(row.runningStatus ?? "").trim().toLowerCase() === "running" ||
+    Number(row.rawRows) > 0 ||
+    Number(row.rawOutputQty) > 0 ||
+    Number(row.rawActualQty) > 0
+  )
+}
+
 function rowText(row: Record<string, unknown>, keys: string[]) {
   return keys
     .map((key) => String(row[key] ?? "").trim().toLowerCase())

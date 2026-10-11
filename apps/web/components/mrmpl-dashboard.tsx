@@ -245,11 +245,13 @@ import {
 } from "@/lib/shared-employee-master"
 import {
   nextShopFloorStageId,
+  normalizeShopFloorStage,
   openProductionSessionForShopFloorItem,
   productionSessionDetailHref,
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
+  shopFloorRowIsProductionCurrent,
 } from "@/lib/shop-floor-workflow"
 import {
   priorityChangePlan,
@@ -19142,12 +19144,7 @@ function machineIsRunning(
       planningRowHasUnavailableBreakdown(row)
     )
       return false
-    return (
-      str(row.runningStatus).toLowerCase() === "running" ||
-      Number(row.rawRows) > 0 ||
-      Number(row.rawOutputQty) > 0 ||
-      Number(row.rawActualQty) > 0
-    )
+    return shopFloorRowIsProductionCurrent(row)
   })
 }
 
@@ -19269,6 +19266,8 @@ function shopFloorItemHasActiveProductionCard(
   row: DashboardPayload,
   productionCardRows: DashboardPayload[] = []
 ) {
+  const stage = normalizeShopFloorStage(row.shopFloorStage)
+  if (stage && !shopFloorRowIsProductionCurrent(row)) return false
   return productionCardRows.some((card) => {
     const role = optionalText(card.cardRole) ?? ""
     const entryKind =
@@ -19297,13 +19296,7 @@ function shopFloorItemIsProductionCurrent(row: DashboardPayload) {
     planningRowIsShiftedAfterBreakdown(row)
   )
     return false
-  return (
-    ["operator_started", "worker_start"].includes(str(row.shopFloorStage)) ||
-    str(row.runningStatus).toLowerCase() === "running" ||
-    Number(row.rawRows) > 0 ||
-    Number(row.rawOutputQty) > 0 ||
-    Number(row.rawActualQty) > 0
-  )
+  return shopFloorRowIsProductionCurrent(row)
 }
 
 function shopFloorItemIsStatusCurrent(row: DashboardPayload) {
