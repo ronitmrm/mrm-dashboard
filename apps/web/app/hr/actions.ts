@@ -211,12 +211,41 @@ export async function saveTemplateAction(formData: FormData) {
         minimumSalary: value(formData, "minimum_salary"),
         name: value(formData, "name"),
         roleResponsibilities: value(formData, "role_responsibilities"),
+        roleProfile: Object.fromEntries(
+          [
+            "purpose",
+            "reportsTo",
+            "authority",
+            "limits",
+            "escalation",
+            "measures",
+            "competence",
+          ].map((key) => [key, value(formData, `role_${key}`)])
+        ),
+        expectedVersion: formData.has("template_version")
+          ? Number(value(formData, "template_version"))
+          : undefined,
         shiftEndTime: value(formData, "shift_end_time"),
         shiftStartTime: value(formData, "shift_start_time"),
         shiftType: value(formData, "shift_type"),
         templateCode: value(formData, "template_code"),
         templateId: value(formData, "template_id"),
       })
+  )
+}
+
+export async function saveRoleQuestionsAction(formData: FormData) {
+  await mutate(
+    formData,
+    masterCapability("job_templates", "save"),
+    (repository, context) =>
+      repository.saveTemplateQuestions({
+        ...context,
+        templateId: value(formData, "template_id"),
+        expectedVersion: Number(value(formData, "template_version")),
+        questions: JSON.parse(value(formData, "questions")) as unknown,
+      }),
+    "HR questions saved."
   )
 }
 
@@ -519,24 +548,24 @@ export async function saveCandidateAction(formData: FormData) {
         }
       }
       await consumePendingArtifactUpload({
-          authorization: pendingAuthorization,
-          expectedIntent: resumeIntent,
-          finalize: async (source) => {
-            const artifact = await retain(source)
-            return {
-              binding: {
-                artifactId: artifact.id,
-                purpose: "resume",
-                target: {
-                  id: candidate.id,
-                  schema: "recruitment",
-                  table: "candidates",
-                },
+        authorization: pendingAuthorization,
+        expectedIntent: resumeIntent,
+        finalize: async (source) => {
+          const artifact = await retain(source)
+          return {
+            binding: {
+              artifactId: artifact.id,
+              purpose: "resume",
+              target: {
+                id: candidate.id,
+                schema: "recruitment",
+                table: "candidates",
               },
-              value: undefined,
-            }
-          },
-          recover: () => undefined,
+            },
+            value: undefined,
+          }
+        },
+        recover: () => undefined,
         uploadId: resumeUploadId,
       })
     }

@@ -91,6 +91,8 @@ import {
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
+import { RoleProfileFields } from "@/components/hr/role-profile-fields"
+import { RoleQuestionsPanel } from "@/components/hr/role-questions-panel"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 import {
   recruitmentMasterHref,
@@ -290,8 +292,8 @@ function MastersPanel({
                 activeMasterKind === "department"
                   ? masters.departments.length
                   : masters.designations.length,
-              tone: "information"
-            }
+              tone: "information",
+            },
           ]}
         />
       ) : null}
@@ -357,6 +359,13 @@ function TemplatePanel({
               "shift_start_time",
               "shift_end_time",
               "role_responsibilities",
+              "role_purpose",
+              "role_reports_to",
+              "role_authority",
+              "role_limits",
+              "role_escalation",
+              "role_measures",
+              "role_competence",
             ]}
             fileName="job-description-template-master-template.csv"
           />
@@ -378,10 +387,10 @@ function TemplatePanel({
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
-          description="Create The Reusable Job Description, Shift, Qualification, And Salary Profile Used By Recruitment Openings."
+          description="Define role purpose, duties, reporting, decision authority, approval limits and required competence. Record company delegation explicitly."
           panelId="postMasterPanel"
           masterView={activeView}
-          title="Job Description Template"
+          title="Roles, Responsibilities & Authority"
         >
           <CompanyWideMasterScope />
           <TextField
@@ -426,13 +435,14 @@ function TemplatePanel({
           <TextField label="Shift End Time" name="shift_end_time" required type="time" />
           <Field className="md:col-span-2 xl:col-span-3">
             <FieldLabel htmlFor="template-responsibilities">
-              Role Responsibilities
+              Responsibilities / duties
             </FieldLabel>
             <Textarea
               id="template-responsibilities"
               name="role_responsibilities"
             />
           </Field>
+          <RoleProfileFields />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save Template
           </Button>
@@ -445,14 +455,14 @@ function TemplatePanel({
             {
               label: "Templates",
               value: templates.length,
-              tone: "information"
+              tone: "information",
             },
             {
               label: "Combined Role",
               value: templates.filter((row) => row.combinedRoleId).length,
               description: "Templates for combined posts",
-              tone: "brand"
-            }
+              tone: "brand",
+            },
           ]}
         />
       ) : null}
@@ -482,7 +492,14 @@ function ApprovedPostPanel({
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "masterControls" | "canCreateJob" | "jobs" | "masters" | "masterView" | "posts" | "templates"
+  | "canWrite"
+  | "masterControls"
+  | "canCreateJob"
+  | "jobs"
+  | "masters"
+  | "masterView"
+  | "posts"
+  | "templates"
 >) {
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
@@ -566,7 +583,12 @@ function CombinedRolePanel({
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "masterControls" | "combinedRoles" | "masterView" | "posts" | "templates"
+  | "canWrite"
+  | "masterControls"
+  | "combinedRoles"
+  | "masterView"
+  | "posts"
+  | "templates"
 >) {
   const activeCombinedPostCodes = new Set(
     combinedRoles
@@ -630,14 +652,14 @@ function CombinedRolePanel({
             {
               label: "Combined Roles",
               value: combinedRoles.length,
-              tone: "information"
+              tone: "information",
             },
             {
               label: "Active",
               value: combinedRoles.filter((row) => row.status === "Active")
                 .length,
-              tone: "positive"
-            }
+              tone: "positive",
+            },
           ]}
         />
       ) : null}
@@ -995,18 +1017,18 @@ function LogCandidatePanel({
             {
               label: "Candidates",
               value: candidates.length,
-              tone: "information"
+              tone: "information",
             },
             {
               label: "With Resume",
               value: candidates.filter((row) => row.hasResume).length,
-              tone: "positive"
+              tone: "positive",
             },
             {
               label: "Without Resume",
               value: candidates.filter((row) => !row.hasResume).length,
-              tone: "warning"
-            }
+              tone: "warning",
+            },
           ]}
         />
       ) : null}
@@ -1064,6 +1086,13 @@ function InterviewsPanel({
 
 function RecruitmentPanelContent(props: RecruitmentPanelProps) {
   switch (props.panelId) {
+    case "questionsPanel":
+      return (
+        <RoleQuestionsPanel
+          templates={props.templates}
+          canWrite={props.canEditTemplate}
+        />
+      )
     case "postMasterPanel":
       return (
         <TemplatePanel
@@ -1116,7 +1145,12 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         />
       )
     case "employeeDataPanel":
-      return <EmployeeDataRegister assignments={props.employeeAssignments} canManage={props.canManageEmployees} />
+      return (
+        <EmployeeDataRegister
+          assignments={props.employeeAssignments}
+          canManage={props.canManageEmployees}
+        />
+      )
     case "jobsPanel":
       return (
         <JobsPanel
@@ -1167,9 +1201,21 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         </>
       )
     case "probationRemindersPanel":
-      return <ProbationEndReminders assignments={props.employeeAssignments} posts={props.posts} canManageEmployees={props.canManageEmployees} canViewOfferLetters={props.canViewOfferLetters} appointmentAssignmentId={props.selectedProbationAppointmentAssignmentId} />
+      return (
+        <ProbationEndReminders
+          assignments={props.employeeAssignments}
+          posts={props.posts}
+          canManageEmployees={props.canManageEmployees}
+          canViewOfferLetters={props.canViewOfferLetters}
+          appointmentAssignmentId={
+            props.selectedProbationAppointmentAssignmentId
+          }
+        />
+      )
     case "employeeAssignmentHistoryPanel":
-      return <EmployeeAssignmentHistory assignments={props.employeeAssignments} />
+      return (
+        <EmployeeAssignmentHistory assignments={props.employeeAssignments} />
+      )
     case "conversationLogsPanel":
       return (
         <ConversationLogsTable

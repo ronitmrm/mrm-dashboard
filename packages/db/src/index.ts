@@ -291,3 +291,10 @@ export {
 export { createOrderAcceptanceRepository } from "./order-acceptance"
 export { createInterestedPartiesRepository, type InterestedPartyRequirement, type InterestedPartyMonitoring, type InterestedPartiesAccess, type InterestedPartiesHistory } from "./interested-parties"
 export { createRejectionRepository } from "./rejections"
+export {
+  createSipocRepository,
+  type SipocAccess,
+  type SipocRecord,
+  type SipocRevision,
+  type SipocHistory,
+} from "./sipoc"

@@ -52,6 +52,8 @@ local-data/
 !apps/web/app/iso-document/management-review/export.xlsx/route.ts
 !apps/web/app/iso-document/interested-parties/export.xlsx/
 !apps/web/app/iso-document/interested-parties/export.xlsx/route.ts
+!apps/web/app/iso-document/sipoc/export.xlsx/
+!apps/web/app/iso-document/sipoc/export.xlsx/route.ts
 !apps/web/app/commercial/**/*.xlsx/
 !apps/web/app/commercial/**/*.xlsx/route.ts
 !apps/web/app/iso-document/analysis/**/*.xlsx/
@@ -94,3 +96,4 @@ next-env.d.ts
 
 # local database tooling
 /.neon
+
