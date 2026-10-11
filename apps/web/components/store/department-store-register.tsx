@@ -214,15 +214,19 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
       <SectionCard><CardHeader><CardTitle>Movement Register</CardTitle></CardHeader>
         <CardContent className="min-w-0"><OperationalTable filterStorageKey={`department-store-movements-${store.code}`}>
           <TableHeader><TableRow><TableHead>Date & time</TableHead><TableHead>Item / Unit ID</TableHead>
+            <TableHead>Asset Category</TableHead><TableHead>Asset Subcategory</TableHead>
+            <TableHead>Make/Model</TableHead><TableHead>Asset Name</TableHead>
             <TableHead>Movement</TableHead><TableHead>Quantity</TableHead><TableHead>From</TableHead>
             <TableHead>To</TableHead><TableHead>Recorded by</TableHead><TableHead>Remark</TableHead></TableRow></TableHeader>
           <TableBody>{movements.map((movement, index) => <TableRow key={`${movement.subjectCode}-${movement.occurredAt}-${index}`}>
             <TableCell>{formatIstDateTime(movement.occurredAt)}</TableCell><TableCell>{movement.subjectCode}</TableCell>
+            <TableCell>{movement.assetCategory}</TableCell><TableCell>{movement.assetSubcategory}</TableCell>
+            <TableCell>{movement.makeModel}</TableCell><TableCell>{movement.assetName}</TableCell>
             <TableCell><StatusBadge value={movement.kind} /></TableCell><TableCell>{movement.quantity}</TableCell>
             <TableCell>{movement.from || "—"}</TableCell><TableCell>{movement.to || "—"}</TableCell>
             <TableCell>{movement.performedBy || "—"}</TableCell><TableCell>{movement.remark || "—"}</TableCell>
           </TableRow>)}
-            {!movements.length ? <TableRow><TableCell colSpan={8}>No movements recorded for this Store.</TableCell></TableRow> : null}
+            {!movements.length ? <TableRow><TableCell colSpan={12}>No movements recorded for this Store.</TableCell></TableRow> : null}
           </TableBody>
         </OperationalTable></CardContent></SectionCard>
     </> : null}

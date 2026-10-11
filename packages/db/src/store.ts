@@ -4666,9 +4666,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     async listRecentAssetMovements(organizationId: string) {
       const result = await pool.query<{
         assetCode: string
+        assetCategory: string
+        assetName: string
+        assetSubcategory: string
         department: string | null
         fromHolder: string | null
         fromHolderType: StoreHolderType | null
+        makeModel: string
         movedAt: Date
         movedBy: string | null
         movementType: string
@@ -4679,6 +4683,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `SELECT asset.asset_code AS "assetCode",
             item.type_code AS "typeCode",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName", make_model.name AS "makeModel",
             movement.movement_type AS "movementType",
             movement.from_holder_type AS "fromHolderType",
             movement.to_holder_type AS "toHolderType",
@@ -4694,6 +4701,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           FROM store.stock_movements movement
           JOIN store.assets asset ON asset.id = movement.asset_id
           JOIN store.item_types item ON item.id = movement.item_type_id
+          JOIN store.make_models make_model ON make_model.id = item.make_model_id
           WHERE movement.organization_id = $1
           ORDER BY movement.moved_at DESC
           LIMIT 300`,
