@@ -243,6 +243,11 @@ export {
 } from "./product-portfolio"
 export { createProductRepository } from "./products"
 export {
+  createPrintedDrawingHoldingsRepository,
+  PrintedDrawingHoldingError,
+  type PrintedDrawingHolding,
+} from "./printed-drawing-holdings"
+export {
   connectionTargetSummary,
   createBoundedPostgresPool,
   instrumentPostgresPool,

@@ -1,18 +1,22 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import { createProductPortfolioRepository } from "@workspace/db"
+import {
+  createPrintedDrawingHoldingsRepository,
+  createProductPortfolioRepository,
+} from "@workspace/db"
+import { productionFloors } from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -37,9 +41,18 @@ export default async function DrawingRevisionHistoryPage({
   const repository = createProductPortfolioRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const rows = await repository
-    .listDrawingRevisionsForOrganization("MRMPL", { uid })
-    .finally(() => repository.close())
+  const holdingsRepository = createPrintedDrawingHoldingsRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const [rows, holdings] = await Promise.all([
+    repository
+      .listDrawingRevisionsForOrganization("MRMPL", { uid })
+      .finally(() => repository.close()),
+    holdingsRepository
+      .listForOrganization("MRMPL", { uid })
+      .finally(() => holdingsRepository.close()),
+  ])
+  const revisionsById = new Map(rows.map((row) => [row.drawingId, row]))
   if (!rows.length) notFound()
 
   return (
@@ -60,14 +73,14 @@ export default async function DrawingRevisionHistoryPage({
         </Button>
       </section>
 
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>{rows[0]!.itemDescription}</CardTitle>
           <CardDescription>{rows.length} drawing records.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-2xl border min-w-0">
- <OperationalTable>
+          <div className="min-w-0 rounded-2xl border">
+            <OperationalTable>
               <TableHeader>
                 <TableRow>
                   <TableHead>Revision</TableHead>
@@ -92,7 +105,9 @@ export default async function DrawingRevisionHistoryPage({
                       {row.drawingNumber}
                     </TableCell>
                     <TableCell>
-                      {row.pendingUpload ? "Pending Drawing Upload" : row.status}
+                      {row.pendingUpload
+                        ? "Pending Drawing Upload"
+                        : row.status}
                       {` · ${row.requirement}`}
                     </TableCell>
                     <TableCell>{row.effectiveOn || "—"}</TableCell>
@@ -127,10 +142,67 @@ export default async function DrawingRevisionHistoryPage({
                   </TableRow>
                 ))}
               </TableBody>
- </OperationalTable>
+            </OperationalTable>
           </div>
         </CardContent>
- </SectionCard>
+      </SectionCard>
+      {holdings.length ? (
+        <SectionCard>
+          <CardHeader>
+            <CardTitle>Printed Drawing Locations</CardTitle>
+            <CardDescription>
+              Last recorded holdings for each drawing revision and production
+              unit.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <OperationalTable
+              containerClassName="rounded-xl border"
+              excelFilters
+              filterStorageKey="drawing-revision-printed-holdings"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead data-filterable="true">Revision</TableHead>
+                  <TableHead data-filterable="true">Production Unit</TableHead>
+                  <TableHead data-filterable="true">Printed Copies</TableHead>
+                  <TableHead data-filterable="true">
+                    Internal Location
+                  </TableHead>
+                  <TableHead>Updated By</TableHead>
+                  <TableHead>Updated At</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {holdings.map((holding) => (
+                  <TableRow
+                    key={`${holding.drawingId}-${holding.productionFloorCode}`}
+                  >
+                    <TableCell>
+                      {revisionsById.get(holding.drawingId)?.revision ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {
+                        productionFloors.find(
+                          (floor) => floor.code === holding.productionFloorCode
+                        )?.shortLabel
+                      }
+                    </TableCell>
+                    <TableCell>{holding.quantity}</TableCell>
+                    <TableCell>{holding.location || "—"}</TableCell>
+                    <TableCell>{holding.updatedBy || "—"}</TableCell>
+                    <TableCell>
+                      {holding.updatedAt.toLocaleString("en-IN", {
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </OperationalTable>
+          </CardContent>
+        </SectionCard>
+      ) : null}
     </div>
   )
 }
