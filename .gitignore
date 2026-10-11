@@ -48,6 +48,8 @@ local-data/
 /.runtime/
 *.xls
 *.xlsx
+!apps/web/app/iso-document/management-review/export.xlsx/
+!apps/web/app/iso-document/management-review/export.xlsx/route.ts
 !apps/web/app/commercial/**/*.xlsx/
 !apps/web/app/commercial/**/*.xlsx/route.ts
 !apps/web/app/iso-document/analysis/**/*.xlsx/
