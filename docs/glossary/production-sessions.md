@@ -140,24 +140,28 @@ authorized user records the weight.
 
 An open session changes its displayed operational status to Closing Required as soon as its scheduled shift end passes. Closing Required sessions remain technically open, stay visible in the Session Register, can be isolated with the Status filter, and expose an immediate Close action so missed entries can be corrected using the normal close workflow. The system does not invent output or silently close them.
 
-## Closed-session corrections
+## Session corrections
 
-A Planner may use **Delete Production Session** for a session entered by mistake.
-The Planner reviews its Session Reference and recorded output and supplies a
-reason. Deletion reverses the closed session, its production entry and ordinary
-downtime/rejection entries together. Their quantities leave production totals,
-WIP, efficiency flags and the Session Register; the records and before/after
-audit remain available. The Production Event Log records the deletion.
-Machine ownership and setup stages remain unchanged. Deletion is not a machine
-release or a setup completion.
+Production Sessions cannot be deleted through the dashboard. Correct recorded
+details in the existing session; use **Reopen Setup** when Item Complete itself
+was mistaken. Previously reversed records remain excluded from active totals,
+with their audit and deletion events retained as history.
 
-Open sessions must first close normally. A mistaken Item Complete must first use
-**Reopen Setup**. Later sessions keep their saved counters and historical
-references; deleting a session never rewrites their output. Downtime linked
-to an accident or Maintenance must have those dependencies reviewed separately;
-session deletion must not reverse stock losses or Maintenance work implicitly.
-The saved session version is checked again when applying the deletion. Existing
-Planner override permission for that Production Unit authorizes this action.
+**Correct start date / time** is available for open and closed sessions under
+the Production Unit's existing session-correction permission. A reason is
+required. The correction updates the session and linked Production Entry's
+start, shift and Production Date together. The original Session Reference stays
+unchanged, even when its encoded date differs from the corrected Production Date.
+Good and rejected pieces, counters, weights, end time, completion status and
+machine ownership stay unchanged. Closed-session runtime, target and efficiency
+are recalculated using the session's saved cycle standard and break schedule;
+open-session timing uses the corrected start.
+
+The corrected start cannot be in the future, follow the session's end, overlap
+another machine session, change session order, or exclude recorded downtime.
+The saved session version is checked again on save. The correction records the
+actor, reason, time and original/corrected values in audit history and queues
+planning refresh. Accident and Maintenance records are not rewritten.
 
 A Planner may use **Reopen Setup** to correct a setup marked Item Complete in
 error. A reason is required. The action reverses the current completion evidence,

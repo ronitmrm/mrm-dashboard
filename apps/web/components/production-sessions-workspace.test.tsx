@@ -14,6 +14,7 @@ test("offers accident reporting on an open session", () => {
 
   expect(markup).toContain("End session")
   expect(markup).toContain("Record accident")
+  expect(markup).toContain("Correct start date / time")
 })
 
 test("shows the selected close reason in the session timeline", () => {

@@ -177,7 +177,6 @@ import {
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
 import { formatRmInwardDate } from "@/lib/rm-inward-date"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
-import { DeleteProductionSessionPlannerForm } from "@/components/delete-production-session-planner-form"
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -4037,11 +4036,6 @@ function PlannerDecisionConsole({
       onActionChange={setActiveAction}
       onViewChange={setActiveView}
       panels={{
-        sessionDelete: (
-          <DeleteProductionSessionPlannerForm key={productionFloorFromLocation()} floor={productionFloorFromLocation()} onSave={(session, reason) =>
-            submitAction("production-session-delete", { sessionId: session.id, expectedRowVersion: Number(session.rowVersion),
-              productionFloorCode: productionFloorFromLocation(), reason }, { throwOnError: true })} />
-        ),
         setupReopen: (
           <ReopenSetupPlannerForm floor={productionFloorFromLocation()} onSave={(setup, reason) =>
             submitAction("setup-reopen", { setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion),

@@ -930,15 +930,6 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
-    if (path === "production-session-delete") {
-      const floor = requiredProductionFloor(search.get("floor"))
-      return json(await withProductionRepository(request, productionFloorTaskCapabilities[floor].plan_override,
-        ({ organizationId, repository }) => repository.readProductionSessionForDeletion({
-          organizationId, productionFloorCode: floor,
-          sessionReference: requiredDashboardText(search.get("reference"), "Session reference"),
-        })))
-    }
-
     if (path === "setup-reopen") {
       const floor = requiredProductionFloor(search.get("floor"))
       return json(await withProductionRepository(request,
@@ -1365,18 +1356,6 @@ async function post(request: NextRequest, context: RouteContext) {
       )
     }
 
-    if (path === "production-session-delete") {
-      const result = await withProductionRepository(request, "planning.override.write",
-        ({ actorUserId, organizationId, repository }) => repository.reverseProductionSession({
-          actorUserId, organizationId, productionFloorCode: requiredProductionFloor(body.productionFloorCode),
-          sessionId: requiredDashboardText(body.sessionId, "Production session"),
-          expectedRowVersion: numeric(body.expectedRowVersion), reason: text(body.reason),
-        }))
-      return json(await withPlanningRefresh(request, path, body, {
-        ...result, message: "Production session deleted. Output removed; audit history retained.", rowsUpdated: 1,
-      }))
-    }
-
     if (path === "production-session-efficiency-flag-close") {
       const result = await withProductionRepository(request, "operations.shop_floor.write",
         ({ actorUserId, organizationId, repository }) => repository.closeProductionSessionEfficiencyFlag({
@@ -1799,6 +1778,16 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               productionFloorCode: payload.productionFloorCode,
             })
+            if (text(payload.correctionType).toLowerCase() === "start") {
+              return repository.correctProductionSessionStart({
+                actorUserId, organizationId, enteredRole,
+                productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
+                sessionId: requiredDashboardText(payload.sessionId, "Production session"),
+                startedAt: requiredDashboardText(payload.startedAt, "Session start"),
+                expectedRowVersion: numeric(payload.expectedRowVersion),
+                correctionReason: text(payload.correctionReason),
+              })
+            }
             return repository.correctProductionSession({
               actorUserId,
               correctionReason: text(payload.correctionReason),
@@ -1834,7 +1823,7 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: "Closed production session corrected.",
+            savedText: "Production session corrected.",
           })
         )
       }
@@ -2672,7 +2661,6 @@ const knownDashboardApiPaths = new Set([
   "mark-complete",
   "plan-override",
   "setup-reopen",
-  "production-session-delete",
   "production-session-efficiency-flag-close",
   "planner-priority",
   "raw-material-rejection",
