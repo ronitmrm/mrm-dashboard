@@ -122,6 +122,7 @@ type RecruitmentPanelProps = {
   posts: RecruitmentPostRow[]
   returnJobId?: string
   selectedAppointmentApplicationId?: string
+  selectedProbationAppointmentAssignmentId?: string
   selectedJobId?: string
   selectedTemplateCode?: string
   templates: RecruitmentTemplateRow[]
@@ -1162,7 +1163,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         </>
       )
     case "probationRemindersPanel":
-      return <ProbationEndReminders assignments={props.employeeAssignments} canManageEmployees={props.canManageEmployees} canViewOfferLetters={props.canViewOfferLetters} />
+      return <ProbationEndReminders assignments={props.employeeAssignments} posts={props.posts} canManageEmployees={props.canManageEmployees} canViewOfferLetters={props.canViewOfferLetters} appointmentAssignmentId={props.selectedProbationAppointmentAssignmentId} />
     case "employeeAssignmentHistoryPanel":
       return <EmployeeAssignmentHistory assignments={props.employeeAssignments} />
     case "conversationLogsPanel":

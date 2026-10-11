@@ -1,6 +1,6 @@
 "use client"
 
-import type { RecruitmentEmployeeAssignmentRow } from "@workspace/db"
+import type { RecruitmentEmployeeAssignmentRow, RecruitmentPostRow } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -14,13 +14,24 @@ import {
 } from "@workspace/ui/components/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { useRouter } from "next/navigation"
 
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
+import { EmployeeLetterForm } from "@/components/hr/employee-letter-dialog"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
 import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
-function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAssignmentRow }) {
+function currentEmployeePost(assignment: RecruitmentEmployeeAssignmentRow, posts: RecruitmentPostRow[]) {
+  return posts.find((post) => post.status === "Occupied" &&
+    post.postCode === assignment.postCode && assignment.employeeCode &&
+    post.employeeCode === assignment.employeeCode)
+}
+
+function ProbationDateEditor({ assignment, canGenerateAppointment }: {
+  assignment: RecruitmentEmployeeAssignmentRow
+  canGenerateAppointment: boolean
+}) {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -56,7 +67,14 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
             <FieldDescription>Optional. Saved with this update in the audit history.</FieldDescription>
           </Field>
           {assignment.probationRemark ? <p className="text-sm text-muted-foreground">Latest remark: {assignment.probationRemark}</p> : null}
-          <Button className="w-fit" type="submit">Save Update</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">Save Update</Button>
+            {canGenerateAppointment ? (
+              <Button name="next_step" type="submit" value="appointment" variant="outline">
+                Save & Generate Appointment Letter
+              </Button>
+            ) : null}
+          </div>
         </form>
       </StandardDialogContent>
     </Dialog>
@@ -65,13 +83,18 @@ function ProbationDateEditor({ assignment }: { assignment: RecruitmentEmployeeAs
 
 export function ProbationEndReminders({
   assignments,
+  posts,
   canManageEmployees,
   canViewOfferLetters,
+  appointmentAssignmentId,
 }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
+  posts: RecruitmentPostRow[]
   canManageEmployees: boolean
   canViewOfferLetters: boolean
+  appointmentAssignmentId?: string
 }) {
+  const router = useRouter()
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date())
@@ -79,6 +102,12 @@ export function ProbationEndReminders({
   approaching.setUTCDate(approaching.getUTCDate() + 30)
   const approachingOn = approaching.toISOString().slice(0, 10)
   const { open, completed } = splitProbationAssignments(assignments, today, approachingOn)
+  const appointmentAssignment = canManageEmployees
+    ? open.find((assignment) => assignment.id === appointmentAssignmentId)
+    : undefined
+  const appointmentPost = appointmentAssignment
+    ? currentEmployeePost(appointmentAssignment, posts)
+    : undefined
   open.sort((left, right) =>
     (left.probationDueOn ?? "0000-01-01").localeCompare(right.probationDueOn ?? "0000-01-01")
   )
@@ -93,6 +122,28 @@ export function ProbationEndReminders({
   const dateNeeded = open.filter((assignment) => !assignment.probationDueOn).length
   return (
     <>
+      {appointmentAssignment && appointmentPost ? (
+        <Dialog
+          defaultOpen
+          key={appointmentAssignment.id}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) router.replace("/hr?panel=probationRemindersPanel", { scroll: false })
+          }}
+        >
+          <StandardDialogContent
+            className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+            title="Generate Appointment Letter"
+            description={`${appointmentAssignment.employeeName} · Employee ID ${appointmentAssignment.employeeCode} · ${appointmentAssignment.designation}`}
+          >
+            <EmployeeLetterForm
+              post={appointmentPost}
+              probationCompletedOn={appointmentAssignment.probationDueOn}
+              returnPanel="probationRemindersPanel"
+              type="appointment"
+            />
+          </StandardDialogContent>
+        </Dialog>
+      ) : null}
       <MetricSummary
         scope="Probation assignment tasks and completion log · before table filters"
         items={[
@@ -151,7 +202,7 @@ export function ProbationEndReminders({
                       <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
                       <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
                       <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
-                      {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} /></TableCell> : null}
+                      {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} canGenerateAppointment={Boolean(currentEmployeePost(assignment, posts))} /></TableCell> : null}
                     </TableRow>
                   })}
                   {!open.length ? <TableRow><TableCell colSpan={canManageEmployees ? 11 : 10}>
