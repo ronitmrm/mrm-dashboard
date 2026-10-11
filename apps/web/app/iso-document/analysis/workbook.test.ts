@@ -8,7 +8,7 @@ function workbook(rows: unknown[][]) {
   return XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer
 }
 describe("ISO analysis workbook import", () => {
-  it("preserves source details and separates pending work from completion awaiting QA", () => {
+  it("preserves source claims without inventing assessment or future review dates", () => {
     const pest = parseAnalysisWorkbook(
       workbook([
         ["MRM-QA-021-01"],
@@ -81,11 +81,14 @@ describe("ISO analysis workbook import", () => {
       "SWOT"
     )[0]!
     expect(swot.status).toBe("Completed")
-    expect(swot.completionNotes).toBe("Planning under process")
+    expect(swot.completionNotes).toBe("")
+    expect(swot.source.columns["Action taken"]).toBe("Planning under process")
     expect(swot.fields).toMatchObject({
       identifiedOn: null,
       reviewedOn: "2026-02-01",
-      nextReviewOn: "2026-03-01",
+      nextReviewOn: null,
+      focus: "Not assessed",
+      priority: "Not assessed",
     })
   })
   it("rejects the wrong workbook layout instead of importing incomplete records", () => {

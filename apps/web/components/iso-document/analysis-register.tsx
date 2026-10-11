@@ -147,6 +147,8 @@ export function AnalysisRegister({
                 <TableHead data-filterable="true">Reference</TableHead>
                 <TableHead data-filterable="true">Year</TableHead>
                 <TableHead data-filterable="true">Category</TableHead>
+                <TableHead data-filterable="true">Risk / Opportunity</TableHead>
+                <TableHead data-filterable="true">Priority</TableHead>
                 <TableHead data-filterable="true">Issue / Insight</TableHead>
                 <TableHead data-filterable="true">Action Plan</TableHead>
                 <TableHead data-filterable="true">Department</TableHead>
@@ -170,6 +172,19 @@ export function AnalysisRegister({
                   </TableCell>
                   <TableCell>{row.analysisYear}</TableCell>
                   <TableCell>{row.category}</TableCell>
+                  <TableCell>{row.focus}</TableCell>
+                  <TableCell>
+                    <StatusBadge
+                      value={row.priority}
+                      tone={
+                        row.priority === "High"
+                          ? "warning"
+                          : row.priority === "Not assessed"
+                            ? "inactive"
+                            : "information"
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="max-w-96 min-w-56 whitespace-normal">
                     {row.description}
                   </TableCell>

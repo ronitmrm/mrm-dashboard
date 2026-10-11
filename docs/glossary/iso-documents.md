@@ -84,14 +84,23 @@ is `MRMPL/ISO/REG/001` (defined in `apps/web/lib/iso-documents.ts`).
 
 PEST and SWOT are working analysis registers under ISO Document. Each issue or
 insight owns its category, analysis year, action plan, responsible department
-and staff account, target date, work evidence and review dates. PEST categories
+and staff account, target date, work evidence and review dates. Assessment records
+whether the issue represents risk, opportunity or both; its business impact,
+priority and expected outcome. Unassessed is explicit, never an invented rating.
+PEST categories
 are Political, Economic, Social and Technological; SWOT categories are Strength,
 Weakness, Opportunity and Threat. These records do not release or revise the
 controlled document formats (`MRM-QA-021-01` and `MRM-QA-022-01`).
 
 New actions progress from Open to In Progress, then Completed. The responsible
 account records work done and evidence; only Quality Assurance verification can
-close a Completed action. QA may return it to In Progress or reopen a Closed
+close a Completed action after recording evidence that the expected outcome was
+achieved. Implementation completion and effectiveness verification are separate.
+Completion requires assessment, responsible department/staff and target date.
+QA closure also requires actual recorded completion, an evidence reference and
+effectiveness findings; a source spreadsheet's completion label cannot authorize
+closure. Ineffective or inconclusive work remains pending or is returned.
+QA may return it to In Progress or reopen a Closed
 action with a reason. Closed details stay locked until reopened. Every create,
 edit, import, update, completion, QA decision, reopening and review retains actor,
 timestamp, remarks and before/after values in append-only audit history.
@@ -103,14 +112,16 @@ Only Verify/Close Analyses permission permits QA decisions. Action responsibilit
 does not grant access to unrelated analyses or document-control operations.
 
 Imports preserve original values, filename, file hash, sheet and row. Done and
-Complete entries become Completed, awaiting QA verification; they never invent
+Complete entries become Completed as unverified source claims; they never invent
 completion dates, verifiers or closure evidence. Pending remains Open. Missing
-staff assignments and actual work details stay missing. Reimport of the same
+staff assignments and actual work details stay missing. Source Action Taken
+stays in original workbook data, not in confirmed Work Done. Reimport of the same
 source row does not overwrite work already recorded in MRM. PEST day timelines
 derive target dates from the issue date using calendar days; the original
 timeline remains available. SWOT Review Date is a review date, never an issue
-or completion date. Its supplied monthly review cadence advances one calendar
-month, bounded to the next month's last day. Reviews retain notes and the next
+or completion date. Example workbook cadence does not define the review schedule:
+QA sets the next review according to the issue's importance and circumstances.
+Imports do not invent a next review date. Reviews retain notes and the next
 review date, including after an action is Closed. Overdue work and due reviews
 are visible; no notifications or background schedules are created.
 

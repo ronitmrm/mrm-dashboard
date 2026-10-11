@@ -31,6 +31,11 @@ import { withIsoAnalysis } from "@/lib/iso-document/analysis-server"
 
 const labels: Record<string, string> = {
   category: "Category",
+  focus: "Risk / opportunity",
+  priority: "Priority",
+  impact: "Business impact",
+  expectedOutcome: "Expected outcome",
+  effectivenessNotes: "Effectiveness findings",
   analysisYear: "Year",
   description: "Issue",
   actionPlan: "Action plan",
@@ -127,6 +132,10 @@ export default async function AnalysisItemPage({
             <dl className="grid gap-4 sm:grid-cols-2">
               {[
                 ["Action Plan", entry.actionPlan],
+                ["Risk / Opportunity", entry.focus],
+                ["Priority", entry.priority],
+                ["Business Impact", entry.impact || "Not assessed"],
+                ["Expected Outcome", entry.expectedOutcome || "Not defined"],
                 ["Responsible Staff", entry.ownerName || "Not assigned"],
                 ["Target Date", entry.dueOn || "Not set"],
                 ["Issue Identified On", entry.identifiedOn || "Not recorded"],
@@ -147,6 +156,10 @@ export default async function AnalysisItemPage({
                     : "Awaiting QA verification",
                 ],
                 ["Closure Remarks", entry.closureRemarks || "—"],
+                [
+                  "Effectiveness Findings",
+                  entry.effectivenessNotes || "Not verified",
+                ],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0">
                   <dt className="text-sm text-muted-foreground">{label}</dt>
@@ -161,8 +174,9 @@ export default async function AnalysisItemPage({
             <CardHeader>
               <CardTitle>Work & QA Decisions</CardTitle>
               <CardDescription>
-                Completion needs responsible staff, a target date and work
-                details. QA verifies before closure.
+                Complete work after assessment and assignment. QA closes only
+                after checking actual results against the expected outcome and
+                recording evidence.
               </CardDescription>
             </CardHeader>
             <CardContent>

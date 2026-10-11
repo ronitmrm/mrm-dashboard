@@ -10,6 +10,11 @@ Domain contract: [ISO Document](../glossary/iso-documents.md).
 - Migration `0211_iso_analysis_actions.sql` creates
   `document_control.analysis_records`, registers capabilities and imports
   the 13 supplied 2026 workbook rows with source provenance and import history.
+  Migration `0212_iso_analysis_effectiveness.sql` adds risk/opportunity
+  assessment, impact, priority, expected outcome and QA effectiveness findings,
+  and removes untouched review deadlines inferred from sample monthly cadence.
+  Historical source completion is retained but cannot pass the actual-completion
+  and evidence guards. Unassessed fields require human assessment before completion.
 - `apps/web/lib/iso-document/analysis-server.ts` derives access from the
   authenticated session and authoritative grants. The repository filters
   every read, dossier and export to all-record permissions or item ownership.
