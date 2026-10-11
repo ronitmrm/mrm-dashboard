@@ -4704,7 +4704,7 @@ function MachineConstraintPlannerForm({
             </div>
           ) : null}
           {runningRows.length && machineKey(rescheduleAction) !== "delay" ? (
-            <PlannerRequiredStops
+            <PlannerSetupStops
               rows={runningRows}
               selected={selectedSourceStops}
               onChange={(key, stop) => {
@@ -5171,7 +5171,7 @@ function ParallelMachinePlannerForm({
           </div>
           {targetOccupiedRows.length ? (
             <div className="grid gap-2">
-              <PlannerRequiredStops
+              <PlannerSetupStops
                 rows={targetOccupiedRows}
                 selected={selectedTargetInterruptions}
                 onChange={(key, stop) => {
@@ -5658,9 +5658,6 @@ function PartMachineSwitchPlannerForm({
     queueReviewConfirmed &&
     runningRows.every(
       (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
-    ) &&
-    targetInterruptionRows.every(
-      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
     )
 
   function updateField(
@@ -5883,11 +5880,11 @@ function PartMachineSwitchPlannerForm({
             </span>
             <span>
               {formatNumber(targetInterruptionRows.length)} Target Running
-              Blockers
+              Setups
             </span>
           </div>
           {runningRows.length ? (
-            <PlannerRequiredStops
+            <PlannerSetupStops
               rows={runningRows}
               selected={selectedTargetInterruptions}
               onChange={(key, stop) => {
@@ -5914,8 +5911,9 @@ function PartMachineSwitchPlannerForm({
           ) : null}
           {targetInterruptionRows.length ? (
             <div className="grid gap-2">
-              <PlannerRequiredStops
+              <PlannerSetupStops
                 rows={targetInterruptionRows}
+                required={false}
                 selected={selectedTargetInterruptions}
                 onChange={(key, stop) => {
                   setSelectedTargetInterruptions((current) => ({
@@ -6480,27 +6478,36 @@ function PlannerPreSaveConflictReview({
   )
 }
 
-function PlannerRequiredStops({
+function PlannerSetupStops({
   rows,
   selected,
   onChange,
+  required = true,
 }: {
   rows: DashboardPayload[]
   selected: Record<string, boolean>
   onChange: (key: string, stop: boolean) => void
+  required?: boolean
 }) {
   return (
     <div className="grid gap-1">
       <div className="text-sm font-medium">
-        Stop the affected setup before moving work
+        {required
+          ? "Stop the affected setup before moving work"
+          : "Target machine setup"}
       </div>
+      {!required ? (
+        <p className="text-xs text-muted-foreground">
+          New work waits behind any setup kept running.
+        </p>
+      ) : null}
       {rows.map((row) => (
         <PlannerSetupDecision
           key={machineIssueRowKey(row)}
           identity={`${itemCode(row)} / ${jobCardNumber(row)} / Setup ${displayValue(row.setupNo)}`}
           machine={machineValue(row, "machine")}
           running={machineIssueRowNeedsProducedQty(row)}
-          required
+          required={required}
           selected={Boolean(selected[machineIssueRowKey(row)])}
           onChange={(stop) => onChange(machineIssueRowKey(row), stop)}
         />
