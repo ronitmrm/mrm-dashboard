@@ -2,6 +2,7 @@
 
 import type {
   RecruitmentCombinedRoleRow,
+  RecruitmentEmployeeAssignmentRow,
   RecruitmentPostRow,
 } from "@workspace/db"
 import { resolveRecruitmentEmployeeAssignmentTarget } from "@workspace/db/recruitment-domain"
@@ -18,6 +19,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { useMemo, useState } from "react"
+import { employeeAssignmentForPost } from "@/lib/employee-handover-rows"
 
 type AssignmentTarget = {
   combinedRole: RecruitmentCombinedRoleRow | null
@@ -41,12 +43,14 @@ function initialEmploymentEvent(
 export function SingleEmployeeAssignmentFields({
   allowIdentityCorrection = false,
   combinedRoles,
+  employeeAssignments = [],
   initialPostId = "",
   posts,
   showTargetSelector = true,
 }: {
   allowIdentityCorrection?: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
+  employeeAssignments?: RecruitmentEmployeeAssignmentRow[]
   initialPostId?: string
   posts: RecruitmentPostRow[]
   showTargetSelector?: boolean
@@ -97,6 +101,8 @@ export function SingleEmployeeAssignmentFields({
     initialEmploymentEvent(initialTarget?.post.status, allowIdentityCorrection)
   )
   const selected = targets.find(({ post }) => post.id === postId)
+  const selectedAssignment = selected && event === "Joined"
+    ? employeeAssignmentForPost(selected.post, employeeAssignments) : undefined
   const assigned = Boolean(
     selected?.post.employeeName || selected?.post.employeeCode
   )
@@ -410,10 +416,12 @@ export function SingleEmployeeAssignmentFields({
           </Field>
           <Field className="w-full min-w-0">
             <FieldLabel htmlFor="probation-due-on">Probation Ends On</FieldLabel>
-            <Input id="probation-due-on" name="probation_due_on" type="date" />
+            <Input defaultValue={selectedAssignment?.probationDueOn ?? ""}
+              id="probation-due-on" key={`${postId}-${event}`} name="probation_due_on" type="date" />
             <FieldDescription>
-              Leave blank to use the accepted Offer Letter probation period.
-              Enter a date for employees without an Offer Letter.
+              The saved joining record supplies this date. For a new join, leave
+              blank to use the accepted Offer Letter period or, for a direct join,
+              one calendar month after joining. Enter a date to override it.
             </FieldDescription>
           </Field>
         </>

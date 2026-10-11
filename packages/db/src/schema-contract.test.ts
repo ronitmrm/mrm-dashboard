@@ -1827,12 +1827,20 @@ test("employee data retains personal details across rejoining and separates each
   const employeeCode = `REJOIN-${firstId.slice(0, 8)}`
   await pool.query(
     `INSERT INTO recruitment.employee_post_assignments
-       (id, organization_id, post_code, employee_name, employee_code, joined_on, ended_on)
-     VALUES ($1, $3, 'TEST-OLD', 'Test Employee', $4, '2026-07-10', '2026-12-10'),
-            ($2, $3, 'TEST-NEW', 'Test Employee', $4, '2027-02-01', NULL),
-            ($5, $3, 'TEST-PARALLEL', 'Test Employee', $4, '2026-08-01', '2026-11-01')`,
+       (id, organization_id, post_code, employee_name, employee_code, joined_on, probation_due_on, ended_on)
+     VALUES ($1, $3, 'TEST-OLD', 'Test Employee', $4, '2026-01-31', NULL, '2026-12-10'),
+            ($2, $3, 'TEST-NEW', 'Test Employee', $4, '2027-02-01', NULL, NULL),
+            ($5, $3, 'TEST-PARALLEL', 'Test Employee', $4, '2026-08-01', '2026-11-15', '2026-11-01')`,
     [firstId, secondId, representativeOrganizationId, employeeCode, concurrentPostId]
   )
+  const probation = await pool.query<{ id: string; dueOn: string }>(
+    `SELECT id, probation_due_on::text AS "dueOn"
+     FROM recruitment.employee_post_assignments WHERE employee_code = $1`, [employeeCode]
+  )
+  expect(probation.rows).toEqual(expect.arrayContaining([
+    { id: firstId, dueOn: "2026-02-28" }, { id: secondId, dueOn: "2027-03-01" },
+    { id: concurrentPostId, dueOn: "2026-11-15" },
+  ]))
   const personal = Object.fromEntries(employeePersonalFields.map((field) => [field, ""])) as EmployeePersonalDetails
   const firstTerm = Object.fromEntries(employeeTermFields.map((field) => [field, ""])) as EmployeeTermDetails
   personal.contactNo = "9999999999"

@@ -964,6 +964,15 @@ async function assignEmployeeInTransaction(
   if (result.rows.length !== targetIds.length) {
     throw new Error("Not every approved post in the assignment was updated.")
   }
+  if (correctsExistingIdentity && assignment.status === "Occupied" && optional(input.probationDueOn)) {
+    await client.query(
+      `UPDATE recruitment.employee_post_assignments
+       SET probation_due_on = $1::date, updated_at = now()
+       WHERE organization_id = $2 AND post_id = ANY($3::uuid[])
+         AND employee_code = $4 AND ended_on IS NULL`,
+      [optional(input.probationDueOn), input.organizationId, targetIds, assignment.employeeCode]
+    )
+  }
   if (assignment.status === "Appointed" || assignment.status === "Occupied") {
     await closeOpenJobsForManualAssignment(client, input, targetIds)
   }
@@ -986,6 +995,7 @@ async function assignEmployeeInTransaction(
           combinedRoleId: currentPost.combined_role_id,
           appointedApplicationId: optional(input.appointedApplicationId),
           identityCorrection: correctsExistingIdentity,
+          probationDueOn: optional(input.probationDueOn),
           joiningDate: optional(input.joiningDate),
           postId: post.id,
           status: assignment.status,

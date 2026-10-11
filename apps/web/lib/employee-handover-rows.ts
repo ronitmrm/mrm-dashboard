@@ -1,4 +1,18 @@
-import type { RecruitmentPostRow } from "@workspace/db"
+import type { RecruitmentEmployeeAssignmentRow, RecruitmentPostRow } from "@workspace/db"
+
+export function employeeAssignmentForPost<T extends Pick<
+  RecruitmentEmployeeAssignmentRow, "employeeCode" | "endedOn" | "joinedOn" | "postCode"
+>>(
+  post: Pick<RecruitmentPostRow, "employeeCode" | "joiningDate" | "lastWorkingDate" | "postCode" | "status">,
+  assignments: T[]
+) {
+  if (!post.employeeCode || !["Occupied", "Resigned"].includes(post.status)) return undefined
+  const matching = assignments.filter((assignment) => assignment.postCode === post.postCode &&
+    assignment.employeeCode === post.employeeCode)
+  const outgoing = post.status === "Resigned" ? matching.find((assignment) =>
+    assignment.joinedOn === post.joiningDate && assignment.endedOn === post.lastWorkingDate) : undefined
+  return outgoing ?? matching.find((assignment) => assignment.endedOn === null)
+}
 
 export function employeeHandoverRows(
   posts: RecruitmentPostRow[]

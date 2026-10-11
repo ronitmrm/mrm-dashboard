@@ -2,6 +2,7 @@
 
 import type {
   RecruitmentCombinedRoleRow,
+  RecruitmentEmployeeAssignmentRow,
   RecruitmentEmploymentLetterRow,
   RecruitmentJobRow,
   RecruitmentPostRow,
@@ -52,6 +53,7 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import { useFormStatus } from "react-dom"
+import Link from "next/link"
 
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import {
@@ -64,7 +66,7 @@ import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filt
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
-import { employeeHandoverRows } from "@/lib/employee-handover-rows"
+import { employeeAssignmentForPost, employeeHandoverRows } from "@/lib/employee-handover-rows"
 import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 type TemplateOption = Pick<
@@ -99,6 +101,7 @@ export function ApprovedPostsTable({
   canDelete = false,
   canCreateJob = false,
   combinedRoles = [],
+  employeeAssignments = [],
   employeeManagement = false,
   employeeView = employeeManagement,
   employmentLetters = [],
@@ -111,6 +114,7 @@ export function ApprovedPostsTable({
   canDelete?: boolean
   canCreateJob?: boolean
   combinedRoles?: RecruitmentCombinedRoleRow[]
+  employeeAssignments?: RecruitmentEmployeeAssignmentRow[]
   employeeManagement?: boolean
   employeeView?: boolean
   employmentLetters?: RecruitmentEmploymentLetterRow[]
@@ -278,8 +282,10 @@ export function ApprovedPostsTable({
                 </TableHeader>
                 <TableBody>
                   {filteredPosts.length ? (
-                    filteredPosts.map((row) => (
-                      <TableRow key={row.id}>
+                    filteredPosts.map((row) => {
+                      const employeeAssignment = employeeManagement
+                        ? employeeAssignmentForPost(row, employeeAssignments) : undefined
+                      return <TableRow key={row.id}>
                         {employeeManagement ? (
                           <TableCell>
                             <Checkbox
@@ -321,7 +327,12 @@ export function ApprovedPostsTable({
                             ))}
                         </TableCell>
                         <TableCell className="font-mono">
-                          {row.employeeCode ?? "—"}
+                          {employeeAssignment ? (
+                            <Link className="text-primary underline-offset-4 hover:underline"
+                              href={`/hr/employees/${employeeAssignment.id}`}>
+                              {row.employeeCode}
+                            </Link>
+                          ) : row.employeeCode ?? "—"}
                         </TableCell>
                         <TableCell>{row.joiningDate ?? "—"}</TableCell>
                         <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
@@ -433,7 +444,7 @@ export function ApprovedPostsTable({
                           </TableCell>
                         ) : null}
                       </TableRow>
-                    ))
+                    })
                   ) : (
                     <TableRow>
                       <TableCell
@@ -606,6 +617,7 @@ export function ApprovedPostsTable({
                 <SingleEmployeeAssignmentFields
                   allowIdentityCorrection
                   combinedRoles={combinedRoles}
+                  employeeAssignments={employeeAssignments}
                   initialPostId={selectedEmployeePost.id}
                   key={selectedEmployeePost.id}
                   posts={posts}

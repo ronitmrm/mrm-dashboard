@@ -753,6 +753,7 @@ describe("assignEmployee", () => {
       identityCorrection: true,
       organizationId: "00000000-0000-4000-8000-000000000010",
       postId,
+      probationDueOn: "2026-11-01",
     })
 
     const update = (
@@ -763,6 +764,8 @@ describe("assignEmployee", () => {
       "105",
       "Occupied",
     ])
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.employee_post_assignments"),
+      ["2026-11-01", "00000000-0000-4000-8000-000000000010", [postId], "105"])
   })
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
