@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  firstPieceTaskReportId,
   firstPieceReportView,
   qualityDowntimeRestartTasks,
 } from "./quality-control-workspace"
 
 describe("quality control workspace", () => {
+  it("keeps a resumed setup inspection separate from its earlier report", () => {
+    const planKey = "p1413|m1368b|1|1|hx-01|fpi"
+    const original = firstPieceTaskReportId(planKey, "2026-09-29T22:13:58.122Z")
+    const resumed = firstPieceTaskReportId(planKey, "2026-10-11T11:10:47.352Z")
+
+    expect(resumed).not.toBe(original)
+    expect(resumed).not.toBe(planKey)
+    expect(firstPieceTaskReportId(planKey, "2026-10-11T11:10:47.352Z")).toBe(resumed)
+    expect(firstPieceReportView({ reportId: planKey }).id).toBe(planKey)
+  })
+
   it("keeps QC-started open downtime in the quality task queue", () => {
     expect(
       qualityDowntimeRestartTasks([

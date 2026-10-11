@@ -192,6 +192,7 @@ import {
   type FirstPieceInspectionDraft,
 } from "@/lib/first-piece-inspection-draft"
 import {
+  firstPieceTaskReportId,
   firstPieceReportView,
   qualityDowntimeRestartTasks,
   type FirstPieceReportView,
@@ -10016,7 +10017,10 @@ function ShopFloorRowAction({
       const taskCompletedAt = new Date().toISOString()
       const firstPieceInspection = needsFirstPieceInspection
         ? {
-            reportId: firstPieceReportKey(next),
+            reportId: firstPieceTaskReportId(
+              firstPieceReportKey(next),
+              str(next.shopFloorUpdatedAt)
+            ),
             taskAssignedAt: str(next.shopFloorUpdatedAt),
             taskCompletedAt,
             checkedPieces: 5,
