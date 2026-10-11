@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg"
+import { defaultRoleQuestions } from "./recruitment-role-profile"
 import { describe, expect, test, vi } from "vitest"
 
 import {
@@ -14,6 +15,25 @@ import {
   nextRecruitmentTemplateCode,
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
+
+test("role question saves accept the displayed bigint version and reject stale edits", async () => {
+  const existing = { id: "template-1", row_version: "7", interview_questions: defaultRoleQuestions }
+  const query = vi.fn(async (statement: string) => ({
+    rows: statement.startsWith("SELECT * FROM recruitment.requirement_templates")
+      ? [existing]
+      : statement.startsWith("UPDATE recruitment.requirement_templates")
+        ? [{ ...existing, row_version: "8" }]
+        : [],
+  }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({
+    pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+  })
+  const input = { organizationId: "org-1", templateId: existing.id, expectedVersion: 7, questions: defaultRoleQuestions }
+  await expect(repository.saveTemplateQuestions(input)).resolves.toBeUndefined()
+  expect(query.mock.calls.some(([statement]) => statement.includes("INSERT INTO audit.events"))).toBe(true)
+  await expect(repository.saveTemplateQuestions({ ...input, expectedVersion: 6 })).rejects.toThrow("Refresh")
+})
 
 test("job register returns the template selected for each job", async () => {
   const query = vi.fn().mockResolvedValue({ rows: [{
@@ -77,14 +97,14 @@ test("job description templates require a permitted shift and both times", async
   )
   expect(insert?.[0]).toContain("shift_type, shift_start_time, shift_end_time")
   expect(insert?.[0]).not.toContain("department_id")
-  expect(insert?.[1]?.slice(-3)).toEqual(["Night", "22:00", "06:00"])
+  expect(insert?.[1]?.slice(13,16)).toEqual(["Night", "22:00", "06:00"])
   await expect(repository.upsertTemplate({ ...input, shiftEndTime: "" }))
     .rejects.toThrow("Shift End Time is required")
 })
 
 test("applying an individual template updates linked posts only", async () => {
   const query = vi.fn(async (statement: string) => ({
-    rows: statement.includes("SELECT 1 FROM recruitment.requirement_templates") ||
+    rows: statement.includes("SELECT * FROM recruitment.requirement_templates") ||
       statement.includes("INSERT INTO recruitment.requirement_templates")
       ? [{ id: "template-1" }]
       : [],

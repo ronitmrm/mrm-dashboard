@@ -55,6 +55,9 @@ import {
 } from "@/app/hr/actions"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
+import { RoleProfileFields } from "@/components/hr/role-profile-fields"
+import { roleProfileComplete } from "@workspace/db/recruitment-role-profile"
+import { StatusBadge } from "@workspace/ui/components/badge"
 
 type FilterKey =
   | "code"
@@ -89,12 +92,17 @@ export function JobTemplateEditor({
       ) : null}
       <input name="template_code" type="hidden" value={template.templateCode} />
       <input name="template_id" type="hidden" value={template.id} />
+      <input
+        name="template_version"
+        type="hidden"
+        value={template.rowVersion}
+      />
       <SheetHeader>
         <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
         <SheetDescription>
           {canWrite
-            ? "Update The Job Description Template. The Template Code Remains Fixed."
-            : "Job Description Template."}
+            ? "Update roles, responsibilities and company-confirmed authority. The role code remains fixed."
+            : "Roles, Responsibilities and Authority profile."}
         </SheetDescription>
       </SheetHeader>
       <fieldset disabled={!canWrite} className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
@@ -204,7 +212,7 @@ export function JobTemplateEditor({
         </Field>
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="edit-template-responsibilities">
-            Role Responsibilities
+            Responsibilities / duties
           </FieldLabel>
           <Textarea
             defaultValue={template.roleResponsibilities ?? ""}
@@ -213,6 +221,7 @@ export function JobTemplateEditor({
             rows={8}
           />
         </Field>
+        <RoleProfileFields profile={template.roleProfile} />
         {canWrite ? (
           <Field className="sm:col-span-2">
             <FieldLabel htmlFor="edit-template-apply-to-posts">
@@ -317,13 +326,13 @@ export function JobTemplatesTable({
     >
  <SectionCard>
         <CardHeader>
-          <CardTitle>Job Description Templates</CardTitle>
+          <CardTitle>Roles, Responsibilities &amp; Authority</CardTitle>
           <CardDescription>
             Showing {visibleTemplates.length} Of {templates.length} Reusable
             Profiles
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 min-w-0">
+        <CardContent className="min-w-0 space-y-2">
           <div className="flex justify-end">
             <Button
               disabled={!table.hasFilters}
@@ -341,6 +350,7 @@ export function JobTemplatesTable({
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
+                <TableHead>RRA assessment</TableHead>
                 {canWrite || canDelete ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
@@ -354,6 +364,7 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
+                <TableHead />
                 {canWrite || canDelete ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
@@ -380,6 +391,26 @@ export function JobTemplatesTable({
                     {row.shiftStartTime && row.shiftEndTime
                       ? `${row.shiftStartTime}–${row.shiftEndTime}`
                       : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge
+                      value={
+                        roleProfileComplete(
+                          row.roleProfile,
+                          row.roleResponsibilities
+                        )
+                          ? "RRA fields complete"
+                          : "Needs RRA assessment"
+                      }
+                      tone={
+                        roleProfileComplete(
+                          row.roleProfile,
+                          row.roleResponsibilities
+                        )
+                          ? "information"
+                          : "warning"
+                      }
+                    />
                   </TableCell>
                   {canWrite || canDelete ? (
                     <TableCell className="space-x-2 text-right">

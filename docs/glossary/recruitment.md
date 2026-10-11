@@ -19,6 +19,20 @@ role. Other job-entry paths retain their existing linked-template defaults.
 
 ## Job Description Templates
 
+The existing template is the reusable Roles, Responsibilities and Authority
+profile. It records role purpose, reporting/accountability, duties, competence,
+permitted decisions, authority limits, required approvals and escalation/handoffs.
+Authority is recorded from company delegation, never inferred from a job title.
+Missing authority/reporting fields remain visible as an incomplete profile.
+
+HR Questions is a separate role-linked interview question bank. Questions record
+round, focus, prompt and evidence to seek. Existing embedded screening questions
+move out of duties, with their original wording and full description retained.
+Prompts seek examples/demonstrations and include role, responsibility and authority
+scenarios. They guide interviews; the existing round scoring criteria and hiring
+decision lifecycle remain authoritative. Edits require template-management access
+and retain before/after audit. A question bank is not an employee assessment record.
+
 Individual templates can be assigned to Approved Posts in any department.
 Each Approved Post selects its template explicitly; sharing a designation alone
 does not select one because different jobs may need different profiles.

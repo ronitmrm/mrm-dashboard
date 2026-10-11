@@ -16,6 +16,15 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import { JobTemplateEditor } from "@/components/hr/job-templates-table"
+import { roleProfileFields } from "@workspace/db/recruitment-role-profile"
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@workspace/ui/components/tabs"
+import { RecordDetails } from "@/components/ui/golden-patterns"
+import { RoleQuestionList } from "@/components/hr/role-questions-panel"
 
 type EditTemplate = {
   combinedRoles: RecruitmentCombinedRoleRow[]
@@ -32,53 +41,61 @@ type TemplatePreviewContext = {
 
 const Context = createContext<TemplatePreviewContext | null>(null)
 
-function Detail({
-  label,
-  value,
-}: {
-  label: string
-  value: string | number | null
-}) {
+function TemplateDetails({ template }: { template: RecruitmentTemplateRow }) {
   return (
-    <div>
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="whitespace-pre-wrap font-medium">
-        {value === null || value === "" ? "—" : value}
-      </dd>
-    </div>
-  )
-}
-
-function TemplateDetails({
-  compact = false,
-  template,
-}: {
-  compact?: boolean
-  template: RecruitmentTemplateRow
-}) {
-  return (
-    <dl className={compact ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
-      <Detail
-        label="Template For"
-        value={
-          template.combinedRoleName
-            ? `Combined: ${template.combinedRoleName}`
-            : "Individual Posts"
-        }
-      />
-      <Detail label="Designation" value={template.designation} />
-      <Detail label="Gender" value={template.gender} />
-      <Detail label="Education" value={template.education} />
-      <Detail label="Experience Requirement" value={template.experienceRequirement} />
-      <Detail label="Minimum Salary" value={template.minimumSalary} />
-      <Detail label="Maximum Salary" value={template.maximumSalary} />
-      <Detail label="Shift Type" value={template.shiftType} />
-      <Detail label="Shift Start Time" value={template.shiftStartTime} />
-      <Detail label="Shift End Time" value={template.shiftEndTime} />
-      <div className={compact ? undefined : "sm:col-span-2"}>
-        <Detail label="Role Responsibilities" value={template.roleResponsibilities} />
-      </div>
-    </dl>
+    <Tabs defaultValue="profile">
+      <TabsList>
+        <TabsTrigger value="profile">Role profile</TabsTrigger>
+        <TabsTrigger value="questions">HR Questions</TabsTrigger>
+      </TabsList>
+      <TabsContent value="profile" className="grid gap-5">
+        <RecordDetails
+          items={[
+            { label: "Designation", value: template.designation },
+            {
+              label: "Template for",
+              value: template.combinedRoleName
+                ? `Combined: ${template.combinedRoleName}`
+                : "Individual posts",
+            },
+            {
+              label: "Responsibilities / duties",
+              value: template.roleResponsibilities || "Needs assessment",
+            },
+            ...roleProfileFields.map(({ key, label }) => ({
+              label,
+              value: template.roleProfile[key] || "Needs assessment",
+            })),
+            { label: "Education", value: template.education || "—" },
+            {
+              label: "Experience",
+              value: template.experienceRequirement || "—",
+            },
+            {
+              label: "Salary range",
+              value: `${template.minimumSalary ?? "—"} – ${template.maximumSalary ?? "—"}`,
+            },
+            {
+              label: "Shift",
+              value: `${template.shiftType ?? "—"} · ${template.shiftStartTime ?? "—"} – ${template.shiftEndTime ?? "—"}`,
+            },
+          ]}
+        />
+        {template.originalRoleDescription ? (
+          <details>
+            <summary className="cursor-pointer text-sm">
+              Original job description and questions
+            </summary>
+            <p className="text-sm whitespace-pre-wrap">
+              {template.originalRoleDescription}
+            </p>
+          </details>
+        ) : null}
+      </TabsContent>
+      <TabsContent value="questions">
+        <RoleQuestionList questions={template.interviewQuestions} />
+      </TabsContent>
+    </Tabs>
   )
 }
 
@@ -122,7 +139,9 @@ export function JobTemplatePreviewProvider({
             ) : (
               <>
                 <SheetHeader>
-                  <SheetTitle>Job Description Template {selectedTemplate.templateCode}</SheetTitle>
+                  <SheetTitle>
+                    Role Profile {selectedTemplate.templateCode}
+                  </SheetTitle>
                   <SheetDescription>{selectedTemplate.name}</SheetDescription>
                 </SheetHeader>
                 <div className="grid gap-6 px-6 pb-6">
@@ -147,15 +166,20 @@ export function JobTemplateReference({ code }: { code: string | null }) {
   const template = context?.templates.find((row) => row.templateCode === code)
 
   return (
-    <section aria-label="Job Description Template" className="min-w-0 rounded-lg border bg-muted/20 p-4">
-      <h3 className="font-medium">Job Description Template {code ?? "—"}</h3>
+    <section
+      aria-label="Role profile"
+      className="min-w-0 rounded-lg border bg-muted/20 p-4"
+    >
+      <h3 className="font-medium">Role Profile {code ?? "—"}</h3>
       {template ? (
         <>
           <p className="mb-4 text-sm text-muted-foreground">{template.name}</p>
-          <TemplateDetails compact template={template} />
+          <TemplateDetails template={template} />
         </>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">No Job Description Template Assigned.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No role profile assigned.
+        </p>
       )}
     </section>
   )

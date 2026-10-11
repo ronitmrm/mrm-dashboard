@@ -109,10 +109,27 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
-  { href: "/iso-document/interested-parties", icon: UsersRound, label: "Interested Parties Requirements" },
-  { href: "/iso-document/management-review", icon: UsersRound, label: "Management Review Meetings" },
-  { href: "/iso-document/analysis/pest", icon: ClipboardList, label: "PEST Analysis" },
-  { href: "/iso-document/analysis/swot", icon: ClipboardList, label: "SWOT Analysis" },
+  { href: "/iso-document/sipoc", icon: Route, label: "SIPOC Process Maps" },
+  {
+    href: "/iso-document/interested-parties",
+    icon: UsersRound,
+    label: "Interested Parties Requirements",
+  },
+  {
+    href: "/iso-document/management-review",
+    icon: UsersRound,
+    label: "Management Review Meetings",
+  },
+  {
+    href: "/iso-document/analysis/pest",
+    icon: ClipboardList,
+    label: "PEST Analysis",
+  },
+  {
+    href: "/iso-document/analysis/swot",
+    icon: ClipboardList,
+    label: "SWOT Analysis",
+  },
   {
     href: "/iso-document/documents",
     icon: BookOpenCheck,
@@ -706,7 +723,7 @@ export const hrMasterNavigation = [
   {
     href: "/hr?panel=postMasterPanel",
     icon: ClipboardList,
-    label: "Job Description Templates",
+    label: "Roles, Responsibilities & Authority",
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },
@@ -741,6 +758,13 @@ export const hrNavigation = [
     label: "Job Posts",
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
+  },
+  {
+    href: "/hr?panel=questionsPanel",
+    icon: MessageSquareText,
+    label: "HR Questions",
+    panelId: "questionsPanel",
+    requiredCapability: "masters.universal.job_templates.read",
   },
   {
     href: "/hr?panel=employeeDataPanel",

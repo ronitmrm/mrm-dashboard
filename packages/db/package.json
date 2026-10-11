@@ -26,6 +26,8 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./sipoc-domain": "./src/sipoc-domain.ts",
+    "./recruitment-role-profile": "./src/recruitment-role-profile.ts",
     "./interested-parties-domain": "./src/interested-parties-domain.ts",
     "./job-card-progress": "./src/job-card-progress.ts",
     "./rejection-domain": "./src/rejection-domain.ts",

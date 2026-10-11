@@ -113,6 +113,7 @@ export default async function HrRecruitmentPage({
       "candidatesPanel",
     ].includes(panelId) || (canEditTemplate && ["combinedRolesPanel", "employeeMasterPanel", "jobsPanel"].includes(panelId))
     const needsTemplates = [
+      "questionsPanel",
       "postMasterPanel",
       "approvedPostPanel",
       "combinedRolesPanel",

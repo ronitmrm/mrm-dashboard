@@ -256,3 +256,30 @@ send it out, record its return and certificate, and record the result. ISO does
 not create separate calibration or movement records. Plan access uses
 `store.stock.read`; opening the Store workspace and its actions retain their
 existing Store permissions.
+
+## SIPOC process maps
+
+SIPOC defines Suppliers, Inputs, Process, Outputs and Customers for one process.
+It is a high-level process map with explicit start/end boundaries, purpose,
+scope and accountable process owner. Inputs specify required quality or records;
+outputs specify acceptance criteria and the receiving customer or department.
+Process steps are ordered activities; supplier/input/output/customer lists are
+independent, not implied one-to-one spreadsheet rows. Controls, resources,
+risks, interfaces and performance measures make the map usable for review.
+
+Drafts may be incomplete. Preparation requires the SIPOC manage grant (process
+owners/department managers and QA). Submission requires an assigned active staff
+owner, department, boundaries, all five SIPOC elements, controls, performance
+measure and method/target/frequency, and a next review date. QA approves or
+returns the submitted map with recorded findings. This is the organization’s
+chosen approval flow, not a claim that ISO mandates SIPOC or QA approval.
+Approved revisions are immutable snapshots. Editing starts a new Draft while
+the previous approved revision remains the operative map. A revision cannot
+overwrite pending review. All saves, submissions, decisions and revisions retain
+actor, time, reason and before/after state. Review due dates flag follow-up; they
+do not silently expire an approved map.
+
+The supplied SIPOC workbook contributes ten Draft examples with exact source
+cells/date/file/sheet/row retained. Process ownership, boundaries, acceptance
+criteria, measures and approval are never inferred from these examples. Company
+staff must assess and complete them before submission.
