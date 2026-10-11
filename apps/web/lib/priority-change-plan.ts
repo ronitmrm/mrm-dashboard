@@ -21,6 +21,7 @@ export type PriorityPlanStep = {
   itemCode: string;
   setupNo: string;
   machine: string;
+  isRunning: boolean;
   startDate: string;
   endDate: string;
   blockers: PriorityPlanBlocker[];
@@ -52,7 +53,8 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
       const targetMachine = machineValue(targetRow, "machine");
       const targetMachineKey = machineKey(targetMachine);
       const targetDate = dateSortValue(plannedSetupDate(targetRow));
-      const blockers = plannedRows
+      const isRunning = shopFloorRowIsProductionCurrent(targetRow);
+      const blockers = isRunning ? [] : plannedRows
         .filter((row) => priorityPlanRowKey(row) !== priorityPlanRowKey(targetRow))
         .filter((row) => machineKey(machineValue(row, "machine")) === targetMachineKey)
         .filter((row) => priorityPlanBlocksTarget(row, targetDate))
@@ -64,7 +66,8 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
         itemCode: itemCode(targetRow),
         setupNo: displayValue(targetRow.setupNo),
         machine: targetMachine,
-        startDate: displayValue(plannedSetupDate(targetRow)),
+        isRunning,
+        startDate: displayValue(isRunning ? targetRow.actualProductionStartDate || targetRow.actualStartDate || plannedSetupDate(targetRow) : plannedSetupDate(targetRow)),
         endDate: displayValue(targetRow.plannedProductionEndDate || targetRow.endDate),
         blockers,
         holidays: asArray(productionControl.planningHolidayRows).map((row) => row.date ?? row.holidayDate),
@@ -109,17 +112,19 @@ export function priorityPlanStepWindows(
   queueAfterByStep: Record<string, string> = {},
 ) {
   const windows = new Map<string, PriorityPlanWindow>();
-  let minimumStartDate = "";
+  let previousEndDate = "";
   let blocked = false;
   for (const step of steps) {
     const adjustedStep = { ...step, toolingReservations: step.toolingReservations?.map((row) => ({
       ...row, ...(windows.get(row.key) ?? {}),
     })) };
-    const window: PriorityPlanWindow = blocked ? { startDate: "", endDate: "" }
-      : priorityPlanStepWindow(adjustedStep, selectedInterruptions, queueAfterByStep[step.key], minimumStartDate);
+    const window: PriorityPlanWindow = step.isRunning
+      ? { startDate: step.startDate, endDate: dateSortValue(step.endDate) >= dateSortValue(previousEndDate) ? step.endDate : previousEndDate }
+      : blocked ? { startDate: "", endDate: "" }
+      : priorityPlanStepWindow(adjustedStep, selectedInterruptions, queueAfterByStep[step.key], nextCalendarDateLabel(previousEndDate));
     windows.set(step.key, window);
-    blocked = !window.endDate;
-    minimumStartDate = nextCalendarDateLabel(window.endDate);
+    blocked ||= !window.endDate;
+    previousEndDate = window.endDate;
   }
   return windows;
 }

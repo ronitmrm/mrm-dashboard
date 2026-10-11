@@ -20,6 +20,22 @@ function row(overrides: Record<string, unknown>) {
 }
 
 describe("priorityChangePlan", () => {
+  it("keeps a running downstream setup in progress when its reopened upstream setup moves forward", () => {
+    const plan = priorityChangePlan({ machinePlanDetailRows: [
+      row({ jcNo: "P1413", partCode: "M1368B", setupNo: "1", machine: "HX-01", shopFloorStage: "planned", rawActualQty: 7336,
+        plannedProductionStartDate: "13-Oct-26", plannedProductionEndDate: "20-Oct-26" }),
+      row({ jcNo: "P1413", partCode: "M1368B", setupNo: "2", machine: "CNC-4", shopFloorStage: "operator_started", runningStatus: "Running", rawActualQty: 280,
+        actualProductionStartDate: "10-Oct-26", plannedProductionStartDate: "10-Oct-26", plannedProductionEndDate: "20-Oct-26" }),
+      row({ jcNo: "P2057", partCode: "R74", setupNo: "1", machine: "HX-01", shopFloorStage: "raw_material_at_machine",
+        plannedProductionStartDate: "11-Oct-26", plannedProductionEndDate: "12-Oct-26" }),
+    ] }, "M1368B", "P1413")
+    const windows = priorityPlanStepWindows(plan.steps, { [plan.steps[0]!.blockers[0]!.key]: true })
+    expect(windows.get(plan.steps[0]!.key)).toEqual({ startDate: "11-Oct-26", endDate: "18-Oct-26" })
+    expect(windows.get(plan.steps[1]!.key)).toEqual({ startDate: "10-Oct-26", endDate: "20-Oct-26" })
+    const delayed = priorityPlanStepWindows([{ ...plan.steps[0]!, endDate: "29-Oct-26" }, plan.steps[1]!], {})
+    expect(delayed.get(plan.steps[1]!.key)).toEqual({ startDate: "10-Oct-26", endDate: "29-Oct-26" })
+  })
+
   it("protects cross-machine tooling through the run and skips holidays", () => {
     const allocation = { F1: 1 };
     const target = row({ jcNo: "A", partCode: "P", setupNo: "1", machine: "M1",

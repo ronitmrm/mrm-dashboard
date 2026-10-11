@@ -7229,7 +7229,7 @@ function PrioritySetupPreviewSummary({
                 </div>
                 <div className="col-start-2 sm:col-start-auto">
                   <div className="text-xs text-muted-foreground">
-                    Probable dates
+                    {step.isRunning ? "Actual start / forecast finish" : "Probable dates"}
                   </div>
                   <div className="text-sm font-medium">
                     {previewState.datesVisible
@@ -7321,7 +7321,9 @@ function PriorityPlanStepReview({
         ? "Current queue position"
         : `After ${heldQueueBlockers.length} queued setup${heldQueueBlockers.length === 1 ? "" : "s"}`
     : "No queued setup ahead"
-  const planMode = [interruptMode, queueMode].filter(Boolean).join("; ")
+  const planMode = step.isRunning
+    ? `Continue running on ${step.machine}; actual start retained`
+    : [interruptMode, queueMode].filter(Boolean).join("; ")
 
   return (
     <div className="grid gap-4 rounded-lg border-2 border-primary/25 bg-background p-4">
@@ -7338,7 +7340,7 @@ function PriorityPlanStepReview({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Badge>Current setup</Badge>
+          <Badge>{step.isRunning ? "Already running" : "Current setup"}</Badge>
           <Badge variant={step.blockers.length ? "secondary" : "outline"}>
             {step.blockers.length
               ? `${step.blockers.length} queue impact${step.blockers.length === 1 ? "" : "s"}`
@@ -7348,7 +7350,7 @@ function PriorityPlanStepReview({
       </div>
 
       <PriorityScenarioCard
-        title="Probable setup plan"
+        title={step.isRunning ? "Current run forecast" : "Probable setup plan"}
         window={plannedWindow}
         detail={planMode || "No queue impact"}
       />
@@ -7443,7 +7445,9 @@ function PriorityPlanStepReview({
         <span className="text-sm text-muted-foreground">
           {!plannedWindow.startDate || !plannedWindow.endDate
             ? "No feasible dates. Check tooling allocation and refresh the plan."
-            : runningBlockerCount
+            : step.isRunning
+              ? "This setup continues running. Its session and actual start are retained."
+              : runningBlockerCount
               ? "Running work left unselected will continue running."
               : "No running setup blocks this target."}
         </span>
