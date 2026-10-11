@@ -2244,7 +2244,7 @@ function singleActiveShopFloorStatusRows(rows: Array<Record<string, unknown>>) {
 function shopFloorStatusBlocksMachine(row: Record<string, unknown>) {
   const stage = rowText(row, "stage", "shopFloorStage");
   const normalizedStage = normalizeSetupLifecycleStage(stage);
-  return Boolean(normalizedStage && normalizedStage !== "item_complete");
+  return Boolean(normalizedStage && normalizedStage !== "planned" && normalizedStage !== "item_complete");
 }
 
 function shopFloorStatusOwnerRank(row: Record<string, unknown>) {
@@ -3563,8 +3563,9 @@ function machinePlanDetails(
           : mergedProductionActual(productionActual, unavailableSplitPlan?.producedActualByMachine.get(machineKeyValue));
         productionActual = productionActual ? { ...productionActual, machine } : undefined;
         const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
-        const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started");
-        const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted);
+        const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started")
+          || shopFloorStatus?.hasRecordedStart === true;
+        const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted && taskWorkflowStage !== "planned");
         const effectiveStage = effectiveShopFloorStage(shopFloorStatus, productionActual);
         const effectiveStageLabel = setupLifecycleStageLabel(effectiveStage);
         const settingDone = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("setting");
@@ -3585,7 +3586,7 @@ function machinePlanDetails(
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = rmReplanRequired
           ? maxDateValue(plannedCompletionDate, setupCompletionDate)
-          : actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate, earlyReadyDate);
+          : (machineStarted ? actualStartDate : "") || maxDateValue(plannedCompletionDate, setupCompletionDate, earlyReadyDate);
         const plannedProductionEndDate = itemComplete && actualCompletionDate
           ? actualCompletionDate
           : plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
@@ -3622,7 +3623,7 @@ function machinePlanDetails(
               ? "Plan delayed"
               : itemComplete
               ? "Complete"
-              : productionActual?.rows || machineStarted
+              : machineStarted
                 ? "Running"
                 : settingDone
                   ? "Setup complete"
@@ -3735,7 +3736,7 @@ function machinePlanDetails(
             orderPcs: machineOrderPcs,
             totalOrderPcs: setupOrderPcs,
             cycle,
-            productionActual,
+            productionActual: !machineStarted && productionActual ? { ...productionActual, startDate: "" } : productionActual,
             previousSetupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo,
             assignmentLocked: Boolean(effectivePlanOverride || assignmentQueuePlacement || setupInterruption || appliedParallelOverrides.length || machineHasDelayUnavailableWindow(machine, machineUnavailableWindows)),
             machineUnavailableWindows: machineUnavailableWindowsFor(machineUnavailableWindows, machine),
@@ -4946,7 +4947,7 @@ function actualProductionStartDate(meta: ReturnType<typeof planningMeta>) {
 }
 
 function lockedProductionStartDate(row: Record<string, unknown>) {
-  if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
+  if (rowText(row, "runningStatus").toLowerCase() === "complete" || rowText(row, "shopFloorStage") === "planned") return "";
   const metaStart = actualProductionStartDate(planningMeta(row));
   if (metaStart) return metaStart;
   const rowActualStart = parseDate(rowText(row, "actualProductionStartDate", "actualStartDate"));
@@ -5088,6 +5089,7 @@ function findShopFloorStatus(
 }
 
 const setupLifecycleStages = [
+  "planned",
   "raw_material_at_machine",
   "presetting",
   "setting",
@@ -5102,8 +5104,11 @@ function effectiveShopFloorStage(
   shopFloorStatus: Record<string, unknown> | undefined,
   productionActual: { rows: number } | undefined,
 ): SetupLifecycleStage | "" {
+  const savedStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
+  // A released or previously started setup's current state outranks historical output.
+  if (savedStage === "planned" || shopFloorStatus?.hasRecordedStart === true) return savedStage;
   const candidates: Array<SetupLifecycleStage | ""> = [
-    normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : ""),
+    savedStage,
     productionActual?.rows ? "operator_started" : "",
   ];
   return candidates.sort((a, b) => setupLifecycleStageRank(b) - setupLifecycleStageRank(a))[0] ?? "";
@@ -5111,6 +5116,7 @@ function effectiveShopFloorStage(
 
 function normalizeSetupLifecycleStage(stage: string): SetupLifecycleStage | "" {
   const normalized = ({
+    planned: "planned",
     shop_floor_rm: "raw_material_at_machine",
     raw_material_at_machine: "raw_material_at_machine",
     tools_drawing: "presetting",
@@ -5132,6 +5138,7 @@ function setupLifecycleStageRank(stage: string) {
 
 function setupLifecycleStageLabel(stage: string) {
   return ({
+    planned: "Planned",
     raw_material_at_machine: "Raw material at the machine",
     presetting: "Pre setting done",
     setting: "Setting done",

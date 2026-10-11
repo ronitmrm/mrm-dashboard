@@ -766,7 +766,12 @@ async function buildDashboardReadModel(
   )
   const currentShopFloorStates = await client.query<CurrentShopFloorStateRow>(
     `SELECT floor.code AS production_floor_code,
-      state.source_payload || jsonb_build_object('stage', state.stage) ||
+      state.source_payload || jsonb_build_object('stage', state.stage,
+        'hasRecordedStart', EXISTS (
+          SELECT 1 FROM manufacturing.shop_floor_stage_events event
+          WHERE event.setup_state_id = state.id AND event.to_stage = 'operator_started'
+            AND event.reversed_at IS NULL
+        )) ||
         CASE WHEN state.completed_at IS NOT NULL
           THEN jsonb_build_object('completedAt', state.completed_at)
           ELSE '{}'::jsonb END AS payload

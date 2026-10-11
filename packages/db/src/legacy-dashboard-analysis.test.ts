@@ -2,6 +2,38 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("reopened setup retains output without a missing-start exception or machine ownership", () => {
+  const createdAt = "2026-10-08T17:53:50Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
+    productionEntries: [{ jobCard: "P1413", partCode: "M1368B", optionNumber: "1", setupNo: "1", machine: "HX-01", machineType: "CNC", operatorId: "OP", prodDate: "2026-10-08", outputQty: 7336, actualQty: 7336, rejectQty: 0, targetQty: 7336 }],
+    dataEntries: [
+      ...[{ jcNo: "P1413", partCode: "M1368B" }, { jcNo: "P2057", partCode: "R74" }].flatMap((job) => [
+        entry("work_order", { ...job, optionNumber: "1", orderPcs: 10000, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+        entry("route", { partNo: job.partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
+        entry("cycle", { partNo: job.partCode, optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+        entry("tooling", { partNo: job.partCode, optionNumber: "1", setupNo: "1" }),
+      ]),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
+    ],
+    currentShopFloorStatusRows: [
+      { jcNo: "P1413", partCode: "M1368B", optionNumber: "1", setupNo: "1", machine: "HX-01", stage: "planned", active: false, hasRecordedStart: true, actionType: "Reopen Setup", reopenedAt: createdAt },
+      { jcNo: "P2057", partCode: "R74", optionNumber: "1", setupNo: "1", machine: "HX-01", stage: "raw_material_at_machine", active: true, completedAt: "2026-10-08T12:43:32Z" },
+    ],
+  }
+  const control = buildLegacyDashboardSnapshot(input).productionControl
+  expect(control).toMatchObject({ workflowExceptionRows: [] })
+  expect(control.machinePlanDetailRows.find((row) => row.jcNo === "P1413")).toMatchObject({ rawActualQty: 7336, shopFloorStage: "planned", runningStatus: "Planned", shopFloorTaskReady: false })
+  expect(control.machinePlanDetailRows.find((row) => row.jcNo === "P2057")).toMatchObject({ machine: "HX-01", shopFloorStage: "raw_material_at_machine" })
+  const resumed = buildLegacyDashboardSnapshot({ ...input, currentShopFloorStatusRows: [{ ...input.currentShopFloorStatusRows[0]!, stage: "raw_material_at_machine", active: true }] }).productionControl
+  expect(resumed).toMatchObject({ workflowExceptionRows: [] })
+  expect(resumed.machinePlanDetailRows.find((row) => row.jcNo === "P1413")).toMatchObject({ shopFloorStage: "raw_material_at_machine", runningStatus: "Planned", rawActualQty: 7336 })
+  expect(buildLegacyDashboardSnapshot({ ...input, currentShopFloorStatusRows: input.currentShopFloorStatusRows.slice(1) }).productionControl).toMatchObject({ workflowExceptionRows: [
+    expect.objectContaining({ jcNo: "P1413", rawProductionWithoutWorkflow: true }),
+  ] })
+})
+
 test("saved route change uses the new route and remaining setup quantities", () => {
   const createdAt = "2026-10-03T11:21:35Z"
   const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
