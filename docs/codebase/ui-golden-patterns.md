@@ -15,6 +15,7 @@ This is the mandatory UI contract for `apps/web`. Start at the canonical primiti
 | Page identity         | `PageHeader`                                     | `apps/web/components/ui/golden-patterns.tsx`    |
 | Page actions          | `ActionToolbar`                                  | `apps/web/components/ui/golden-patterns.tsx`    |
 | Form grouping         | `FormSection`, `FormGrid`                        | `apps/web/components/ui/golden-patterns.tsx`    |
+| Labelled record facts | `RecordDetails`                                  | `apps/web/components/ui/golden-patterns.tsx`    |
 | Empty/loading/error   | `StandardState`                                  | `packages/ui/src/components/standard-state.tsx` |
 | Simple overlay        | `StandardDialogContent`, `StandardDrawerContent` | `apps/web/components/ui/golden-patterns.tsx`    |
 
@@ -149,6 +150,9 @@ adjacent error `StandardState` and keeps the selected file available for
 correction or retry. Next.js navigation errors must still be rethrown.
 
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
+
+Pass an explicit `value` to every `NativeSelectOption`; the searchable wrapper
+uses that prop to collect its selectable options.
 
 Planner queue reviews use explicit Keep running / Stop running setup decisions,
 a labelled queue-position selector and one compact `OperationalTable` per selected

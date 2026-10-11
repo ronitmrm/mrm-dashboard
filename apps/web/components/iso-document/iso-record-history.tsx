@@ -49,24 +49,27 @@ function retainedValue(value: unknown): string {
   return String(value)
 }
 
-export function ManagementReviewHistoryTable({
+export function IsoRecordHistoryTable({
   history,
+  filterStorageKey,
 }: {
   history: ManagementReviewHistory[]
+  filterStorageKey: string
 }) {
   return (
     <SectionCard>
       <CardHeader>
         <CardTitle>Complete history</CardTitle>
         <CardDescription>
-          Every change and decision, newest first. Before/after records retain
-          earlier minutes, assignments, work and approvals.
+          Every saved change and decision, newest first, with its before and
+          after records.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <OperationalTable
+          key={history[0]?.id}
           excelFilters
-          filterStorageKey="iso-management-review-history"
+          filterStorageKey={filterStorageKey}
           containerClassName="max-h-[55vh] rounded-xl border"
           state={history.length ? "ready" : "empty"}
           stateTitle="No history"
@@ -90,9 +93,7 @@ export function ManagementReviewHistoryTable({
                   })}
                 </TableCell>
                 <TableCell>
-                  {event.eventType
-                    .replace("management_review.", "")
-                    .replaceAll("_", " ")}
+                  {event.eventType.replace(/^[^.]+\./, "").replaceAll("_", " ")}
                 </TableCell>
                 <TableCell>{event.actorName}</TableCell>
                 <TableCell className="max-w-96 min-w-56 whitespace-pre-wrap">

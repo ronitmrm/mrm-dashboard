@@ -5,6 +5,36 @@ and the other operational software. MRM owns document creation, approval,
 release, revision history, master indexing and audit history. Another system may
 hold generated operational records, but it never becomes the document master.
 
+## Interested parties requirements and monitoring
+
+A requirement records a party/group, the specific expectation and its scope,
+source/basis and relevance to the QMS. QA records the relevance decision and
+reason, responsible department/staff, acceptance criteria, monitoring method,
+frequency/event trigger and planned review date. Optional climate considerations
+and related risk/action/document references connect it to organizational context.
+
+Requirements begin as Draft. Active requirements are relevant and have a complete
+monitoring plan. Inactive requirements retain a reason and all history. Meeting a
+requirement does not close or deactivate an ongoing obligation.
+
+Responsible staff records an actual monitoring date, observations, evidence and
+proposed result (Met, Partly met or Not met). Gaps require a follow-up plan and
+target date. QA verifies or returns the result with a reason. Verification records
+the next review date chosen by QA. Submitted results do not replace verified
+results. Each observation retains the plan as it stood when submitted; observations
+and QA decisions are retained without deletion.
+
+Plan changes require a reason and new monitoring against the revised plan.
+Resolve a submitted observation before changing the plan. A follow-up remains
+visible until a later QA-verified result confirms the requirement is met. Related
+CAR, PEST/SWOT or management-review actions retain their own closure lifecycles;
+recording a reference does not close another record.
+
+Workbook rows are imported as Draft examples with original dates, text, row
+references and status labels. Source Done is not a verified result. Similar rows
+from different dates remain separate until QA decides their scope. Missing owners,
+relevance decisions, evidence and planned dates are not inferred.
+
 ## Master Document List
 
 One row represents one controlled document or format, including every individual

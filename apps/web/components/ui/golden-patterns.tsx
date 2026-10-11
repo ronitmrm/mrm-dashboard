@@ -47,14 +47,12 @@ function MetricSummary({
     <section
       aria-label={scope}
       className={cn(
-        "sticky top-[var(--header-height,0px)] z-20 grid w-full min-w-0 shrink-0 self-start gap-2 bg-background py-2",
+        "sticky top-[var(--header-height,0px)] z-20 grid w-full min-w-0 shrink-0 gap-2 self-start bg-background py-2",
         className
       )}
       data-slot="metric-summary"
     >
-      <div
-        className="grid max-h-[40dvh] min-w-0 grid-flow-col auto-cols-[min(100%,16rem)] gap-3 overflow-auto sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-[repeat(auto-fill,min(100%,16rem))]"
-      >
+      <div className="grid max-h-[40dvh] min-w-0 auto-cols-[min(100%,16rem)] grid-flow-col gap-3 overflow-auto sm:auto-cols-auto sm:grid-flow-row sm:grid-cols-[repeat(auto-fill,min(100%,16rem))]">
         {items.map((item) => (
           <MetricCard
             {...item}
@@ -163,11 +161,28 @@ function FormSection({
   )
 }
 
+function RecordDetails({
+  items,
+}: {
+  items: readonly { label: string; value: ReactNode }[]
+}) {
+  return (
+    <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+      {items.map((item) => (
+        <div className="min-w-0" key={item.label}>
+          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dd className="break-words whitespace-pre-wrap">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 function FormGrid({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "grid w-full min-w-0 max-w-5xl gap-4 sm:grid-cols-2 xl:grid-cols-3 [&_[data-slot=field]]:gap-1.5",
+        "grid w-full max-w-5xl min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 [&_[data-slot=field]]:gap-1.5",
         className
       )}
       data-slot="form-grid"
@@ -226,6 +241,7 @@ export {
   FormSection,
   MetricSummary,
   PageHeader,
+  RecordDetails,
   StandardDialogContent,
   StandardDrawerContent,
   StandardState,

@@ -5,6 +5,7 @@ import { departmentStorePageAccess } from "./department-store-capabilities"
 import { isoCalibrationPlanPageAccess } from "./iso-calibration-plan-capabilities"
 import { isoAnalysisPageAccess } from "./iso-analysis-capabilities"
 import { managementReviewPageAccess } from "./management-review-capabilities"
+import { interestedPartiesPageAccess } from "./interested-parties-capabilities"
 import { commercialPageAccess } from "./commercial-capabilities"
 import { storePageAccess } from "./store-capabilities"
 import { hrPageAccess } from "./hr-capabilities"
@@ -22,6 +23,7 @@ export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   isoCalibrationPlanPageAccess,
   ...isoAnalysisPageAccess,
   managementReviewPageAccess,
+  interestedPartiesPageAccess,
   ...administrationPageAccess,
   ...commercialPageAccess,
   ...storePageAccess,

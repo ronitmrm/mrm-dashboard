@@ -289,4 +289,5 @@ export {
   type MonitoringConfirmation,
 } from "./branding"
 export { createOrderAcceptanceRepository } from "./order-acceptance"
+export { createInterestedPartiesRepository, type InterestedPartyRequirement, type InterestedPartyMonitoring, type InterestedPartiesAccess, type InterestedPartiesHistory } from "./interested-parties"
 export { createRejectionRepository } from "./rejections"

@@ -31,7 +31,7 @@ import {
   MeetingPointForm,
   CarryMeetingPointForm,
 } from "@/components/iso-document/management-review-forms"
-import { ManagementReviewHistoryTable } from "@/components/iso-document/management-review-history"
+import { IsoRecordHistoryTable } from "@/components/iso-document/iso-record-history"
 import { withManagementReview } from "@/lib/iso-document/management-review-server"
 
 export default async function ManagementReviewMeetingPage({
@@ -334,7 +334,10 @@ export default async function ManagementReviewMeetingPage({
           canManage={access.canManage}
           canApprove={access.canApprove}
         />
-        <ManagementReviewHistoryTable history={history} />
+        <IsoRecordHistoryTable
+          history={history}
+          filterStorageKey="iso-management-review-history"
+        />
         {entry.source ? (
           <SectionCard width="wide">
             <CardHeader>
