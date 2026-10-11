@@ -4245,7 +4245,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               session.job_card_number_snapshot, session.part_code_snapshot,
               session.option_number_snapshot, session.setup_number_snapshot,
               session.operator_code_snapshot, session.operator_name_snapshot,
-              CASE WHEN correction.source_table = 'production_session_efficiency_flag'
+              CASE WHEN correction.source_table = 'production_session_reversal' THEN 'session_deleted'
+                WHEN correction.source_table = 'production_session_efficiency_flag'
                 THEN 'efficiency_flag_closed' ELSE 'session_correction' END,
               correction.occurred_at,
               correction.occurred_at, NULL::timestamptz, NULL::integer,
@@ -4263,8 +4264,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             WHERE correction.target_schema = 'manufacturing'
               AND correction.target_table = 'production_sessions'
               AND correction.event_type LIKE 'production.session.%'
-              AND correction.source_table IN ('production_session_correction', 'production_session_efficiency_flag')
-              AND session.reversed_at IS NULL
+              AND correction.source_table IN ('production_session_correction', 'production_session_efficiency_flag', 'production_session_reversal')
+              AND (session.reversed_at IS NULL OR correction.source_table = 'production_session_reversal')
 
             UNION ALL
 
@@ -5230,6 +5231,109 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { id: completion.rows[0]!.id, ok: true }
+      })
+    },
+
+    async readProductionSessionForDeletion(input: {
+      organizationId: string
+      productionFloorCode: string
+      sessionReference: string
+    }) {
+      const result = await pool.query<{
+        id: string; rowVersion: string; sessionReference: string; status: string
+        jobCardNumber: string; partCode: string; machineNumber: string; setupNumber: string
+        startedAt: Date; endedAt: Date | null; endReason: string | null
+        totalPieces: string; goodPieces: string; rejectedPieces: string
+        reversedAt: Date | null; reversalReason: string | null
+        requiresSetupReopen: boolean
+      }>(`SELECT session.id, session.row_version::text AS "rowVersion",
+          session.session_reference AS "sessionReference", session.status,
+          session.job_card_number_snapshot AS "jobCardNumber", session.part_code_snapshot AS "partCode",
+          session.machine_number_snapshot AS "machineNumber", session.setup_number_snapshot AS "setupNumber",
+          session.started_at AS "startedAt", session.ended_at AS "endedAt", session.end_reason AS "endReason",
+          session.total_pieces::text AS "totalPieces", session.quantity_good::text AS "goodPieces",
+          session.quantity_rejected::text AS "rejectedPieces",
+          session.reversed_at AS "reversedAt", session.reversal_reason AS "reversalReason",
+          EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state state
+            WHERE state.organization_id = session.organization_id AND state.stage = 'item_complete'
+              AND state.source_payload->>'sessionId' = session.id::text) AS "requiresSetupReopen"
+        FROM manufacturing.production_sessions session
+        JOIN catalog.machines machine ON machine.id = session.machine_id
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        WHERE session.organization_id = $1 AND floor.code = $2 AND session.session_reference = $3`,
+        [input.organizationId, normalizeProductionFloorCode(input.productionFloorCode),
+          requiredText(input.sessionReference, "Session reference").toUpperCase()])
+      return { rows: result.rows }
+    },
+
+    async reverseProductionSession(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: string
+      sessionId: string
+      expectedRowVersion: number
+      reason: string
+    }) {
+      const reason = requiredText(input.reason, "Deletion reason")
+      return transaction(pool, async client => {
+        await lockProductionSessionMachine(client, input)
+        const session = await client.query<{
+          id: string; production_entry_id: string | null; row_version: string
+          status: string; end_reason: string | null; completes_setup: boolean
+        }>(`SELECT session.id, session.production_entry_id, session.row_version,
+            session.status, session.end_reason,
+            EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state state
+              WHERE state.organization_id = session.organization_id AND state.stage = 'item_complete'
+                AND state.source_payload->>'sessionId' = session.id::text) AS completes_setup
+          FROM manufacturing.production_sessions session
+          JOIN catalog.machines machine ON machine.id = session.machine_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          WHERE session.id = $1 AND session.organization_id = $2 AND floor.code = $3
+            AND session.reversed_at IS NULL FOR UPDATE OF session`,
+          [input.sessionId, input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
+        const current = session.rows[0]
+        if (!current || Number(current.row_version) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Session changed or was already deleted. Review the session again.")
+        }
+        if (current.status !== "closed") throw new ShopFloorConflictError("Close the production session before deleting it.")
+        if (current.end_reason === "item_complete" || current.completes_setup) {
+          throw new ShopFloorConflictError("Use Reopen Setup to correct Item Complete before deleting this session.")
+        }
+        const dependencies = await client.query(`SELECT 1 FROM manufacturing.production_session_downtime_events
+          WHERE production_session_id = $1 AND reversed_at IS NULL
+            AND (source_payload ? 'accident' OR NULLIF(source_payload->>'maintenanceTaskKey', '') IS NOT NULL)
+          LIMIT 1`, [input.sessionId])
+        if (dependencies.rows.length) {
+          throw new ShopFloorConflictError("Review accident or Maintenance records before deleting this session.")
+        }
+        const reversalId = randomUUID()
+        // Reverse only this session's records. Setup ownership and recorded workflow are separate.
+        const records = [
+          { table: "production_sessions", filter: "id", id: input.sessionId, extra: ", updated_at = now(), row_version = row_version + 1", event: "production.session.reversed" },
+          { table: "production_entries", filter: "id", id: current.production_entry_id, extra: "", event: "production.entry.reversed" },
+          { table: "production_session_downtime_events", filter: "production_session_id", id: input.sessionId, extra: ", updated_at = now()", event: "production.session.downtime_reversed" },
+          { table: "production_session_rejection_events", filter: "production_session_id", id: input.sessionId, extra: "", event: "production.session.rejection_reversed" },
+        ] as const
+        for (const record of records) {
+          if (!record.id) continue
+          await client.query(`WITH before AS (
+              SELECT id, to_jsonb(row) AS snapshot FROM manufacturing.${record.table} row
+              WHERE ${record.filter} = $1 AND organization_id = $2 AND reversed_at IS NULL FOR UPDATE
+            ), updated AS (
+              UPDATE manufacturing.${record.table} row
+              SET reversed_at = now(), reversal_reason = $3${record.extra}
+              FROM before WHERE row.id = before.id RETURNING row.id, to_jsonb(row) AS snapshot
+            ) INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+              target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
+            SELECT $2, $4, 'manufacturing', $5, updated.id, $6, $3, before.snapshot, updated.snapshot,
+              jsonb_build_object('sessionId', $7::text, 'enteredRole', 'planner'),
+              'mrm-dashboard', 'production_session_reversal', concat($8::text, ':', updated.id)
+            FROM updated JOIN before ON before.id = updated.id`,
+            [record.id, input.organizationId, reason, record.event, record.table,
+              input.actorUserId ?? null, input.sessionId, reversalId])
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: input.sessionId, ok: true }
       })
     },
 

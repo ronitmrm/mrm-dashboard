@@ -1249,6 +1249,47 @@ describe("production and shop-floor workflows", () => {
     await expect(repository.reopenSetup(reopen)).rejects.toThrow("Setup changed")
   })
 
+  test("deletes a mistaken closed session and its output without releasing its setup", async () => {
+    const jobCardNumber = `FLOOR-JC-${suffix}-DELETE`
+    const machineNumber = `FLOOR-MC-${suffix}-DELETE`
+    await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+    await planning.upsertMachine({ machineNumber, organizationId })
+    await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
+      payload: { doneBy: "Machinist", partCode: itemUid }, stage: "operator_started" })
+    const session = await repository.startProductionSession({ cycleTimeSeconds: 60, jobCardNumber, machineNumber,
+      measurementMethod: "weight", operationSetupCode: "1", operatorCode: firstOperator, organizationId,
+      pieceWeightGrams: 15.4, startCount: 0, productionDate: "2026-08-15", shift: "Day", startedAt: "2026-08-15T08:30:00+05:30" })
+    await repository.startProductionSessionDowntime({ sessionId: session.id, organizationId,
+      startedAt: "2026-08-15T08:35:00+05:30",
+      enteredRole: "shop_floor", reasonCode: "VIBRATION", reasonName: "Vibration" })
+    await repository.endProductionSessionDowntime({ sessionId: session.id, organizationId,
+      endedAt: "2026-08-15T08:36:00+05:30", endOutcome: "resolved" })
+    await repository.recordProductionSessionRejection({ sessionId: session.id, organizationId, quantity: 1,
+      enteredRole: "quality", typeCode: "PROC", typeName: "Process", reasonCode: "BURR", reasonName: "Burr",
+      remarkCode: "REJ", remarkName: "Reject" })
+    await repository.closeProductionSession({ sessionId: session.id, organizationId, grossWeightKg: 0.154, crateCount: 0, crateWeightKg: 0,
+      endedAt: "2026-08-15T08:40:00+05:30", endReason: "manual_stop" })
+    const row = (await repository.readProductionSessions({ organizationId, sessionId: session.id })).rows[0]!
+    const stateQuery = `SELECT to_jsonb(state) AS state FROM manufacturing.shop_floor_setup_state state
+      WHERE state.machine_id = (SELECT machine_id FROM manufacturing.production_sessions WHERE id = $1)`
+    const before = (await pool.query(stateQuery, [session.id])).rows
+    const input = { organizationId, productionFloorCode: "conventional", sessionId: session.id,
+      expectedRowVersion: Number(row.rowVersion), reason: "Session entered by mistake." }
+    await expect(repository.reverseProductionSession({ ...input, expectedRowVersion: 0 })).rejects.toThrow("Session changed")
+    await repository.reverseProductionSession(input)
+    expect((await repository.readProductionSessions({ organizationId, sessionId: session.id })).rows).toEqual([])
+    expect((await readCanonicalDashboardSource(pool, organizationId)).productionEntries.some(entry => entry.sessionId === session.id)).toBe(false)
+    expect((await pool.query(stateQuery, [session.id])).rows).toEqual(before)
+    expect((await repository.readProductionSessionForDeletion({ organizationId, productionFloorCode: "conventional",
+      sessionReference: String(row.sessionReference) })).rows[0]).toMatchObject({ reversalReason: input.reason, goodPieces: "9" })
+    expect((await repository.readProductionSessionEvents({ organizationId, sessionId: session.id })).rows)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "session_deleted", reasonName: input.reason })]))
+    expect((await pool.query(`SELECT count(*)::int AS count FROM audit.events
+      WHERE source_table = 'production_session_reversal' AND metadata->>'sessionId' = $1`, [session.id])).rows[0]).toEqual({ count: 4 })
+    await expect(repository.reverseProductionSession(input)).rejects.toThrow("already deleted")
+  })
+
   test("reverses mistaken downtime while moving a closed session end earlier", async () => {
     const jobCardNumber = `FLOOR-JC-${suffix}-CORRECTION`
     const machineNumber = `FLOOR-MC-${suffix}-CORRECTION`
