@@ -142,6 +142,23 @@ An open session changes its displayed operational status to Closing Required as 
 
 ## Closed-session corrections
 
+A Planner may use **Delete Production Session** for a session entered by mistake.
+The Planner reviews its Session Reference and recorded output and supplies a
+reason. Deletion reverses the closed session, its production entry and ordinary
+downtime/rejection entries together. Their quantities leave production totals,
+WIP, efficiency flags and the Session Register; the records and before/after
+audit remain available. The Production Event Log records the deletion.
+Machine ownership and setup stages remain unchanged. Deletion is not a machine
+release or a setup completion.
+
+Open sessions must first close normally. A mistaken Item Complete must first use
+**Reopen Setup**. Later sessions keep their saved counters and historical
+references; deleting a session never rewrites their output. Downtime linked
+to an accident or Maintenance must have those dependencies reviewed separately;
+session deletion must not reverse stock losses or Maintenance work implicitly.
+The saved session version is checked again when applying the deletion. Existing
+Planner override permission for that Production Unit authorizes this action.
+
 A Planner may use **Reopen Setup** to correct a setup marked Item Complete in
 error. A reason is required. The action reverses the current completion evidence,
 clears the setup completion date, and returns that setup to **Planned**, inactive.
