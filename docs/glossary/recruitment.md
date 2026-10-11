@@ -235,8 +235,12 @@ not a resignation or departure; the employee's other posts remain occupied.
 Role Changed is available only when the employee holds another occupied post.
 
 For each joined assignment, HR sees a reminder as probation end approaches.
-The date comes from the Offer Letter probation period when available, or HR
-enters it when missing. The reminder is due on the probation end date and
+Employee Master shows the probation end date saved for that employee's joined
+assignment. The date comes from the accepted Offer Letter probation period when
+available. For a direct join without a Candidate Application, a missing date
+defaults to one calendar month after joining (clamped to the next month's last
+day when needed). An explicitly recorded date takes precedence. HR can correct
+the saved date. The reminder is due on the probation end date and
 completed when the Appointment Letter is issued and its PDF retained.
 For employees carried over from the former system, HR may record that
 probation was already completed there. That explicit migration record also

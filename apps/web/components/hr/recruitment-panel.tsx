@@ -660,6 +660,7 @@ function EmployeePanel({
   canManageEmployees,
   masterControls,
   combinedRoles,
+  employeeAssignments,
   employmentLetters,
   jobs,
   masterView,
@@ -671,6 +672,7 @@ function EmployeePanel({
   | "canManageEmployees"
   | "masterControls"
   | "combinedRoles"
+  | "employeeAssignments"
   | "employmentLetters"
   | "jobs"
   | "masterView"
@@ -729,6 +731,7 @@ function EmployeePanel({
           employeeView
           canCreateJob={canCreateJob}
           combinedRoles={combinedRoles}
+          employeeAssignments={employeeAssignments}
           employeeManagement={canManageEmployees}
           employmentLetters={employmentLetters}
           jobs={jobs}
@@ -1104,6 +1107,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
           canManageEmployees={props.canManageEmployees}
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
+          employeeAssignments={props.employeeAssignments}
           employmentLetters={props.employmentLetters}
           jobs={props.jobs}
           masterView={props.masterView}

@@ -1,6 +1,15 @@
 import { expect, it } from "vitest"
 import type { RecruitmentPostRow } from "@workspace/db"
-import { employeeHandoverRows } from "./employee-handover-rows"
+import { employeeAssignmentForPost, employeeHandoverRows } from "./employee-handover-rows"
+
+it("matches Employee Data and probation to the displayed joined term", () => {
+  const post = { postCode: "HR-AS-1", employeeCode: "65", joiningDate: "2026-09-01", lastWorkingDate: null, status: "Occupied" }
+  const earlier = { id: "earlier-term", postCode: post.postCode, employeeCode: "65", joinedOn: "2022-09-01", endedOn: "2024-01-01" }
+  const current = { ...earlier, id: "current-term", joinedOn: post.joiningDate, endedOn: null, probationDueOn: "2026-10-01" }
+  expect(employeeAssignmentForPost(post, [earlier, current])).toBe(current)
+  expect(employeeAssignmentForPost({ ...post, joiningDate: null }, [earlier, current])).toBe(current)
+  expect(employeeAssignmentForPost({ ...post, status: "Appointed" }, [current])).toBeUndefined()
+})
 
 it("shows both employee identities during handover and removes only the outgoing row after notice", () => {
   const post: RecruitmentPostRow = {
