@@ -227,6 +227,8 @@ const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
   "iso.documents.approve": "Approve / Reject Documents",
   "iso.documents.release": "Final Release",
   "iso.documents.monitor": "Confirm Reviews / Records",
+  "iso.analysis.manage": "Manage PEST / SWOT Items",
+  "iso.analysis.verify": "QA Verify / Close Analyses",
   "store.asset_lifecycle.write": "Update Status",
   "store.asset_maintenance.write":
     "Add Timetable / Complete & Calculate Next Due",

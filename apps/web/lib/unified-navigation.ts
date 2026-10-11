@@ -109,6 +109,8 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
+  { href: "/iso-document/analysis/pest", icon: ClipboardList, label: "PEST Analysis" },
+  { href: "/iso-document/analysis/swot", icon: ClipboardList, label: "SWOT Analysis" },
   {
     href: "/iso-document/documents",
     icon: BookOpenCheck,

@@ -255,7 +255,7 @@ export function UnifiedSidebarNavigation({
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
     isoDocumentNavigation.filter((item) =>
-      item.href === "/iso-document/documents"
+      item.href === "/iso-document/documents" || item.href.startsWith("/iso-document/analysis/")
         ? true
         : item.href === "/iso-document/rejections"
           ? navigationAccess.qualityControlHrefs?.includes(item.href)
