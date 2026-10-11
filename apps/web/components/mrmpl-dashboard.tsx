@@ -282,7 +282,7 @@ import {
 } from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
-import { RouteChangeTargetPicker, type RouteChangeTargetMode } from "@/components/route-change-target-picker"
+import { RouteChangeTargetPicker } from "@/components/route-change-target-picker"
 import {
   PlannerDecisionWorkspace,
   type PlannerDecisionAction,
@@ -7322,7 +7322,6 @@ function RouteChangePlannerForm({
   const workOrders = asArray(productionControl.workOrders)
   const routeRows = asArray(productionControl.routeMasterRows)
   const [target, setTarget] = useState("")
-  const [targetMode, setTargetMode] = useState<RouteChangeTargetMode>("jobCard")
   const [lookupPartCode, setLookupPartCode] = useState("")
   const [newOption, setNewOption] = useState("")
   const [reason, setReason] = useState("")
@@ -7333,9 +7332,13 @@ function RouteChangePlannerForm({
   const selectedWorkOrder = useMemo(() => {
     const targetKey = target.trim().toLowerCase()
     return targetKey
-      ? workOrders.find((row) => str(row.jcNo).toLowerCase() === targetKey)
+      ? workOrders.find(
+          (row) =>
+            str(row.jcNo).toLowerCase() === targetKey &&
+            str(row.partCode).toLowerCase() === lookupPartCode.toLowerCase()
+        )
       : undefined
-  }, [target, workOrders])
+  }, [lookupPartCode, target, workOrders])
   const partCode = str(selectedWorkOrder?.partCode)
   const defaultOrderQty = str(selectedWorkOrder?.orderPcs)
   const optionRows = useMemo(
@@ -7426,75 +7429,68 @@ function RouteChangePlannerForm({
   }
 
   return (
-    <form
-      className="grid gap-3 rounded-xl border bg-background p-3"
-      onSubmit={submit}
-    >
-      <div>
-        <div className="text-sm font-medium">Route Change Details</div>
-        <div className="text-xs text-muted-foreground">
-          Planner Selects The New Route Option And Enters Remaining Setup
-          Quantities.
-        </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-3">
-        <RouteChangeTargetPicker
-          mode={targetMode}
-          target={target}
-          partCode={lookupPartCode}
-          workOrders={workOrders}
-          onModeChange={(mode) => {
-            setTargetMode(mode)
-            setLookupPartCode("")
-            changeTarget("")
-          }}
-          onPartCodeChange={(code) => {
-            setLookupPartCode(code)
-            changeTarget("")
-          }}
-          onTargetChange={changeTarget}
-        />
-        <Field label="New Route Option">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={selectedOption}
-            required
-            onChange={(event) => setNewOption(event.target.value)}
-          >
-            {optionNumbers.length ? (
-              optionNumbers.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))
-            ) : (
-              <option value="">Select Job Card First</option>
-            )}
-          </SearchableSelect>
-        </Field>
-        <Field label="Reason">
-          <Input
-            value={reason}
-            placeholder="Why Route Is Changing"
-            required
-            onChange={(event) => setReason(event.target.value)}
+    <form className="grid gap-5" onSubmit={submit}>
+      <PlannerActionDetails reviewing={false} title="Route change details">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <RouteChangeTargetPicker
+            target={target}
+            partCode={lookupPartCode}
+            workOrders={workOrders}
+            onPartCodeChange={(code) => {
+              setLookupPartCode(code)
+              changeTarget("")
+            }}
+            onTargetChange={changeTarget}
           />
-        </Field>
-      </div>
-      <div className="min-w-0 rounded-md border">
-        <OperationalTable>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Setup</TableHead>
-              <TableHead>Machine</TableHead>
-              <TableHead>Plan</TableHead>
-              <TableHead>Qty To Plan</TableHead>
-              <TableHead>Remark</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {selectedSetups.length ? (
-              selectedSetups.map((setup) => {
+          <Field label="New Route Option">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedOption}
+              disabled={!selectedWorkOrder || !optionNumbers.length}
+              required
+              onChange={(event) => setNewOption(event.target.value)}
+            >
+              {optionNumbers.length ? (
+                optionNumbers.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))
+              ) : (
+                <option value="">
+                  {selectedWorkOrder
+                    ? "No route options"
+                    : "Select Job Card First"}
+                </option>
+              )}
+            </SearchableSelect>
+          </Field>
+          <Field label="Reason">
+            <Input
+              value={reason}
+              placeholder="Why Route Is Changing"
+              required
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+        </div>
+        {selectedSetups.length ? (
+          <OperationalTable
+            excelFilters={false}
+            aria-label="Remaining setups"
+            containerClassName="max-h-80 rounded-md border"
+          >
+            <TableHeader>
+              <TableRow>
+                <TableHead>Setup</TableHead>
+                <TableHead>Machine</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>Qty To Plan</TableHead>
+                <TableHead>Remark</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {selectedSetups.map((setup) => {
                 const setupNo = str(setup.displaySetupNo || setup.setupNo)
                 const state = selectedSetupPlan[setupNo] ?? {
                   plan: true,
@@ -7533,6 +7529,7 @@ function RouteChangePlannerForm({
                         min="0"
                         step="1"
                         value={state.quantity}
+                        aria-label={`Quantity to plan for setup ${setupNo}`}
                         disabled={!state.plan}
                         onChange={(event) =>
                           updateSetup(setupNo, { quantity: event.target.value })
@@ -7542,6 +7539,7 @@ function RouteChangePlannerForm({
                     <TableCell>
                       <Input
                         value={state.remark}
+                        aria-label={`Remark for setup ${setupNo}`}
                         placeholder="Optional"
                         onChange={(event) =>
                           updateSetup(setupNo, { remark: event.target.value })
@@ -7550,28 +7548,26 @@ function RouteChangePlannerForm({
                     </TableCell>
                   </TableRow>
                 )
-              })
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-6 text-center text-sm text-muted-foreground"
-                >
-                  Select A Job Card And Route Option To Load Setups.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </OperationalTable>
-      </div>
-      <Button
-        className="w-fit"
-        type="submit"
-        disabled={!selectedWorkOrder || !selectedOption || !selectedSetups.length}
-      >
-        <Route className="size-4" />
-        Save Route Change Plan
-      </Button>
+              })}
+            </TableBody>
+          </OperationalTable>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <span className="text-sm text-muted-foreground">
+            Review the remaining setup quantities before saving.
+          </span>
+          <Button
+            className="w-fit"
+            type="submit"
+            disabled={
+              !selectedWorkOrder || !selectedOption || !selectedSetups.length
+            }
+          >
+            <Route className="size-4" />
+            Save Route Change Plan
+          </Button>
+        </div>
+      </PlannerActionDetails>
     </form>
   )
 }
