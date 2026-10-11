@@ -46,6 +46,7 @@ export default async function HrRecruitmentPage({
     kind?: string
     masterView?: string
     panel?: string
+    probationAppointment?: string
     returnJob?: string
     success?: string
     template?: string
@@ -125,7 +126,7 @@ export default async function HrRecruitmentPage({
       "employeeMasterPanel",
       "interviewsPanel",
       "jobsPanel",
-    ].includes(panelId)
+    ].includes(panelId) || (panelId === "probationRemindersPanel" && canManageEmployees)
     const needsCombinedRoles = [
       "postMasterPanel",
       "approvedPostPanel",
@@ -336,6 +337,7 @@ export default async function HrRecruitmentPage({
         posts={posts}
         returnJobId={feedback.returnJob}
         selectedAppointmentApplicationId={feedback.appointment}
+        selectedProbationAppointmentAssignmentId={feedback.probationAppointment}
         selectedJobId={feedback.job}
         selectedTemplateCode={feedback.template}
         templates={templates}

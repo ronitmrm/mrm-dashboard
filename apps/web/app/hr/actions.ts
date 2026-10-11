@@ -812,7 +812,10 @@ export async function updateEmployeeProbationAction(formData: FormData) {
       probationDueOn: value(formData, "probation_due_on") || null,
       remark: value(formData, "remark") || null,
     }),
-    "Probation update saved."
+    "Probation update saved.",
+    value(formData, "next_step") === "appointment"
+      ? { probationAppointment: value(formData, "assignment_id") }
+      : undefined
   )
 }
 
