@@ -8,6 +8,7 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 
 import { DepartmentStoreForms, type DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
+import { TableExcelDownloadButton } from "@/components/table-excel-download-button"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { formatIstDateTime } from "@/lib/date-time"
 
@@ -53,6 +54,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
     : selectMode === "calibration" ? "/department-store/calibration" : basePath
   return <div className="flex min-w-0 flex-col gap-6">
     <PageHeader
+      actions={view === "stock" ? <TableExcelDownloadButton
+        fileName={`${store.code.toLowerCase()}-store-stock-${today}.xlsx`}
+        tableId="department-store-stock" /> : undefined}
       description={view === "stock"
         ? store.kind === "PRODUCTION"
           ? `Stock accountable to ${store.name}, plus Unit IDs held by its departments. Company on-hand includes all Stores.`
@@ -128,11 +132,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable
+            id="department-store-stock"
             filterStorageKey={`department-store-stock-${store.code}`}
             filteredSelection={selectMode ? { checkboxName: selectingAssets ? "asset_code" : "item_type_id" } : undefined}
           >
             <TableHeader><TableRow>
-              {selectMode ? <TableHead>Select</TableHead> : null}
+              {selectMode ? <TableHead data-export-ignore="true">Select</TableHead> : null}
               <TableHead>Asset Code</TableHead><TableHead>Unit ID</TableHead>
               <TableHead>Asset Category</TableHead><TableHead>Asset Subcategory</TableHead>
               <TableHead>Asset Name</TableHead><TableHead>Make/Model</TableHead>
