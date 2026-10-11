@@ -232,6 +232,9 @@ const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
   "iso.management_review.manage": "Prepare Meetings / Assign Actions",
   "iso.management_review.approve": "QA Approve / Return Minutes",
   "iso.management_review.verify": "QA Verify / Close Meeting Actions",
+  "iso.interested_parties.manage": "QA Prepare Requirements / Monitoring Plans",
+  "iso.interested_parties.read_all": "View All Requirements / Monitoring",
+  "iso.interested_parties.verify": "QA Verify / Return Monitoring",
   "store.asset_lifecycle.write": "Update Status",
   "store.asset_maintenance.write":
     "Add Timetable / Complete & Calculate Next Due",
