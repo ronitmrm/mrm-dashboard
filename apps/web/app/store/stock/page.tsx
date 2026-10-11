@@ -26,7 +26,8 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
+import { TableExcelDownloadButton } from "@/components/table-excel-download-button"
 import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
 import { StoreStockLossForm } from "@/components/store/store-stock-loss-form"
 import {
@@ -141,9 +142,11 @@ export default async function StoreStockPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
-      </div>
+      <PageHeader
+        title="Stock"
+        actions={<TableExcelDownloadButton
+          fileName={`main-store-stock-${today}.xlsx`} tableId="main-store-stock" />}
+      />
 
       {firstValue(params.saved) === "1" ? (
         <SectionCard role="status">
@@ -296,6 +299,7 @@ export default async function StoreStockPage({
           ) : null}
 
           <OperationalTable
+            id="main-store-stock"
             filterStorageKey="store-stock-register-unit-ids"
             filteredSelection={
               mode === "view" || mode === "adjust"
@@ -312,7 +316,7 @@ export default async function StoreStockPage({
           >
             <TableHeader>
               <TableRow>
-                {mode !== "view" && mode !== "adjust" ? <TableHead>Select</TableHead> : null}
+                {mode !== "view" && mode !== "adjust" ? <TableHead data-export-ignore="true">Select</TableHead> : null}
                 <TableHead data-filterable="true">
                   Asset Code / Unit ID
                 </TableHead>
@@ -330,7 +334,7 @@ export default async function StoreStockPage({
                 <TableHead>Supplier</TableHead>
                 <TableHead>Quote / Purchase Price</TableHead>
                 {mode === "order" ? (
-                  <TableHead>Order Quantity</TableHead>
+                  <TableHead data-export-ignore="true">Order Quantity</TableHead>
                 ) : null}
               </TableRow>
             </TableHeader>
@@ -398,6 +402,7 @@ export default async function StoreStockPage({
                     <TableCell
                       className="font-medium"
                       data-filter-value={`${item.typeCode} ${item.displayedCode}`}
+                      data-export-value={item.displayedCode}
                     >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
@@ -465,7 +470,11 @@ export default async function StoreStockPage({
                       {item.physicalUnit?.accountableStoreName ?? "—"}
                     </TableCell>
                     <TableCell>{item.locationHolder}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      data-export-value={item.physicalUnit
+                        ? (item.physicalUnit.supplierName ?? "Not recorded")
+                        : (item.currentSupplierName ?? "No current quote")}
+                    >
                       {mode === "order" &&
                       item.actionItem &&
                       supplierOptions.length ? (
@@ -497,7 +506,7 @@ export default async function StoreStockPage({
                           : "Current quote"}
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-export-value={displayedPrice ? `₹ ${displayedPrice}` : "—"}>
                       {displayedPrice ? `₹ ${displayedPrice}` : "—"}
                       <span className="block text-xs text-muted-foreground">
                         {item.physicalUnit ? "Purchase price" : "Master quote"}
