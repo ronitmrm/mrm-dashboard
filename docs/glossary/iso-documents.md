@@ -143,6 +143,46 @@ Access uses `store.stock.read`; opening a workspace additionally requires
 `store.asset_history.read`. Existing Store action permissions remain enforced.
 The Universal Measuring Instrument Master for inspection dropdowns is unchanged.
 
+## Management Review Meetings
+
+A management review records the period reviewed, time/place, chair, participants
+and attendance, review inputs, discussion, evidence and decisions. Its reusable
+agenda covers previous actions; context and interested parties; customer
+feedback; objectives; process and product performance; nonconformities;
+monitoring and measurement; audits; suppliers; resources and competence;
+risk/opportunity action effectiveness; improvement; and policy/strategy.
+Legal or other business topics may be recorded under additional topics.
+Each input records a review outcome and reasoned discussion/decision, including
+why it is not applicable. Missing evidence and deferred matters remain explicit.
+
+Outputs record conclusions on QMS suitability, adequacy and effectiveness,
+improvement decisions, QMS changes and resource decisions. No-change decisions
+need an explanation. Planned next review dates are chosen, never inferred from
+an example's meeting frequency. Top management participation is recorded through
+the identified chair and actual attendance; QA approval does not replace it.
+
+Minutes progress from Draft to For Approval to Approved. Submission requires
+the review period, recorded chair participation, all input outcomes and outputs.
+Follow-up inputs need a linked action. QA approves or returns the minutes with
+remarks; approved minutes are locked. QA may reopen them with a reason, retaining
+the prior approved snapshot in audit history. Approval does not close actions.
+
+An action has one original meeting and one stable reference across subsequent
+meetings. The shared pending list includes every action not Closed, including
+Completed awaiting QA. Reviewing an existing point links the same action to the
+new meeting and retains the then-current action snapshot and discussion. It does
+not clone the point, change its original meeting or erase previous discussions.
+Actions record department/person, priority, deadline and expected result.
+Assigned staff record progress and completion; QA closes after checking evidence
+and effectiveness, or returns/reopens with a reason. Changes and decisions retain
+actor, timestamp, remarks, version and before/after values. No deletion is offered.
+
+Imported meeting examples remain Draft, with source names, notes and status claims
+preserved. Names are not silently mapped to staff accounts; attendance, approval
+and completion are not invented. Continuing monitoring decisions need not become
+artificially closed actions. Existing CAR, PEST/SWOT and other operational records
+remain in their own registers and may be referenced as review evidence.
+
 ## Maintenance Register
 
 One row is one completed machine or physical Unit ID maintenance job, including
