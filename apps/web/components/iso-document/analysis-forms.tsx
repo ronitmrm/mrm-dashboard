@@ -3,8 +3,9 @@
 import type { AnalysisRecord } from "@workspace/db"
 import {
   analysisCategories,
+  analysisPriorities,
+  analysisFocuses,
   analysisToday,
-  nextMonthlyReview,
   type AnalysisKind,
   type AnalysisOperation,
 } from "@workspace/db/iso-analysis-domain"
@@ -57,6 +58,36 @@ export function AnalysisMetadataForm({
       ) : null}
       <FieldGroup>
         <FormGrid>
+          <Field>
+            <FieldLabel htmlFor={`${id}-focus`}>Risk / Opportunity</FieldLabel>
+            <NativeSelect
+              id={`${id}-focus`}
+              name="focus"
+              defaultValue={entry?.focus ?? "Not assessed"}
+              disabled={pending}
+            >
+              {analysisFocuses.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-priority`}>Priority</FieldLabel>
+            <NativeSelect
+              id={`${id}-priority`}
+              name="priority"
+              defaultValue={entry?.priority ?? "Not assessed"}
+              disabled={pending}
+            >
+              {analysisPriorities.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-year`}>Analysis Year</FieldLabel>
             <Input
@@ -167,6 +198,36 @@ export function AnalysisMetadataForm({
             />
           </Field>
         </FormGrid>
+        <Field>
+          <FieldLabel htmlFor={`${id}-impact`}>
+            Business Impact & Assessment
+          </FieldLabel>
+          <Textarea
+            id={`${id}-impact`}
+            name="impact"
+            maxLength={4000}
+            defaultValue={entry?.impact ?? ""}
+            disabled={pending}
+            placeholder="Affected process, customer or interested party; likely consequence or benefit; why this priority was chosen"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor={`${id}-outcome`}>
+            Expected Outcome / Success Criteria
+          </FieldLabel>
+          <Textarea
+            id={`${id}-outcome`}
+            name="expectedOutcome"
+            maxLength={4000}
+            defaultValue={entry?.expectedOutcome ?? ""}
+            disabled={pending}
+            placeholder="Describe the result to achieve and how it will be checked"
+          />
+        </Field>
+        <p className="text-sm text-muted-foreground">
+          Assessment and ownership are required before completion. Set review
+          dates according to the importance and circumstances of the issue.
+        </p>
         <Field>
           <FieldLabel htmlFor={`${id}-description`}>Issue / Insight</FieldLabel>
           <Textarea
@@ -305,12 +366,28 @@ export function AnalysisUpdateForm({
           <Input
             id={`${id}-evidence`}
             name="evidenceLocation"
+            required={operation === "verify"}
             maxLength={4000}
             defaultValue={entry.evidenceLocation}
             disabled={pending}
             placeholder="Report reference, document link, or physical record location"
           />
         </Field>
+        {operation === "verify" ? (
+          <Field>
+            <FieldLabel htmlFor={`${id}-effectiveness`}>
+              Effectiveness Findings Against Expected Outcome
+            </FieldLabel>
+            <Textarea
+              id={`${id}-effectiveness`}
+              name="effectivenessNotes"
+              required
+              maxLength={4000}
+              disabled={pending}
+              placeholder="Expected result, observed result, how and when checked, and why the action is effective. Return work if ineffective or inconclusive."
+            />
+          </Field>
+        ) : null}
         {operation === "review" ? (
           <FormGrid>
             <Field>
@@ -328,15 +405,10 @@ export function AnalysisUpdateForm({
             <Field>
               <FieldLabel htmlFor={`${id}-next`}>Next Review</FieldLabel>
               <Input
-                key={reviewedOn}
                 id={`${id}-next`}
                 name="nextReviewOn"
                 type="date"
-                defaultValue={
-                  entry.kind === "SWOT" && reviewedOn
-                    ? nextMonthlyReview(reviewedOn)
-                    : ""
-                }
+                defaultValue={entry.nextReviewOn ?? ""}
                 disabled={pending}
               />
             </Field>

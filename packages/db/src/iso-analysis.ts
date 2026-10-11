@@ -36,6 +36,7 @@ export type AnalysisRecord = AnalysisFields & {
   closedAt: string | null
   closedBy: string | null
   closureRemarks: string
+  effectivenessNotes: string
   version: number
   source: AnalysisSource | null
   createdAt: string
@@ -60,6 +61,7 @@ export type AnalysisImportRow = {
 
 const selectRecord = `r.id, r.record_number AS number, r.kind, r.analysis_year AS "analysisYear",
   r.category, r.description, r.action_plan AS "actionPlan", r.department,
+  r.focus, r.priority, r.impact, r.expected_outcome AS "expectedOutcome", r.effectiveness_notes AS "effectivenessNotes",
   r.owner_user_id AS "ownerUserId", owner.name AS "ownerName",
   r.identified_on::text AS "identifiedOn", r.due_on::text AS "dueOn",
   r.reviewed_on::text AS "reviewedOn", r.next_review_on::text AS "nextReviewOn", r.status,
@@ -159,8 +161,8 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
       `INSERT INTO document_control.analysis_records (
       organization_id, kind, analysis_year, category, description, action_plan, department,
       owner_user_id, identified_on, due_on, reviewed_on, next_review_on, created_by_user_id,
-      status, completion_notes, source_key, source_payload
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      status, completion_notes, source_key, source_payload, focus, priority, impact, expected_outcome
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
     ON CONFLICT (organization_id, kind, source_key) DO NOTHING RETURNING id`,
       [
         access.organizationId,
@@ -180,6 +182,10 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
         imported?.completionNotes ?? "",
         imported?.sourceKey ?? null,
         imported?.source ?? null,
+        fields.focus,
+        fields.priority,
+        fields.impact,
+        fields.expectedOutcome,
       ]
     )
     const id = result.rows[0]?.id
@@ -264,7 +270,8 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
         await client.query(
           `UPDATE document_control.analysis_records SET analysis_year=$3, category=$4,
           description=$5, action_plan=$6, department=$7, owner_user_id=$8, identified_on=$9,
-          due_on=$10, reviewed_on=$11, next_review_on=$12, version=version+1, updated_at=now()
+          due_on=$10, reviewed_on=$11, next_review_on=$12, focus=$13, priority=$14, impact=$15,
+          expected_outcome=$16, version=version+1, updated_at=now()
           WHERE organization_id=$1 AND id=$2`,
           [
             access.organizationId,
@@ -279,6 +286,10 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
             fields.dueOn,
             fields.reviewedOn,
             fields.nextReviewOn,
+            fields.focus,
+            fields.priority,
+            fields.impact,
+            fields.expectedOutcome,
           ]
         )
         await audit(
@@ -314,13 +325,20 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
         operation: AnalysisOperation
         notes: string
         evidenceLocation: string
+        effectivenessNotes?: string
         reviewedOn?: string
         nextReviewOn?: string
       }
     ) {
       const notes = input.notes.trim()
       const evidence = input.evidenceLocation.trim()
-      if (!notes || notes.length > 4000 || evidence.length > 4000)
+      const effectiveness = input.effectivenessNotes?.trim() ?? ""
+      if (
+        !notes ||
+        notes.length > 4000 ||
+        evidence.length > 4000 ||
+        effectiveness.length > 4000
+      )
         throw new AnalysisError(
           "Enter work/review notes within 4,000 characters."
         )
@@ -344,15 +362,33 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
           )
         const status = nextAnalysisStatus(before.status, input.operation)
         if (
-          input.operation === "complete" &&
-          (!before.ownerUserId || !before.dueOn)
+          ["complete", "verify"].includes(input.operation) &&
+          (!before.ownerUserId ||
+            !before.dueOn ||
+            !before.department.trim() ||
+            before.focus === "Not assessed" ||
+            before.priority === "Not assessed" ||
+            !before.impact.trim() ||
+            !before.expectedOutcome.trim())
         )
           throw new AnalysisError(
-            "Assign responsible staff and a target date before recording completion."
+            "Record the risk/opportunity assessment, priority, expected outcome, responsible department/staff and target date first."
           )
-        if (input.operation === "verify" && !before.completionNotes.trim())
+        if (
+          input.operation === "verify" &&
+          (!before.completedAt ||
+            !before.completedBy ||
+            !before.completionNotes.trim())
+        )
           throw new AnalysisError(
-            "Record work done before QA verifies closure."
+            "Record actual work completion before QA closure. A workbook's Done label is not completion evidence."
+          )
+        if (
+          input.operation === "verify" &&
+          (!(evidence || before.evidenceLocation.trim()) || !effectiveness)
+        )
+          throw new AnalysisError(
+            "Record an evidence reference and effectiveness findings against the expected outcome before closing. Return inconclusive work for follow-up."
           )
         const reviewedOn =
           input.operation === "review"
@@ -373,6 +409,7 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
           closed_at=CASE WHEN $4='verify' THEN now() WHEN $4='reopen' THEN NULL ELSE closed_at END,
           closed_by_user_id=CASE WHEN $4='verify' THEN $7 WHEN $4='reopen' THEN NULL ELSE closed_by_user_id END,
           closure_remarks=CASE WHEN $4='verify' THEN $5 WHEN $4='reopen' THEN '' ELSE closure_remarks END,
+          effectiveness_notes=CASE WHEN $4='verify' THEN $10 WHEN $4 IN ('return','reopen') THEN '' ELSE effectiveness_notes END,
           reviewed_on=$8, next_review_on=$9, version=version+1, updated_at=now()
           WHERE organization_id=$1 AND id=$2`,
           [
@@ -385,6 +422,7 @@ export function createIsoAnalysisRepository(options: RepositoryPoolOptions) {
             access.userId,
             reviewedOn,
             nextReviewOn,
+            effectiveness,
           ]
         )
         await audit(

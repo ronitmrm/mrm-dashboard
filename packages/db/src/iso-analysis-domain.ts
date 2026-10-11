@@ -4,6 +4,18 @@ export const analysisCategories = {
 } as const
 
 export type AnalysisKind = keyof typeof analysisCategories
+export const analysisPriorities = [
+  "Not assessed",
+  "Low",
+  "Medium",
+  "High",
+] as const
+export const analysisFocuses = [
+  "Not assessed",
+  "Risk",
+  "Opportunity",
+  "Risk and Opportunity",
+] as const
 export type AnalysisCategory = (typeof analysisCategories)[AnalysisKind][number]
 export type AnalysisStatus = "Open" | "In Progress" | "Completed" | "Closed"
 export type AnalysisOperation =
@@ -22,6 +34,10 @@ export type AnalysisFields = {
   description: string
   actionPlan: string
   department: string
+  focus: (typeof analysisFocuses)[number]
+  priority: (typeof analysisPriorities)[number]
+  impact: string
+  expectedOutcome: string
   ownerUserId: string | null
   identifiedOn: string | null
   dueOn: string | null
@@ -76,6 +92,15 @@ export function parseAnalysisFields(input: unknown): AnalysisFields {
   )
     throw new AnalysisError("Enter an analysis year from 2000 to 2100.")
   const ownerUserId = text(data.ownerUserId, "Responsible staff") || null
+  const focus = data.focus ?? "Not assessed"
+  const priority = data.priority ?? "Not assessed"
+  if (
+    !analysisFocuses.some((value) => value === focus) ||
+    !analysisPriorities.some((value) => value === priority)
+  )
+    throw new AnalysisError(
+      "Choose a valid risk/opportunity focus and priority."
+    )
   if (
     ownerUserId &&
     !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(ownerUserId)
@@ -88,6 +113,10 @@ export function parseAnalysisFields(input: unknown): AnalysisFields {
     description: text(data.description, "Issue / insight", true),
     actionPlan: text(data.actionPlan, "Action plan", true),
     department: text(data.department, "Responsible department"),
+    focus: focus as AnalysisFields["focus"],
+    priority: priority as AnalysisFields["priority"],
+    impact: text(data.impact, "Business impact"),
+    expectedOutcome: text(data.expectedOutcome, "Expected outcome"),
     ownerUserId,
     identifiedOn: analysisDate(data.identifiedOn),
     dueOn: analysisDate(data.dueOn),
@@ -118,15 +147,4 @@ export function analysisReference(kind: AnalysisKind, number: number) {
 }
 export function analysisToday() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
-}
-export function nextMonthlyReview(date: string) {
-  const value = new Date(`${date}T00:00:00Z`)
-  const day = value.getUTCDate()
-  value.setUTCDate(1)
-  value.setUTCMonth(value.getUTCMonth() + 1)
-  const lastDay = new Date(
-    Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)
-  ).getUTCDate()
-  value.setUTCDate(Math.min(day, lastDay))
-  return value.toISOString().slice(0, 10)
 }

@@ -68,6 +68,11 @@ it("tracks assigned work through QA closure, review and reopening with before/af
     department: "QA",
     ownerUserId: ownerId,
     dueOn: "2026-10-20",
+    focus: "Risk",
+    priority: "High",
+    impact: "Gauge misuse can cause incorrect inspection results",
+    expectedOutcome:
+      "Operators handle gauges correctly during observed inspection",
   }))!
   await repository.update(worker, {
     id: itemId,
@@ -88,6 +93,7 @@ it("tracks assigned work through QA closure, review and reopening with before/af
     version: 3,
     operation: "verify",
     notes: "Verified handling on shop floor",
+    effectivenessNotes: "Observed all trained operators using gauges correctly",
     evidenceLocation: "",
   })
   const closed = (await repository.dossier(qa, itemId))!
@@ -96,6 +102,7 @@ it("tracks assigned work through QA closure, review and reopening with before/af
     completionNotes: "Operators trained",
     evidenceLocation: "Training register 1",
     closedBy: "QA reviewer",
+    effectivenessNotes: "Observed all trained operators using gauges correctly",
     version: 4,
   })
   expect(
@@ -126,7 +133,7 @@ it("tracks assigned work through QA closure, review and reopening with before/af
   expect(reopened.entry.nextReviewOn).toBe("2026-11-11")
 })
 
-it("prevents unassigned users and action owners from issuing QA closure", async () => {
+it("prevents unassigned access, unsupported QA closure and stale overwrites", async () => {
   const other = { ...worker, userId: qaId }
   expect(await repository.dossier(other, itemId)).toBeNull()
   await expect(
@@ -147,4 +154,20 @@ it("prevents unassigned users and action owners from issuing QA closure", async 
       evidenceLocation: "",
     })
   ).rejects.toThrow("This item changed")
+  await repository.update(worker, {
+    id: itemId,
+    version: 6,
+    operation: "complete",
+    notes: "Refresher completed",
+    evidenceLocation: "",
+  })
+  await expect(
+    repository.update(qa, {
+      id: itemId,
+      version: 7,
+      operation: "verify",
+      notes: "Closed without findings",
+      evidenceLocation: "",
+    })
+  ).rejects.toThrow("effectiveness findings")
 })

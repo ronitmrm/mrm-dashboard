@@ -64,6 +64,7 @@ export async function updateAnalysisAction(formData: FormData) {
         operation: operation as AnalysisOperation,
         notes: formData.get("notes")?.toString() ?? "",
         evidenceLocation: formData.get("evidenceLocation")?.toString() ?? "",
+        effectivenessNotes: formData.get("effectivenessNotes")?.toString(),
         reviewedOn: formData.get("reviewedOn")?.toString(),
         nextReviewOn: formData.get("nextReviewOn")?.toString(),
       })

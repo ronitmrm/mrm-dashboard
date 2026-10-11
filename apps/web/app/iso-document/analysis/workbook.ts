@@ -3,7 +3,6 @@ import type { AnalysisImportRow } from "@workspace/db"
 import {
   AnalysisError,
   analysisDate,
-  nextMonthlyReview,
   parseAnalysisFields,
   type AnalysisKind,
 } from "@workspace/db/iso-analysis-domain"
@@ -116,7 +115,7 @@ export function parseAnalysisWorkbook(
         identifiedOn,
         dueOn,
         reviewedOn,
-        nextReviewOn: reviewedOn ? nextMonthlyReview(reviewedOn) : null,
+        nextReviewOn: null,
       })
       const columns = Object.fromEntries(
         headers.flatMap((header, cell) =>
@@ -137,8 +136,7 @@ export function parseAnalysisWorkbook(
       result.push({
         fields,
         status,
-        completionNotes:
-          kind === "SWOT" ? String(read(row, "Action taken")).trim() : "",
+        completionNotes: "",
         sourceKey: `${analysisYear}:${sheetName}:${index + 1}`,
         source: {
           fileName,
