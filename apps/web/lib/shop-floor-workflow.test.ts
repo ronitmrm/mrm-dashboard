@@ -7,9 +7,17 @@ import {
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
+  shopFloorRowIsProductionCurrent,
 } from "./shop-floor-workflow";
 
 describe("shop-floor workflow action labels", () => {
+  it("keeps reopened production out of Running until the machine starts again", () => {
+    const reopened = { shopFloorStage: "planned", runningStatus: "Planned", rawRows: 18, rawOutputQty: 7336, rawActualQty: 7336 }
+    expect(shopFloorRowIsProductionCurrent(reopened)).toBe(false)
+    expect(shopFloorRowIsProductionCurrent({ ...reopened, shopFloorStage: "raw_material_at_machine" })).toBe(false)
+    expect(shopFloorRowIsProductionCurrent({ ...reopened, shopFloorStage: "operator_started" })).toBe(true)
+    expect(shopFloorRowIsProductionCurrent({ ...reopened, shopFloorStage: "" })).toBe(true)
+  })
   it("skips Pre Setting only for CNC, including existing Pre Setting records", () => {
     expect(nextShopFloorStageId("raw_material_at_machine", "cnc")).toBe("setting")
     expect(nextShopFloorStageId("presetting", "cnc")).toBe("setting")
