@@ -150,6 +150,13 @@ correction or retry. Next.js navigation errors must still be rethrown.
 
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
+Planner queue reviews use explicit Keep running / Stop running setup decisions,
+a labelled queue-position selector and one compact `OperationalTable` per selected
+machine. Show forecast dates after these decisions; keep sequential setup review.
+Do not repeat drag handles, placement slots or generic step banners. Stop choices
+are drafts until the planner action is saved; offer the normal session-close link
+where required. Changing placement or a stop choice invalidates queue confirmation.
+
 User-facing PDF actions open the authenticated in-app attachment viewer through
 `AttachmentViewerLink`. PDF routes serve inline content for viewer previews and
 attachment content only for the viewer's explicit **Download Original** action.

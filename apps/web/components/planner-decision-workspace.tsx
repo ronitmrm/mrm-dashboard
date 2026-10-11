@@ -6,7 +6,6 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   Clock3,
-  Eye,
   FilePenLine,
   ListPlus,
   PackageX,
@@ -272,7 +271,7 @@ export function PlannerDecisionWorkspace({
         ) : null}
         {activeView === "new" && activeChoice ? (
           <div className="grid gap-4" role="tabpanel" aria-label={activeChoice.title}>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/15 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <Button type="button" variant="ghost" className="-ml-3 mb-1" onClick={() => onActionChange(null)}>
                   <ArrowLeft className="size-4" />
@@ -281,12 +280,6 @@ export function PlannerDecisionWorkspace({
                 <div className="text-lg font-semibold">{activeChoice.title}</div>
                 <div className="text-sm text-muted-foreground">{activeChoice.description}</div>
               </div>
-              <Badge variant="secondary">Action in progress</Badge>
-            </div>
-            <div className="grid overflow-hidden rounded-lg border @3xl/planner:grid-cols-3" aria-label="Decision steps">
-              <DecisionStage icon={FilePenLine} label="1. Enter Details" description="Choose the affected job, machine, dates, or route." />
-              <DecisionStage icon={Eye} label="2. Review Impact" description="Check interruptions, queue movement, and probable dates." />
-              <DecisionStage icon={CheckCircle2} label="3. Confirm Decision" description="Resolve conflicts and apply the approved plan." />
             </div>
             <div className="min-w-0">{activePanel}</div>
           </div>
@@ -321,27 +314,5 @@ export function PlannerDecisionWorkspace({
         ) : null}
       </CardContent>
  </SectionCard>
-  )
-}
-
-function DecisionStage({
-  description,
-  icon: Icon,
-  label,
-}: {
-  description: string
-  icon: typeof FilePenLine
-  label: string
-}) {
-  return (
-    <div className="flex gap-3 border-b p-3 last:border-b-0 @3xl/planner:border-r @3xl/planner:border-b-0 @3xl/planner:last:border-r-0">
-      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-background text-primary shadow-xs">
-        <Icon className="size-4" />
-      </span>
-      <div>
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="text-xs text-muted-foreground">{description}</div>
-      </div>
-    </div>
   )
 }

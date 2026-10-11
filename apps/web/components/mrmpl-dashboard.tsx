@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore,
   type Dispatch,
-  type DragEvent,
   type FormEvent,
   type ReactNode,
   type SetStateAction,
@@ -19,10 +18,8 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
   Activity,
-  ArrowDown,
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
   Ban,
   CalendarDays,
   ChevronDown,
@@ -31,7 +28,6 @@ import {
   Eye,
   FileText,
   Gauge,
-  GripVertical,
   LayoutDashboard,
   ListChecks,
   Moon,
@@ -225,6 +221,14 @@ import {
   stalePlanningRefreshKey,
 } from "@/lib/planning-refresh-policy"
 import { plannerActionHistoryRows } from "@/lib/planner-action-history"
+import {
+  PlannerActionDetails,
+  PlannerSetupDecision,
+  PlannerQueuePosition,
+  PlannerQueueTable,
+  type PlannerQueueRow,
+} from "@/components/planner-queue-review"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { ReopenSetupPlannerForm } from "@/components/reopen-setup-planner-form"
 import {
   machineIssueNeedsReview,
@@ -4401,6 +4405,9 @@ function MachineConstraintPlannerForm({
   const [resolvedMachineConflictIds, setResolvedMachineConflictIds] = useState<
     Set<string>
   >(() => new Set())
+  const [selectedSourceStops, setSelectedSourceStops] = useState<
+    Record<string, boolean>
+  >({})
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
   const [queueAfterByRow, setQueueAfterByRow] = useState<
     Record<string, string>
@@ -4428,7 +4435,10 @@ function MachineConstraintPlannerForm({
       }),
     [affectedRows, machineNo, machineRows, plannedRows, rescheduleAction]
   )
-  const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty)
+  const runningRows = affectedRows.filter(
+    (row) =>
+      parallelTargetRowIsActive(row) && machineIssueRowNeedsProducedQty(row)
+  )
   const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length
   const plannedCount = affectedRows.length - lockedCount
   const queueReviewRequired = planningMode === "review_then_plan"
@@ -4444,6 +4454,22 @@ function MachineConstraintPlannerForm({
         queueAfterByRow
       ),
     [movableAffectedRows, queueAfterByRow, queueReviewGroups]
+  )
+  const destinationMachines = new Set(
+    queueReviewRequired
+      ? proposedMachineQueuePlacements.map((placement) =>
+          machineKey(placement.targetMachine)
+        )
+      : []
+  )
+  const destinationRunningRows = plannedRows.filter(
+    (row) =>
+      destinationMachines.has(machineKey(machineValue(row, "machine"))) &&
+      parallelTargetRowIsActive(row) &&
+      machineIssueRowNeedsProducedQty(row)
+  )
+  const selectedDestinationStops = destinationRunningRows.filter(
+    (row) => selectedSourceStops[machineIssueRowKey(row)]
   )
   const machineConstraintConflicts = useMemo(
     () =>
@@ -4479,13 +4505,16 @@ function MachineConstraintPlannerForm({
     reviewReady &&
     !shiftAllHasNoPlannedRows &&
     !machineConstraintConflicts.length &&
-    (!queueReviewRequired || queueReviewConfirmed)
+    (!queueReviewRequired || queueReviewConfirmed) &&
+    (machineKey(rescheduleAction) === "delay" ||
+      runningRows.every((row) => selectedSourceStops[machineIssueRowKey(row)]))
 
   function updateField(
     setter: Dispatch<SetStateAction<string>>,
     value: string
   ) {
     setter(value)
+    setSelectedSourceStops({})
     setReviewReady(false)
     setQueueReviewConfirmed(false)
     setQueueAfterByRow({})
@@ -4530,7 +4559,10 @@ function MachineConstraintPlannerForm({
     if (!canSave || isSubmitting) return
     setIsSubmitting(true)
     try {
-      const interruptedSetups = runningRows.map((row) => ({
+      const interruptedSetups = [
+        ...runningRows,
+        ...selectedDestinationStops,
+      ].map((row) => ({
         jcNo: jobCardNumber(row),
         setupNo: displayValue(row.setupNo),
         machine: machineValue(row, "machine"),
@@ -4555,6 +4587,7 @@ function MachineConstraintPlannerForm({
       setReason("")
       setQueueAfterByRow({})
       setQueueReviewConfirmed(false)
+      setSelectedSourceStops({})
       setReviewReady(false)
     } finally {
       setIsSubmitting(false)
@@ -4566,84 +4599,86 @@ function MachineConstraintPlannerForm({
       className="grid gap-3 rounded-xl border bg-background p-3"
       onSubmit={saveMachineIssue}
     >
-      <div>
-        <div className="text-sm font-medium">Machine Unavailable Details</div>
-        <div className="text-xs text-muted-foreground">
-          Running Work Uses Its Production Session Output. Planner Actions Never
-          Ask For A Second Quantity.
-        </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Machine Unavailable">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={machineNo}
-            required
-            onChange={(event) => updateField(setMachineNo, event.target.value)}
-          >
-            <option value="">Select Machine</option>
-            {machineOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
+      <PlannerActionDetails
+        reviewing={reviewReady}
+        title="Machine unavailable details"
+      >
+        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+          <Field label="Machine Unavailable">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={machineNo}
+              required
+              onChange={(event) =>
+                updateField(setMachineNo, event.target.value)
+              }
+            >
+              <option value="">Select Machine</option>
+              {machineOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="From">
+            <Input
+              type="date"
+              value={unavailableFrom}
+              required
+              onChange={(event) =>
+                updateField(setUnavailableFrom, event.target.value)
+              }
+            />
+          </Field>
+          <Field label="To">
+            <Input
+              type="date"
+              value={unavailableTo}
+              onChange={(event) =>
+                updateField(setUnavailableTo, event.target.value)
+              }
+            />
+          </Field>
+          <Field label="Plan Action">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={rescheduleAction}
+              onChange={(event) =>
+                updateField(setRescheduleAction, event.target.value)
+              }
+            >
+              <option value="shift_required">Shift Required</option>
+              <option value="shift_all">Shift All</option>
+              <option value="delay">Delay Plan</option>
+            </SearchableSelect>
+          </Field>
+          <Field label="Planning Confirmation">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={planningMode}
+              onChange={(event) =>
+                updatePlanningInput(setPlanningMode, event.target.value)
+              }
+            >
+              <option value="system_recalculate">
+                System Recalculation (All Planning Rules)
               </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="From">
-          <Input
-            type="date"
-            value={unavailableFrom}
-            required
-            onChange={(event) =>
-              updateField(setUnavailableFrom, event.target.value)
-            }
-          />
-        </Field>
-        <Field label="To">
-          <Input
-            type="date"
-            value={unavailableTo}
-            onChange={(event) =>
-              updateField(setUnavailableTo, event.target.value)
-            }
-          />
-        </Field>
-        <Field label="Plan Action">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={rescheduleAction}
-            onChange={(event) =>
-              updateField(setRescheduleAction, event.target.value)
-            }
-          >
-            <option value="shift_required">Shift Required</option>
-            <option value="shift_all">Shift All</option>
-            <option value="delay">Delay Plan</option>
-          </SearchableSelect>
-        </Field>
-        <Field label="Planning Confirmation">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={planningMode}
-            onChange={(event) =>
-              updatePlanningInput(setPlanningMode, event.target.value)
-            }
-          >
-            <option value="system_recalculate">
-              System Recalculation (All Planning Rules)
-            </option>
-            <option value="review_then_plan">Review Queue Before Saving</option>
-          </SearchableSelect>
-        </Field>
-        <Field label="Reason">
-          <Input
-            value={reason}
-            placeholder="Breakdown / Quality Hold"
-            required
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </Field>
-      </div>
+              <option value="review_then_plan">
+                Review Queue Before Saving
+              </option>
+            </SearchableSelect>
+          </Field>
+          <Field label="Reason">
+            <Input
+              value={reason}
+              placeholder="Breakdown / Quality Hold"
+              required
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+        </div>
+      </PlannerActionDetails>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -4668,6 +4703,19 @@ function MachineConstraintPlannerForm({
               </div>
             </div>
           ) : null}
+          {runningRows.length && machineKey(rescheduleAction) !== "delay" ? (
+            <PlannerRequiredStops
+              rows={runningRows}
+              selected={selectedSourceStops}
+              onChange={(key, stop) => {
+                setSelectedSourceStops((current) => ({
+                  ...current,
+                  [key]: stop,
+                }))
+                setQueueReviewConfirmed(false)
+              }}
+            />
+          ) : null}
           {runningRows.length ? (
             <PlannerSessionSettlementNotice
               mode={
@@ -4677,54 +4725,24 @@ function MachineConstraintPlannerForm({
               sessionRows={asArray(productionControl.productionCardRows)}
             />
           ) : null}
-          {affectedRows.length ? (
-            <div className="grid gap-2 @5xl/main:grid-cols-2">
-              {affectedRows.map((row, index) => {
-                const needsSessionAction = machineIssueRowNeedsProducedQty(row)
-                return (
-                  <div
-                    key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`}
-                    className="grid gap-2 rounded-md border bg-background p-2"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">
-                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
-                        {displayValue(row.setupNo)}
-                      </div>
-                      <StatusBadge
-                        value={
-                          needsSessionAction
-                            ? machineKey(rescheduleAction) === "delay"
-                              ? "Downtime required"
-                              : "Session close required"
-                            : machineIssueRowIsLocked(row)
-                              ? "Delay locked setup"
-                              : "Shift if alternate exists"
-                        }
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order{" "}
-                      {displayValue(row.orderPcs, true)} Of{" "}
-                      {displayValue(row.totalOrderPcs || row.orderPcs, true)} |
-                      Production {displayValue(row.plannedProductionStartDate)}{" "}
-                      To {displayValue(row.plannedProductionEndDate)} |{" "}
-                      {displayValue(row.runningStatus)}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">
-              No Planned Setup Rows Overlap This Unavailable Window.
-            </div>
-          )}
+          <PlannerQueueTable
+            machine={machineNo}
+            heading="Affected setups"
+            rows={affectedRows.map((row) =>
+              plannerQueueRow(
+                row,
+                selectedSourceStops[machineIssueRowKey(row)]
+                  ? "stopping"
+                  : undefined
+              )
+            )}
+          />
           <PlannerPreSaveConflictReview
             conflicts={machineConstraintConflicts}
             title="Conflicting Machine Action Found"
             description="This Machine Action Cannot Be Saved While Another Active Unavailable/Breakdown Decision Overlaps The Same Machine With A Different Action Or Queue Choice."
             onKeepExisting={() => {
+              setSelectedSourceStops({})
               setReviewReady(false)
               setQueueReviewConfirmed(false)
             }}
@@ -4732,32 +4750,71 @@ function MachineConstraintPlannerForm({
           />
           {queueReviewRequired ? (
             <>
+              {destinationRunningRows.length ? (
+                <div className="grid gap-1">
+                  <div className="text-sm font-medium">
+                    Running work on the destination machine
+                  </div>
+                  {destinationRunningRows.map((row) => (
+                    <PlannerSetupDecision
+                      key={machineIssueRowKey(row)}
+                      identity={`${itemCode(row)} / ${jobCardNumber(row)} / Setup ${displayValue(row.setupNo)}`}
+                      machine={machineValue(row, "machine")}
+                      running
+                      selected={Boolean(
+                        selectedSourceStops[machineIssueRowKey(row)]
+                      )}
+                      onChange={(stop) => {
+                        setSelectedSourceStops((current) => ({
+                          ...current,
+                          [machineIssueRowKey(row)]: stop,
+                        }))
+                        setQueueReviewConfirmed(false)
+                      }}
+                    />
+                  ))}
+                  {selectedDestinationStops.length ? (
+                    <PlannerSessionSettlementNotice
+                      mode="close"
+                      rows={selectedDestinationStops}
+                      sessionRows={asArray(
+                        productionControl.productionCardRows
+                      )}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <MachineConstraintQueueReviewPanel
                 groups={queueReviewGroups}
                 movableRows={movableAffectedRows}
+                stoppedKeys={
+                  new Set(
+                    Object.keys(selectedSourceStops).filter(
+                      (key) => selectedSourceStops[key]
+                    )
+                  )
+                }
                 queueAfterByRow={queueAfterByRow}
-                onQueueAfterChange={(rowKey, value) =>
+                onQueueAfterChange={(rowKey, value) => {
+                  setQueueReviewConfirmed(false)
                   setQueueAfterByRow((current) => {
                     const next = { ...current }
                     if (value) next[rowKey] = value
                     else delete next[rowKey]
                     return next
                   })
-                }
+                }}
               />
-              <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
-                <input
-                  className="mt-1"
-                  type="checkbox"
-                  checked={queueReviewConfirmed}
-                  onChange={(event) =>
-                    setQueueReviewConfirmed(event.target.checked)
-                  }
-                />
-                <span>
-                  Queue Reviewed; Save This Breakdown And Recalculate Planning.
-                </span>
-              </label>
+              <Button
+                type="button"
+                className="w-fit"
+                variant={queueReviewConfirmed ? "secondary" : "outline"}
+                aria-pressed={queueReviewConfirmed}
+                onClick={() => setQueueReviewConfirmed((current) => !current)}
+              >
+                <CheckCircle2 className="size-4" />
+                {queueReviewConfirmed ? "Queue confirmed" : "Confirm queue"}
+              </Button>
             </>
           ) : null}
         </div>
@@ -4781,6 +4838,7 @@ function MachineConstraintPlannerForm({
             variant="outline"
             disabled={isSubmitting}
             onClick={() => {
+              setSelectedSourceStops({})
               setReviewReady(false)
               setQueueReviewConfirmed(false)
             }}
@@ -4941,7 +4999,10 @@ function ParallelMachinePlannerForm({
     )
   )
   const canSave =
-    canReview && reviewReady && queueReviewConfirmed && Boolean(reason.trim()) &&
+    canReview &&
+    reviewReady &&
+    queueReviewConfirmed &&
+    Boolean(reason.trim()) &&
     targetOccupiedRows.every(
       (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
     )
@@ -4991,107 +5052,107 @@ function ParallelMachinePlannerForm({
       className="grid gap-3 rounded-xl border bg-background p-3"
       onSubmit={submit}
     >
-      <div>
-        <div className="text-sm font-medium">Add Parallel Machine Details</div>
-        <div className="text-xs text-muted-foreground">
-          Add a compatible machine. If it is running another setup, close that
-          production session and approve the stop first. Current setup machines
-          keep running while planning redistributes the remaining quantity.
+      <PlannerActionDetails
+        reviewing={reviewReady}
+        title="Parallel machine details"
+      >
+        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+          <Field label="Item Code">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedItem}
+              required
+              onChange={(event) => {
+                setSelectedItem(event.target.value)
+                setTarget("")
+                setSetupNo("")
+                setToMachine("")
+                resetReview()
+              }}
+            >
+              <option value="">Select Item</option>
+              {itemOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Job Card">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={target}
+              required
+              onChange={(event) => {
+                setTarget(event.target.value)
+                setSetupNo("")
+                setToMachine("")
+                resetReview()
+              }}
+            >
+              <option value="">Select Job Card</option>
+              {jobCardOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Setup No.">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={setupNo}
+              required
+              onChange={(event) => {
+                setSetupNo(event.target.value)
+                setToMachine("")
+                resetReview()
+              }}
+            >
+              <option value="">Select Setup</option>
+              {setupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Machine To Add">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={toMachine}
+              required
+              onChange={(event) => {
+                setToMachine(event.target.value)
+                resetReview()
+              }}
+            >
+              <option value="">Select Compatible Machine</option>
+              {targetMachineOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}{" "}
+                  {occupiedMachineKeys.has(machineKey(option))
+                    ? "(active setup)"
+                    : "(idle)"}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Reason">
+            <Input
+              value={reason}
+              placeholder="Planner approved parallel capacity"
+              required
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
         </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Item Code">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={selectedItem}
-            required
-            onChange={(event) => {
-              setSelectedItem(event.target.value)
-              setTarget("")
-              setSetupNo("")
-              setToMachine("")
-              resetReview()
-            }}
-          >
-            <option value="">Select Item</option>
-            {itemOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Job Card">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={target}
-            required
-            onChange={(event) => {
-              setTarget(event.target.value)
-              setSetupNo("")
-              setToMachine("")
-              resetReview()
-            }}
-          >
-            <option value="">Select Job Card</option>
-            {jobCardOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Setup No.">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={setupNo}
-            required
-            onChange={(event) => {
-              setSetupNo(event.target.value)
-              setToMachine("")
-              resetReview()
-            }}
-          >
-            <option value="">Select Setup</option>
-            {setupOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Machine To Add">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={toMachine}
-            required
-            onChange={(event) => {
-              setToMachine(event.target.value)
-              resetReview()
-            }}
-          >
-            <option value="">Select Compatible Machine</option>
-            {targetMachineOptions.map((option) => (
-              <option key={option} value={option}>
-                {option} {occupiedMachineKeys.has(machineKey(option)) ? "(active setup)" : "(idle)"}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Reason">
-          <Input
-            value={reason}
-            placeholder="Planner approved parallel capacity"
-            required
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </Field>
-      </div>
-      {target && setupNo && !targetMachineOptions.length ? (
-        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          No compatible machine is currently available for this setup.
-        </div>
-      ) : null}
+        {target && setupNo && !targetMachineOptions.length ? (
+          <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            No compatible machine is currently available for this setup.
+          </div>
+        ) : null}
+      </PlannerActionDetails>
       {reviewReady ? (
         <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -5109,33 +5170,24 @@ function ParallelMachinePlannerForm({
             workflow.
           </div>
           {targetOccupiedRows.length ? (
-            <div className="grid gap-2 rounded-md border bg-background p-3">
-              <div className="text-sm font-medium">Target Machine Active Setup</div>
-              <div className="text-xs text-muted-foreground">
-                Approve the stop. Close its Production Session first if one is open.
-              </div>
-              {targetOccupiedRows.map((row) => {
-                const rowKey = machineIssueRowKey(row)
-                return (
-                  <label key={rowKey} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(selectedTargetInterruptions[rowKey])}
-                      onChange={(event) =>
-                        setSelectedTargetInterruptions((current) => ({
-                          ...current,
-                          [rowKey]: event.target.checked,
-                        }))
-                      }
-                    />
-                    Stop {itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)} on {toMachine}
-                  </label>
-                )
-              })}
+            <div className="grid gap-2">
+              <PlannerRequiredStops
+                rows={targetOccupiedRows}
+                selected={selectedTargetInterruptions}
+                onChange={(key, stop) => {
+                  setSelectedTargetInterruptions((current) => ({
+                    ...current,
+                    [key]: stop,
+                  }))
+                  setQueueReviewConfirmed(false)
+                }}
+              />
               {targetOccupiedRows.some(machineIssueRowNeedsProducedQty) ? (
                 <PlannerSessionSettlementNotice
                   mode="close"
-                  rows={targetOccupiedRows.filter(machineIssueRowNeedsProducedQty)}
+                  rows={targetOccupiedRows.filter(
+                    machineIssueRowNeedsProducedQty
+                  )}
                   sessionRows={asArray(productionControl.productionCardRows)}
                 />
               ) : null}
@@ -5144,30 +5196,34 @@ function ParallelMachinePlannerForm({
           <MachineConstraintQueueReviewPanel
             groups={queueReviewGroups}
             movableRows={selectedRows.slice(0, 1)}
+            stoppedKeys={
+              new Set(
+                Object.keys(selectedTargetInterruptions).filter(
+                  (key) => selectedTargetInterruptions[key]
+                )
+              )
+            }
             queueAfterByRow={queueAfterByRow}
-            onQueueAfterChange={(rowKey, value) =>
+            onQueueAfterChange={(rowKey, value) => {
+              setQueueReviewConfirmed(false)
               setQueueAfterByRow((current) => {
                 const next = { ...current }
                 if (value) next[rowKey] = value
                 else delete next[rowKey]
                 return next
               })
-            }
+            }}
           />
-          <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
-            <input
-              className="mt-1"
-              type="checkbox"
-              checked={queueReviewConfirmed}
-              onChange={(event) =>
-                setQueueReviewConfirmed(event.target.checked)
-              }
-            />
-            <span>
-              Queue reviewed; stop any approved target setup, add this machine,
-              and recalculate the shared setup quantity.
-            </span>
-          </label>
+          <Button
+            type="button"
+            className="w-fit"
+            variant={queueReviewConfirmed ? "secondary" : "outline"}
+            aria-pressed={queueReviewConfirmed}
+            onClick={() => setQueueReviewConfirmed((current) => !current)}
+          >
+            <CheckCircle2 className="size-4" />
+            {queueReviewConfirmed ? "Queue confirmed" : "Confirm queue"}
+          </Button>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -5203,10 +5259,17 @@ function EarlyDownstreamPlannerForm({
   const plannedRows = asArray(productionControl.machinePlanDetailRows)
   const machineRows = asArray(productionControl.machinePlanningRows)
   const routeRows = asArray(productionControl.routeMasterRows)
-  const setupNumber = (value: unknown) => Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
-  const setupOneRows = plannedRows.filter((row) =>
-    setupNumber(row.setupNo) === 1 && !shopFloorItemIsFinished(row) &&
-    !plannedRows.some((other) => jobCardNumber(other) === jobCardNumber(row) && setupNumber(other.setupNo) === 2)
+  const setupNumber = (value: unknown) =>
+    Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
+  const setupOneRows = plannedRows.filter(
+    (row) =>
+      setupNumber(row.setupNo) === 1 &&
+      !shopFloorItemIsFinished(row) &&
+      !plannedRows.some(
+        (other) =>
+          jobCardNumber(other) === jobCardNumber(row) &&
+          setupNumber(other.setupNo) === 2
+      )
   )
   const [target, setTarget] = useState("")
   const [toMachine, setToMachine] = useState("")
@@ -5215,28 +5278,56 @@ function EarlyDownstreamPlannerForm({
   const [queueReviewed, setQueueReviewed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const selected = setupOneRows.find((row) => jobCardNumber(row) === target)
-  const setupTwo = routeRows.find((row) =>
-    machineKey(str(row.partNo)) === machineKey(itemCode(selected ?? {})) &&
-    str(row.optionNumber) === str(selected?.optionNumber) &&
-    setupNumber(row.setupNo) === 2
+  const setupTwo = routeRows.find(
+    (row) =>
+      machineKey(str(row.partNo)) === machineKey(itemCode(selected ?? {})) &&
+      str(row.optionNumber) === str(selected?.optionNumber) &&
+      setupNumber(row.setupNo) === 2
   )
-  const upstreamMachines = new Set(setupOneRows
-    .filter((row) => jobCardNumber(row) === target)
-    .map((row) => machineKey(machineValue(row, "machine"))))
-  const occupied = new Set(plannedRows
-    .filter((row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row))
-    .map((row) => machineKey(machineValue(row, "machine"))))
-  const unavailable = new Set(openMachineIssues(asArray(productionControl.machineConstraintRows))
-    .map((row) => machineKey(displayValue(row.machineNo || row.machine))))
-  const machineOptions = setupTwo ? compatibleDestinationMachineOptions({
-    affectedRows: [{ routeMachine: setupTwo.machineUsed || setupTwo.machineFamily, machineType: setupTwo.machineType }],
-    machineRows,
-    sourceMachine: "",
-  }).filter((machine) => !upstreamMachines.has(machineKey(machine)) && !occupied.has(machineKey(machine)) && !unavailable.has(machineKey(machine))) : []
+  const upstreamMachines = new Set(
+    setupOneRows
+      .filter((row) => jobCardNumber(row) === target)
+      .map((row) => machineKey(machineValue(row, "machine")))
+  )
+  const occupied = new Set(
+    plannedRows
+      .filter(
+        (row) => !shopFloorItemIsFinished(row) && machineIssueRowIsLocked(row)
+      )
+      .map((row) => machineKey(machineValue(row, "machine")))
+  )
+  const unavailable = new Set(
+    openMachineIssues(asArray(productionControl.machineConstraintRows)).map(
+      (row) => machineKey(displayValue(row.machineNo || row.machine))
+    )
+  )
+  const machineOptions = setupTwo
+    ? compatibleDestinationMachineOptions({
+        affectedRows: [
+          {
+            routeMachine: setupTwo.machineUsed || setupTwo.machineFamily,
+            machineType: setupTwo.machineType,
+          },
+        ],
+        machineRows,
+        sourceMachine: "",
+      }).filter(
+        (machine) =>
+          !upstreamMachines.has(machineKey(machine)) &&
+          !occupied.has(machineKey(machine)) &&
+          !unavailable.has(machineKey(machine))
+      )
+    : []
   const targetQueue = plannedRows
-    .filter((row) => machineKey(machineValue(row, "machine")) === machineKey(toMachine) && !shopFloorItemIsFinished(row))
+    .filter(
+      (row) =>
+        machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
+        !shopFloorItemIsFinished(row)
+    )
     .sort(machinePlanDisplaySort)
-  const canReview = Boolean(target && setupTwo && machineOptions.includes(toMachine))
+  const canReview = Boolean(
+    target && setupTwo && machineOptions.includes(toMachine)
+  )
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -5265,62 +5356,129 @@ function EarlyDownstreamPlannerForm({
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
-      <div>
-        <div className="text-sm font-medium">Plan Setup 2 Early</div>
-        <div className="text-xs text-muted-foreground">
-          Reserve a separate compatible machine while Setup 1 is planned. Setup 2 may produce before the normal WIP buffer, limited by recorded Setup 1 good pieces.
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
+      <PlannerActionDetails reviewing={reviewReady} title="Early setup details">
+        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+          <Field label="Job Card">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={target}
+              required
+              onChange={(event) => {
+                setTarget(event.target.value)
+                setToMachine("")
+                setReviewReady(false)
+                setQueueReviewed(false)
+              }}
+            >
+              <option value="">Select Job Card</option>
+              {uniqueValues(setupOneRows.map(jobCardNumber)).map((jobCard) => (
+                <option key={jobCard} value={jobCard}>
+                  {jobCard}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Setup 2 Machine">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={toMachine}
+              required
+              onChange={(event) => {
+                setToMachine(event.target.value)
+                setReviewReady(false)
+                setQueueReviewed(false)
+              }}
+            >
+              <option value="">Select Compatible Machine</option>
+              {machineOptions.map((machine) => (
+                <option key={machine} value={machine}>
+                  {machine}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Reason">
+            <Input
+              value={reason}
+              required
+              placeholder="Why this Job Card needs early overlap"
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
         </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Job Card">
-          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={target} required onChange={(event) => {
-            setTarget(event.target.value)
-            setToMachine("")
-            setReviewReady(false)
-            setQueueReviewed(false)
-          }}>
-            <option value="">Select Job Card</option>
-            {uniqueValues(setupOneRows.map(jobCardNumber)).map((jobCard) => <option key={jobCard} value={jobCard}>{jobCard}</option>)}
-          </SearchableSelect>
-        </Field>
-        <Field label="Setup 2 Machine">
-          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={toMachine} required onChange={(event) => {
-            setToMachine(event.target.value)
-            setReviewReady(false)
-            setQueueReviewed(false)
-          }}>
-            <option value="">Select Compatible Machine</option>
-            {machineOptions.map((machine) => <option key={machine} value={machine}>{machine}</option>)}
-          </SearchableSelect>
-        </Field>
-        <Field label="Reason">
-          <Input value={reason} required placeholder="Why this Job Card needs early overlap" onChange={(event) => setReason(event.target.value)} />
-        </Field>
-      </div>
-      {target && !setupTwo ? <div className="text-sm text-muted-foreground">This Job Card has no selected Setup 2 route.</div> : null}
-      {target && setupTwo && !machineOptions.length ? <div className="text-sm text-muted-foreground">No idle compatible machine is available.</div> : null}
+        {target && !setupTwo ? (
+          <div className="text-sm text-muted-foreground">
+            This Job Card has no selected Setup 2 route.
+          </div>
+        ) : null}
+        {target && setupTwo && !machineOptions.length ? (
+          <div className="text-sm text-muted-foreground">
+            No idle compatible machine is available.
+          </div>
+        ) : null}
+      </PlannerActionDetails>
       {reviewReady && canReview ? (
         <div className="grid gap-3 rounded-md border bg-muted/15 p-3 text-sm">
           <div className="flex flex-wrap gap-2">
-            <StatusBadge value={`${target} · ${itemCode(selected ?? {})} · Setup 2`} />
+            <StatusBadge
+              value={`${target} · ${itemCode(selected ?? {})} · Setup 2`}
+            />
             <StatusBadge value={`Reserve ${toMachine}`} tone="information" />
             <StatusBadge value="WIP pending" tone="warning" />
           </div>
-          <div>Current {toMachine} queue: {targetQueue.length ? targetQueue.map((row) => `${jobCardNumber(row)} Setup ${displayValue(row.setupNo)} (${displayValue(row.setupPlannedDate || row.plannedDate)})`).join("; ") : "empty"}.</div>
-          <div>Setup preparation may proceed. Machine start waits for recorded Setup 1 WIP; output cannot exceed the remaining WIP.</div>
-          <label className="flex items-start gap-2 rounded-md border bg-background p-2">
-            <input className="mt-1" type="checkbox" checked={queueReviewed} onChange={(event) => setQueueReviewed(event.target.checked)} />
-            <span>I reviewed this machine queue and the early WIP condition.</span>
-          </label>
+          <PlannerQueueTable
+            machine={toMachine}
+            heading="Current queue"
+            rows={targetQueue.map((row) => plannerQueueRow(row))}
+          />
+          <div>
+            Setup preparation may proceed. Machine start waits for recorded
+            Setup 1 WIP; output cannot exceed the remaining WIP.
+          </div>
+          <Button
+            type="button"
+            className="w-fit"
+            variant={queueReviewed ? "secondary" : "outline"}
+            aria-pressed={queueReviewed}
+            onClick={() => setQueueReviewed((current) => !current)}
+          >
+            <CheckCircle2 className="size-4" />
+            {queueReviewed
+              ? "Queue confirmed"
+              : "Confirm queue and WIP condition"}
+          </Button>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && (!queueReviewed || !reason.trim()))}>
+        <Button
+          className="w-fit"
+          type="submit"
+          disabled={
+            !canReview ||
+            isSubmitting ||
+            (reviewReady && (!queueReviewed || !reason.trim()))
+          }
+        >
           <ArrowRight className="size-4" />
           {reviewReady ? "Reserve Setup 2" : "Review Early Plan"}
         </Button>
-        {reviewReady ? <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewed(false) }}>Recheck Inputs</Button> : null}
+        {reviewReady ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => {
+              setReviewReady(false)
+              setQueueReviewed(false)
+            }}
+          >
+            Recheck Inputs
+          </Button>
+        ) : null}
       </div>
     </form>
   )
@@ -5420,7 +5578,10 @@ function PartMachineSwitchPlannerForm({
       }),
     [fromMachine, machineRows, selectedRows]
   )
-  const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty)
+  const runningRows = selectedRows.filter(
+    (row) =>
+      parallelTargetRowIsActive(row) && machineIssueRowNeedsProducedQty(row)
+  )
   const queueReviewGroups = useMemo(
     () =>
       machineConstraintQueueReview({
@@ -5469,10 +5630,14 @@ function PartMachineSwitchPlannerForm({
   )
   const targetInterruptionRows = useMemo(
     () =>
-      plannedRows.filter((row) =>
-        machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
-        parallelTargetRowIsActive(row) &&
-        !selectedRows.some((selected) => machineIssueRowKey(selected) === machineIssueRowKey(row))
+      plannedRows.filter(
+        (row) =>
+          machineKey(machineValue(row, "machine")) === machineKey(toMachine) &&
+          parallelTargetRowIsActive(row) &&
+          !selectedRows.some(
+            (selected) =>
+              machineIssueRowKey(selected) === machineIssueRowKey(row)
+          )
       ),
     [plannedRows, selectedRows, toMachine]
   )
@@ -5491,6 +5656,9 @@ function PartMachineSwitchPlannerForm({
     selectedRows.length > 0 &&
     !switchConflicts.length &&
     queueReviewConfirmed &&
+    runningRows.every(
+      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+    ) &&
     targetInterruptionRows.every(
       (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
     )
@@ -5512,20 +5680,24 @@ function PartMachineSwitchPlannerForm({
     if (!targetId || targetId === "-" || isSubmitting) return
     setIsSubmitting(true)
     try {
-      await submitAction("reverse-entry", {
-        targetTable: "planOverrides",
-        targetId,
-        targetKey:
-          displayValue(conflict.targetKey) !== "-"
-            ? displayValue(conflict.targetKey)
-            : "",
-        targetLabel:
-          displayValue(conflict.targetLabel) !== "-"
-            ? displayValue(conflict.targetLabel)
-            : "",
-        reason: `Planner replacing conflicting machine switch with ${target} setup ${setupNo} to ${toMachine}`,
-        correctedBy: "Planner",
-      }, { throwOnError: true })
+      await submitAction(
+        "reverse-entry",
+        {
+          targetTable: "planOverrides",
+          targetId,
+          targetKey:
+            displayValue(conflict.targetKey) !== "-"
+              ? displayValue(conflict.targetKey)
+              : "",
+          targetLabel:
+            displayValue(conflict.targetLabel) !== "-"
+              ? displayValue(conflict.targetLabel)
+              : "",
+          reason: `Planner replacing conflicting machine switch with ${target} setup ${setupNo} to ${toMachine}`,
+          correctedBy: "Planner",
+        },
+        { throwOnError: true }
+      )
       setResolvedConflictIds((current) => new Set([...current, targetId]))
     } catch {
       // submitAction displays the error; keep the conflict for another review.
@@ -5556,15 +5728,19 @@ function PartMachineSwitchPlannerForm({
         }))
       const interruptedSetups = [...sourceInterruptions, ...targetInterruptions]
       const queuePlacements = proposedQueuePlacements
-      await submitAction("plan-override", {
-        target,
-        setupNo,
-        fromMachine,
-        toMachine,
-        interruptedSetups,
-        queuePlacements,
-        reason,
-      }, { throwOnError: true })
+      await submitAction(
+        "plan-override",
+        {
+          target,
+          setupNo,
+          fromMachine,
+          toMachine,
+          interruptedSetups,
+          queuePlacements,
+          reason,
+        },
+        { throwOnError: true }
+      )
       setSelectedItem("")
       setTarget("")
       setSetupNo("")
@@ -5588,116 +5764,113 @@ function PartMachineSwitchPlannerForm({
       className="grid gap-3 rounded-xl border bg-background p-3"
       onSubmit={submit}
     >
-      <div>
-        <div className="text-sm font-medium">Move Setup Details</div>
-        <div className="text-xs text-muted-foreground">
-          Move Only The Selected Part/Setup To Another Machine After Reviewing
-          That Target Queue And Downstream Wip Queues.
+      <PlannerActionDetails reviewing={reviewReady} title="Move setup details">
+        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+          <Field label="Item Code">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedItem}
+              required
+              onChange={(event) => {
+                updateField(setSelectedItem, event.target.value)
+                setTarget("")
+                setSetupNo("")
+                setFromMachine("")
+                setToMachine("")
+              }}
+            >
+              <option value="">Select Item</option>
+              {itemOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Job Card">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={target}
+              required
+              onChange={(event) => {
+                updateField(setTarget, event.target.value)
+                setSetupNo("")
+                setFromMachine("")
+                setToMachine("")
+              }}
+            >
+              <option value="">Select Job Card</option>
+              {jobCardOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Setup No.">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={setupNo}
+              required
+              onChange={(event) => {
+                updateField(setSetupNo, event.target.value)
+                setFromMachine("")
+                setToMachine("")
+              }}
+            >
+              <option value="">Select Setup</option>
+              {setupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="From Machine">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={fromMachine}
+              required
+              onChange={(event) => {
+                updateField(setFromMachine, event.target.value)
+                setToMachine("")
+              }}
+            >
+              <option value="">Select Source Machine</option>
+              {fromMachineOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Plan On Machine">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={toMachine}
+              required
+              onChange={(event) =>
+                updateField(setToMachine, event.target.value)
+              }
+            >
+              <option value="">Select Target Machine</option>
+              {targetMachineOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Reason">
+            <Input
+              value={reason}
+              placeholder="Planner Approved Machine Switch"
+              required
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
         </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Item Code">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={selectedItem}
-            required
-            onChange={(event) => {
-              updateField(setSelectedItem, event.target.value)
-              setTarget("")
-              setSetupNo("")
-              setFromMachine("")
-              setToMachine("")
-            }}
-          >
-            <option value="">Select Item</option>
-            {itemOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Job Card">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={target}
-            required
-            onChange={(event) => {
-              updateField(setTarget, event.target.value)
-              setSetupNo("")
-              setFromMachine("")
-              setToMachine("")
-            }}
-          >
-            <option value="">Select Job Card</option>
-            {jobCardOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Setup No.">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={setupNo}
-            required
-            onChange={(event) => {
-              updateField(setSetupNo, event.target.value)
-              setFromMachine("")
-              setToMachine("")
-            }}
-          >
-            <option value="">Select Setup</option>
-            {setupOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="From Machine">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={fromMachine}
-            required
-            onChange={(event) => {
-              updateField(setFromMachine, event.target.value)
-              setToMachine("")
-            }}
-          >
-            <option value="">Select Source Machine</option>
-            {fromMachineOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Plan On Machine">
-          <SearchableSelect
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={toMachine}
-            required
-            onChange={(event) => updateField(setToMachine, event.target.value)}
-          >
-            <option value="">Select Target Machine</option>
-            {targetMachineOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </SearchableSelect>
-        </Field>
-        <Field label="Reason">
-          <Input
-            value={reason}
-            placeholder="Planner Approved Machine Switch"
-            required
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </Field>
-      </div>
+      </PlannerActionDetails>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -5714,109 +5887,44 @@ function PartMachineSwitchPlannerForm({
             </span>
           </div>
           {runningRows.length ? (
+            <PlannerRequiredStops
+              rows={runningRows}
+              selected={selectedTargetInterruptions}
+              onChange={(key, stop) => {
+                setSelectedTargetInterruptions((current) => ({
+                  ...current,
+                  [key]: stop,
+                }))
+                setQueueReviewConfirmed(false)
+              }}
+            />
+          ) : null}
+          {runningRows.length ? (
             <PlannerSessionSettlementNotice
               mode="close"
               rows={runningRows}
               sessionRows={asArray(productionControl.productionCardRows)}
             />
           ) : null}
-          {selectedRows.length ? (
-            <div className="grid gap-2 @5xl/main:grid-cols-2">
-              {selectedRows.map((row, index) => {
-                const needsSessionClose = machineIssueRowNeedsProducedQty(row)
-                return (
-                  <div
-                    key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`}
-                    className="grid gap-2 rounded-md border bg-background p-2"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">
-                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
-                        {displayValue(row.setupNo)}
-                      </div>
-                      <StatusBadge
-                        value={
-                          needsSessionClose
-                            ? "Session close required"
-                            : "Selected setup"
-                        }
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order{" "}
-                      {displayValue(row.orderPcs, true)} Of{" "}
-                      {displayValue(row.totalOrderPcs || row.orderPcs, true)} |
-                      Production {displayValue(row.plannedProductionStartDate)}{" "}
-                      To {displayValue(row.plannedProductionEndDate)} |{" "}
-                      {displayValue(row.runningStatus)}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">
-              No Planned Setup Row Matches This Job Card/Part, Setup Number, And
-              Source Machine.
-            </div>
-          )}
+          {!selectedRows.length ? (
+            <StandardState
+              title="Setup not found"
+              description="Recheck the Job Card, setup and source machine."
+            />
+          ) : null}
           {targetInterruptionRows.length ? (
-            <div className="grid gap-2 rounded-md border bg-background p-3">
-              <div>
-                <div className="text-sm font-medium">
-                  Target Machine Active Setup
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Approve Its Stop Before Moving This Setup. Close Any Open
-                  Production Session Normally Before Saving.
-                </div>
-              </div>
-              {targetInterruptionRows.map((row) => {
-                const rowKey = machineIssueRowKey(row)
-                const selected = Boolean(selectedTargetInterruptions[rowKey])
-                return (
-                  <div
-                    key={rowKey}
-                    className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end"
-                  >
-                    <div>
-                      <div className="text-sm font-medium">
-                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
-                        {displayValue(row.setupNo)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {machineValue(row, "machine")} | Production{" "}
-                        {displayValue(row.plannedProductionStartDate)} To{" "}
-                        {displayValue(row.plannedProductionEndDate)} |{" "}
-                        {displayValue(row.runningStatus)}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant={selected ? "default" : "outline"}
-                        onClick={() =>
-                          setSelectedTargetInterruptions((current) => ({
-                            ...current,
-                            [rowKey]: !selected,
-                          }))
-                        }
-                      >
-                        {selected
-                          ? "Stop Selected"
-                          : "Do Not Stop / Click To Stop"}
-                      </Button>
-                      {selected ? (
-                        <StatusBadge
-                          value={machineIssueRowNeedsProducedQty(row)
-                            ? "Session close required"
-                            : "Stop approved"}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="grid gap-2">
+              <PlannerRequiredStops
+                rows={targetInterruptionRows}
+                selected={selectedTargetInterruptions}
+                onChange={(key, stop) => {
+                  setSelectedTargetInterruptions((current) => ({
+                    ...current,
+                    [key]: stop,
+                  }))
+                  setQueueReviewConfirmed(false)
+                }}
+              />
               {targetInterruptionRows.some(
                 (row) =>
                   selectedTargetInterruptions[machineIssueRowKey(row)] &&
@@ -5837,15 +5945,23 @@ function PartMachineSwitchPlannerForm({
           <MachineConstraintQueueReviewPanel
             groups={queueReviewGroups}
             movableRows={selectedRows}
+            stoppedKeys={
+              new Set(
+                Object.keys(selectedTargetInterruptions).filter(
+                  (key) => selectedTargetInterruptions[key]
+                )
+              )
+            }
             queueAfterByRow={queueAfterByRow}
-            onQueueAfterChange={(rowKey, value) =>
+            onQueueAfterChange={(rowKey, value) => {
+              setQueueReviewConfirmed(false)
               setQueueAfterByRow((current) => {
                 const next = { ...current }
                 if (value) next[rowKey] = value
                 else delete next[rowKey]
                 return next
               })
-            }
+            }}
           />
           {switchConflicts.length ? (
             <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -5900,20 +6016,16 @@ function PartMachineSwitchPlannerForm({
               ))}
             </div>
           ) : null}
-          <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
-            <input
-              className="mt-1"
-              type="checkbox"
-              checked={queueReviewConfirmed}
-              onChange={(event) =>
-                setQueueReviewConfirmed(event.target.checked)
-              }
-            />
-            <span>
-              Queue Reviewed; Save This Part-Specific Machine Switch And
-              Recalculate Planning.
-            </span>
-          </label>
+          <Button
+            type="button"
+            className="w-fit"
+            variant={queueReviewConfirmed ? "secondary" : "outline"}
+            aria-pressed={queueReviewConfirmed}
+            onClick={() => setQueueReviewConfirmed((current) => !current)}
+          >
+            <CheckCircle2 className="size-4" />
+            {queueReviewConfirmed ? "Queue confirmed" : "Confirm queue"}
+          </Button>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -5946,405 +6058,177 @@ function MachineConstraintQueueReviewPanel({
   groups,
   movableRows = [],
   queueAfterByRow = {},
+  stoppedKeys,
   onQueueAfterChange,
 }: {
   groups: MachineConstraintQueueReviewGroup[]
   movableRows?: DashboardPayload[]
   queueAfterByRow?: Record<string, string>
+  stoppedKeys?: ReadonlySet<string>
   onQueueAfterChange?: (rowKey: string, value: string) => void
 }) {
-  const destinationGroups = groups.filter(
-    (group) => group.kind === "destination"
+  const destinations = groups.filter((group) => group.kind === "destination")
+  const defaultMachine = destinations[0]?.machine ?? ""
+  const canPlace = Boolean(
+    onQueueAfterChange && movableRows.length && destinations.length
   )
-  const defaultDestinationMachine = destinationGroups[0]?.machine ?? ""
-  const canPlaceTiles = Boolean(
-    onQueueAfterChange && movableRows.length && destinationGroups.length
+  const visibleGroups = groups.filter(
+    (group) =>
+      !canPlace ||
+      group.kind !== "destination" ||
+      movableRows.some(
+        (row) =>
+          machineConstraintPlacementParts(
+            queueAfterByRow[machineIssueRowKey(row)],
+            defaultMachine
+          ).machineKey === machineKey(group.machine)
+      )
   )
-
   return (
-    <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium">Replanned Queue Review</div>
-          {canPlaceTiles ? (
-            <div className="text-xs text-muted-foreground">
-              Drag Each Affected Setup Tile To The Planned Position Before
-              Saving.
-            </div>
-          ) : null}
-        </div>
-        <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
-      </div>
-      {groups.length ? (
-        <div className="grid gap-2">
-          {groups.map((group) => (
-            <div
-              key={`${group.kind}-${group.machine}`}
-              className="grid gap-2 rounded-md border bg-muted/10 p-2"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">{group.title}</div>
-                <StatusBadge
-                  value={
-                    group.kind === "destination"
-                      ? "Destination queue"
-                      : group.kind === "downstream"
-                        ? "Downstream WIP queue"
-                        : "Same machine queue"
-                  }
-                />
+    <div className="grid min-w-0 gap-4">
+      {canPlace && onQueueAfterChange
+        ? movableRows.map((row) => {
+            const key = machineIssueRowKey(row)
+            const placement = machineConstraintPlacementParts(
+              queueAfterByRow[key],
+              defaultMachine
+            )
+            const group =
+              destinations.find(
+                (group) => machineKey(group.machine) === placement.machineKey
+              ) ?? destinations[0]!
+            return (
+              <div key={key} className="grid gap-2">
+                <div className="text-sm font-medium">
+                  {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+                  {displayValue(row.setupNo)}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {destinations.length > 1 ? (
+                    <Field label="Move to machine">
+                      <SearchableSelect
+                        value={group.machine}
+                        onValueChange={(machine) =>
+                          onQueueAfterChange(
+                            key,
+                            machineConstraintPlacementValue(machine, "")
+                          )
+                        }
+                      >
+                        {destinations.map((group) => (
+                          <option key={group.machine} value={group.machine}>
+                            {group.machine}
+                          </option>
+                        ))}
+                      </SearchableSelect>
+                    </Field>
+                  ) : null}
+                  <PlannerQueuePosition
+                    id={`move-position-${key}`}
+                    value={placement.afterKey}
+                    options={group.rows
+                      .filter((queued) => !parallelTargetRowIsActive(queued))
+                      .map((queued) => ({
+                        value: machineConstraintQueueRowKey(queued),
+                        label: `After ${jobCardNumber(queued)} / Setup ${displayValue(queued.setupNo)} · ${itemCode(queued)}`,
+                      }))}
+                    onChange={(after) =>
+                      onQueueAfterChange(
+                        key,
+                        machineConstraintPlacementValue(group.machine, after)
+                      )
+                    }
+                  />
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {group.description}
-              </div>
-              {canPlaceTiles &&
-              group.kind === "destination" &&
-              onQueueAfterChange ? (
-                <MachineConstraintQueuePlacementBoard
-                  group={group}
-                  movableRows={movableRows}
-                  queueAfterByRow={queueAfterByRow}
-                  defaultDestinationMachine={defaultDestinationMachine}
-                  onQueueAfterChange={onQueueAfterChange}
-                />
-              ) : (
-                <MachineConstraintStaticQueueRows group={group} />
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">
-          No Destination Or Downstream Queues Were Identified From The Current
-          Plan.
-        </div>
-      )}
+            )
+          })
+        : null}
+      {visibleGroups.map((group) => (
+        <MachineConstraintQueuePlacementBoard
+          key={`${group.kind}-${group.machine}`}
+          group={group}
+          movableRows={canPlace ? movableRows : []}
+          queueAfterByRow={queueAfterByRow}
+          stoppedKeys={stoppedKeys}
+          defaultDestinationMachine={defaultMachine}
+        />
+      ))}
+      {!groups.length ? (
+        <StandardState
+          title="No affected queue"
+          description="No destination or later work appears in the current plan."
+        />
+      ) : null}
     </div>
   )
+}
+
+function plannerQueueRow(
+  row: DashboardPayload,
+  kind: PlannerQueueRow["kind"] = parallelTargetRowIsActive(row) &&
+  machineIssueRowNeedsProducedQty(row)
+    ? "running"
+    : "queued"
+): PlannerQueueRow {
+  return {
+    key: machineIssueRowKey(row),
+    identity: `${itemCode(row)} / ${jobCardNumber(row)} / Setup ${displayValue(row.setupNo)}`,
+    kind,
+  }
 }
 
 function MachineConstraintQueuePlacementBoard({
   group,
   movableRows,
   queueAfterByRow,
+  stoppedKeys,
   defaultDestinationMachine,
-  onQueueAfterChange,
 }: {
   group: MachineConstraintQueueReviewGroup
   movableRows: DashboardPayload[]
   queueAfterByRow: Record<string, string>
   defaultDestinationMachine: string
-  onQueueAfterChange: (rowKey: string, value: string) => void
+  stoppedKeys?: ReadonlySet<string>
 }) {
-  const groupMachineKey = machineKey(group.machine)
-  const movableKeys = new Set(movableRows.map(machineIssueRowKey))
-  const placedRows = movableRows.filter((row) => {
-    const placement = machineConstraintPlacementParts(
-      queueAfterByRow[machineIssueRowKey(row)],
-      defaultDestinationMachine
-    )
-    return placement.machineKey === groupMachineKey
-  })
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-
-  function placeRow(rowKey: string, index: number) {
-    const boundedIndex = Math.max(0, Math.min(index, group.rows.length))
-    const afterKey =
-      boundedIndex > 0
-        ? machineConstraintQueueRowKey(group.rows[boundedIndex - 1]!)
-        : ""
-    onQueueAfterChange(
-      rowKey,
-      machineConstraintPlacementValue(group.machine, afterKey)
-    )
-  }
-
-  function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "move"
-    setDragOverIndex(index)
-  }
-
-  function dropMoveTile(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault()
-    const sourceKey = event.dataTransfer.getData("text/plain")
-    setDragOverIndex(null)
-    if (!sourceKey || !movableKeys.has(sourceKey)) return
-    placeRow(sourceKey, index)
-  }
-
-  return (
-    <div className="grid gap-1 rounded-md border bg-background p-2">
-      {Array.from({ length: group.rows.length + 1 }, (_, index) => {
-        const slotRows = placedRows.filter(
-          (row) =>
-            machineConstraintQueuePlacementIndex(
-              group.rows,
-              machineConstraintPlacementParts(
-                queueAfterByRow[machineIssueRowKey(row)],
-                defaultDestinationMachine
-              ).afterKey
-            ) === index
-        )
-        const slotPreviewWindows = machineConstraintSlotPreviewWindows(
+  const placedRows = movableRows.filter(
+    (row) =>
+      machineConstraintPlacementParts(
+        queueAfterByRow[machineIssueRowKey(row)],
+        defaultDestinationMachine
+      ).machineKey === machineKey(group.machine)
+  )
+  const rows: PlannerQueueRow[] = []
+  for (let index = 0; index <= group.rows.length; index++) {
+    const slotRows = placedRows.filter(
+      (row) =>
+        machineConstraintQueuePlacementIndex(
           group.rows,
-          slotRows,
-          index
-        )
-        return (
-          <Fragment key={`${group.machine}-slot-${index}`}>
-            <PriorityQueueDropZone
-              active={dragOverIndex === index}
-              current={slotRows.length > 0}
-              label={machineConstraintQueueDropLabel(index, group.rows)}
-              onClick={() => undefined}
-              onDragOver={(event) => allowDrop(event, index)}
-              onDragLeave={() =>
-                setDragOverIndex((current) =>
-                  current === index ? null : current
-                )
-              }
-              onDrop={(event) => dropMoveTile(event, index)}
-            />
-            {slotRows.map((row) => (
-              <MachineConstraintMoveTile
-                key={`${group.machine}-${machineIssueRowKey(row)}`}
-                row={row}
-                targetMachine={group.machine}
-                previewWindow={slotPreviewWindows.get(machineIssueRowKey(row))}
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = "move"
-                  event.dataTransfer.setData(
-                    "text/plain",
-                    machineIssueRowKey(row)
-                  )
-                }}
-                onDragEnd={() => setDragOverIndex(null)}
-              />
-            ))}
-            {index < group.rows.length ? (
-              <MachineConstraintQueueRowTile row={group.rows[index]!} />
-            ) : null}
-          </Fragment>
-        )
-      })}
-    </div>
-  )
-}
-
-function machineConstraintSlotPreviewWindows(
-  rows: DashboardPayload[],
-  slotRows: DashboardPayload[],
-  slotIndex: number
-) {
-  const windows = new Map<string, { startDate: string; endDate: string }>()
-  let nextStart =
-    slotIndex > 0
-      ? nextCalendarDateLabelForReview(
-          rows[slotIndex - 1]?.plannedProductionEndDate ||
-            rows[slotIndex - 1]?.setupPlannedDate ||
-            rows[slotIndex - 1]?.plannedDate
-        )
-      : ""
-
-  for (const row of slotRows) {
-    const originalStart = parseReviewDateLabel(
-      row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate
+          machineConstraintPlacementParts(
+            queueAfterByRow[machineIssueRowKey(row)],
+            defaultDestinationMachine
+          ).afterKey
+        ) === index
     )
-    const originalEnd = parseReviewDateLabel(
-      row.plannedProductionEndDate ||
-        row.plannedProductionStartDate ||
-        row.setupPlannedDate ||
-        row.plannedDate
-    )
-    const durationDays =
-      originalStart && originalEnd
-        ? Math.max(
-            1,
-            Math.round(
-              (originalEnd.getTime() - originalStart.getTime()) / 86400000
-            ) + 1
-          )
-        : 1
-    const startDate =
-      nextStart ||
-      displayValue(
-        row.plannedProductionStartDate ||
-          row.setupPlannedDate ||
-          row.plannedDate
+    rows.push(...slotRows.map((row) => plannerQueueRow(row, "moved")))
+    const queued = group.rows[index]
+    if (queued)
+      rows.push(
+        plannerQueueRow(
+          queued,
+          stoppedKeys?.has(machineIssueRowKey(queued)) ? "stopping" : undefined
+        )
       )
-    const endDate =
-      addCalendarDaysLabelForReview(startDate, durationDays - 1) ||
-      displayValue(
-        row.plannedProductionEndDate ||
-          row.plannedProductionStartDate ||
-          row.setupPlannedDate ||
-          row.plannedDate
-      )
-    windows.set(machineIssueRowKey(row), { startDate, endDate })
-    nextStart = nextCalendarDateLabelForReview(endDate)
   }
-
-  return windows
-}
-
-function nextCalendarDateLabelForReview(value: unknown) {
-  return addCalendarDaysLabelForReview(value, 1)
-}
-
-function addCalendarDaysLabelForReview(value: unknown, days: number) {
-  const date = parseReviewDateLabel(value)
-  if (!date) return ""
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return formatReviewDateLabel(next)
-}
-
-function parseReviewDateLabel(value: unknown) {
-  const textValue = str(value)
-  if (!textValue || textValue === "-") return undefined
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(textValue)
-  if (iso?.[1] && iso[2] && iso[3])
-    return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
-  const dashboard = /^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/.exec(textValue)
-  if (dashboard?.[1] && dashboard[2] && dashboard[3]) {
-    const month = reviewMonthNumber(dashboard[2])
-    const year = Number(
-      dashboard[3].length === 2 ? `20${dashboard[3]}` : dashboard[3]
-    )
-    if (month) return new Date(year, month - 1, Number(dashboard[1]))
-  }
-  const parsed = new Date(textValue)
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed
-}
-
-function formatReviewDateLabel(date: Date) {
-  const month =
-    [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ][date.getMonth()] ?? ""
-  return `${date.getDate()}-${month}-${String(date.getFullYear()).slice(-2)}`
-}
-
-function reviewMonthNumber(value: string) {
-  const months: Record<string, number> = {
-    january: 1,
-    jan: 1,
-    february: 2,
-    feb: 2,
-    march: 3,
-    mar: 3,
-    april: 4,
-    apr: 4,
-    may: 5,
-    june: 6,
-    jun: 6,
-    july: 7,
-    jul: 7,
-    august: 8,
-    aug: 8,
-    september: 9,
-    sep: 9,
-    october: 10,
-    oct: 10,
-    november: 11,
-    nov: 11,
-    december: 12,
-    dec: 12,
-  }
-  return months[value.toLowerCase()] ?? 0
-}
-function MachineConstraintMoveTile({
-  row,
-  targetMachine,
-  previewWindow,
-  onDragStart,
-  onDragEnd,
-}: {
-  row: DashboardPayload
-  targetMachine: string
-  previewWindow?: { startDate: string; endDate: string }
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
-}) {
   return (
-    <div
-      className="grid cursor-grab gap-2 rounded-md border border-primary/50 bg-primary/10 p-2 active:cursor-grabbing md:grid-cols-[auto_1fr_auto] md:items-center"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
-      <GripVertical className="size-4 text-primary" aria-hidden="true" />
-      <div>
-        <div className="text-sm font-semibold">
-          {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
-          {displayValue(row.setupNo)}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Move Remaining/Planned Quantity To {targetMachine} | Current{" "}
-          {machineValue(row, "machine")} | Preview{" "}
-          {displayValue(
-            previewWindow?.startDate || row.plannedProductionStartDate
-          )}{" "}
-          To{" "}
-          {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}
-        </div>
-      </div>
-      <Badge>Move</Badge>
-    </div>
+    <PlannerQueueTable
+      machine={group.machine}
+      heading={placedRows.length ? "Queue after this change" : "Current queue"}
+      rows={rows}
+    />
   )
 }
 
-function MachineConstraintQueueRowTile({ row }: { row: DashboardPayload }) {
-  return (
-    <div className="grid gap-1 rounded border bg-background px-2 py-1">
-      <div className="text-xs font-medium">
-        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
-        {displayValue(row.setupNo)}
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {machineValue(row, "machine")} | Order{" "}
-        {displayValue(row.orderPcs, true)} Of{" "}
-        {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production{" "}
-        {displayValue(row.plannedProductionStartDate)} To{" "}
-        {displayValue(row.plannedProductionEndDate)} |{" "}
-        {displayValue(row.runningStatus)}
-      </div>
-    </div>
-  )
-}
-
-function MachineConstraintStaticQueueRows({
-  group,
-}: {
-  group: MachineConstraintQueueReviewGroup
-}) {
-  return group.rows.length ? (
-    <div className="grid gap-1">
-      {group.rows.map((row, index) => (
-        <MachineConstraintQueueRowTile
-          key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`}
-          row={row}
-        />
-      ))}
-    </div>
-  ) : (
-    <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">
-      {group.emptyMessage || "No current planned rows in this queue."}
-    </div>
-  )
-}
 function PlannerActionConflictPanel({
   productionControl,
   submitAction,
@@ -6596,6 +6480,35 @@ function PlannerPreSaveConflictReview({
   )
 }
 
+function PlannerRequiredStops({
+  rows,
+  selected,
+  onChange,
+}: {
+  rows: DashboardPayload[]
+  selected: Record<string, boolean>
+  onChange: (key: string, stop: boolean) => void
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="text-sm font-medium">
+        Stop the affected setup before moving work
+      </div>
+      {rows.map((row) => (
+        <PlannerSetupDecision
+          key={machineIssueRowKey(row)}
+          identity={`${itemCode(row)} / ${jobCardNumber(row)} / Setup ${displayValue(row.setupNo)}`}
+          machine={machineValue(row, "machine")}
+          running={machineIssueRowNeedsProducedQty(row)}
+          required
+          selected={Boolean(selected[machineIssueRowKey(row)])}
+          onChange={(stop) => onChange(machineIssueRowKey(row), stop)}
+        />
+      ))}
+    </div>
+  )
+}
+
 function PlannerSessionSettlementNotice({
   mode,
   rows,
@@ -6621,60 +6534,64 @@ function PlannerSessionSettlementNotice({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
-            Production Session Action Required
+            {mode === "close"
+              ? "Close session before saving"
+              : "Start downtime before saving"}
           </div>
           <div className="text-xs">
             {mode === "close"
-              ? "Close running work through its Weight or Machine Counter form. Saved good pieces will update the Production Entry and Job Card; do not enter output again here."
+              ? "Save the actual production output in the session, then return here to apply the planner action."
               : "Keep the session open and start downtime at the actual interruption time before saving this same-machine delay."}
           </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            const params = new URLSearchParams({
-              floor: productionFloorFromLocation(),
-            })
-            window.open(
-              `/dashboard/production-sessions?${params.toString()}`,
-              "_blank",
-              "noopener,noreferrer"
-            )
-          }}
-        >
-          <Activity className="size-4" />
-          Open Production Sessions
-        </Button>
+        {sessions.length ? null : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const params = new URLSearchParams({
+                floor: productionFloorFromLocation(),
+              })
+              window.open(
+                `/dashboard/production-sessions?${params.toString()}`,
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }}
+          >
+            <Activity className="size-4" />
+            Open Production Sessions
+          </Button>
+        )}
       </div>
       <div className="grid gap-1 text-xs">
-        {sessions.length ? (
-          sessions.map((session) => (
-            <div
-              key={str(session.id)}
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--color-warning)]/30 bg-background px-2 py-1.5 text-foreground"
-            >
-              <span>
-                {displayValue(session.sessionReference || session.id)} ·{" "}
-                {displayValue(session.machineNumber || session.machine)} ·{" "}
-                {displayValue(
-                  session.jobCardNumber || session.jobCard || session.jcNo
-                )}{" "}
-                / Setup {displayValue(session.setupNumber || session.setupNo)}
-              </span>
-              <StatusBadge
-                value={`${actionLabel} · ${displayValue(session.measurementMethod)}`}
-              />
-            </div>
-          ))
-        ) : (
-          <div>
-            Open Production Sessions, complete the required action for the
-            running machine, then retry Save. The server checks the live session
-            before applying the planner decision.
-          </div>
-        )}
+        {sessions.length
+          ? sessions.map((session) => (
+              <div
+                key={str(session.id)}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--color-warning)]/30 bg-background px-2 py-1.5 text-foreground"
+              >
+                <span>
+                  {displayValue(session.sessionReference || session.id)} ·{" "}
+                  {displayValue(session.machineNumber || session.machine)} ·{" "}
+                  {displayValue(
+                    session.jobCardNumber || session.jobCard || session.jcNo
+                  )}{" "}
+                  / Setup {displayValue(session.setupNumber || session.setupNo)}
+                </span>
+                <Button asChild type="button" size="sm" variant="outline">
+                  <a
+                    href={`/dashboard/production-sessions?floor=${encodeURIComponent(productionFloorFromLocation())}&session=${encodeURIComponent(str(session.id))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {actionLabel}
+                  </a>
+                </Button>
+              </div>
+            ))
+          : null}
       </div>
     </div>
   )
@@ -6931,24 +6848,7 @@ function PlannerPriorityForm({
 
   return (
     <form className="grid gap-5" onSubmit={submit}>
-      <section
-        className="grid gap-4 rounded-xl border bg-background p-4 sm:p-5"
-        aria-labelledby="priority-input-heading"
-      >
-        <div className="flex items-start gap-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            1
-          </span>
-          <div>
-            <div id="priority-input-heading" className="font-semibold">
-              Select the work to reprioritize
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Choose an item, optionally narrow it to one job card, then set the
-              required priority.
-            </div>
-          </div>
-        </div>
+      <PlannerActionDetails reviewing={planReady} title="Priority details">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Field label="Item Code">
             <SearchableSelect
@@ -7018,11 +6918,11 @@ function PlannerPriorityForm({
             </span>
             <Button type="submit">
               <Eye className="size-4" />
-              Review Probable Plan
+              Review queue and dates
             </Button>
           </div>
         ) : null}
-      </section>
+      </PlannerActionDetails>
 
       {planReady ? (
         <section
@@ -7031,17 +6931,14 @@ function PlannerPriorityForm({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-start gap-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                2
-              </span>
               <div>
                 <div id="priority-review-heading" className="font-semibold">
-                  Review the setup sequence
+                  Review queue and dates
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {priorityPlan.steps.length} target setup
-                  {priorityPlan.steps.length === 1 ? "" : "s"}. Confirm the
-                  current setup to unlock the next one.
+                  {priorityPlan.steps.length > 1
+                    ? "Confirm setups in order."
+                    : ""}
                 </div>
               </div>
             </div>
@@ -7071,12 +6968,7 @@ function PlannerPriorityForm({
                 </Badge>
               </div>
             </div>
-          ) : (
-            <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground">
-              The complete item dates will appear after all setup actions are
-              confirmed.
-            </div>
-          )}
+          ) : null}
           {priorityPlan.steps.length ? (
             <>
               <PrioritySetupPreviewSummary
@@ -7135,11 +7027,10 @@ function PlannerPriorityForm({
       {planReady ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-4">
           <div>
-            <div className="font-semibold">3. Apply the decision</div>
             <div className="text-sm text-muted-foreground">
               {allStepsConfirmed
-                ? "All setup actions are confirmed."
-                : "Confirm every setup above before applying this priority."}
+                ? "Ready to apply."
+                : "Confirm the setup review to continue."}
             </div>
           </div>
           <Button
@@ -7151,7 +7042,7 @@ function PlannerPriorityForm({
             }
           >
             <Wrench className="size-4" />
-            Apply Confirmed Priority
+            Apply priority
           </Button>
         </div>
       ) : null}
@@ -7173,93 +7064,33 @@ function PrioritySetupPreviewSummary({
   onEdit: (stepKey: string) => void
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border bg-background">
-      <div className="border-b bg-muted/20 px-4 py-3">
-        <div className="text-sm font-semibold">Setup progress</div>
-        <div className="text-xs text-muted-foreground">
-          One setup is open at a time. Confirmed setups can be edited from this
-          list.
-        </div>
-      </div>
-      <ol className="divide-y">
-        {steps.map((step, index) => {
-          const window = windows.get(step.key) ?? {
-            startDate: step.startDate,
-            endDate: step.endDate,
-          }
-          const previewState = priorityPlanStepPreviewState(
-            step.key,
-            confirmedSteps,
-            activeStepKey
-          )
-          const isConfirmed = Boolean(confirmedSteps[step.key])
-          const isActive = step.key === activeStepKey
-          return (
-            <li
-              key={step.key}
-              className={isActive ? "bg-primary/5" : undefined}
-            >
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(10rem,auto)_auto] sm:items-center">
-                <span
-                  className={[
-                    "grid size-8 place-items-center rounded-full border text-sm font-semibold",
-                    isConfirmed
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : isActive
-                        ? "border-primary text-primary"
-                        : "bg-muted text-muted-foreground",
-                  ].join(" ")}
-                >
-                  {isConfirmed ? (
-                    <CheckCircle2 className="size-4" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <div className="min-w-0">
-                  <div className="font-medium">Setup {step.setupNo}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {step.machine} · {step.itemCode} / {step.jcNo}
-                  </div>
-                </div>
-                <div className="col-start-2 sm:col-start-auto">
-                  <div className="text-xs text-muted-foreground">
-                    {step.isRunning ? "Actual start / forecast finish" : "Probable dates"}
-                  </div>
-                  <div className="text-sm font-medium">
-                    {previewState.datesVisible
-                      ? `${window.startDate || "-"} to ${window.endDate || "-"}`
-                      : "Waiting for previous setup"}
-                  </div>
-                </div>
-                <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 sm:justify-end">
-                  <Badge
-                    variant={
-                      isActive
-                        ? "default"
-                        : isConfirmed
-                          ? "outline"
-                          : "secondary"
-                    }
-                  >
-                    {previewState.label}
-                  </Badge>
-                  {isConfirmed ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEdit(step.key)}
-                    >
-                      Edit
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            </li>
-          )
-        })}
-      </ol>
+    <div className="flex flex-wrap gap-2" aria-label="Setup review progress">
+      {steps.map((step) => {
+        const confirmed = Boolean(confirmedSteps[step.key])
+        const state = priorityPlanStepPreviewState(
+          step.key,
+          confirmedSteps,
+          activeStepKey
+        )
+        const window = windows.get(step.key)
+        return (
+          <Button
+            key={step.key}
+            type="button"
+            size="sm"
+            variant={confirmed ? "secondary" : "outline"}
+            disabled={!confirmed}
+            title={
+              confirmed && window
+                ? `${window.startDate} to ${window.endDate} · Click to edit`
+                : state.label
+            }
+            onClick={() => onEdit(step.key)}
+          >
+            Setup {step.setupNo} · {state.label}
+          </Button>
+        )
+      })}
     </div>
   )
 }
@@ -7321,100 +7152,39 @@ function PriorityPlanStepReview({
     : [interruptMode, queueMode].filter(Boolean).join("; ")
 
   return (
-    <div className="grid gap-4 rounded-lg border-2 border-primary/25 bg-background p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-        <div className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-            <ListChecks className="size-5" />
-          </span>
-          <div>
-            <div className="font-semibold">Decide Setup {step.setupNo}</div>
-            <div className="text-sm text-muted-foreground">
-              {step.itemCode} / {step.jcNo} on {step.machine}
-            </div>
-          </div>
+    <div className="grid min-w-0 gap-4">
+      <div>
+        <div className="font-semibold">
+          {step.itemCode} / {step.jcNo} / Setup {step.setupNo}
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Badge>{step.isRunning ? "Already running" : "Current setup"}</Badge>
-          <Badge variant={step.blockers.length ? "secondary" : "outline"}>
-            {step.blockers.length
-              ? `${step.blockers.length} queue impact${step.blockers.length === 1 ? "" : "s"}`
-              : "No queue impact"}
-          </Badge>
+        <div className="text-sm text-muted-foreground">
+          {step.machine}
+          {step.isRunning ? " · Already running" : ""}
         </div>
       </div>
 
-      <PriorityScenarioCard
-        title={step.isRunning ? "Current run forecast" : "Probable setup plan"}
-        window={plannedWindow}
-        detail={planMode || "No queue impact"}
-      />
-
-      {queuedBlockers.length ? (
-        <PriorityQueuePlacementBoard
-          step={step}
-          queueAfterKey={queueAfterKey}
-          plannedWindow={plannedWindow}
-          onQueueAfterChange={onQueueAfterChange}
-        />
-      ) : null}
-
       {step.blockers.some((blocker) => blocker.requiresApproval) ? (
         <div className="grid gap-3 rounded-lg border bg-muted/10 p-3">
-          <div>
-            <div className="text-sm font-semibold">
-              Work that may be interrupted
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Choose explicitly whether each running or started setup may be
-              stopped or moved.
-            </div>
+          <div className="text-sm font-medium">
+            Running or prepared work on {step.machine}
           </div>
           {step.blockers
             .filter((blocker) => blocker.requiresApproval)
-            .map((blocker) => {
-              const selected = Boolean(selectedInterruptions[blocker.key])
-              return (
-                <div
-                  key={blocker.key}
-                  className="grid gap-2 rounded-md border bg-background p-3 md:grid-cols-[1fr_auto] md:items-center"
-                >
-                  <div>
-                    <div className="text-sm font-medium">
-                      {blocker.itemCode} / {blocker.jcNo} / Setup{" "}
-                      {blocker.setupNo}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {blocker.machine} - {blocker.startDate} To{" "}
-                      {blocker.endDate} - {blocker.label}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant={selected ? "default" : "outline"}
-                      onClick={() =>
-                        setSelectedInterruptions((current) => ({
-                          ...current,
-                          [blocker.key]: !selected,
-                        }))
-                      }
-                    >
-                      {blocker.state === "running"
-                        ? selected
-                          ? "Stop Selected"
-                          : "Stop This Setup"
-                        : selected
-                          ? "Move Approved"
-                          : "Approve Queue Move"}
-                    </Button>
-                    {selected && blocker.state === "running" ? (
-                      <StatusBadge value="Session close required" />
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
+            .map((blocker) => (
+              <PlannerSetupDecision
+                key={blocker.key}
+                identity={`${blocker.itemCode} / ${blocker.jcNo} / Setup ${blocker.setupNo}`}
+                machine={blocker.machine}
+                running={blocker.state === "running"}
+                selected={Boolean(selectedInterruptions[blocker.key])}
+                onChange={(stop) =>
+                  setSelectedInterruptions((current) => ({
+                    ...current,
+                    [blocker.key]: stop,
+                  }))
+                }
+              />
+            ))}
         </div>
       ) : null}
 
@@ -7436,15 +7206,29 @@ function PriorityPlanStepReview({
         />
       ) : null}
 
+      {queuedBlockers.length ? (
+        <PriorityQueuePlacementBoard
+          step={step}
+          queueAfterKey={queueAfterKey}
+          onQueueAfterChange={onQueueAfterChange}
+        />
+      ) : null}
+
+      <PriorityScenarioCard
+        title={
+          step.isRunning ? "Current run forecast" : "Expected production dates"
+        }
+        window={plannedWindow}
+        detail={planMode || "No queue impact"}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
         <span className="text-sm text-muted-foreground">
           {!plannedWindow.startDate || !plannedWindow.endDate
             ? "No feasible dates. Check tooling allocation and refresh the plan."
             : step.isRunning
-              ? "This setup continues running. Its session and actual start are retained."
-              : runningBlockerCount
-              ? "Running work left unselected will continue running."
-              : "No running setup blocks this target."}
+              ? "The current run and its actual start are retained."
+              : null}
         </span>
         <Button
           type="button"
@@ -7462,243 +7246,38 @@ function PriorityPlanStepReview({
 function PriorityQueuePlacementBoard({
   step,
   queueAfterKey,
-  plannedWindow,
   onQueueAfterChange,
 }: {
   step: PriorityPlanStep
   queueAfterKey: string
-  plannedWindow: PriorityPlanWindow
   onQueueAfterChange: (value: string) => void
 }) {
-  const queuedBlockers = step.blockers.filter(
-    (blocker) => blocker.state === "queued"
-  )
-  const placementIndex = priorityQueuePlacementIndex(
-    queuedBlockers,
-    queueAfterKey
-  )
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-
-  function placeAt(index: number) {
-    const boundedIndex = Math.max(0, Math.min(index, queuedBlockers.length))
-    const afterKey =
-      boundedIndex > 0 ? (queuedBlockers[boundedIndex - 1]?.key ?? "") : ""
-    onQueueAfterChange(afterKey)
-  }
-
-  function dragPriority(event: DragEvent<HTMLDivElement>) {
-    event.dataTransfer.effectAllowed = "move"
-    event.dataTransfer.setData("text/plain", step.key)
-  }
-
-  function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "move"
-    setDragOverIndex(index)
-  }
-
-  function dropPriority(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault()
-    const sourceKey = event.dataTransfer.getData("text/plain")
-    setDragOverIndex(null)
-    if (sourceKey && sourceKey !== step.key) return
-    placeAt(index)
-  }
-
+  const queued = step.blockers.filter((blocker) => blocker.state === "queued")
+  const position = priorityQueuePlacementIndex(queued, queueAfterKey)
+  const rows: PlannerQueueRow[] = queued.map((blocker) => ({
+    key: blocker.key,
+    identity: `${blocker.itemCode} / ${blocker.jcNo} / Setup ${blocker.setupNo}`,
+    kind: "queued",
+  }))
+  rows.splice(position, 0, {
+    key: step.key,
+    identity: `${step.itemCode} / ${step.jcNo} / Setup ${step.setupNo}`,
+    kind: step.isRunning ? "running" : "moved",
+  })
   return (
-    <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold">
-            Choose the position on {step.machine}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Click a placement row or drag the highlighted priority setup.
-            Planned dates: {plannedWindow.startDate || "-"} to{" "}
-            {plannedWindow.endDate || "-"}.
-          </div>
-        </div>
-        <Badge variant="secondary">
-          Selected position: {placementIndex + 1}
-        </Badge>
-      </div>
-      <div className="grid gap-2 rounded-lg border bg-background p-2">
-        {Array.from({ length: queuedBlockers.length + 1 }, (_, index) => (
-          <Fragment key={`${step.key}-slot-${index}`}>
-            <PriorityQueueDropZone
-              active={dragOverIndex === index}
-              current={placementIndex === index}
-              label={priorityQueueDropLabel(index, queuedBlockers)}
-              onClick={() => placeAt(index)}
-              onDragOver={(event) => allowDrop(event, index)}
-              onDragLeave={() =>
-                setDragOverIndex((current) =>
-                  current === index ? null : current
-                )
-              }
-              onDrop={(event) => dropPriority(event, index)}
-            />
-            {placementIndex === index ? (
-              <PriorityQueuePriorityTile
-                step={step}
-                plannedWindow={plannedWindow}
-                position={placementIndex + 1}
-                onDragStart={dragPriority}
-                onDragEnd={() => setDragOverIndex(null)}
-              />
-            ) : null}
-            {index < queuedBlockers.length ? (
-              <PriorityQueueBlockerTile
-                blocker={queuedBlockers[index]!}
-                keptAhead={index < placementIndex}
-                position={index >= placementIndex ? index + 2 : index + 1}
-                onPlaceBefore={() => placeAt(index)}
-                onPlaceAfter={() => placeAt(index + 1)}
-              />
-            ) : null}
-          </Fragment>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function PriorityQueueDropZone({
-  active,
-  current,
-  label,
-  onClick,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-}: {
-  active: boolean
-  current: boolean
-  label: string
-  onClick: () => void
-  onDragOver: (event: DragEvent<HTMLButtonElement>) => void
-  onDragLeave: () => void
-  onDrop: (event: DragEvent<HTMLButtonElement>) => void
-}) {
-  const className = [
-    "flex min-h-8 w-full items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors",
-    current
-      ? "border-primary bg-primary/10 text-primary"
-      : "border-dashed border-border bg-muted/10 text-muted-foreground hover:border-primary/50 hover:bg-primary/10 hover:text-primary",
-    active ? "border-primary bg-primary/20" : "",
-  ]
-    .filter(Boolean)
-    .join(" ")
-
-  return (
-    <button
-      type="button"
-      className={className}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      <span>{current ? "Priority position selected" : label}</span>
-    </button>
-  )
-}
-
-function PriorityQueuePriorityTile({
-  step,
-  plannedWindow,
-  position,
-  onDragStart,
-  onDragEnd,
-}: {
-  step: PriorityPlanStep
-  plannedWindow: PriorityPlanWindow
-  position: number
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
-}) {
-  return (
-    <div
-      className="grid cursor-grab grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-md border-2 border-primary/50 bg-primary/10 p-3 active:cursor-grabbing md:grid-cols-[auto_auto_1fr_auto]"
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
-      <GripVertical className="size-4 text-primary" aria-hidden="true" />
-      <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-        {position}
-      </span>
-      <div>
-        <div className="text-sm font-semibold">
-          {step.itemCode} / {step.jcNo} / Setup {step.setupNo}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {step.machine} · {plannedWindow.startDate || "-"} to{" "}
-          {plannedWindow.endDate || "-"}
-        </div>
-      </div>
-      <Badge className="col-start-3 md:col-start-auto">New priority</Badge>
-    </div>
-  )
-}
-
-function PriorityQueueBlockerTile({
-  blocker,
-  keptAhead,
-  position,
-  onPlaceBefore,
-  onPlaceAfter,
-}: {
-  blocker: PriorityPlanStep["blockers"][number]
-  keptAhead: boolean
-  position: number
-  onPlaceBefore: () => void
-  onPlaceAfter: () => void
-}) {
-  return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-md border bg-background p-3 md:grid-cols-[auto_1fr_auto]">
-      <span className="grid size-7 place-items-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-        {position}
-      </span>
-      <div className="min-w-0">
-        <div className="text-sm font-medium">
-          {blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {blocker.machine} · {blocker.startDate} to {blocker.endDate}
-        </div>
-      </div>
-      <div className="col-span-2 flex flex-wrap items-center justify-end gap-2 md:col-span-1">
-        <Badge variant={keptAhead ? "secondary" : "outline"}>
-          {keptAhead ? "Ahead of priority" : "After priority"}
-        </Badge>
-        <div className="flex gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`}
-            title="Place Priority Before This Setup"
-            onClick={onPlaceBefore}
-          >
-            <ArrowUp className="size-3" />
-            Before
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`}
-            title="Place Priority After This Setup"
-            onClick={onPlaceAfter}
-          >
-            <ArrowDown className="size-3" />
-            After
-          </Button>
-        </div>
-      </div>
+    <div className="grid min-w-0 gap-3">
+      {step.isRunning ? null : (
+        <PlannerQueuePosition
+          id={`priority-position-${step.key}`}
+          value={queueAfterKey}
+          options={queued.map((blocker) => ({
+            value: blocker.key,
+            label: `After ${blocker.jcNo} / Setup ${blocker.setupNo} · ${blocker.itemCode}`,
+          }))}
+          onChange={onQueueAfterChange}
+        />
+      )}
+      <PlannerQueueTable machine={step.machine} rows={rows} />
     </div>
   )
 }
@@ -7714,16 +7293,6 @@ function priorityQueuePlacementIndex(
   return blockerIndex < 0 ? 0 : blockerIndex + 1
 }
 
-function priorityQueueDropLabel(
-  index: number,
-  queuedBlockers: PriorityPlanStep["blockers"]
-) {
-  if (index === 0) return "Place priority at position 1"
-  const blocker = queuedBlockers[index - 1]
-  return blocker
-    ? `Place priority after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}`
-    : "Place priority at current queue position"
-}
 function PriorityScenarioCard({
   title,
   window,
@@ -7734,18 +7303,11 @@ function PriorityScenarioCard({
   detail: string
 }) {
   return (
-    <div className="grid gap-3 rounded-lg border bg-muted/15 p-4 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] sm:items-center">
-      <div>
-        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {title}
-        </div>
-        <div className="mt-1 text-base font-semibold">
-          {window.startDate || "-"} to {window.endDate || "-"}
-        </div>
+    <div className="grid gap-1 border-t pt-3">
+      <div className="text-sm font-medium">
+        {title}: {window.startDate || "—"} to {window.endDate || "—"}
       </div>
-      <div className="rounded-md bg-background p-3 text-sm text-muted-foreground">
-        {detail}
-      </div>
+      <p className="text-xs text-muted-foreground">{detail}</p>
     </div>
   )
 }
@@ -18672,16 +18234,6 @@ function machineConstraintQueueRowKey(row: DashboardPayload) {
     .join("|")
 }
 
-function machineConstraintQueueDropLabel(
-  index: number,
-  rows: DashboardPayload[]
-) {
-  if (index === 0) return "Place moved setup at position 1"
-  const row = rows[index - 1]
-  return row
-    ? `Place moved setup after ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`
-    : "Place moved setup at the end of this queue"
-}
 function machineIssueRowIsLocked(row: DashboardPayload) {
   const stage = str(row.shopFloorStage)
   const runningStatus = str(row.runningStatus).toLowerCase()
