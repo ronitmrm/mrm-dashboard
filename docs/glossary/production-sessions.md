@@ -34,6 +34,13 @@ evidence. Inspection parameter definitions remain the snapshots captured when
 the check was first saved. The Hourly Check Register lists this same saved
 evidence for later review; it is not a separate copy of the inspection.
 
+Each new Setting completion creates a separate first-piece inspection task,
+including when a Planner reopens an unfinished setup. Its report is identified
+by the job, part, option, setup, machine and Setting task assignment time.
+Retrying that same task keeps the same report identity. A new task's readings
+must not overwrite an earlier approval or require an old-report correction
+reason. Earlier reports remain available for review and reasoned correction.
+
 Setup Checklist masters belong to one production unit. Codes and revisions are
 unique within that unit; tasks may only select and complete that unit's templates.
 Editing a unit's checklist does not change another unit's checklist. Existing

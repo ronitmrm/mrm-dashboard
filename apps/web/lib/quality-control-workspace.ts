@@ -2,6 +2,10 @@ import { qualityInspectionReadingResult } from "./quality-parameter-set"
 
 export type QualityWorkspaceRecord = Record<string, unknown>
 
+export function firstPieceTaskReportId(planKey: string, taskAssignedAt: string) {
+  return [planKey, taskAssignedAt].filter(Boolean).join("|")
+}
+
 export type QualityDowntimeRestartTask = {
   eventId: string
   jobCardNumber: string
