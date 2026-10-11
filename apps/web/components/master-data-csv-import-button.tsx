@@ -59,11 +59,15 @@ export function MasterDataCsvImportButton({
   fields = {},
   fileField = "master_csv_file",
   successMessage,
+  accept = ".csv,text/csv",
+  label = "Upload CSV",
 }: {
   action: CsvImportAction
   fields?: Record<string, string>
   fileField?: string
   successMessage?: string
+  accept?: string
+  label?: string
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -87,7 +91,7 @@ export function MasterDataCsvImportButton({
           }
         } catch (error) {
           unstable_rethrow(error)
-          setError(getUploadErrorMessage(error, "CSV import failed."))
+          setError(getUploadErrorMessage(error, "File import failed."))
         } finally {
           setSubmitting(false)
         }
@@ -98,7 +102,7 @@ export function MasterDataCsvImportButton({
       {error ? (
         <StandardState
           variant="error"
-          title="CSV import stopped"
+          title="Import stopped"
           description={error}
         />
       ) : null}
@@ -111,7 +115,7 @@ export function MasterDataCsvImportButton({
         <input key={name} name={name} type="hidden" value={value} />
       ))}
       <input
-        accept=".csv,text/csv"
+        accept={accept}
         className="sr-only"
         name={fileField}
         ref={inputRef}
@@ -131,7 +135,11 @@ export function MasterDataCsvImportButton({
         onClick={() => inputRef.current?.click()}
       >
         <Upload className="size-4" />
-        {submitting ? "Importing CSV..." : "Upload CSV"}
+        {submitting
+          ? label === "Upload CSV"
+            ? "Importing CSV..."
+            : "Importing..."
+          : label}
       </Button>
     </form>
   )

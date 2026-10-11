@@ -242,6 +242,7 @@ export {
   type ProductPortfolioRow,
 } from "./product-portfolio"
 export { createProductRepository } from "./products"
+export { createIsoAnalysisRepository, type AnalysisAccess, type AnalysisRecord, type AnalysisHistory, type AnalysisImportRow } from "./iso-analysis"
 export {
   createPrintedDrawingHoldingsRepository,
   PrintedDrawingHoldingError,
