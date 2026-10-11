@@ -1,4 +1,8 @@
-import { machineFamilyMatches, machineMasterFamily } from "@workspace/db/planning-rules"
+import {
+  isActivePlannerDecision,
+  machineFamilyMatches,
+  machineMasterFamily,
+} from "@workspace/db/planning-rules"
 import {
   validDate,
   type PlanningContext,
@@ -46,7 +50,9 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
   const routes = rows(source.routeMasterRows)
   const cycles = rows(source.cycleMasterRows)
   const families = [
-    ...new Set(routes.map((row) => text(row.machineFamily)).filter(Boolean)),
+    ...new Set(
+      routes.map((row) => text(row.machineFamily).toUpperCase()).filter(Boolean)
+    ),
   ]
   const machines = rows(source.machinePlanningRows)
     .filter(
@@ -118,7 +124,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
           same(cycle.setupNo, route.setupNo)
       )
       const seconds = Number(matches[0]?.totalTime)
-      const family = text(route.machineFamily)
+      const family = text(route.machineFamily).toUpperCase()
       if (matches.length !== 1 || !Number.isFinite(seconds) || seconds <= 0)
         issue = `Missing or ambiguous cycle time: setup ${text(route.setupNo)}`
       if (!machines.some((machine) => machine.family === family))
@@ -139,14 +145,19 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
     const own = details.filter(
       (row) => same(row.jcNo, id) && same(row.partCode, work.partCode)
     )
-    const unfinished = own.filter((row) =>
-      text(row.shopFloorStage) !== "item_complete" &&
-      text(row.runningStatus) !== "Complete" &&
-      (row.pendingGoodQty == null
-        ? Number(row.rawActualQty) < Number(row.orderPcs)
-        : Number(row.pendingGoodQty) > 0)
+    const unfinished = own.filter(
+      (row) =>
+        text(row.shopFloorStage) !== "item_complete" &&
+        text(row.runningStatus) !== "Complete" &&
+        (row.pendingGoodQty == null
+          ? Number(row.rawActualQty) < Number(row.orderPcs)
+          : Number(row.pendingGoodQty) > 0)
     )
-    if (Number(work.finalSetupGoodPieces) >= quantity && own.length && !unfinished.length)
+    if (
+      Number(work.finalSetupGoodPieces) >= quantity &&
+      own.length &&
+      !unfinished.length
+    )
       continue
     const line = resolve({
       id,
@@ -188,12 +199,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
     context.existing.push(line)
   }
   for (const constraint of rows(source.machineConstraints)) {
-    if (
-      ["cancelled", "resolved", "inactive"].includes(
-        text(constraint.status).toLowerCase()
-      )
-    )
-      continue
+    if (!isActivePlannerDecision(constraint.status)) continue
     const machine = text(constraint.machine ?? constraint.machineNumber)
     const start = date(
       constraint.unavailableFrom ?? constraint.startDate ?? constraint.fromDate

@@ -28,6 +28,8 @@ orders, job cards, reservations, priorities or production commitments.
 Plans are estimates, not shop-floor instructions. Missing master data or unknown
 existing workload prevents approval rather than silently treating it as zero.
 Changed inputs or refreshed workload require recalculation before approval.
+Machine-family labels match without regard to capitalization. Closed planner
+constraints, including those marked Available, do not reserve machine capacity.
 Existing physical WIP retains its canonical machine reservations even after
 final good output meets customer demand. Demand completion alone does not finish
 a setup or free its capacity.

@@ -14,6 +14,8 @@ across machines is not assumed. Input-order scheduling is used in RM-date mode.
 
 The adapter in `order-acceptance-context.ts` reads the canonical floor snapshot:
 route/cycle masters, active machines, pending work, machine plan dates and holidays.
+Route operation and machine-family keys are normalized to uppercase before
+scheduling; constraint activity uses the shared `isActivePlannerDecision` rule.
 Received existing work retains its canonical machine reservations, conservatively
 occupying its assigned working dates. Waiting-RM work is scheduled before proposed
 lines. Unknown remaining work, overdue unrefreshed schedules, ambiguous masters
