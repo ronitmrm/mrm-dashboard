@@ -173,6 +173,13 @@ from another job. The Planner schedules the remaining work through the normal
 planning actions, then production starts a new session. Open sessions and a
 changed setup block the correction; refresh and review before retrying.
 
+Reopen Setup excludes Job Cards after final dispatch, including historical
+dispatch approvals without a quantity. Partial dispatch alone does not block
+reopening: the Job Card remains open until the final setup is complete and all
+recorded finished good has shipped. If a later setup in the same route is already
+Item Complete, an earlier setup cannot reopen. Correct the later completion first.
+These rules are checked again on save against current production records.
+
 Historical output and recorded Machine Start evidence survive reopening or
 releasing a setup. They do not make its current Planned state Running, reserve
 its former machine, or create a missing-start workflow exception. Preparation

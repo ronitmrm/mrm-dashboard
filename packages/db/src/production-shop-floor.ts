@@ -101,6 +101,72 @@ function dispatchSetupSignature(setup: DispatchSetup) {
     ? `${name}|${family}|${weight}` : null
 }
 
+async function finishedGoodPieces(
+  executor: Pick<PoolClient, "query">,
+  organizationId: string,
+  workOrderId: string,
+  finalSetup: DispatchSetup,
+) {
+  const produced = await executor.query<{ good_pieces: string }>(
+    `SELECT COALESCE(sum(entry.quantity_good), 0)::text AS good_pieces
+     FROM manufacturing.production_entries entry
+     WHERE entry.organization_id = $1 AND entry.work_order_id = $2
+       AND entry.operation_setup_id = $3 AND entry.reversed_at IS NULL`,
+    [organizationId, workOrderId, finalSetup.id]
+  )
+  let goodPieces = Number(produced.rows[0]?.good_pieces ?? 0)
+  const routeChanges = await executor.query<{
+    from_route_option_id: string | null
+    to_route_option_id: string
+    source_payload: Record<string, unknown> | null
+  }>(
+    `SELECT from_route_option_id, to_route_option_id, source_payload
+     FROM manufacturing.route_change_events
+     WHERE work_order_id = $1 AND reversed_at IS NULL
+     ORDER BY occurred_at DESC, id DESC`,
+    [workOrderId]
+  )
+  const countedSetups = new Set([finalSetup.id])
+  let carriedSetup = finalSetup
+  for (const change of routeChanges.rows) {
+    const previousRouteId = change.from_route_option_id
+    const remaining = change.source_payload?.remainingSetups
+    const remainingSetups = Array.isArray(remaining)
+      ? remaining.filter((row): row is Record<string, unknown> =>
+        typeof row === "object" && row !== null && !Array.isArray(row))
+      : []
+    const zeroRemaining = remainingSetups.length > 0 && remainingSetups.every((row) =>
+      Number(row.quantity ?? row.qty ?? row.remainingQty) === 0)
+    const finalCarried = remainingSetups.some((row) =>
+      Number(row.setupNumber ?? row.setupNo) === carriedSetup.setup_number)
+    if (!previousRouteId || previousRouteId === carriedSetup.route_option_id
+      || change.to_route_option_id !== carriedSetup.route_option_id
+      || !zeroRemaining || !finalCarried) break
+    const previousSetups = await executor.query<DispatchSetup>(
+      `SELECT id, route_option_id, setup_number, operation_name, source_payload
+       FROM manufacturing.operation_setups
+       WHERE route_option_id = $1 AND active`,
+      [previousRouteId]
+    )
+    const signature = dispatchSetupSignature(carriedSetup)
+    const matching = signature
+      ? previousSetups.rows.filter((setup) => dispatchSetupSignature(setup) === signature)
+      : []
+    if (matching.length !== 1 || countedSetups.has(matching[0]!.id)) break
+    carriedSetup = matching[0]!
+    countedSetups.add(carriedSetup.id)
+    const priorProduction = await executor.query<{ good_pieces: string }>(
+      `SELECT COALESCE(sum(quantity_good), 0)::text AS good_pieces
+       FROM manufacturing.production_entries
+       WHERE organization_id = $1 AND work_order_id = $2
+         AND operation_setup_id = $3 AND reversed_at IS NULL`,
+      [organizationId, workOrderId, carriedSetup.id]
+    )
+    goodPieces += Number(priorProduction.rows[0]?.good_pieces ?? 0)
+  }
+  return goodPieces
+}
+
 type ProductionSessionEndReason =
   | "operator_change"
   | "shift_end"
@@ -4912,63 +4978,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!finalSetup.rows[0]) {
           throw new Error("Select a route with a final setup before dispatching finished good.")
         }
-        const produced = await client.query<{ good_pieces: string }>(
-          `SELECT COALESCE(sum(entry.quantity_good), 0)::text AS good_pieces
-           FROM manufacturing.production_entries entry
-           WHERE entry.organization_id = $1 AND entry.work_order_id = $2
-             AND entry.operation_setup_id = $3 AND entry.reversed_at IS NULL`,
-          [input.organizationId, workOrder.work_order_id, finalSetup.rows[0].id]
-        )
-        let goodPieces = Number(produced.rows[0]?.good_pieces ?? 0)
-        const routeChanges = await client.query<{
-          from_route_option_id: string | null
-          to_route_option_id: string
-          source_payload: Record<string, unknown> | null
-        }>(
-          `SELECT from_route_option_id, to_route_option_id, source_payload
-           FROM manufacturing.route_change_events
-           WHERE work_order_id = $1 AND reversed_at IS NULL
-           ORDER BY occurred_at DESC, id DESC`,
-          [workOrder.work_order_id]
-        )
-        const countedSetups = new Set([finalSetup.rows[0].id])
-        let carriedSetup = finalSetup.rows[0]
-        for (const change of routeChanges.rows) {
-          const previousRouteId = change.from_route_option_id
-          const remaining = change.source_payload?.remainingSetups
-          const remainingSetups = Array.isArray(remaining)
-            ? remaining.filter((row): row is Record<string, unknown> =>
-              typeof row === "object" && row !== null && !Array.isArray(row))
-            : []
-          const zeroRemaining = remainingSetups.length > 0 && remainingSetups.every((row) =>
-            Number(row.quantity ?? row.qty ?? row.remainingQty) === 0)
-          const finalCarried = remainingSetups.some((row) =>
-            Number(row.setupNumber ?? row.setupNo) === carriedSetup.setup_number)
-          if (!previousRouteId || previousRouteId === carriedSetup.route_option_id
-            || change.to_route_option_id !== carriedSetup.route_option_id
-            || !zeroRemaining || !finalCarried) break
-          const previousSetups = await client.query<DispatchSetup>(
-            `SELECT id, route_option_id, setup_number, operation_name, source_payload
-             FROM manufacturing.operation_setups
-             WHERE route_option_id = $1 AND active`,
-            [previousRouteId]
-          )
-          const signature = dispatchSetupSignature(carriedSetup)
-          const matching = signature
-            ? previousSetups.rows.filter((setup) => dispatchSetupSignature(setup) === signature)
-            : []
-          if (matching.length !== 1 || countedSetups.has(matching[0]!.id)) break
-          carriedSetup = matching[0]!
-          countedSetups.add(carriedSetup.id)
-          const priorProduction = await client.query<{ good_pieces: string }>(
-            `SELECT COALESCE(sum(quantity_good), 0)::text AS good_pieces
-             FROM manufacturing.production_entries
-             WHERE organization_id = $1 AND work_order_id = $2
-               AND operation_setup_id = $3 AND reversed_at IS NULL`,
-            [input.organizationId, workOrder.work_order_id, carriedSetup.id]
-          )
-          goodPieces += Number(priorProduction.rows[0]?.good_pieces ?? 0)
-        }
+        const goodPieces = await finishedGoodPieces(client, input.organizationId, workOrder.work_order_id, finalSetup.rows[0])
         const dispatched = await client.query<{
           legacy_dispatch: boolean
           shipped_pieces: string
@@ -5078,14 +5088,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     async readCompletedSetups(input: {
       organizationId: string
       productionFloorCode: string
-    }) {
-      const result = await pool.query<{
+      setupStateId?: string
+    }, executor: Pick<PoolClient, "query"> = pool) {
+      const result = await executor.query<{
         id: string; rowVersion: string; jobCardNumber: string; partCode: string
         optionNumber: string; setupNumber: number; machineNumber: string; completedAt: Date
+        workOrderId: string; finalSetup: DispatchSetup; dispatchedPieces: string
+        finalSetupComplete: boolean
       }>(`SELECT state.id, state.row_version::text AS "rowVersion",
           work_order.job_card_number AS "jobCardNumber", item.uid AS "partCode",
           route.route_code AS "optionNumber", setup.setup_number AS "setupNumber",
-          machine.machine_number AS "machineNumber", state.completed_at AS "completedAt"
+          machine.machine_number AS "machineNumber", state.completed_at AS "completedAt",
+          work_order.id AS "workOrderId", to_jsonb(final_setup) AS "finalSetup",
+          dispatch.pieces::text AS "dispatchedPieces",
+          state.operation_setup_id = final_setup.id AND NOT EXISTS (
+            SELECT 1 FROM manufacturing.shop_floor_setup_state unfinished
+            WHERE unfinished.work_order_id = work_order.id
+              AND unfinished.operation_setup_id = final_setup.id
+              AND unfinished.active AND unfinished.stage <> 'item_complete'
+          ) AS "finalSetupComplete"
         FROM manufacturing.shop_floor_setup_state state
         JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
         JOIN catalog.items item ON item.id = work_order.item_id
@@ -5093,11 +5114,59 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
         JOIN catalog.machines machine ON machine.id = state.machine_id
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        JOIN LATERAL (
+          SELECT id, route_option_id, setup_number, operation_name, source_payload
+          FROM manufacturing.operation_setups
+          WHERE route_option_id = route.id AND active
+          ORDER BY sequence DESC, setup_number DESC LIMIT 1
+        ) final_setup ON true
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(bool_or(quantity IS NULL), false) AS legacy_terminal,
+            COALESCE(sum(quantity), 0) AS pieces
+          FROM manufacturing.dispatch_approval_events
+          WHERE work_order_id = work_order.id AND decision = 'approved' AND reversed_at IS NULL
+        ) dispatch ON true
         WHERE state.organization_id = $1 AND floor.code = $2
           AND state.stage = 'item_complete' AND NOT state.active
+          AND ($3::uuid IS NULL OR state.id = $3)
+          AND work_order.status <> 'Cancelled' AND NOT dispatch.legacy_terminal
+          AND NOT EXISTS (
+            SELECT 1 FROM manufacturing.operation_setups later
+            WHERE later.route_option_id = route.id AND later.active AND later.sequence > setup.sequence
+              AND (EXISTS (
+                SELECT 1 FROM manufacturing.shop_floor_setup_state completed
+                WHERE completed.work_order_id = work_order.id AND completed.operation_setup_id = later.id
+                  AND completed.stage = 'item_complete'
+              ) OR EXISTS (
+                SELECT 1 FROM manufacturing.setup_completion_events completed
+                WHERE completed.work_order_id = work_order.id AND completed.operation_setup_id = later.id
+                  AND completed.reversed_at IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM manufacturing.shop_floor_setup_state current_state
+                    WHERE current_state.work_order_id = work_order.id
+                      AND current_state.operation_setup_id = later.id
+                      AND (completed.machine_id IS NULL OR current_state.machine_id = completed.machine_id)
+                  )
+              ))
+          )
         ORDER BY state.completed_at DESC, state.id`,
-        [input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
-      return { rows: result.rows }
+        [input.organizationId, normalizeProductionFloorCode(input.productionFloorCode), input.setupStateId ?? null])
+      const finishedBySetup = new Map<string, Promise<number>>()
+      const rows = await Promise.all(result.rows.map(async ({ workOrderId, finalSetup, dispatchedPieces,
+        finalSetupComplete, ...row }) => {
+        const shipped = Number(dispatchedPieces)
+        if (finalSetupComplete && shipped > 0) {
+          const key = `${workOrderId}:${finalSetup.id}`
+          let finished = finishedBySetup.get(key)
+          if (!finished) {
+            finished = finishedGoodPieces(executor, input.organizationId, workOrderId, finalSetup)
+            finishedBySetup.set(key, finished)
+          }
+          if (shipped === await finished) return null
+        }
+        return row
+      }))
+      return { rows: rows.filter(row => row !== null) }
     },
 
     async reopenSetup(input: {
@@ -5141,6 +5210,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const workOrder = await workOrderContext(client, input.organizationId, String(state.context.jcNo), input.productionFloorCode)
         if (workOrder.route_option_id !== state.route_option_id) {
           throw new ShopFloorConflictError("This setup belongs to an earlier route. Review the current route before reopening.")
+        }
+        const eligible = await this.readCompletedSetups(input, client)
+        if (!eligible.rows.length) {
+          throw new ShopFloorConflictError("This setup cannot reopen after final dispatch or while a later setup is complete. Refresh the completed setups.")
         }
         const open = await client.query(`SELECT id FROM manufacturing.production_sessions
           WHERE work_order_id = $1 AND operation_setup_id = $2 AND machine_id = $3
