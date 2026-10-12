@@ -124,7 +124,6 @@ export function hrMasterForPanel(panel: string, kind?: string) {
     probationRemindersPanel: "employee_assignments",
     employeeAssignmentHistoryPanel: "employee_assignments",
     postMasterPanel: "job_templates",
-    questionsPanel: "job_templates",
   }
   return panels[panel] ?? null
 }

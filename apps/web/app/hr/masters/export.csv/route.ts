@@ -1,5 +1,4 @@
 import { createRecruitmentRepository } from "@workspace/db"
-import { roleProfileFields } from "@workspace/db/recruitment-role-profile"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -10,9 +9,16 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const kind = new URL(request.url).searchParams.get("kind")
-  const templates = kind === "job_template" || kind === "role_questions"
+  const templates = kind === "job_template"
   await requireCapability(
-    masterCapability(templates ? "job_templates" : kind === "designation" ? "designation" : "department", "read"),
+    masterCapability(
+      templates
+        ? "job_templates"
+        : kind === "designation"
+          ? "designation"
+          : "department",
+      "read"
+    ),
     "/hr"
   )
   const repository = createRecruitmentRepository({
@@ -22,21 +28,6 @@ export async function GET(request: Request) {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     if (templates) {
       const rows = await repository.listTemplates(organizationId)
-      if (kind === "role_questions")
-        return masterCsvResponse(
-          rows.flatMap((row) =>
-            row.interviewQuestions.map((question) => ({
-              "Template Code": row.templateCode,
-              Role: row.name,
-              Round: question.round,
-              Focus: question.focus,
-              Question: question.prompt,
-              "Evidence to seek": question.evidence,
-              "Original Question": question.originalPrompt ?? "",
-            }))
-          ),
-          "hr-role-questions.csv"
-        )
       return masterCsvResponse(
         rows.map((row) => ({
           "Template Code": row.templateCode,
@@ -48,18 +39,13 @@ export async function GET(request: Request) {
           "Experience Requirement": row.experienceRequirement,
           "Minimum Salary": row.minimumSalary,
           "Maximum Salary": row.maximumSalary,
-          "Role Responsibilities": row.roleResponsibilities,
-          ...Object.fromEntries(
-            roleProfileFields.map(({ key }) => [
-              `role_${key}`,
-              row.roleProfile[key] ?? "",
-            ])
-          ),
+          "Job Description": row.roleResponsibilities,
+          Questions: row.questions,
           "Shift Type": row.shiftType,
           "Shift Start Time": row.shiftStartTime,
           "Shift End Time": row.shiftEndTime,
         })),
-        "roles-responsibilities-authority.csv"
+        "job-description-templates.csv"
       )
     }
     const masters = await repository.listMasters(organizationId)

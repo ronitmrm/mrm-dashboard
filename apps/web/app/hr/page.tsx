@@ -112,7 +112,6 @@ export default async function HrRecruitmentPage({
       "candidatesPanel",
     ].includes(panelId) || (canEditTemplate && ["combinedRolesPanel", "employeeMasterPanel", "jobsPanel"].includes(panelId))
     const needsTemplates = [
-      "questionsPanel",
       "postMasterPanel",
       "approvedPostPanel",
       "combinedRolesPanel",
@@ -233,11 +232,6 @@ export default async function HrRecruitmentPage({
                 <MasterDataCsvImportButton action={importEmployeeDataCsvAction} />
               ) : null}
             </>
-          ) : activeItem.panelId === "questionsPanel" ? (
-            <DataDownloadButton
-              href="/hr/masters/export.csv?kind=role_questions"
-              label="Download CSV"
-            />
           ) : null
         }
       />

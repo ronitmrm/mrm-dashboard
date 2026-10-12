@@ -734,7 +734,7 @@ export const hrMasterNavigation = [
   {
     href: "/hr?panel=postMasterPanel",
     icon: ClipboardList,
-    label: "Roles, Responsibilities & Authority",
+    label: "Job Description Templates",
     panelId: "postMasterPanel",
     requiredCapability: "hr.job_templates.read",
   },
@@ -769,13 +769,6 @@ export const hrNavigation = [
     label: "Job Posts",
     panelId: "jobsPanel",
     requiredCapability: "hr.jobs.read",
-  },
-  {
-    href: "/hr?panel=questionsPanel",
-    icon: MessageSquareText,
-    label: "HR Questions",
-    panelId: "questionsPanel",
-    requiredCapability: "masters.universal.job_templates.read",
   },
   {
     href: "/hr?panel=employeeDataPanel",

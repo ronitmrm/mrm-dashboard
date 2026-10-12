@@ -1,11 +1,4 @@
 import { assertMasterAvailable } from "./master-duplicate"
-import {
-  defaultRoleQuestions,
-  parseRoleProfile,
-  parseRoleQuestions,
-  type RecruitmentRoleProfile,
-  type RecruitmentRoleQuestion,
-} from "./recruitment-role-profile"
 import { insertOfferRevision } from "./recruitment-employment-letter-repository"
 import type { OfferLetterDetails, PreparedEmploymentLetter } from "./recruitment-employment-letters"
 import { randomUUID } from "node:crypto"
@@ -92,9 +85,7 @@ export type RecruitmentTemplateRow = {
   minimumSalary: number | null
   name: string
   roleResponsibilities: string | null
-  roleProfile: RecruitmentRoleProfile
-  interviewQuestions: RecruitmentRoleQuestion[]
-  originalRoleDescription: string | null
+  questions: string
   rowVersion: number
   shiftEndTime: string | null
   shiftStartTime: string | null
@@ -1371,9 +1362,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         minimum_salary: string | null
         name: string
         role_responsibilities: string | null
-        role_profile: RecruitmentRoleProfile
-        interview_questions: RecruitmentRoleQuestion[]
-        original_role_description: string | null
+        questions: string
         row_version: string
         shift_end_time: string | null
         shift_start_time: string | null
@@ -1390,8 +1379,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             template.gender, template.experience_requirement,
             template.education, template.minimum_salary,
             template.maximum_salary, template.role_responsibilities,
-            template.role_profile, template.interview_questions,
-            template.original_role_description, template.row_version,
+            template.questions, template.row_version,
             template.shift_type, template.shift_start_time::text,
             template.shift_end_time::text
           FROM recruitment.requirement_templates template
@@ -1423,9 +1411,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           row.minimum_salary === null ? null : Number(row.minimum_salary),
         name: row.name,
         roleResponsibilities: row.role_responsibilities,
-        roleProfile: row.role_profile,
-        interviewQuestions: row.interview_questions,
-        originalRoleDescription: row.original_role_description,
+        questions: row.questions,
         rowVersion: Number(row.row_version),
         shiftEndTime: row.shift_end_time?.slice(0, 5) ?? null,
         shiftStartTime: row.shift_start_time?.slice(0, 5) ?? null,
@@ -2492,7 +2478,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         minimumSalary?: string | number | null
         name: string
         roleResponsibilities?: string | null
-        roleProfile?: RecruitmentRoleProfile
+        questions?: string | null
         expectedVersion?: number
         shiftEndTime?: string | null
         shiftStartTime?: string | null
@@ -2517,7 +2503,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           input.expectedVersion !== undefined &&
           Number(before.row_version) !== input.expectedVersion
         )
-          throw new Error("The role profile changed. Refresh before saving.")
+          throw new Error("The job template changed. Refresh before saving.")
         await assertMasterAvailable(
           client,
           input,
@@ -2536,13 +2522,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               combined_role_id, designation_id, gender,
               experience_requirement, education,
               minimum_salary, maximum_salary, role_responsibilities,
-              shift_type, shift_start_time, shift_end_time, role_profile, interview_questions,
+              shift_type, shift_start_time, shift_end_time, questions,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
             SELECT $1, upper($2), $3, combined.id,
               designation.id, $4, $5, $6, $7, $8, $9,
-              $14, $15::time, $16::time, COALESCE($17::jsonb,'{}'), $18::jsonb, $10, $10,
+              $14, $15::time, $16::time, COALESCE($17::text, ''), $10, $10,
               'mrm-dashboard', 'requirementTemplates', $11
             FROM recruitment.designations designation
             LEFT JOIN recruitment.combined_roles combined
@@ -2562,7 +2548,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               minimum_salary = EXCLUDED.minimum_salary,
               maximum_salary = EXCLUDED.maximum_salary,
               role_responsibilities = EXCLUDED.role_responsibilities,
-              role_profile = CASE WHEN $17::jsonb IS NULL THEN recruitment.requirement_templates.role_profile ELSE EXCLUDED.role_profile END,
+              questions = CASE WHEN $17::text IS NULL THEN recruitment.requirement_templates.questions ELSE EXCLUDED.questions END,
               shift_type = EXCLUDED.shift_type,
               shift_start_time = EXCLUDED.shift_start_time,
               shift_end_time = EXCLUDED.shift_end_time,
@@ -2588,10 +2574,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             shiftType,
             shiftStartTime,
             shiftEndTime,
-            input.roleProfile === undefined
+            input.questions === undefined
               ? null
-              : parseRoleProfile(input.roleProfile),
-            JSON.stringify(defaultRoleQuestions),
+              : input.questions?.trim() ?? "",
           ]
         )
         if (!result.rows[0]) {
@@ -2646,62 +2631,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "requirement_templates",
         })
         return result.rows[0]
-      })
-    },
-
-    async saveTemplateQuestions(
-      input: MutationContext & {
-        templateId: string
-        expectedVersion: number
-        questions: unknown
-      }
-    ) {
-      const questions = parseRoleQuestions(input.questions)
-      return transaction(pool, async (client) => {
-        const previous = await client.query<
-          Record<string, unknown> & {
-            row_version: string
-            interview_questions: RecruitmentRoleQuestion[]
-          }
-        >(
-          "SELECT * FROM recruitment.requirement_templates WHERE organization_id=$1 AND id=$2 AND active FOR UPDATE",
-          [input.organizationId, input.templateId]
-        )
-        const before = previous.rows[0]
-        if (!before || Number(before.row_version) !== input.expectedVersion)
-          throw new Error(
-            "The role question bank changed. Refresh before saving."
-          )
-        const retained = questions.map((question) => {
-          const original = before.interview_questions.find(
-            (item) => item.id === question.id
-          )?.originalPrompt
-          return {
-            id: question.id,
-            round: question.round,
-            focus: question.focus,
-            prompt: question.prompt,
-            evidence: question.evidence,
-            ...(original ? { originalPrompt: original } : {}),
-          }
-        })
-        const after = await client.query<Record<string, unknown>>(
-          "UPDATE recruitment.requirement_templates SET interview_questions=$3::jsonb,updated_by_user_id=$4,updated_at=now(),row_version=row_version+1 WHERE organization_id=$1 AND id=$2 RETURNING *",
-          [
-            input.organizationId,
-            input.templateId,
-            JSON.stringify(retained),
-            input.actorUserId ?? null,
-          ]
-        )
-        await audit(client, {
-          ...input,
-          eventType: "recruitment.template.questions_saved",
-          targetId: input.templateId,
-          targetTable: "requirement_templates",
-          beforeState: before,
-          afterState: after.rows[0],
-        })
       })
     },
 

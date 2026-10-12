@@ -1,5 +1,4 @@
 import type { Pool, PoolClient } from "pg"
-import { defaultRoleQuestions } from "./recruitment-role-profile"
 import { describe, expect, test, vi } from "vitest"
 
 import {
@@ -16,23 +15,31 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
-test("role question saves accept the displayed bigint version and reject stale edits", async () => {
-  const existing = { id: "template-1", row_version: "7", interview_questions: defaultRoleQuestions }
-  const query = vi.fn(async (statement: string) => ({
+test("job templates save free-text questions with audit and reject stale edits", async () => {
+  const existing = { id: "template-1", row_version: "7" }
+  const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => ({
     rows: statement.startsWith("SELECT * FROM recruitment.requirement_templates")
       ? [existing]
-      : statement.startsWith("UPDATE recruitment.requirement_templates")
-        ? [{ ...existing, row_version: "8" }]
+      : statement.includes("INSERT INTO recruitment.requirement_templates")
+        ? [{ ...existing, questions: parameters?.[16] }]
         : [],
   }))
   const client = { query, release: vi.fn() } as unknown as PoolClient
   const repository = createRecruitmentRepository({
     pool: { connect: vi.fn(async () => client) } as unknown as Pool,
   })
-  const input = { organizationId: "org-1", templateId: existing.id, expectedVersion: 7, questions: defaultRoleQuestions }
-  await expect(repository.saveTemplateQuestions(input)).resolves.toBeUndefined()
+  const input = {
+    organizationId: "org-1", templateId: existing.id, templateCode: "JRT-1",
+    name: "Operator", designationCode: "OP", expectedVersion: 7,
+    shiftType: "Day", shiftStartTime: "09:00", shiftEndTime: "17:00",
+    roleResponsibilities: "Check and record dimensions.",
+    questions: "How do you check dimensions?\nWhat would you do with a rejected part?",
+  }
+  await expect(repository.upsertTemplate(input)).resolves.toMatchObject({ questions: input.questions })
+  const insert = query.mock.calls.find(([statement]) => statement.includes("INSERT INTO recruitment.requirement_templates"))
+  expect(insert?.[1]?.[8]).toBe(input.roleResponsibilities)
   expect(query.mock.calls.some(([statement]) => statement.includes("INSERT INTO audit.events"))).toBe(true)
-  await expect(repository.saveTemplateQuestions({ ...input, expectedVersion: 6 })).rejects.toThrow("Refresh")
+  await expect(repository.upsertTemplate({ ...input, expectedVersion: 6 })).rejects.toThrow("Refresh")
 })
 
 test("job register returns the template selected for each job", async () => {

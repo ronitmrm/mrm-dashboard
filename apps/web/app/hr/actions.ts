@@ -211,17 +211,7 @@ export async function saveTemplateAction(formData: FormData) {
         minimumSalary: value(formData, "minimum_salary"),
         name: value(formData, "name"),
         roleResponsibilities: value(formData, "role_responsibilities"),
-        roleProfile: Object.fromEntries(
-          [
-            "purpose",
-            "reportsTo",
-            "authority",
-            "limits",
-            "escalation",
-            "measures",
-            "competence",
-          ].map((key) => [key, value(formData, `role_${key}`)])
-        ),
+        questions: value(formData, "questions"),
         expectedVersion: formData.has("template_version")
           ? Number(value(formData, "template_version"))
           : undefined,
@@ -231,21 +221,6 @@ export async function saveTemplateAction(formData: FormData) {
         templateCode: value(formData, "template_code"),
         templateId: value(formData, "template_id"),
       })
-  )
-}
-
-export async function saveRoleQuestionsAction(formData: FormData) {
-  await mutate(
-    formData,
-    masterCapability("job_templates", "save"),
-    (repository, context) =>
-      repository.saveTemplateQuestions({
-        ...context,
-        templateId: value(formData, "template_id"),
-        expectedVersion: Number(value(formData, "template_version")),
-        questions: JSON.parse(value(formData, "questions")) as unknown,
-      }),
-    "HR questions saved."
   )
 }
 

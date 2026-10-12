@@ -215,7 +215,7 @@ const universalMasterDefinitions = [
       {
         access: "hrJobTemplates",
         id: "job_templates",
-        label: "HR Roles, Responsibilities & Authority",
+        label: "HR Job Description Templates",
       },
     ],
   },
