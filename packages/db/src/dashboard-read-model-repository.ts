@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto"
-import { dashboardLiveFactEntryTypes, readDashboardSourceRevision, readDirectDashboardFacts, readToolingAssetCodes } from "./dashboard-direct-facts"
-
-
+import {
+  dashboardLiveFactEntryTypes,
+  dashboardPlannerActionSourceGroups,
+  readDashboardSourceRevision,
+  readDirectDashboardFacts,
+  readToolingAssetCodes,
+} from "./dashboard-direct-facts"
 import {
   activeCorrectionTargetKeys,
   dataEntryCorrectionTargetsWithWorkflowCascade,
@@ -399,7 +403,8 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         `,
         [organizationId, productionFloorCode, knownVersion ?? null,
           knownLiveVersion ?? null,
-          ["setup_state", "corrections", "shop_floor_status", ...dashboardLiveFactEntryTypes]]
+          ["setup_state", "corrections", "shop_floor_status", ...dashboardLiveFactEntryTypes,
+            ...dashboardPlannerActionSourceGroups]]
       )
       const row = result.rows[0]!
       const version = row.model_version ? Number(row.model_version) : null
@@ -407,10 +412,14 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         ? normalizeSourceCoverage(row.model_payload.sourceCoverage)
         : null
       const liveFacts = row.model_payload
-        ? await readDirectDashboardFacts(pool, organizationId, productionFloorCode, dashboardLiveFactEntryTypes)
+        ? await readDirectDashboardFacts(
+            pool, organizationId, productionFloorCode,
+            [...dashboardLiveFactEntryTypes, "shop_floor_status"],
+            dashboardPlannerActionSourceGroups
+          )
         : null
       const liveControl = liveFacts ? Object.fromEntries(
-        ["setupChecklistSessionRows", "firstPieceInspectionReportRows", "hourlyQualityCheckRows"]
+        ["setupChecklistSessionRows", "firstPieceInspectionReportRows", "hourlyQualityCheckRows", "plannerActionLog"]
           .map(key => [key, payloadRecord(liveFacts.productionControl)[key]])
       ) : {}
       const liveDashboard = row.model_payload

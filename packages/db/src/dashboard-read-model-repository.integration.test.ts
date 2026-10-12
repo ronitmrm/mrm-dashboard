@@ -72,6 +72,101 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL dashboard corrections", () => {
+  it("delivers saved planner history before the queued forecast publishes", async () => {
+    await pool.query(
+      `INSERT INTO derived.dashboard_read_models
+        (organization_id, version, payload, source_watermark)
+       VALUES ($1, 1, $2, '{}'::jsonb)`,
+      [
+        organizationId,
+        {
+          productionControl: {
+            machinePlanDetailRows: [],
+            plannerActionLog: [],
+          },
+        },
+      ]
+    )
+    const before = await repository.state(organizationId)
+    const id = randomUUID()
+    const reason = `Saved priority ${suffix}`
+    await pool.query(
+      `INSERT INTO manufacturing.planner_priority_events
+        (organization_id, planning_date, source_system, source_table, source_id, source_payload)
+       VALUES ($1, '2026-10-12', 'mrm-dashboard', 'plannerPriorities', $2, $3)`,
+      [
+        organizationId,
+        id,
+        {
+          _id: id,
+          target: "HISTORY-JC",
+          priority: "Urgent",
+          remark: reason,
+          createdAt: "2026-10-12T12:00:00.000Z",
+          productionFloorCode: "conventional",
+        },
+      ]
+    )
+    await repository.requestRefresh(organizationId)
+
+    const changed = await repository.state(
+      organizationId,
+      {},
+      "conventional",
+      before.version!,
+      before.liveVersion ?? undefined
+    )
+    const history = [
+      {
+        _id: id,
+        actionType: "Priority",
+        target: "HISTORY-JC",
+        priority: "Urgent",
+        remark: reason,
+      },
+    ]
+    expect(changed).toMatchObject({
+      version: before.version,
+      notModified: false,
+      status: { isRefreshing: true },
+      patch: { productionControl: { plannerActionLog: history } },
+    })
+    const full = await repository.state(organizationId)
+    expect(full).toMatchObject({
+      dashboard: { productionControl: { plannerActionLog: history } },
+    })
+    const unchanged = await repository.state(
+      organizationId,
+      {},
+      "conventional",
+      changed.version!,
+      changed.liveVersion ?? undefined
+    )
+    expect(unchanged).toMatchObject({
+      notModified: true,
+      dashboard: null,
+      patch: null,
+    })
+
+    await pool.query(
+      `UPDATE manufacturing.planner_priority_events SET reversed_at = now()
+       WHERE organization_id = $1 AND source_id = $2`,
+      [organizationId, id]
+    )
+    const reversed = await repository.state(
+      organizationId,
+      {},
+      "conventional",
+      changed.version!,
+      changed.liveVersion ?? undefined
+    )
+    expect(reversed).toMatchObject({
+      version: before.version,
+      notModified: false,
+      patch: { productionControl: { plannerActionLog: [] } },
+    })
+  })
+
   it("prevents an older worker snapshot from consuming a coalesced refresh", async () => {
     const refresh = await repository.requestRefresh(organizationId)
     const worker = await pool.connect()
