@@ -23,6 +23,7 @@ import {
 } from "@workspace/ui/components/table"
 import {
   StoreStorageLocationField,
+  storeStorageLocationSelection,
   type StoreStorageLocations,
 } from "./store-storage-location-field"
 
@@ -81,6 +82,13 @@ export function StoreTransferConfirmation({
   const changedCount = lines.filter(
     (line) => selected[line.id] && selected[line.id] !== line.requestedUnitCode
   ).length
+  const orderedLines = [...lines].sort((left, right) =>
+    left.assetName.localeCompare(right.assetName, "en", { numeric: true }) ||
+    left.typeCode.localeCompare(right.typeCode, "en", { numeric: true }) ||
+    (left.requestedUnitCode ?? "").localeCompare(
+      right.requestedUnitCode ?? "", "en", { numeric: true }
+    )
+  )
 
   return (
     <form action={dispatch} className="grid min-w-0 gap-4">
@@ -105,7 +113,7 @@ export function StoreTransferConfirmation({
       </p>
       <FieldSet disabled={pending}>
         <OperationalTable
-          excelFilters={false}
+          filterStorageKey={`store-transfer-review-${destinationStoreCode}`}
           containerClassName="max-h-[50dvh] rounded-lg border"
         >
           <TableHeader>
@@ -117,17 +125,26 @@ export function StoreTransferConfirmation({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lines.map((line, index) => {
+            {orderedLines.map((line, index) => {
               const unit = available.find(
                 (choice) => choice.assetCode === selected[line.id]
               )
+              const { locations, defaultId } = storeStorageLocationSelection(
+                storageLocations,
+                destinationStoreCode,
+                line.itemTypeId
+              )
+              const receivingLocation = locations.find(
+                (location) =>
+                  location.id === (selectedLocations[line.id] ?? defaultId)
+              )
               return (
-                <TableRow key={line.id}>
+                <TableRow key={line.id} data-row-id={line.id}>
                   <TableCell>
                     <span className="block font-medium">{line.typeCode}</span>
                     <span className="block">{line.assetName}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-filter-value={selected[line.id] ?? ""}>
                     <input
                       name="requisition_id"
                       type="hidden"
@@ -180,7 +197,14 @@ export function StoreTransferConfirmation({
                       ? formatIstDate(unit.acquiredOn)
                       : "Not recorded"}
                   </TableCell>
-                  <TableCell className="min-w-56">
+                  <TableCell
+                    className="min-w-56"
+                    data-filter-value={
+                      receivingLocation
+                        ? receivingLocation.code + " · " + receivingLocation.name
+                        : ""
+                    }
+                  >
                     <StoreStorageLocationField
                       id={"batch-transfer-location-" + line.id}
                       itemTypeId={line.itemTypeId}

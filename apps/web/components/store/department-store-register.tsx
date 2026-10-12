@@ -175,8 +175,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.assetSubcategory}</TableCell>
                 <TableCell>{asset.assetName}</TableCell>
                 <TableCell>{asset.makeModel}</TableCell>
-                <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"}</TableCell>
-                <TableCell>1</TableCell>
+                <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"} {asset.unit}</TableCell>
+                <TableCell>1 {asset.unit}</TableCell>
                 <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
                 <TableCell>{asset.holderName || asset.holderType}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
@@ -189,8 +189,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.assetSubcategory}</TableCell>
                 <TableCell>{asset.assetName}</TableCell>
                 <TableCell>{asset.makeModel}</TableCell>
-                <TableCell>Non Consumable</TableCell><TableCell>0</TableCell>
-                <TableCell>1</TableCell><TableCell><StatusBadge value={asset.status} /></TableCell>
+                <TableCell>Non Consumable</TableCell><TableCell>0 {asset.unit}</TableCell>
+                <TableCell>1 {asset.unit}</TableCell><TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.departmentName}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{asset.accountableStoreName}</TableCell> : null}
               </TableRow>)}

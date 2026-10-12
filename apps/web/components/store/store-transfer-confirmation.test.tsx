@@ -72,3 +72,22 @@ test("blocks confirmation when an assigned unit is unavailable", () => {
   expect(html).toContain("the assigned unit is unavailable")
   expect(html).toMatch(/<button[^>]*disabled=""[^>]*type="submit"/)
 })
+
+test("keeps matching items together and orders their assigned Unit IDs", () => {
+  const lines = [
+    { ...props.lines[0]!, id: "scrap-2", assetName: "Scrap Bin", typeCode: "NC460", itemTypeId: "bin", requestedUnitCode: "NC460-0002" },
+    { ...props.lines[0]!, id: "crate", assetName: "Crate Trolley", typeCode: "NC459", itemTypeId: "crate", requestedUnitCode: "NC459-0001" },
+    { ...props.lines[0]!, id: "scrap-1", assetName: "Scrap Bin", typeCode: "NC460", itemTypeId: "bin", requestedUnitCode: "NC460-0001" },
+  ]
+  const html = renderToStaticMarkup(
+    <Dialog>
+      <StoreTransferConfirmation {...props} lines={lines} choices={lines.map((line) => ({
+        acquiredOn: null, assetCode: line.requestedUnitCode, itemTypeId: line.itemTypeId, reservedRequestId: line.id,
+      }))} />
+    </Dialog>
+  )
+  expect([...html.matchAll(/name="requisition_id"[^>]*value="([^"]+)"/g)].map((match) => match[1]))
+    .toEqual(["crate", "scrap-1", "scrap-2"])
+  expect(html).toContain("3 of 3 units selected")
+  expect(html).toContain("Confirm Transfer (3)")
+})
