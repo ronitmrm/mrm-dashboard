@@ -9,6 +9,7 @@ import {
 import Link from "next/link"
 
 import { DataDownloadButton } from "@/components/data-download-button"
+import { PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -55,29 +56,34 @@ export default async function PricingRevisionsPage({
   }))
 
   return (
- <SectionCard>
-      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <div className="grid min-w-0 gap-6">
+      <PageHeader
+        title="Price Revisions"
+        actions={
+          <>
+            <DataDownloadButton
+              href={"/commercial/pricing/revisions/export.xlsx" + query}
+            />
+            <Button asChild variant="secondary">
+              <Link href="/commercial/pricing">Back To Pricing</Link>
+            </Button>
+          </>
+        }
+      />
+      <SectionCard>
+        <CardHeader>
           <CardTitle>
             {code ? "Price revisions — " + code : "Price Revisions"}
           </CardTitle>
-        </div>
-        <div className="flex gap-2">
-          <DataDownloadButton
-            href={"/commercial/pricing/revisions/export.xlsx" + query}
+        </CardHeader>
+        <CardContent>
+          <PricingTable
+            filterStorageKey="mrmpl:commercial:pricing-revisions:filters:v1"
+            revisionLinks={false}
+            rows={tableRows}
           />
-          <Button asChild variant="secondary">
-            <Link href="/commercial/pricing">Back To Pricing</Link>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <PricingTable
-          filterStorageKey="mrmpl:commercial:pricing-revisions:filters:v1"
-          revisionLinks={false}
-          rows={tableRows}
-        />
-      </CardContent>
- </SectionCard>
+        </CardContent>
+      </SectionCard>
+    </div>
   )
 }

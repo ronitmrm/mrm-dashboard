@@ -36,6 +36,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { DataDownloadButton } from "@/components/data-download-button"
+import { PageHeader } from "@/components/ui/golden-patterns"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { currencyCodes } from "@/lib/currencies"
@@ -102,38 +103,39 @@ export default async function PurchaseOrderPage({
 
   return (
     <div className="grid gap-6">
+      <PageHeader
+        title={order.poNumber}
+        actions={
+          <>
+            {order.fileName ? (
+              <Button asChild variant="outline">
+                <Link href={`/commercial/orders/${order.id}/file`}>
+                  Open {order.fileName}
+                </Link>
+              </Button>
+            ) : null}
+            <DataDownloadButton
+              href={`/commercial/orders/${order.id}/export.xlsx`}
+              label="Download PO Excel"
+            />
+            <Button asChild variant="outline">
+              <Link href="/commercial/orders">Purchase-Order Register</Link>
+            </Button>
+          </>
+        }
+      />
  <SectionCard>
         <CardHeader className="gap-3">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <CardTitle>{order.poNumber}</CardTitle>
-                <Badge variant={statusVariant(order.status)}>
-                  {order.status}
-                </Badge>
-              </div>
-              <CardDescription>
-                {order.companyName} · {order.poDate} · Po Total{" "}
-                {money(order.totalAmount)}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {order.fileName ? (
-                <Button asChild variant="outline">
-                  <Link href={`/commercial/orders/${order.id}/file`}>
-                    Open {order.fileName}
-                  </Link>
-                </Button>
-              ) : null}
-              <DataDownloadButton
-                href={`/commercial/orders/${order.id}/export.xlsx`}
-                label="Download PO Excel"
-              />
-              <Button asChild variant="outline">
-                <Link href="/commercial/orders">Purchase-Order Register</Link>
-              </Button>
-            </div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <CardTitle>{order.poNumber}</CardTitle>
+            <Badge variant={statusVariant(order.status)}>
+              {order.status}
+            </Badge>
           </div>
+          <CardDescription>
+            {order.companyName} · {order.poDate} · Po Total{" "}
+            {money(order.totalAmount)}
+          </CardDescription>
         </CardHeader>
         {order.cancellationReason ? (
           <CardContent>
