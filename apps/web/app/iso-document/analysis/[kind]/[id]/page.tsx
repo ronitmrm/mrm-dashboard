@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import {
   analysisReference,
   isAnalysisKind,
+  analysisStatusLabel,
 } from "@workspace/db/iso-analysis-domain"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -28,6 +29,9 @@ import {
 } from "@/components/iso-document/analysis-forms"
 import { PageHeader } from "@/components/ui/golden-patterns"
 import { withIsoAnalysis } from "@/lib/iso-document/analysis-server"
+import { riskPriority, riskScore } from "@workspace/db/risk-thinking-domain"
+import { RecordDetails } from "@/components/ui/golden-patterns"
+import { IsoRecordHistoryTable } from "@/components/iso-document/iso-record-history"
 
 const labels: Record<string, string> = {
   category: "Category",
@@ -98,7 +102,7 @@ export default async function AnalysisItemPage({
           description={entry.description}
           badge={
             <StatusBadge
-              value={entry.status}
+              value={analysisStatusLabel(entry)}
               tone={
                 entry.status === "Closed"
                   ? "inactive"
@@ -115,11 +119,56 @@ export default async function AnalysisItemPage({
                 href={`${path}/export.xlsx?item=${id}`}
               />
               <Button asChild variant="outline">
-                <Link href={path}>Back to {kind} Analysis</Link>
+                <Link href={path}>
+                  {kind === "RISK"
+                    ? "Back to Risk Register"
+                    : `Back to ${kind} Analysis`}
+                </Link>
               </Button>
             </>
           }
         />
+        {kind === "RISK" ? (
+          <SectionCard width="wide">
+            <CardHeader>
+              <CardTitle>Risk Assessment & Monitoring</CardTitle>
+              <CardDescription>
+                Confirmed ratings and controls. Original workbook ratings
+                require reassessment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RecordDetails
+                items={[
+                  {
+                    label: "Current Score / Priority",
+                    value: `${riskScore(entry.risk?.likelihood ?? null, entry.risk?.severity ?? null) ?? "Not assessed"} · ${entry.priority}`,
+                  },
+                  ...Object.entries(entry.risk ?? {}).map(([label, value]) => ({
+                    label: label.replace(/^./, (s) => s.toUpperCase()),
+                    value: value || "Not recorded",
+                  })),
+                  {
+                    label: "Residual Score / Priority",
+                    value: `${riskScore(entry.riskReview?.likelihood ?? null, entry.riskReview?.severity ?? null) ?? "Not verified"} · ${riskPriority(entry.riskReview?.likelihood ?? null, entry.riskReview?.severity ?? null)}`,
+                  },
+                  {
+                    label: "Risk Review Decision",
+                    value: entry.riskReview?.decision ?? "Not verified",
+                  },
+                  {
+                    label: "Acceptance Basis",
+                    value: entry.riskReview?.acceptance ?? "Not verified",
+                  },
+                  {
+                    label: "Management Authorization",
+                    value: entry.riskReview?.authorization || "Not recorded",
+                  },
+                ]}
+              />
+            </CardContent>
+          </SectionCard>
+        ) : null}
         <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Action Details</CardTitle>
@@ -189,7 +238,10 @@ export default async function AnalysisItemPage({
             </CardContent>
           </SectionCard>
         ) : null}
-        {access.canManage && entry.status !== "Closed" ? (
+        {access.canManage &&
+        entry.status !== "Closed" &&
+        entry.riskState !== "Retired" &&
+        !(kind === "RISK" && entry.status === "Completed") ? (
           <SectionCard width="wide">
             <CardHeader>
               <CardTitle>Edit Action Details</CardTitle>
@@ -204,70 +256,77 @@ export default async function AnalysisItemPage({
             </CardContent>
           </SectionCard>
         ) : null}
-        <SectionCard>
-          <CardHeader>
-            <CardTitle>Complete History</CardTitle>
-            <CardDescription>
-              Every change, work update and QA decision, newest first. Times
-              shown in India time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <OperationalTable
-              key={entry.version}
-              excelFilters
-              filterStorageKey="iso-analysis-item-history"
-              containerClassName="max-h-[60vh] rounded-xl border"
-              state={history.length ? "ready" : "empty"}
-              stateTitle="No history yet"
-              stateDescription="Saved actions will appear here."
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead data-filterable="true">When</TableHead>
-                  <TableHead data-filterable="true">Action</TableHead>
-                  <TableHead data-filterable="true">By</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Changes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell>{timestamp(event.occurredAt)}</TableCell>
-                    <TableCell>
-                      {actions[event.eventType.split(".").at(-1) ?? ""] ??
-                        event.eventType}
-                    </TableCell>
-                    <TableCell>{event.actorName}</TableCell>
-                    <TableCell className="max-w-96 min-w-56 whitespace-pre-wrap">
-                      {event.remarks}
-                    </TableCell>
-                    <TableCell className="max-w-xl min-w-64 whitespace-normal">
-                      <div className="grid gap-1">
-                        {Object.entries(labels).flatMap(([key, label]) => {
-                          const before = event.before?.[key]
-                          const after = event.after?.[key]
-                          if (
-                            before === after ||
-                            (!event.before && (after == null || after === ""))
-                          )
-                            return []
-                          return [
-                            <p key={key}>
-                              {label}: {String(before ?? "—")} →{" "}
-                              {String(after ?? "—")}
-                            </p>,
-                          ]
-                        })}
-                      </div>
-                    </TableCell>
+        {kind === "RISK" ? (
+          <IsoRecordHistoryTable
+            history={history}
+            filterStorageKey="iso-risk-history"
+          />
+        ) : (
+          <SectionCard>
+            <CardHeader>
+              <CardTitle>Complete History</CardTitle>
+              <CardDescription>
+                Every change, work update and QA decision, newest first. Times
+                shown in India time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OperationalTable
+                key={entry.version}
+                excelFilters
+                filterStorageKey="iso-analysis-item-history"
+                containerClassName="max-h-[60vh] rounded-xl border"
+                state={history.length ? "ready" : "empty"}
+                stateTitle="No history yet"
+                stateDescription="Saved actions will appear here."
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead data-filterable="true">When</TableHead>
+                    <TableHead data-filterable="true">Action</TableHead>
+                    <TableHead data-filterable="true">By</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead>Changes</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </OperationalTable>
-          </CardContent>
-        </SectionCard>
+                </TableHeader>
+                <TableBody>
+                  {history.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell>{timestamp(event.occurredAt)}</TableCell>
+                      <TableCell>
+                        {actions[event.eventType.split(".").at(-1) ?? ""] ??
+                          event.eventType}
+                      </TableCell>
+                      <TableCell>{event.actorName}</TableCell>
+                      <TableCell className="max-w-96 min-w-56 whitespace-pre-wrap">
+                        {event.remarks}
+                      </TableCell>
+                      <TableCell className="max-w-xl min-w-64 whitespace-normal">
+                        <div className="grid gap-1">
+                          {Object.entries(labels).flatMap(([key, label]) => {
+                            const before = event.before?.[key]
+                            const after = event.after?.[key]
+                            if (
+                              before === after ||
+                              (!event.before && (after == null || after === ""))
+                            )
+                              return []
+                            return [
+                              <p key={key}>
+                                {label}: {String(before ?? "—")} →{" "}
+                                {String(after ?? "—")}
+                              </p>,
+                            ]
+                          })}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </OperationalTable>
+            </CardContent>
+          </SectionCard>
+        )}
         {entry.source ? (
           <SectionCard width="wide">
             <CardHeader>
@@ -279,9 +338,23 @@ export default async function AnalysisItemPage({
             </CardHeader>
             <CardContent>
               <p className="mb-4 text-sm text-muted-foreground">
-                Original completion labels represent source data. QA
-                verification and closure are recorded separately in MRM.
+                {kind === "RISK"
+                  ? "Original names, ratings and status are source evidence. Confirm ownership and reassess the risk before completing work. Source ratings do not constitute an approved assessment."
+                  : "Original completion labels represent source data. QA verification and closure are recorded separately in MRM."}
               </p>
+              {kind === "RISK" &&
+              [
+                entry.source.columns.Probability ?? entry.source.columns.P,
+                entry.source.columns.Severity ?? entry.source.columns.S,
+              ].some(
+                (value) =>
+                  value !== undefined && ![1, 2, 3].includes(Number(value))
+              ) ? (
+                <StatusBadge
+                  value="Source rating outside 1–3 scale · reassess"
+                  tone="warning"
+                />
+              ) : null}
               <dl className="grid gap-3 sm:grid-cols-2">
                 {Object.entries(entry.source.columns).map(([label, value]) => (
                   <div key={label}>

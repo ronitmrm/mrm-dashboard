@@ -4,6 +4,7 @@ import type { AnalysisRecord } from "@workspace/db"
 import {
   analysisReference,
   analysisToday,
+  analysisStatusLabel,
   type AnalysisKind,
 } from "@workspace/db/iso-analysis-domain"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -20,6 +21,8 @@ import {
 } from "@workspace/ui/components/table"
 import Link from "next/link"
 import { useState } from "react"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
+import { riskScore } from "@workspace/db/risk-thinking-domain"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import {
@@ -45,13 +48,28 @@ export function AnalysisRegister({
 }) {
   const [creating, setCreating] = useState(false)
   const [importSummary, setImportSummary] = useState("")
+  const [view, setView] = useState("all")
   const today = analysisToday()
   const path = `/iso-document/analysis/${kind.toLowerCase()}`
   const overdue = (row: AnalysisRecord) =>
+    row.riskState !== "Retired" &&
     (row.status === "Open" || row.status === "In Progress") &&
     Boolean(row.dueOn && row.dueOn < today)
   const reviewDue = (row: AnalysisRecord) =>
+    row.riskState !== "Retired" &&
     Boolean(row.nextReviewOn && row.nextReviewOn <= today)
+  const visible =
+    kind === "RISK"
+      ? rows.filter((row) =>
+          view === "pending"
+            ? row.riskState !== "Retired" && row.status !== "Closed"
+            : view === "due"
+              ? reviewDue(row)
+              : view === "retired"
+                ? row.riskState === "Retired"
+                : true
+        )
+      : rows
   return (
     <div className="grid min-w-0 gap-6">
       <MetricSummary
@@ -61,18 +79,24 @@ export function AnalysisRegister({
           {
             label: "Open Work",
             value: rows.filter(
-              (row) => row.status === "Open" || row.status === "In Progress"
+              (row) =>
+                row.riskState !== "Retired" &&
+                (row.status === "Open" || row.status === "In Progress")
             ).length,
             tone: "warning",
           },
           {
             label: "Awaiting QA",
-            value: rows.filter((row) => row.status === "Completed").length,
+            value: rows.filter(
+              (row) => row.riskState !== "Retired" && row.status === "Completed"
+            ).length,
             tone: "warning",
           },
           {
-            label: "Closed",
-            value: rows.filter((row) => row.status === "Closed").length,
+            label: kind === "RISK" ? "Monitoring" : "Closed",
+            value: rows.filter(
+              (row) => row.riskState !== "Retired" && row.status === "Closed"
+            ).length,
             tone: "inactive",
           },
           {
@@ -88,12 +112,21 @@ export function AnalysisRegister({
         ]}
       />
       <PageHeader
-        title={`${kind} Analysis`}
-        description="Assign actions, record work and evidence, then obtain QA verification to close. Open an item for its complete history."
+        title={kind === "RISK" ? "Risk-Based Thinking" : `${kind} Analysis`}
+        description={
+          kind === "RISK"
+            ? "Assess process risks, assign treatment, verify control effectiveness and monitor remaining risk. Completing work keeps ongoing risks under review."
+            : "Assign actions, record work and evidence, then obtain QA verification to close. Open an item for its complete history."
+        }
         actions={
           <>
             <p className="text-sm text-muted-foreground">
-              Document No. {kind === "PEST" ? "MRM-QA-021-01" : "MRM-QA-022-01"}
+              Document No.{" "}
+              {kind === "RISK"
+                ? "MRM-QA-027"
+                : kind === "PEST"
+                  ? "MRM-QA-021-01"
+                  : "MRM-QA-022-01"}
             </p>
             <DataDownloadButton href={`${path}/export.xlsx`} />
             {canManage ? (
@@ -114,10 +147,12 @@ export function AnalysisRegister({
                 />
                 <Dialog open={creating} onOpenChange={setCreating}>
                   <DialogTrigger asChild>
-                    <Button>New {kind} Item</Button>
+                    <Button>
+                      {kind === "RISK" ? "New Risk" : `New ${kind} Item`}
+                    </Button>
                   </DialogTrigger>
                   <StandardDialogContent
-                    title={`New ${kind} Item`}
+                    title={kind === "RISK" ? "New Risk" : `New ${kind} Item`}
                     className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
                   >
                     <AnalysisMetadataForm kind={kind} owners={owners} />
@@ -128,13 +163,23 @@ export function AnalysisRegister({
           </>
         }
       />
+      {kind === "RISK" ? (
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList className="flex h-auto w-fit flex-wrap">
+            <TabsTrigger value="all">All Risks</TabsTrigger>
+            <TabsTrigger value="pending">Pending Actions</TabsTrigger>
+            <TabsTrigger value="due">Reviews Due</TabsTrigger>
+            <TabsTrigger value="retired">Retired</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      ) : null}
       <SectionCard>
         <CardContent>
           <OperationalTable
             excelFilters
-            filterStorageKey={`iso-analysis-${kind}`}
+            filterStorageKey={`iso-analysis-${kind}-${view}`}
             containerClassName="max-h-[70vh] rounded-xl border"
-            state={rows.length ? "ready" : "empty"}
+            state={visible.length ? "ready" : "empty"}
             stateTitle={`No ${kind} items`}
             stateDescription={
               canManage
@@ -149,6 +194,14 @@ export function AnalysisRegister({
                 <TableHead data-filterable="true">Category</TableHead>
                 <TableHead data-filterable="true">Risk / Opportunity</TableHead>
                 <TableHead data-filterable="true">Priority</TableHead>
+                {kind === "RISK" ? (
+                  <>
+                    <TableHead>Current Score</TableHead>
+                    <TableHead>Residual Score</TableHead>
+                    <TableHead>Process</TableHead>
+                    <TableHead>Treatment</TableHead>
+                  </>
+                ) : null}
                 <TableHead data-filterable="true">Issue / Insight</TableHead>
                 <TableHead data-filterable="true">Action Plan</TableHead>
                 <TableHead data-filterable="true">Department</TableHead>
@@ -160,7 +213,7 @@ export function AnalysisRegister({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => (
+              {visible.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>
                     <Link
@@ -185,6 +238,28 @@ export function AnalysisRegister({
                       }
                     />
                   </TableCell>
+                  {kind === "RISK" ? (
+                    <>
+                      <TableCell>
+                        {riskScore(
+                          row.risk?.likelihood ?? null,
+                          row.risk?.severity ?? null
+                        ) ?? "Needs assessment"}
+                      </TableCell>
+                      <TableCell>
+                        {riskScore(
+                          row.riskReview?.likelihood ?? null,
+                          row.riskReview?.severity ?? null
+                        ) ?? "Not verified"}
+                      </TableCell>
+                      <TableCell>
+                        {row.risk?.process || "Needs assessment"}
+                      </TableCell>
+                      <TableCell>
+                        {row.risk?.treatment || "Not assessed"}
+                      </TableCell>
+                    </>
+                  ) : null}
                   <TableCell className="max-w-96 min-w-56 whitespace-normal">
                     {row.description}
                   </TableCell>
@@ -201,7 +276,7 @@ export function AnalysisRegister({
                   </TableCell>
                   <TableCell>
                     <StatusBadge
-                      value={row.status}
+                      value={analysisStatusLabel(row)}
                       tone={
                         row.status === "Closed"
                           ? "inactive"

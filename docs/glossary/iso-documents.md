@@ -283,3 +283,49 @@ The supplied SIPOC workbook contributes ten Draft examples with exact source
 cells/date/file/sheet/row retained. Process ownership, boundaries, acceptance
 criteria, measures and approval are never inferred from these examples. Company
 staff must assess and complete them before submission.
+
+## Risk-based thinking
+
+The risk register extends the existing ISO analysis/action lifecycle. Each risk
+records the affected process, cause, consequence, existing controls, assessment
+basis, treatment decision, expected result, owner and deadline. The organization's
+simple method uses likelihood and severity from 1 to 3; their product guides
+priority (1–2 Low, 3–4 Medium, 6–9 High). Severity 3 is High regardless of score.
+Likelihood means unlikely, possible or recurring; severity means limited/local,
+significant quality/delivery disruption or serious customer/safety/legal impact.
+Ratings require evidence and judgment; the matrix is a company method, not an
+ISO-mandated formula. Safety/legal obligations are never waived by a low score.
+
+Assigned staff implements the treatment plan and records evidence. QA verifies
+effectiveness and independently records residual likelihood/severity, acceptance
+reason and next review. High residual risk requires an explicit management
+authorization reference. Completing an action does not remove an ongoing risk:
+verified controls remain under monitoring with a method, frequency and change
+triggers. A review requiring further treatment reopens the action; QA may retire
+a risk only with evidence explaining why it no longer applies. Reopening restores
+active monitoring. Every assessment, action and review retains before/after history.
+Related PEST/SWOT, SIPOC, CAR and meeting references retain their own lifecycles.
+
+Workbook examples enter as Open, unassessed records. Original ratings, names,
+status and actions remain visible with file hash/sheet/row provenance; source
+names do not imply staff assignment and source claims do not verify controls.
+Out-of-scale ratings are flagged rather than silently changed.
+
+## Customer satisfaction reports
+
+One report records a customer or defined customer group, reporting period,
+collection method, coverage/sample limitations, findings and trend, conclusion,
+responsible account and next review date. Optional result/target descriptions
+retain the method's actual scale; no invented universal satisfaction percentage.
+Original reports and supporting files are retained as private Artifacts with
+file history. Reports may be PDFs, Excel workbooks or JPG/PNG scans.
+
+Draft reports may be incomplete. Submission requires complete monitoring details
+and at least one uploaded report. QA reviews the evidence and approves or returns
+with findings. Approved reports are locked; QA may reopen with a reason, retaining
+the previous record in audit history. Approval confirms the report review and
+does not close follow-up work. Where findings require action, the report links
+an existing ISO analysis action; QA approval requires that link. A pending list
+shows these linked actions until QA closure in their original register. Customer
+feedback and risk outputs can be referenced in management review. All mutations
+use organization/access/version guards and retain actor, time and before/after data.

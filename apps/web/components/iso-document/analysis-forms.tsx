@@ -24,6 +24,7 @@ import {
   updateAnalysisAction,
 } from "@/app/iso-document/analysis/actions"
 import { FormGrid, StandardState } from "@/components/ui/golden-patterns"
+import { RiskAssessmentFields, RiskReviewFields } from "./risk-thinking-fields"
 
 export function AnalysisMetadataForm({
   kind,
@@ -63,7 +64,9 @@ export function AnalysisMetadataForm({
             <NativeSelect
               id={`${id}-focus`}
               name="focus"
-              defaultValue={entry?.focus ?? "Not assessed"}
+              defaultValue={
+                entry?.focus ?? (kind === "RISK" ? "Risk" : "Not assessed")
+              }
               disabled={pending}
             >
               {analysisFocuses.map((value) => (
@@ -75,18 +78,24 @@ export function AnalysisMetadataForm({
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-priority`}>Priority</FieldLabel>
-            <NativeSelect
-              id={`${id}-priority`}
-              name="priority"
-              defaultValue={entry?.priority ?? "Not assessed"}
-              disabled={pending}
-            >
-              {analysisPriorities.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {value}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            {kind === "RISK" ? (
+              <p className="text-sm">
+                Calculated from confirmed ratings and severity.
+              </p>
+            ) : (
+              <NativeSelect
+                id={`${id}-priority`}
+                name="priority"
+                defaultValue={entry?.priority ?? "Not assessed"}
+                disabled={pending}
+              >
+                {analysisPriorities.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            )}
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-year`}>Analysis Year</FieldLabel>
@@ -198,6 +207,9 @@ export function AnalysisMetadataForm({
             />
           </Field>
         </FormGrid>
+        {kind === "RISK" ? (
+          <RiskAssessmentFields value={entry?.risk} disabled={pending} />
+        ) : null}
         <Field>
           <FieldLabel htmlFor={`${id}-impact`}>
             Business Impact & Assessment
@@ -297,15 +309,24 @@ export function AnalysisUpdateForm({
   const id = useId()
   const router = useRouter()
   const operations: AnalysisOperation[] = [
-    ...(canWork && (entry.status === "Open" || entry.status === "In Progress")
+    ...(canWork &&
+    entry.riskState !== "Retired" &&
+    (entry.status === "Open" || entry.status === "In Progress")
       ? ["progress" as const]
       : []),
-    ...(canWork && entry.status !== "Closed" ? ["complete" as const] : []),
-    ...(canVerify && entry.status === "Completed"
+    ...(canWork && entry.riskState !== "Retired" && entry.status !== "Closed"
+      ? ["complete" as const]
+      : []),
+    ...(canVerify &&
+    entry.riskState !== "Retired" &&
+    entry.status === "Completed"
       ? ["verify" as const, "return" as const]
       : []),
-    ...(canVerify && entry.status === "Closed" ? ["reopen" as const] : []),
-    ...(canVerify ? ["review" as const] : []),
+    ...(canVerify &&
+    (entry.status === "Closed" || entry.riskState === "Retired")
+      ? ["reopen" as const]
+      : []),
+    ...(canVerify && entry.riskState !== "Retired" ? ["review" as const] : []),
   ]
   const [operation, setOperation] = useState<AnalysisOperation>(
     operations[0] ?? "progress"
@@ -338,7 +359,9 @@ export function AnalysisUpdateForm({
           >
             {operations.map((value) => (
               <NativeSelectOption key={value} value={value}>
-                {operationLabels[value]}
+                {entry.kind === "RISK" && value === "verify"
+                  ? "QA Verify Controls & Monitor"
+                  : operationLabels[value]}
               </NativeSelectOption>
             ))}
           </NativeSelect>
@@ -388,6 +411,15 @@ export function AnalysisUpdateForm({
             />
           </Field>
         ) : null}
+        {entry.kind === "RISK" &&
+        (operation === "verify" || operation === "review") ? (
+          <RiskReviewFields
+            value={entry.riskReview}
+            disabled={pending}
+            verifying={operation === "verify"}
+            nextReviewOn={entry.nextReviewOn}
+          />
+        ) : null}
         {operation === "review" ? (
           <FormGrid>
             <Field>
@@ -424,7 +456,11 @@ export function AnalysisUpdateForm({
       ) : null}
       {state?.success ? <p role="status">Action recorded.</p> : null}
       <Button className="w-fit" type="submit" disabled={pending}>
-        {pending ? "Saving…" : operationLabels[operation]}
+        {pending
+          ? "Saving…"
+          : entry.kind === "RISK" && operation === "verify"
+            ? "QA Verify Controls & Monitor"
+            : operationLabels[operation]}
       </Button>
     </form>
   )

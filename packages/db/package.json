@@ -26,6 +26,8 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./risk-thinking-domain": "./src/risk-thinking-domain.ts",
+    "./customer-satisfaction-domain": "./src/customer-satisfaction-domain.ts",
     "./sipoc-domain": "./src/sipoc-domain.ts",
     "./recruitment-role-profile": "./src/recruitment-role-profile.ts",
     "./interested-parties-domain": "./src/interested-parties-domain.ts",

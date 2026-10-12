@@ -111,6 +111,16 @@ export const publishedRegisterNavigation = [
 export const isoDocumentNavigation = [
   { href: "/iso-document/sipoc", icon: Route, label: "SIPOC Process Maps" },
   {
+    href: "/iso-document/customer-satisfaction",
+    icon: Route,
+    label: "Customer Satisfaction Reports",
+  },
+  {
+    href: "/iso-document/analysis/risk",
+    icon: Route,
+    label: "Risk-Based Thinking",
+  },
+  {
     href: "/iso-document/interested-parties",
     icon: UsersRound,
     label: "Interested Parties Requirements",
