@@ -68,30 +68,39 @@ function SelectField({ children, label, name, ...props }: React.ComponentProps<t
 function DestinationFields({
   departments,
   machines,
+  storageLocations,
   store,
   vendors,
 }: {
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  storageLocations: Workspace["storageLocations"]
   store: Workspace["store"]
   vendors: Array<{ code: string; id: string; name: string }>
 }) {
   const [holderType, setHolderType] = useState<"STORE" | "DEPARTMENT" | "MACHINE" | "VENDOR">("STORE")
   const [holderReference, setHolderReference] = useState(store.defaultLocationId)
+  const locations = storageLocations.locations.filter((location) =>
+    location.storeCode.toLowerCase() === store.code.toLowerCase()
+  )
   return <>
     <SelectField label="Physical destination" name="holder_type" required value={holderType}
       onValueChange={(value) => {
         setHolderType(value as typeof holderType)
         setHolderReference(value === "STORE" ? store.defaultLocationId : "")
       }}>
-      <NativeSelectOption value="STORE">Return to this Store</NativeSelectOption>
+      <NativeSelectOption value="STORE">Location in this Store</NativeSelectOption>
       <NativeSelectOption value="DEPARTMENT">Department use</NativeSelectOption>
       <NativeSelectOption value="MACHINE">Machine use</NativeSelectOption>
       <NativeSelectOption value="VENDOR">Vendor</NativeSelectOption>
     </SelectField>
-    <SelectField label="Destination" name="holder_reference" required value={holderReference}
+    <SelectField label={holderType === "STORE" ? "Store location" : "Destination"}
+      name="holder_reference" required value={holderReference}
       onValueChange={setHolderReference}>
-      {holderType === "STORE" ? <NativeSelectOption value={store.defaultLocationId}>{store.name}</NativeSelectOption> : null}
+      {holderType === "STORE" ? locations.map((location) =>
+        <NativeSelectOption key={location.id} value={location.id}>
+          {location.code} · {location.name}
+        </NativeSelectOption>) : null}
       {holderType !== "STORE" ? <NativeSelectOption value="">Select destination</NativeSelectOption> : null}
       {holderType === "DEPARTMENT" ? departments.map((department) =>
         <NativeSelectOption key={department.code} value={department.code}>{department.code} · {department.name}</NativeSelectOption>) : null}
@@ -140,8 +149,9 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   )
   const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
   return <div className="grid gap-5">
-    {action === "quantity" || action === "physical" ? <FormSection title="Transfer or move stock"
-      description="Transfer Consumable quantity to another Store, or move one Unit ID to a physical holder."
+    {action === "quantity" || action === "physical" ? <FormSection
+      title={transferMode === "physical" ? "Assign asset location" : "Transfer or move stock"}
+      description="Choose a rack/bin for a Unit ID in this Store, move it to another physical holder, or transfer Consumable quantity."
       width="wide">
       <SelectField label="Stock to move" name="stock_type" value={transferMode}
         onValueChange={(value) => setTransferMode(value as typeof transferMode)}>
@@ -177,7 +187,8 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
               {asset.assetCode} · {asset.assetName} · {asset.holderName || asset.holderType}
             </NativeSelectOption>)}
           </SelectField>
-          <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
+          <DestinationFields departments={departments} machines={machines}
+            storageLocations={storageLocations} store={store} vendors={vendors} />
           <TextField label="Movement note" name="remark" />
         </FormGrid>
       </ActionForm>}
@@ -275,7 +286,8 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
               {gaugeSets.filter((set) => set.status === "COMPLETE").map((set) =>
                 <NativeSelectOption key={set.id} value={set.id}>{set.setCode} · {set.name} · {set.assetCodes.join(" + ")}</NativeSelectOption>)}
             </SelectField>
-            <DestinationFields departments={departments} machines={machines} store={store} vendors={vendors} />
+            <DestinationFields departments={departments} machines={machines}
+              storageLocations={storageLocations} store={store} vendors={vendors} />
             <TextField label="Movement note" name="remark" />
           </FormGrid>
         </ActionForm>
