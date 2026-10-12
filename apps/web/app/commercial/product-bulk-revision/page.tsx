@@ -12,7 +12,7 @@ import {
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -51,24 +51,14 @@ export default async function ProductBulkRevisionPage() {
 
   return (
     <div className="grid gap-6">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Product Parameter Bulk Revision
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Start a revision here. Product selection and costing are completed
-            from Product Parameter Costing.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Product Parameter Bulk Revision"
+        actions={
           <Button asChild variant="outline">
-            <Link href="/commercial/product-costing">
-              Product Costing Queue
-            </Link>
+            <Link href="/commercial/product-costing">Product Costing Queue</Link>
           </Button>
-        </div>
-      </section>
+        }
+      />
 
       <MetricSummary
         scope="All product revision requests · before table filters"

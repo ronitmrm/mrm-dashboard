@@ -44,7 +44,6 @@ import {
   FormSection,
   PageHeader,
 } from "@/components/ui/golden-patterns"
-import { DataDownloadButton } from "@/components/data-download-button"
 import { saveRoleQuestionsAction } from "@/app/hr/actions"
 
 function QuestionsEditor({ template }: { template: RecruitmentTemplateRow }) {
@@ -246,12 +245,6 @@ export function RoleQuestionsPanel({
       <PageHeader
         title="HR Questions"
         description="Role-linked interview prompts covering duties, competence, decision limits and escalation. Use evidence, examples and demonstrations alongside the interview scoring criteria."
-        actions={
-          <DataDownloadButton
-            href="/hr/masters/export.csv?kind=role_questions"
-            label="Download CSV"
-          />
-        }
       />
       <SectionCard>
         <CardHeader>

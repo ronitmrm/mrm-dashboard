@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { type ReactNode, useEffect } from "react"
 
 import { DataDownloadButton } from "@/components/data-download-button"
+import { ActionToolbar } from "@/components/ui/golden-patterns"
 
 import { masterDataTransferAction } from "@/lib/master-data-transfer"
 import { MasterDataUnsavedGuard } from "./master-data-unsaved-guard"
@@ -77,6 +78,24 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
   return (
     <>
       <MasterDataUnsavedGuard enabled={props.activeView === "dataEntry"} />
+      {transferAction ? (
+        <ActionToolbar className="w-full">
+          {transferAction === "csvImport" ? props.csvDownloadAction : null}
+          {transferAction === "csvImport" ? props.csvImportAction : null}
+          {transferAction === "export" && props.exportAction
+            ? props.exportAction
+            : null}
+          {transferAction === "export" &&
+          !props.exportAction &&
+          props.onExport ? (
+            <DataDownloadButton
+              disabled={props.exportDisabled}
+              label="Download CSV"
+              onClick={props.onExport}
+            />
+          ) : null}
+        </ActionToolbar>
+      ) : null}
       <div className="flex flex-wrap items-center border-b">
         <Link
           className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -115,22 +134,6 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
             View Records
           </Link>
         </nav>
-        <div className="ml-auto flex items-center gap-2">
-          {transferAction === "csvImport" ? props.csvDownloadAction : null}
-          {transferAction === "csvImport" ? props.csvImportAction : null}
-          {transferAction === "export" && props.exportAction
-            ? props.exportAction
-            : null}
-          {transferAction === "export" &&
-          !props.exportAction &&
-          props.onExport ? (
-            <DataDownloadButton
-              disabled={props.exportDisabled}
-              label="Download CSV"
-              onClick={props.onExport}
-            />
-          ) : null}
-        </div>
       </div>
     </>
   )

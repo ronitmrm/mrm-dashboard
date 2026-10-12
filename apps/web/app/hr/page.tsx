@@ -16,10 +16,9 @@ import {
   type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
 import { PinDashboardMetricButton } from "@/components/dashboard/pin-dashboard-metric-button"
-import { ActionToolbar, MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { MasterDataCsvImportButton } from "@/components/master-data-csv-import-button"
 import { importEmployeeDataCsvAction } from "./employees/actions"
@@ -221,20 +220,27 @@ export default async function HrRecruitmentPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <BriefcaseBusiness className="size-5 text-primary" />
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Hr Recruitment
-            </h2>
-          </div>
-          {activeItem.panelId === "employeeDataPanel" ? <ActionToolbar>
-            <DataDownloadButton href="/hr/employees/export.csv" label="Download CSV" />
-            {masterControls.import ? <MasterDataCsvImportButton action={importEmployeeDataCsvAction} /> : null}
-          </ActionToolbar> : null}
-        </div>
-      </section>
+      <PageHeader
+        title="HR Recruitment"
+        actions={
+          activeItem.panelId === "employeeDataPanel" ? (
+            <>
+              <DataDownloadButton
+                href="/hr/employees/export.csv"
+                label="Download CSV"
+              />
+              {masterControls.import ? (
+                <MasterDataCsvImportButton action={importEmployeeDataCsvAction} />
+              ) : null}
+            </>
+          ) : activeItem.panelId === "questionsPanel" ? (
+            <DataDownloadButton
+              href="/hr/masters/export.csv?kind=role_questions"
+              label="Download CSV"
+            />
+          ) : null
+        }
+      />
 
       {feedback.error ? (
         <Alert variant="destructive">

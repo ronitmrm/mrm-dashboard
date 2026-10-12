@@ -3,7 +3,6 @@ import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import {
   SectionCard,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -11,6 +10,7 @@ import {
 
 import { DataDownloadButton } from "@/components/data-download-button"
 import { FullPageWorkspace } from "@/components/full-page-workspace"
+import { PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -35,16 +35,21 @@ export default async function PricingPage() {
   }))
 
   return (
-    <FullPageWorkspace className="h-[calc(100svh-var(--header-height))] grid-rows-[minmax(0,1fr)] content-stretch overflow-hidden">
-      <SectionCard className="min-h-0">
-        <CardHeader className="shrink-0">
-          <CardTitle>Pricing</CardTitle>
-          <CardAction>
+    <FullPageWorkspace className="h-[calc(100svh-var(--header-height))] grid-rows-[auto_minmax(0,1fr)] content-stretch overflow-hidden">
+      <PageHeader
+        title="Pricing"
+        actions={
+          <>
             <Button asChild variant="outline">
               <Link href="/commercial/pricing/update">Update From Excel</Link>
             </Button>
             <DataDownloadButton href="/commercial/pricing/export.xlsx" />
-          </CardAction>
+          </>
+        }
+      />
+      <SectionCard className="min-h-0">
+        <CardHeader className="shrink-0">
+          <CardTitle>Pricing</CardTitle>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
           <PricingTable

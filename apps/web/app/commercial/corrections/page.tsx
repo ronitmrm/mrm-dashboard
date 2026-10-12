@@ -30,7 +30,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -61,16 +61,10 @@ export default async function CommercialCorrectionsPage() {
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-semibold tracking-tight">Corrections</h2>
-          <Badge variant="outline">Audited Reversals</Badge>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Safe Source Reversals Are Executable. Sent Quotes And Other Historical
-          Commercial Evidence Remain Immutable And Use Quarantine Requests.
-        </p>
-      </section>
+      <PageHeader
+        title="Corrections"
+        badge={<Badge variant="outline">Audited Reversals</Badge>}
+      />
 
       <MetricSummary
         scope="Loaded correction workspace · before table filters"

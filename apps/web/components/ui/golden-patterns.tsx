@@ -76,7 +76,6 @@ function PageHeader({
   badge,
   className,
   description,
-  icon: Icon,
   title,
 }: {
   actions?: ReactNode
@@ -89,29 +88,18 @@ function PageHeader({
   return (
     <header
       className={cn(
-        "flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-xl border border-[var(--color-panel-border)] bg-[color-mix(in_srgb,var(--mrm-green)_5%,var(--color-surface))] p-4 shadow-[var(--shadow-sm)] sm:p-5",
+        actions || badge
+          ? "flex w-full min-w-0 flex-wrap items-center justify-end gap-2"
+          : "sr-only",
         className
       )}
       data-slot="page-header"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        {Icon ? (
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[var(--shadow-sm)]">
-            <Icon aria-hidden="true" className="size-5" />
-          </span>
-        ) : null}
-        <div className="grid min-w-0 gap-1">
-          {badge ? <div className="mb-1 w-fit">{badge}</div> : null}
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-pretty">
-            {title}
-          </h1>
-          {description ? (
-            <p className="max-w-3xl text-sm text-pretty text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
+      <div className="sr-only">
+        <h1>{title}</h1>
+        {description ? <p>{description}</p> : null}
       </div>
+      {badge ? <div className="mr-auto">{badge}</div> : null}
       {actions ? <ActionToolbar>{actions}</ActionToolbar> : null}
     </header>
   )
@@ -122,7 +110,7 @@ function ActionToolbar({ className, ...props }: React.ComponentProps<"div">) {
     <div
       aria-label="Page actions"
       className={cn(
-        "flex min-h-9 min-w-0 max-w-full shrink-0 flex-wrap items-center justify-end gap-2",
+        "flex min-h-9 max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2",
         className
       )}
       data-slot="action-toolbar"

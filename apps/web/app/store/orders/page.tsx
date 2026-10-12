@@ -36,7 +36,7 @@ import { StoreReceiptUnitFields } from "@/components/store/store-receipt-unit-fi
 import { StoreStorageLocationField } from "@/components/store/store-storage-location-field"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
@@ -102,18 +102,17 @@ export default async function StoreOrdersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Purchase Register
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Purchase Orders are started from Stock. Receive goods or complete a
-          returned repair Unit ID against its order line. Allocate a returned
-          unit through Store Movement. A Department request for the same Asset
-          Code can be issued with any available Unit ID through Requests &amp;
-          Issues.
-        </p>
-      </div>
+      <PageHeader
+        title="Purchase Register"
+        description={
+          <>
+            Purchase Orders are started from Stock. Receive goods or complete a
+            returned repair Unit ID against its order line. Allocate a returned unit
+            through Store Movement. A Department request for the same Asset Code can
+            be issued with any available Unit ID through Requests &amp; Issues.
+          </>
+        }
+      />
 
       <MetricSummary
         scope="Purchase register · before table filters"

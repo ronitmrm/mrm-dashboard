@@ -1,6 +1,5 @@
 import Link from "next/link"
 
-import { DataDownloadButton } from "./data-download-button"
 
 export const salesWorkspaceViews = [
   {
@@ -28,7 +27,6 @@ export function SalesWorkspaceTabs({
   activeView: SalesWorkspaceView
 }) {
   const linkClass = "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
-  const active = salesWorkspaceViews.find((view) => view.id === activeView)!
 
   return (
     <div className="flex flex-wrap items-end gap-3 border-b">
@@ -49,9 +47,6 @@ export function SalesWorkspaceTabs({
           </Link>
         ))}
       </nav>
-      <div className="ml-auto pb-2">
-        <DataDownloadButton href={active.exportHref} />
-      </div>
     </div>
   )
 }

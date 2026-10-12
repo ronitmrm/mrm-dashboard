@@ -22,7 +22,7 @@ import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { pageBounds } from "@/lib/page-bounds"
 import { DataDownloadButton } from "@/components/data-download-button"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { formatIstDateTime } from "@/lib/date-time"
 import { enquiryExcelViewColumns } from "@/lib/pricing/enquiry-excel-view"
@@ -57,14 +57,12 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Enquiry Excel View
-        </h2>
-        <div className="flex flex-wrap gap-2 pt-2">
+      <PageHeader
+        title="Enquiry Excel View"
+        actions={
           <DataDownloadButton href="/commercial/enquiries/register/export.xlsx" />
-        </div>
-      </section>
+        }
+      />
 
       <MetricSummary
         scope="Your workflow lines · all pages · before table filters"

@@ -26,7 +26,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -139,14 +139,14 @@ export async function ProductParameterCostingView({
       {!standalone ? (
         <>
           <section className="grid gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Product Parameter Costing
-              </h2>
-              <Button asChild variant="outline">
-                <Link href="/commercial/pricing">Product Pricing</Link>
-              </Button>
-            </div>
+            <PageHeader
+              title="Product Parameter Costing"
+              actions={
+                <Button asChild variant="outline">
+                  <Link href="/commercial/pricing">Product Pricing</Link>
+                </Button>
+              }
+            />
             <BoundedResultNotice
               coverage={queue.coverage}
               section="Product Parameter Costing queue"

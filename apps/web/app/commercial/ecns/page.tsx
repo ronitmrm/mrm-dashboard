@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -84,9 +84,7 @@ export default async function EngineeringChangeNotesPage() {
   return (
     <div className="grid gap-6">
       <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Engineering Change Notes
-        </h2>
+        <PageHeader title="Engineering Change Notes" />
         {ecns.length === registerLimit ? (
           <p className="text-xs text-muted-foreground">
             Showing The Latest {registerLimit} ECNs. Open Work Counts Remain
