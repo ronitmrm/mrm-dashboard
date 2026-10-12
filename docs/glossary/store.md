@@ -120,7 +120,10 @@ be physically at a CNC machine; Main Store remains responsible until a formal
 transfer to CNC Store. Company ownership persists through internal transfers.
 
 **Store Storage Location**: An active Store location belongs to one Accountable
-Store and is maintained in Location Master (for example, a rack or bin). Every
+Store and is maintained by its Code in Location Master (for example, a rack or
+bin). A storage location has no separate user-entered Name. Storage is blank
+until an actual rack/bin is selected; the default Store location represents
+assignment to that Store and is not a rack/bin. Every
 goods receipt line and incoming Store transfer selects its own receiving
 location. The same Asset Code can use different locations in different Stores.
 The selector defaults to the most recently used location where that Asset Code
@@ -134,7 +137,9 @@ Multiple Asset Codes and Unit IDs can share a rack/bin. **Storage location** is
 separate from **Assigned location**: changing a rack/bin does not change the
 assigned Store, Department, Machine or Supplier, the unit's status, responsibility,
 quantities, or another Store's saved rack/bin. A Store may update storage only for
-units currently assigned there and may select only its own active locations.
+units currently assigned there and may select only its own active rack/bin
+locations. Receipt or return to the default Store location leaves that Store's
+storage blank without clearing another Store's saved rack/bin.
 An active Gauge Set changes storage together through its Set Movement.
 
 **Store Balance**: Unused quantity of one Consumable at one accountable store.

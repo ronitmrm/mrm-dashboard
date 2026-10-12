@@ -189,6 +189,8 @@ export function StoreMasterWorkspace({
     storeMasterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
   const rows = masterRows(selectedMaster, data)
   const showsCode = storeMasterShowsCode(selectedMaster)
+  const showsName = selectedMaster !== "LOCATION" ||
+    data.locations.some((location) => location.locationType !== "STORE")
 
   function selectMaster(master: StoreMasterKey) {
     const url = new URL(window.location.href)
@@ -225,7 +227,7 @@ export function StoreMasterWorkspace({
       ) : null}
 
       {canManage && mode !== "table" ? (
- <SectionCard width={selectedMaster === "CATEGORY" ? "compact" : ["SUBCATEGORY", "ASSET_NAME"].includes(selectedMaster) ? "standard" : "wide"}>
+ <SectionCard width={selectedMaster === "CATEGORY" ? "compact" : ["SUBCATEGORY", "ASSET_NAME", "LOCATION"].includes(selectedMaster) ? "standard" : "wide"}>
           <CardHeader>
             <CardTitle>{selectedLabel} Data Entry</CardTitle>
           </CardHeader>
@@ -347,7 +349,7 @@ export function StoreMasterWorkspace({
                 <TableHeader>
                   <TableRow>
                     {showsCode ? <TableHead>Code</TableHead> : null}
-                    <TableHead>Name</TableHead>
+                    {showsName ? <TableHead>Name</TableHead> : null}
                     <TableHead>Details</TableHead>
                     {canManage || canDelete ? (
                       <TableHead className="text-right">Actions</TableHead>
@@ -362,7 +364,11 @@ export function StoreMasterWorkspace({
                           {row.code}
                         </TableCell>
                       ) : null}
-                      <TableCell>{row.name}</TableCell>
+                      {showsName ? (
+                        <TableCell>
+                          {row.editDefaults.location_type === "STORE" ? "" : row.name}
+                        </TableCell>
+                      ) : null}
                       <TableCell>{row.details}</TableCell>
                       {canManage || canDelete ? (
                         <TableCell>
@@ -394,7 +400,7 @@ export function StoreMasterWorkspace({
                     <TableRow>
                       <TableCell
                         className="h-24 text-center text-muted-foreground"
-                        colSpan={(showsCode ? 3 : 2) + (canManage || canDelete ? 1 : 0)}
+                        colSpan={1 + Number(showsCode) + Number(showsName) + Number(canManage || canDelete)}
                       >
                         No saved records for this master.
                       </TableCell>
@@ -444,8 +450,7 @@ export function StoreMasterWorkspace({
               <input name="master_id" type="hidden" value={deleteRow.key} />
               <input name="master_kind" type="hidden" value={deleteRow.kind} />
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                {deleteRow.code ? `${deleteRow.code} — ` : ""}
-                {deleteRow.name}
+                {masterRowLabel(deleteRow)}
               </div>
               <SelectField
                 label="Replacement (Required Only If Used)"
@@ -454,7 +459,7 @@ export function StoreMasterWorkspace({
                 options={rows
                   .filter((row) => row.key !== deleteRow.key)
                   .map((row) => ({
-                    label: `${row.code} — ${row.name}`,
+                    label: masterRowLabel(row),
                     value: row.key,
                   }))}
                 placeholder="No replacement — record must be unused"
@@ -570,7 +575,7 @@ function masterRows(
         details: `${location.storeName} · ${location.locationType}`,
         key: location.id,
         kind: "store_location",
-        name: location.name,
+        name: location.locationType === "STORE" ? location.code : location.name,
         editable: true,
         editDefaults: {
           location_code: location.code,
@@ -744,52 +749,7 @@ function masterForm(
         </MasterEntryForm>
       )
     case "LOCATION":
-      return (
-        <MasterEntryForm action={createStoreLocationAction}>
-          <input
-            name="master_id"
-            type="hidden"
-            value={defaults.master_id ?? ""}
-          />
-          <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <SelectField
-              defaultValue={defaults.store_code ?? "MAIN"}
-              disabled={editing}
-              label="Accountable Store"
-              name="store_code"
-              options={Array.from(new Map(data.locations.map((location) => [
-                location.storeCode, { label: location.storeName, value: location.storeCode },
-              ])).values())}
-            />
-            <TextField
-              defaultValue={defaults.location_code}
-              label="Code"
-              name="location_code"
-              readOnly={editing}
-              required
-            />
-            <TextField
-              defaultValue={defaults.location_name}
-              label="Name"
-              name="location_name"
-              required
-            />
-            <SelectField
-              defaultValue={defaults.location_type}
-              label="Type"
-              name="location_type"
-              options={[
-                { label: "Store", value: "STORE" },
-                { label: "Unit", value: "UNIT" },
-                { label: "Department", value: "DEPARTMENT" },
-              ]}
-            />
-          </FieldGroup>
-          <Button className="mt-5" type="submit">
-            Save Location
-          </Button>
-        </MasterEntryForm>
-      )
+      return <StoreLocationForm key={defaults.master_id ?? "new"} data={data} defaults={defaults} />
     case "SUPPLIER":
       return (
         <MasterEntryForm action={createStoreSupplierAction}>
@@ -871,6 +831,66 @@ function masterForm(
         </MasterEntryForm>
       )
   }
+}
+
+function masterRowLabel(row: StoreMasterRow) {
+  return row.code && row.code !== row.name
+    ? `${row.code} — ${row.name}`
+    : row.name
+}
+
+function StoreLocationForm({
+  data,
+  defaults,
+}: {
+  data: StoreMasterData
+  defaults: Record<string, string>
+}) {
+  const editing = Boolean(defaults.master_id)
+  const [locationType, setLocationType] = useState(defaults.location_type ?? "STORE")
+  return (
+    <MasterEntryForm action={createStoreLocationAction}>
+      <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
+      <FormGrid className="xl:grid-cols-2">
+        <SelectField
+          defaultValue={defaults.store_code ?? "MAIN"}
+          disabled={editing}
+          label="Accountable Store"
+          name="store_code"
+          options={Array.from(new Map(data.locations.map((location) => [
+            location.storeCode, { label: location.storeName, value: location.storeCode },
+          ])).values())}
+        />
+        <TextField
+          defaultValue={defaults.location_code}
+          label="Code"
+          name="location_code"
+          readOnly={editing}
+          required
+        />
+        <SelectField
+          label="Type"
+          name="location_type"
+          onChange={(event) => setLocationType(event.target.value)}
+          value={locationType}
+          options={[
+            { label: "Store", value: "STORE" },
+            { label: "Unit", value: "UNIT" },
+            { label: "Department", value: "DEPARTMENT" },
+          ]}
+        />
+        {locationType !== "STORE" ? (
+          <TextField
+            defaultValue={defaults.location_name}
+            label="Name"
+            name="location_name"
+            required
+          />
+        ) : null}
+      </FormGrid>
+      <Button className="mt-5" type="submit">Save Location</Button>
+    </MasterEntryForm>
+  )
 }
 
 function storeItemOptions(

@@ -146,7 +146,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   const [transferAssetCode, setTransferAssetCode] = useState("")
   const [destinationStoreCode, setDestinationStoreCode] = useState("")
   const ownStorageLocations = storageLocations.locations.filter((location) =>
-    location.storeCode.toLowerCase() === store.code.toLowerCase()
+    location.storeCode.toLowerCase() === store.code.toLowerCase() && !location.isDefault
   )
   const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
   return <div className="grid gap-5">
@@ -162,14 +162,16 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
               {asset.assetCode} · {asset.assetName}
             </NativeSelectOption>)}
           </SelectField>
-          <SelectField label="Storage location" name="storage_location_id" required defaultValue={store.defaultLocationId}>
+          <SelectField label="Storage location" name="storage_location_id" required defaultValue="">
+            <NativeSelectOption value="">Select storage location</NativeSelectOption>
             {ownStorageLocations.map((location) => <NativeSelectOption key={location.id} value={location.id}>
-              {location.code} · {location.name}
+              {location.code}
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Note" name="remark" />
         </FormGrid>
         {!storageAssets.length ? <p className="text-sm text-muted-foreground">No Unit IDs are currently assigned to this Store.</p> : null}
+        {!ownStorageLocations.length ? <p className="text-sm text-muted-foreground">Add a location code for this Store in Location Master.</p> : null}
       </ActionForm>
     </FormSection> : null}
 

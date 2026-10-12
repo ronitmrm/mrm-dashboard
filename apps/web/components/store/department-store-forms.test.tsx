@@ -46,8 +46,10 @@ test("offers only local storage controls for an assigned Unit ID", () => {
     />
   )
   expect(html).toContain("Storage location")
-  expect(html).toContain('value="cnc-default" selected=""')
+  expect(html).toContain('value="" selected=""')
+  expect(html).not.toContain('value="cnc-default"')
   expect(html).toContain('value="cnc-rack-a"')
+  expect(html).not.toContain("Rack A")
   expect(html).not.toContain('value="main-rack"')
   expect(html).toContain('name="storage_location_id"')
   expect(html).toContain('value="NC459-0001"')

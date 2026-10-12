@@ -84,7 +84,7 @@ export function StoreStorageLocationField({
         </NativeSelectOption>
         {locations.map((location) => (
           <NativeSelectOption key={location.id} value={location.id}>
-            {location.code} · {location.name}
+            {location.code}
           </NativeSelectOption>
         ))}
       </NativeSelect>

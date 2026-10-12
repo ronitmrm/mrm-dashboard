@@ -757,10 +757,11 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             item.asset_subcategory AS "assetSubcategory",
             item.asset_name AS "assetName", make_model.name AS "makeModel",
             item.unit,
-            COALESCE((SELECT string_agg(storage.name, ', ' ORDER BY storage.name)
+            COALESCE((SELECT string_agg(storage.code, ', ' ORDER BY storage.code)
               FROM store.locations storage
               WHERE storage.organization_id = $1 AND storage.accountable_store_id = $2
                 AND storage.active AND storage.location_type = 'STORE'
+                AND storage.id <> $3
                 AND (SELECT COALESCE(sum(balance.quantity), 0)
                   FROM store.stock_movements balance
                   WHERE balance.organization_id = $1 AND balance.item_type_id = item.id
@@ -782,7 +783,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
              AND item.tracking_mode = 'CONSUMABLE' AND item.active
            GROUP BY item.id, make_model.name
            ORDER BY item.type_code`,
-          [input.organizationId, store.id]
+          [input.organizationId, store.id, store.defaultLocationId]
         ),
         pool.query<{
           accountableQuantity: string
@@ -850,8 +851,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
               ELSE COALESCE(asset.current_holder_name, asset.current_holder_reference,
                 asset.current_holder_type) END AS "assignedLocation",
             held_store.id AS "assignedStoreId",
-            COALESCE(storage.name, CASE WHEN location.accountable_store_id = $2
-              THEN location.name END) AS "storageLocation",
+            storage.code AS "storageLocation",
             COALESCE(asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
               AND location.accountable_store_id = $2 AND location.active, false) AS "availableHere",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
@@ -1143,7 +1143,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
              AS "departmentName",
            accountable.code AS "accountableStoreCode",
            accountable.name AS "accountableStoreName", asset.status,
-           storage.name AS "storageLocation",
+           storage.code AS "storageLocation",
            EXISTS (SELECT 1 FROM store.gauge_set_memberships member
              WHERE member.asset_id = asset.id AND member.removed_at IS NULL) AS "inGaugeSet"
          FROM store.assets asset
@@ -1617,6 +1617,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           organizationId: input.organizationId, storeId: store.id,
           holderType: "STORE", holderReference: input.locationId,
         })
+        if (destination.locationId === store.defaultLocationId) {
+          throw new Error("Choose a rack/bin location in this Store.")
+        }
         await saveAssetStorageLocation(client, {
           organizationId: input.organizationId, assetId: asset.id, storeId: store.id,
           locationId: destination.locationId!, actorUserId: input.actorUserId, remark: input.remark,
