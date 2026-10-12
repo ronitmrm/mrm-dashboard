@@ -287,6 +287,61 @@ function normalizePlanOverrideDecision(row: ActionRow): ActionRow {
   };
 }
 
+type PlannerActionSources = Pick<
+  LegacyDashboardInput,
+  "plannerPriorities" | "machineConstraints" | "planOverrides" | "routeChanges" | "rawMaterialRejections"
+>;
+
+function plannerActionSources(input: PlannerActionSources) {
+  return {
+    plannerPriorities: mergeSourceActionRows(sourcePlannerDecisions.plannerPriorities, input.plannerPriorities ?? [], priorityDecisionKey),
+    machineConstraints: mergeSourceActionRows(sourcePlannerDecisions.machineConstraints, input.machineConstraints ?? [], machineConstraintDecisionKey).map(row => ({
+      ...row,
+      machineNo: rowText(row, "machineNumber", "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"),
+    })),
+    planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey)
+      .map(normalizePlanOverrideDecision),
+    routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
+  };
+}
+
+function plannerActionLogRows({
+  setupReopenRows,
+  plannerPriorities,
+  machineConstraints,
+  planOverrides,
+  routeChanges,
+  rawMaterialRejections,
+}: {
+  setupReopenRows: ActionRow[];
+  plannerPriorities: ActionRow[];
+  machineConstraints: ActionRow[];
+  planOverrides: ActionRow[];
+  routeChanges: ActionRow[];
+  rawMaterialRejections: ActionRow[];
+}) {
+  return [
+    ...setupReopenRows.map(row => ({ ...row, createdAt: row.reopenedAt, actionType: "Reopen Setup" })),
+    ...plannerPriorities.map(row => ({ ...row, actionType: "Priority" })),
+    ...machineConstraints.map(row => ({ ...row, actionType: "Machine Unavailable" })),
+    ...planOverrides.map(row => ({ ...row,
+      actionType: isEarlyDownstreamOverride(row) ? "Early Downstream Setup" : isParallelMachineOverride(row) ? "Parallel Machine Added" : "Machine Switch",
+    })),
+    ...routeChanges.map(row => ({ ...row, actionType: "Route Change" })),
+    ...rawMaterialRejections.map(row => ({ ...row, actionType: "Raw Material Rejection" })),
+  ].sort((a, b) => rowText(b, "createdAt", "loggedOn").localeCompare(rowText(a, "createdAt", "loggedOn")));
+}
+
+export function directDashboardPlannerActionLog(dataEntries: DataEntry[], input: PlannerActionSources) {
+  const setupReopenRows = entryRows(bucketDataEntries(dataEntries), "shop_floor_status")
+    .filter(row => rowText(row, "actionType") === "Reopen Setup");
+  return plannerActionLogRows({
+    ...plannerActionSources(input),
+    setupReopenRows,
+    rawMaterialRejections: input.rawMaterialRejections ?? [],
+  });
+}
+
 function routeChangeDecisionKey(row: ActionRow) {
   return [
     canonicalKey(rowText(row, "target", "jobCardNumber", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
@@ -398,14 +453,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     machineRows: entryRows(byType, "machine_master"),
     dispatchRows: entryRows(byType, "dispatch"),
     routeSelections: mergeSourceActionRows(sourcePlannerDecisions.routeSelections, input.routeSelections ?? [], routeSelectionDecisionKey),
-    plannerPriorities: mergeSourceActionRows(sourcePlannerDecisions.plannerPriorities, input.plannerPriorities ?? [], priorityDecisionKey),
-    machineConstraints: mergeSourceActionRows(sourcePlannerDecisions.machineConstraints, input.machineConstraints ?? [], machineConstraintDecisionKey).map((row) => ({
-      ...row,
-      machineNo: rowText(row, "machineNumber", "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"),
-    })),
-    planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey)
-      .map(normalizePlanOverrideDecision),
-    routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
+    ...plannerActionSources(input),
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
     rawMaterialRejections: input.rawMaterialRejections ?? [],
@@ -1493,18 +1541,9 @@ function buildProductionControl({
   const activeMachineConstraints = machineConstraints.filter((row) => isActivePlannerDecision(rowText(row, "status"))).length;
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
-  const plannerActionLog = [
-    ...setupReopenRows
-      .map(row => ({ ...row, createdAt: row.reopenedAt, actionType: "Reopen Setup" })),
-    ...plannerPriorities.map((row) => ({ ...row, actionType: "Priority" })),
-    ...machineConstraints.map((row) => ({ ...row, actionType: "Machine Unavailable" })),
-    ...planOverrides.map((row) => ({
-      ...row,
-      actionType: isEarlyDownstreamOverride(row) ? "Early Downstream Setup" : isParallelMachineOverride(row) ? "Parallel Machine Added" : "Machine Switch",
-    })),
-    ...routeChanges.map((row) => ({ ...row, actionType: "Route Change" })),
-    ...rawMaterialRejections.map((row) => ({ ...row, actionType: "Raw Material Rejection" })),
-  ].sort((a, b) => rowText(b, "createdAt", "loggedOn").localeCompare(rowText(a, "createdAt", "loggedOn")));
+  const plannerActionLog = plannerActionLogRows({
+    setupReopenRows, plannerPriorities, machineConstraints, planOverrides, routeChanges, rawMaterialRejections,
+  });
 
   return {
     sourceMap: productionSourceMap(),
