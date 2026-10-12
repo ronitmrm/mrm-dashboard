@@ -29,6 +29,7 @@ export type ManagementReviewAccess = {
 }
 export type ManagementReviewRecord = MeetingFields & {
   id: string
+  ownerUserId: string | null
   number: number
   chairName: string | null
   status: "Draft" | "For Approval" | "Approved"
@@ -74,13 +75,13 @@ export type ManagementReviewActionReview = {
   reviewedAt: string
 }
 
-const meetingColumns = `m.id, m.record_number AS number, m.title, m.held_on::text AS "heldOn", m.start_time AS "startTime", m.end_time AS "endTime", m.location,
+const meetingColumns = `m.id, m.owner_user_id AS "ownerUserId", m.record_number AS number, m.title, m.held_on::text AS "heldOn", m.start_time AS "startTime", m.end_time AS "endTime", m.location,
   m.period_start::text AS "periodStart", m.period_end::text AS "periodEnd", m.next_review_on::text AS "nextReviewOn", m.chair_user_id AS "chairUserId", chair.name AS "chairName",
   m.attendees, m.agenda, m.suitability, m.adequacy, m.effectiveness, m.improvement_decisions AS "improvementDecisions", m.qms_changes AS "qmsChanges", m.resource_decisions AS "resourceDecisions",
   m.status, m.approved_at::text AS "approvedAt", approved.name AS "approvedBy", m.approval_notes AS "approvalNotes", m.version, m.source_payload AS source,
   m.created_at::text AS "createdAt", m.updated_at::text AS "updatedAt"`
 const meetingJoins = `FROM document_control.management_reviews m LEFT JOIN identity.users chair ON chair.id=m.chair_user_id LEFT JOIN identity.users approved ON approved.id=m.approved_by_user_id`
-const meetingScope = `( $3::boolean OR m.chair_user_id=$4 OR m.attendees @> jsonb_build_array(jsonb_build_object('userId',$4::text)) OR EXISTS (
+const meetingScope = `( $3::boolean OR m.owner_user_id=$4 OR m.chair_user_id=$4 OR m.attendees @> jsonb_build_array(jsonb_build_object('userId',$4::text)) OR EXISTS (
   SELECT 1 FROM document_control.management_review_action_reviews link JOIN document_control.management_review_actions action ON action.id=link.action_id
   WHERE link.meeting_id=m.id AND action.owner_user_id=$4))`
 const actionColumns = `a.id, a.record_number AS number, a.origin_meeting_id AS "originMeetingId", origin.record_number AS "originMeetingNumber", origin.held_on::text AS "originMeetingDate",
@@ -194,6 +195,10 @@ export function createManagementReviewRepository(
   ) {
     const entry = await meeting(access, id, client, true)
     if (!entry) throw new ManagementReviewError("Meeting was not found.")
+    if (!access.canManage && entry.ownerUserId !== access.userId)
+      throw new ManagementReviewError(
+        "Only the assigned coordinator may prepare these minutes."
+      )
     checkVersion(entry.version, version)
     if (entry.status !== "Draft")
       throw new ManagementReviewError(
@@ -261,7 +266,7 @@ export function createManagementReviewRepository(
       input: unknown,
       existing?: { id: string; version: number; reason: string }
     ) {
-      if (!access.canManage)
+      if (!access.canManage && !existing)
         throw new ManagementReviewError(
           "Prepare Management Reviews permission is required."
         )
@@ -339,16 +344,22 @@ export function createManagementReviewRepository(
         notes: string
       }
     ) {
-      if (input.operation === "submit" ? !access.canManage : !access.canApprove)
+      if (input.operation !== "submit" && !access.canApprove)
         throw new ManagementReviewError(
-          input.operation === "submit"
-            ? "Prepare Management Reviews permission is required."
-            : "QA Approve Minutes permission is required."
+          "QA Approve Minutes permission is required."
         )
       const notes = reviewText(input.notes, "decision remarks", true)
       return withTransaction(pool, async (client) => {
         const before = await meeting(access, input.id, client, true)
         if (!before) throw new ManagementReviewError("Meeting was not found.")
+        if (
+          input.operation === "submit" &&
+          !access.canManage &&
+          before.ownerUserId !== access.userId
+        )
+          throw new ManagementReviewError(
+            "Only the assigned coordinator may submit these minutes."
+          )
         checkVersion(before.version, input.version)
         const expected = {
           submit: "Draft",
@@ -373,7 +384,7 @@ export function createManagementReviewRepository(
               ? "Approved"
               : "Draft"
         await client.query(
-          `UPDATE document_control.management_reviews SET status=$3,approved_at=CASE WHEN $3='Approved' THEN now() ELSE NULL END,approved_by_user_id=CASE WHEN $3='Approved' THEN $4::uuid ELSE NULL END,approval_notes=CASE WHEN $3='Approved' THEN $5 ELSE '' END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
+          `UPDATE document_control.management_reviews SET status=$3,approved_at=CASE WHEN $3='Approved' THEN now() ELSE NULL END,approved_by_user_id=CASE WHEN $3='Approved' THEN $4::uuid ELSE NULL END,approval_notes=CASE WHEN $3='Approved' THEN $5 ELSE '' END,work_target_on=CASE WHEN $3='Approved' THEN NULL ELSE work_target_on END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
           [access.organizationId, input.id, status, access.userId, notes]
         )
         await audit(

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { ArrowLeft, FileText } from "lucide-react"
 import { revisionLabel } from "@workspace/db/branding-domain"
 import {
@@ -163,7 +163,10 @@ export default async function DocumentDossierPage({
   )
   const current = released[0]
   const display = current ?? draft
-  if (!display) notFound()
+  if (!display) {
+    if(dossier.workflowTitle) redirect(`/iso-document/documents/${id}/workflow`)
+    notFound()
+  }
   const lastReview = dossier.monitoring.find(
     ({ obligationType }) => obligationType === "document-review"
   )
@@ -221,6 +224,8 @@ export default async function DocumentDossierPage({
                 Back to Master List
               </Link>
             </Button>
+            <Button asChild variant="outline"><Link href={`/iso-document/documents/${id}/workflow`}>Task Workflow</Link></Button>
+            <Button asChild variant="outline"><Link href={`/iso-document/pending-actions?document=${id}`}>Pending Actions</Link></Button>
             {current && canViewContent ? (
               <Button asChild variant="outline">
                 <AttachmentViewerLink

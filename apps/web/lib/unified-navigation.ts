@@ -109,6 +109,7 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
+  { href: "/iso-document/pending-actions", icon: ListChecks, label: "Pending Actions" },
   { href: "/iso-document/sipoc", icon: Route, label: "SIPOC Process Maps" },
   {
     href: "/iso-document/customer-satisfaction",

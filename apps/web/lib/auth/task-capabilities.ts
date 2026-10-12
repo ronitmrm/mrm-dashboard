@@ -218,6 +218,9 @@ export const taskCapabilityLabels = {
 } satisfies Record<TaskCapability, string>
 
 const additionalTaskCapabilityLabels: Readonly<Record<string, string>> = {
+  "iso.tasks.department": "Assign ISO Staff / Target Date (Own Department)",
+  "iso.tasks.manage": "Edit ISO Task Workflow / Create Linked Action",
+  "iso.tasks.verify": "QA Verify / Close ISO Action",
   "artifacts.delete": "Delete Stored Files",
   "operations.attendance.write": "Record Attendance",
   "operations.corrections.write": "Reverse Production Entries",

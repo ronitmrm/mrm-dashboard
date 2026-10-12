@@ -26,7 +26,8 @@ export default async function SipocDetail({
     const approved = revisions.find(
       (row) => row.revision === entry.approvedRevision
     )
-    const owners = access.canManage
+    const canPrepare=access.canManage||entry.fields.ownerUserId===access.userId
+    const owners = canPrepare
       ? await repository.owners(access.organizationId)
       : []
     return (
@@ -58,7 +59,7 @@ export default async function SipocDetail({
             {approved ? (
               <TabsTrigger value="approved">Approved map</TabsTrigger>
             ) : null}
-            {access.canManage && entry.status !== "Submitted" ? (
+            {canPrepare && entry.status !== "Submitted" ? (
               <TabsTrigger value="edit">
                 {entry.status === "Approved"
                   ? "Prepare revision"
@@ -72,7 +73,7 @@ export default async function SipocDetail({
             <SipocMap fields={entry.fields} ownerName={entry.ownerName} />
             <SipocDecision
               record={entry}
-              canManage={access.canManage}
+              canManage={canPrepare}
               canApprove={access.canApprove}
             />
           </TabsContent>
@@ -97,7 +98,7 @@ export default async function SipocDetail({
               />
             </TabsContent>
           ) : null}
-          {access.canManage && entry.status !== "Submitted" ? (
+          {canPrepare && entry.status !== "Submitted" ? (
             <TabsContent value="edit">
               <SipocForm key={entry.version} record={entry} owners={owners} />
             </TabsContent>

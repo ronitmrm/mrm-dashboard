@@ -13,8 +13,9 @@ workflow state instead of creating a second document store.
   writes, department-scoped decisions, final release, monitoring confirmations
   and audit writes. All state transitions run under row locks.
 - `/iso-document/documents` is the signed-in metadata index. Released and pending
-  documents are separate views over the same records; Excel filters persist
-  through `OperationalTable` and export uses the same released dataset.
+  documents and module workflow entries are views over the same records; Excel
+  filters persist through `OperationalTable` and export includes the full index.
+  See [shared pending actions and task workflows](iso-workflows.md).
 - `/iso-document/documents/[id]` is the dossier. It composes control metadata,
   revision history, transaction history, record locations and on-demand
   monitoring. Document Templates remain the structured/upload authoring UI.

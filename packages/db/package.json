@@ -26,6 +26,7 @@
     "vitest": "4.1.10"
   },
   "exports": {
+    "./iso-workflow-domain": "./src/iso-workflow-domain.ts",
     "./risk-thinking-domain": "./src/risk-thinking-domain.ts",
     "./customer-satisfaction-domain": "./src/customer-satisfaction-domain.ts",
     "./sipoc-domain": "./src/sipoc-domain.ts",

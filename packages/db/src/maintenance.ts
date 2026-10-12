@@ -839,6 +839,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         throw new Error("Select a valid date range.")
       const result = await pool.query<{
         assetCode: string
+        scheduleId: string
         assetName: string
         completedAt: string | null
         dueOn: string
@@ -871,7 +872,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
                 AND task.due_on = schedule.next_due_on
             )
         )
-        SELECT planned.id, asset.asset_code AS "assetCode",
+        SELECT planned.id, planned.schedule_id AS "scheduleId", asset.asset_code AS "assetCode",
           planned.maintenance_record_id AS "reportId",
           item.asset_name AS "assetName",
           COALESCE(asset.current_holder_name, location.name, 'Store') AS "productionUnit",
@@ -948,6 +949,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         id: string
         machineId: string
+        scheduleId: string
         machineNumber: string
         productionUnit: string
         maintenance: string
@@ -981,7 +983,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
                 AND task.status <> 'Cancelled'
             )
         )
-        SELECT planned.id, machine.id AS "machineId", machine.machine_number AS "machineNumber",
+        SELECT planned.id, planned.schedule_id AS "scheduleId", machine.id AS "machineId", machine.machine_number AS "machineNumber",
           floor.name AS "productionUnit", definition.name AS maintenance,
           planned.due_on::text AS "dueOn", planned.status,
           planned.completed_at::text AS "completedAt"

@@ -31,6 +31,10 @@ Use `OperationalTable` for comparable records, scanning, filtering, sorting, sel
 
 Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.
 
+`ActionToolbar` stays within the available page width and wraps its buttons on
+narrow screens. Long tab lists scroll inside a bounded strip; they must not
+force the entire page to scroll horizontally.
+
 ### Form widths
 
 Keep form panels left-aligned and size them for their controls. Use `SectionCard`

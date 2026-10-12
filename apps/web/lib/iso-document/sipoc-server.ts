@@ -1,12 +1,13 @@
 import "server-only"
 import { redirect } from "next/navigation"
-import { createSipocRepository, type SipocAccess } from "@workspace/db"
+import { createSipocRepository, createBrandingRepository, type SipocAccess } from "@workspace/db"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
 } from "@/lib/auth/require-capability"
 import { sipocCapabilities } from "@/lib/auth/sipoc-capabilities"
+import { isoWorkflowCapabilities } from "@/lib/auth/iso-workflow-capabilities"
 export async function withSipoc<T>(
   operation: (context: {
     repository: ReturnType<typeof createSipocRepository>
@@ -20,10 +21,11 @@ export async function withSipoc<T>(
       repository.organizationId(),
       listGrantedCapabilities(
         session.user.id,
-        Object.values(sipocCapabilities)
+        [...Object.values(sipocCapabilities),isoWorkflowCapabilities.manage]
       ),
     ])
     if (!grants.length) redirect("/unauthorized")
+    const permittedDepartments=grants.includes(sipocCapabilities.manage)&&!grants.includes(sipocCapabilities.approve)&&!grants.includes(isoWorkflowCapabilities.manage)?await createBrandingRepository({pool:getWebPostgresPool()}).approvalDepartments({organizationId,userId:session.user.id}):null
     return await operation({
       repository,
       access: {
@@ -33,6 +35,7 @@ export async function withSipoc<T>(
         canRead: grants.includes(sipocCapabilities.read),
         canManage: grants.includes(sipocCapabilities.manage),
         canApprove: grants.includes(sipocCapabilities.approve),
+        permittedDepartments,
       },
     })
   } finally {

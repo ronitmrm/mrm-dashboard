@@ -122,7 +122,7 @@ function ActionToolbar({ className, ...props }: React.ComponentProps<"div">) {
     <div
       aria-label="Page actions"
       className={cn(
-        "flex min-h-9 shrink-0 flex-wrap items-center justify-end gap-2",
+        "flex min-h-9 min-w-0 max-w-full shrink-0 flex-wrap items-center justify-end gap-2",
         className
       )}
       data-slot="action-toolbar"

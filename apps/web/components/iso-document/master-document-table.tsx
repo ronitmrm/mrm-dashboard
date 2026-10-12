@@ -40,9 +40,11 @@ function workflowLabel(state: MasterDocumentRow["workflowState"]) {
 export function MasterDocumentTable({
   rows,
   pending = false,
+  pendingCounts = {},
 }: {
   rows: MasterDocumentRow[]
   pending?: boolean
+  pendingCounts?: Record<string, number>
 }) {
   const headers = pending
     ? [
@@ -53,6 +55,10 @@ export function MasterDocumentTable({
         "Draft revision",
         "Workflow",
         "Current release",
+        "Responsible person",
+        "Target date",
+        "Pending work (permitted)",
+        "Task Workflow",
         "Open",
       ]
     : [
@@ -68,6 +74,10 @@ export function MasterDocumentTable({
         "Data / record frequency",
         "Data retention",
         "Status",
+        "Responsible person",
+        "Target date",
+        "Pending work (permitted)",
+        "Task Workflow",
         "Open",
       ]
   return (
@@ -117,15 +127,15 @@ export function MasterDocumentTable({
                 </>
               ) : (
                 <>
-                  <TableCell>{row.number}</TableCell>
+                  <TableCell>{row.number || "Not released"}</TableCell>
                   <TableCell className="font-medium">{row.title}</TableCell>
                   <TableCell>{documentTypeLabels[row.documentType]}</TableCell>
-                  <TableCell>{row.department}</TableCell>
+                  <TableCell>{row.department || "Not assigned"}</TableCell>
                   <TableCell>{row.responsibleRole || "—"}</TableCell>
                   <TableCell>{recordLocations(row)}</TableCell>
                   <TableCell>
                     {row.revision === null
-                      ? "—"
+                      ? "Not released"
                       : documentRevisionLabel(row.revision)}
                   </TableCell>
                   <TableCell>{row.revisionDate?.slice(0, 10) ?? "—"}</TableCell>
@@ -148,10 +158,28 @@ export function MasterDocumentTable({
                   </TableCell>
                 </>
               )}
+              <TableCell>{row.responsibleName || "Not assigned"}</TableCell>
+              <TableCell>{row.workTargetOn || "Not set"}</TableCell>
+              <TableCell>
+                <Link
+                  className="text-primary hover:underline"
+                  href={`/iso-document/pending-actions?document=${row.id}`}
+                >
+                  {pendingCounts[row.id] ?? 0}
+                </Link>
+              </TableCell>
+              <TableCell>
+                <Link
+                  className="text-primary hover:underline"
+                  href={`/iso-document/documents/${row.id}/workflow`}
+                >
+                  Task Workflow
+                </Link>
+              </TableCell>
               <TableCell>
                 <Link
                   className="font-medium text-primary hover:underline"
-                  href={`/iso-document/documents/${row.id}`}
+                  href={`/iso-document/documents/${row.id}${!row.hasDraft && row.revision === null ? "/workflow" : ""}`}
                 >
                   Dossier
                 </Link>

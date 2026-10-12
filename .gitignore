@@ -99,3 +99,5 @@ next-env.d.ts
 
 !apps/web/app/iso-document/customer-satisfaction/export.xlsx/
 !apps/web/app/iso-document/customer-satisfaction/export.xlsx/route.ts
+!apps/web/app/iso-document/documents/export.xlsx/
+!apps/web/app/iso-document/documents/export.xlsx/route.ts

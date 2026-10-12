@@ -8,6 +8,7 @@ import { managementReviewPageAccess } from "./management-review-capabilities"
 import { interestedPartiesPageAccess } from "./interested-parties-capabilities"
 import { sipocPageAccess } from "./sipoc-capabilities"
 import { satisfactionPageAccess } from "./customer-satisfaction-capabilities"
+import { isoWorkflowPageAccess } from "./iso-workflow-capabilities"
 import { commercialPageAccess } from "./commercial-capabilities"
 import { storePageAccess } from "./store-capabilities"
 import { hrPageAccess } from "./hr-capabilities"
@@ -28,6 +29,7 @@ export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   interestedPartiesPageAccess,
   sipocPageAccess,
   satisfactionPageAccess,
+  isoWorkflowPageAccess,
   ...administrationPageAccess,
   ...commercialPageAccess,
   ...storePageAccess,

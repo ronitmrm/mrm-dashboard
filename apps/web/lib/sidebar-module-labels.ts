@@ -51,6 +51,8 @@ export function sidebarModuleForPermission(
 ) {
   if (permissionKey.startsWith("iso.documents."))
     return sidebarModuleLabels.isoDocument
+  if (permissionKey.startsWith("iso.tasks."))
+    return sidebarModuleLabels.isoDocument
   if (permissionKey.startsWith("iso.analysis."))
     return sidebarModuleLabels.isoDocument
   if (permissionKey.startsWith("iso.management_review."))

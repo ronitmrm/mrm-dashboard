@@ -3,6 +3,7 @@ import { brandingPageAccess } from "./branding-capabilities"
 import { qualityControlPageAccess } from "./quality-control-capabilities"
 import { departmentStoreCapability } from "./department-store-capabilities"
 import { isoCalibrationPlanPageAccess } from "./iso-calibration-plan-capabilities"
+import { isoWorkflowPageAccess } from "./iso-workflow-capabilities"
 import {
   hrMasterForPanel,
   masterCapability,
@@ -31,6 +32,7 @@ const artifactCapability = "artifacts.read"
 export type UnifiedNavigationAccess = {
   qualityControlHrefs?: string[]
   isoCalibrationPlan?: boolean
+  isoPendingActions?: boolean
   productionStoreFloorCodes?: ProductionFloorCode[]
   brandingHrefs?: string[]
   masterReadKeys?: string[]
@@ -53,6 +55,7 @@ async function readUnifiedNavigationAccess(
   const capabilities = [
     ...qualityControlPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     isoCalibrationPlanPageAccess.readPermissionKey,
+    isoWorkflowPageAccess.readPermissionKey,
     ...brandingPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...masterPermissionOptions
       .filter(({ key }) => key.endsWith(".read"))
@@ -115,6 +118,7 @@ async function readUnifiedNavigationAccess(
   )
 
   return {
+    isoPendingActions: grantedCapabilities.has(isoWorkflowPageAccess.readPermissionKey),
     qualityControlHrefs: qualityControlPageAccess.filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey)).map(({ href }) => href),
     isoCalibrationPlan:
       grantedCapabilities.has(isoCalibrationPlanPageAccess.readPermissionKey) ||

@@ -45,10 +45,13 @@ export default async function ManagementReviewMeetingPage({
     const dossier = await repository.meetingDossier(access, id)
     if (!dossier) notFound()
     const { entry, actionReviews, history } = dossier
-    const editable = access.canManage && entry.status === "Draft"
+    const canPrepare = access.canManage || entry.ownerUserId === access.userId
+    const editable = canPrepare && entry.status === "Draft"
     const [staff, points] = await Promise.all([
       editable ? repository.staff(access.organizationId) : Promise.resolve([]),
-      editable ? repository.listActions(access) : Promise.resolve([]),
+      editable && access.canManage
+        ? repository.listActions(access)
+        : Promise.resolve([]),
     ])
     return (
       <div className="grid min-w-0 gap-6">
@@ -302,7 +305,7 @@ export default async function ManagementReviewMeetingPage({
             </OperationalTable>
           </CardContent>
         </SectionCard>
-        {editable ? (
+        {editable && access.canManage ? (
           <>
             <FormSection
               title="Raise a new follow-up point"
@@ -331,7 +334,7 @@ export default async function ManagementReviewMeetingPage({
         <MinutesDecisionForm
           key={`decision-${entry.version}`}
           entry={entry}
-          canManage={access.canManage}
+          canManage={canPrepare}
           canApprove={access.canApprove}
         />
         <IsoRecordHistoryTable
