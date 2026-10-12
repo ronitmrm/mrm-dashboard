@@ -1021,7 +1021,7 @@ describe("Store requests", () => {
     expect(await store.listItemTypes(organizationId)).toContainEqual(
       expect.objectContaining({
         id: itemType.id,
-        storageLocations: "Purchase Receipt Store",
+        storageLocations: `PO-${suffix}`,
       })
     )
   })
@@ -1165,8 +1165,8 @@ describe("Store requests", () => {
     }
     const units = (await departmentStore.listStoreWorkspace({ organizationId, storeCode: "QUALITY" })).assets
     expect(units.filter((unit) => result.assetCodes.slice(0, 2).includes(unit.assetCode))
-      .map((unit) => unit.holderName)).toEqual(["Quality Rack A", "Quality Rack A"])
-    expect(units.find((unit) => unit.assetCode === result.assetCodes[2])?.holderName).toBe("Quality Rack B")
+      .map((unit) => unit.holderName)).toEqual([`QUALITY-RACK-A-${suffix}`, `QUALITY-RACK-A-${suffix}`])
+    expect(units.find((unit) => unit.assetCode === result.assetCodes[2])?.holderName).toBe(`QUALITY-RACK-B-${suffix}`)
     expect((await store.listStorageLocations(organizationId)).defaults).toEqual(expect.arrayContaining([
       { itemTypeId: secondItem.id, locationId: otherLocation.id, storeCode: "MAIN" },
       { itemTypeId: firstItem.id, locationId: qualityOverride.id, storeCode: "QUALITY" },
@@ -2971,9 +2971,10 @@ describe("Store requests", () => {
       organizationId, storeCode: "MAIN", code: `MAIN-RACK-${suffix}`, name: "Main Rack", locationType: "STORE",
     })
     const cncRack = await store.createLocation({
-      organizationId, storeCode: "cnc", code: `CNC-RACK-${suffix}`, name: "CNC Rack", locationType: "STORE",
+      organizationId, storeCode: "cnc", code: `CNC-RACK-${suffix}`, locationType: "STORE",
     })
     const assetCodes = [`STORAGE-A-${suffix}`, `STORAGE-B-${suffix}`]
+    expect((await store.listLocations(organizationId, { allStores: true })).find((location) => location.id === cncRack.id)?.name).toBe(`CNC-RACK-${suffix}`)
     for (const assetCode of assetCodes) {
       await pool.query(
         `INSERT INTO store.assets (organization_id, item_type_id, asset_code, identification_name,
@@ -2989,22 +2990,45 @@ describe("Store requests", () => {
     }
     const before = await store.listAssets({ organizationId })
     const countsBefore = (await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })).serializedTotals
+    const unassigned = await departmentStore.listDepartmentAllocations({ organizationId, productionFloorCode: "cnc" })
+    expect(unassigned.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBeNull()
+    await expect(departmentStore.assignAssetStorageLocation({
+      organizationId, storeCode: "cnc", assetCode: assetCodes[0]!, locationId: cnc.defaultLocationId,
+    })).rejects.toThrow("Choose a rack/bin location")
     const movementsBefore = await pool.query(`SELECT count(*) FROM store.stock_movements WHERE organization_id = $1`, [organizationId])
     for (const assetCode of assetCodes) await departmentStore.assignAssetStorageLocation({
       organizationId, storeCode: "cnc", assetCode, locationId: cncRack.id,
     })
     const allocations = await departmentStore.listDepartmentAllocations({ organizationId, productionFloorCode: "cnc" })
     for (const assetCode of assetCodes) expect(allocations.find((asset) => asset.assetCode === assetCode)).toMatchObject({
-      storageLocation: "CNC Rack", departmentName: "PPAC CNC-01", accountableStoreCode: "MAIN", status: "ASSIGNED",
+      storageLocation: `CNC-RACK-${suffix}`, departmentName: "PPAC CNC-01", accountableStoreCode: "MAIN", status: "ASSIGNED",
     })
     expect(await store.listAssets({ organizationId })).toEqual(before)
     expect((await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })).serializedTotals).toEqual(countsBefore)
     expect((await pool.query(`SELECT count(*) FROM store.stock_movements WHERE organization_id = $1`, [organizationId])).rows).toEqual(movementsBefore.rows)
     const mainStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" })
-    expect(mainStock.assets.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBe("Main Rack")
+    expect(mainStock.assets.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBe(`MAIN-RACK-${suffix}`)
     await expect(departmentStore.assignAssetStorageLocation({
       organizationId, storeCode: "cnc", assetCode: assetCodes[0]!, locationId: mainRack.id,
     })).rejects.toThrow("Choose a location in the accountable Store")
+    await departmentStore.moveAsset({
+      organizationId, storeCode: "MAIN", assetCode: assetCodes[0]!, holderType: "STORE", holderReference: main.defaultLocationId,
+    })
+    const returned = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" })
+    expect(returned.assets.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBeNull()
+    await departmentStore.assignAssetStorageLocation({
+      organizationId, storeCode: "MAIN", assetCode: assetCodes[0]!, locationId: mainRack.id,
+    })
+    await departmentStore.moveAsset({
+      organizationId, storeCode: "MAIN", assetCode: assetCodes[0]!, holderType: "STORE", holderReference: main.defaultLocationId,
+    })
+    expect((await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" }))
+      .assets.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBeNull()
+    expect((await pool.query<{ locationId: string }>(
+      `SELECT location_id AS "locationId" FROM store.asset_storage_locations
+       WHERE asset_id = (SELECT id FROM store.assets WHERE organization_id = $1 AND asset_code = $2)
+         AND accountable_store_id = $3`, [organizationId, assetCodes[0], cnc.id]
+    )).rows).toEqual([{ locationId: cncRack.id }])
     expect(cnc.id).not.toBe(main.id)
   })
 
@@ -3032,6 +3056,10 @@ describe("Store requests", () => {
     await departmentStore.transferQuantity({
       destinationStoreCode: "cnc", itemTypeId: item.id,
       organizationId, quantity: 10, sourceStoreCode: "MAIN",
+    })
+    const received = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
+    expect(received.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "10", storageLocations: "",
     })
     await departmentStore.consumeQuantities({
       consumedOn: "2026-08-17", items: [{ itemTypeId: item.id, quantity: 10 }],

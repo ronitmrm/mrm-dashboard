@@ -12,7 +12,12 @@ export async function saveAssetStorageLocation(database: PoolClient, input: {
     `INSERT INTO store.asset_storage_locations (
        organization_id, asset_id, accountable_store_id, location_id,
        updated_by_user_id, remark
-     ) VALUES ($1, $2, $3, $4, $5, $6)
+     ) SELECT $1, $2, $3, location.id, $5, $6
+       FROM store.locations location
+       JOIN store.accountable_stores accountable ON accountable.id = $3
+       WHERE location.id = $4 AND location.accountable_store_id = accountable.id
+         AND location.organization_id = $1 AND location.location_type = 'STORE'
+         AND location.id <> accountable.default_location_id
      ON CONFLICT (asset_id, accountable_store_id) DO UPDATE SET
        location_id = EXCLUDED.location_id, updated_at = now(),
        updated_by_user_id = EXCLUDED.updated_by_user_id, remark = EXCLUDED.remark`,

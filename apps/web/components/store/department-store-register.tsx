@@ -165,7 +165,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>Consumable</TableCell><TableCell>{item.availableQuantity} {item.unit}</TableCell>
                 {store.kind === "MAIN" ? <TableCell>{item.companyQuantity} {item.unit}</TableCell> : null}
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
-                <TableCell>{store.name}</TableCell><TableCell>{item.storageLocations || "—"}</TableCell>
+                <TableCell>{store.name}</TableCell><TableCell>{item.storageLocations}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {accountableAssets.map((asset) => <TableRow key={asset.assetCode}>
@@ -184,7 +184,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 {store.kind === "MAIN" ? <TableCell>1 {asset.unit}</TableCell> : null}
                 <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
                 <TableCell>{asset.assignedLocation || asset.holderName || asset.holderType}</TableCell>
-                <TableCell>{asset.storageLocation || "—"}</TableCell>
+                <TableCell>{asset.storageLocation}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {otherStoreAllocations.map((asset) => <TableRow key={asset.assetCode}>
@@ -198,7 +198,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>Non Consumable</TableCell><TableCell>0 {asset.unit}</TableCell>
                 {store.kind === "MAIN" ? <TableCell>1 {asset.unit}</TableCell> : null}<TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.departmentName}</TableCell>
-                <TableCell>{asset.storageLocation || "—"}</TableCell>
+                <TableCell>{asset.storageLocation}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{asset.accountableStoreName}</TableCell> : null}
               </TableRow>)}
               {!stockCount ? <TableRow><TableCell colSpan={11 + (selectMode ? 1 : 0) + (store.kind !== "QUALITY" ? 1 : 0)}>

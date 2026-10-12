@@ -204,26 +204,27 @@ export async function createStoreLocationAction(formData: FormData) {
       masterCapability("LOCATION", "save"),
       (repository, actorUserId, organizationId) => {
         const masterId = optionalText(formData, "master_id")
+        const locationType = requiredText(formData, "location_type") as
+          | "DEPARTMENT"
+          | "STORE"
+          | "UNIT"
+        const name = locationType === "STORE"
+          ? undefined
+          : requiredText(formData, "location_name")
         return masterId
           ? repository.updateLocation({
               actorUserId,
               id: masterId,
-              locationType: requiredText(formData, "location_type") as
-                | "DEPARTMENT"
-                | "STORE"
-                | "UNIT",
-              name: requiredText(formData, "location_name"),
+              locationType,
+              name,
               organizationId,
             })
           : repository.createLocation({
               rejectDuplicates: true,
               actorUserId,
               code: requiredText(formData, "location_code"),
-              locationType: requiredText(formData, "location_type") as
-                | "DEPARTMENT"
-                | "STORE"
-                | "UNIT",
-              name: requiredText(formData, "location_name"),
+              locationType,
+              name,
               organizationId,
               storeCode: optionalText(formData, "store_code") ?? "MAIN",
             })

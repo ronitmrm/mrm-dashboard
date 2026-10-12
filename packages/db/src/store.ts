@@ -2077,10 +2077,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       code: string
       locationType?: "DEPARTMENT" | "STORE" | "UNIT"
-      name: string
+      name?: string
       organizationId: string
       storeCode?: string
     }) {
+      const code = requiredText(input.code, "Location code")
+      const locationType = input.locationType ?? "STORE"
       return withTransaction(pool, async (client) => {
         const result = await client.query<{ id: string; inserted: boolean }>(
           `
@@ -2103,9 +2105,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            requiredText(input.code, "Location code"),
-            requiredText(input.name, "Location name"),
-            input.locationType ?? "STORE",
+            code,
+            locationType === "STORE" ? code : requiredText(input.name, "Location name"),
+            locationType,
             input.actorUserId ?? null,
             input.storeCode ?? "MAIN",
           ]
@@ -2125,12 +2127,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       id: string
       locationType?: "DEPARTMENT" | "STORE" | "UNIT"
-      name: string
+      name?: string
       organizationId: string
     }) {
+      const locationType = input.locationType ?? "STORE"
       const result = await pool.query<{ id: string }>(
         `UPDATE store.locations
-         SET name = $1, location_type = $2, updated_by_user_id = $3,
+         SET name = CASE WHEN $2 = 'STORE' THEN code ELSE $1 END,
+           location_type = $2, updated_by_user_id = $3,
            updated_at = now()
          WHERE id = $4 AND organization_id = $5
            AND ($2 = 'STORE' OR NOT EXISTS (
@@ -2139,8 +2143,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
            ))
          RETURNING id`,
         [
-          requiredText(input.name, "Location name"),
-          input.locationType ?? "STORE",
+          locationType === "STORE" ? null : requiredText(input.name, "Location name"),
+          locationType,
           input.actorUserId ?? null,
           input.id,
           input.organizationId,
