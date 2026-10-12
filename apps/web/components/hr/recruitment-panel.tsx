@@ -91,8 +91,6 @@ import {
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
-import { RoleProfileFields } from "@/components/hr/role-profile-fields"
-import { RoleQuestionsPanel } from "@/components/hr/role-questions-panel"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 import {
   recruitmentMasterHref,
@@ -358,14 +356,8 @@ function TemplatePanel({
               "shift_type",
               "shift_start_time",
               "shift_end_time",
-              "role_responsibilities",
-              "role_purpose",
-              "role_reports_to",
-              "role_authority",
-              "role_limits",
-              "role_escalation",
-              "role_measures",
-              "role_competence",
+              "job_description",
+              "questions",
             ]}
             fileName="job-description-template-master-template.csv"
           />
@@ -387,10 +379,10 @@ function TemplatePanel({
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
-          description="Define role purpose, duties, reporting, decision authority, approval limits and required competence. Record company delegation explicitly."
+          description="Enter the job description and interview questions in separate text areas."
           panelId="postMasterPanel"
           masterView={activeView}
-          title="Roles, Responsibilities & Authority"
+          title="Job Description Template"
         >
           <CompanyWideMasterScope />
           <TextField
@@ -435,14 +427,18 @@ function TemplatePanel({
           <TextField label="Shift End Time" name="shift_end_time" required type="time" />
           <Field className="md:col-span-2 xl:col-span-3">
             <FieldLabel htmlFor="template-responsibilities">
-              Responsibilities / duties
+              Job Description
             </FieldLabel>
             <Textarea
               id="template-responsibilities"
               name="role_responsibilities"
+              rows={8}
             />
           </Field>
-          <RoleProfileFields />
+          <Field className="col-span-full">
+            <FieldLabel htmlFor="template-questions">Questions</FieldLabel>
+            <Textarea id="template-questions" name="questions" rows={8} />
+          </Field>
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save Template
           </Button>
@@ -1086,13 +1082,6 @@ function InterviewsPanel({
 
 function RecruitmentPanelContent(props: RecruitmentPanelProps) {
   switch (props.panelId) {
-    case "questionsPanel":
-      return (
-        <RoleQuestionsPanel
-          templates={props.templates}
-          canWrite={props.canEditTemplate}
-        />
-      )
     case "postMasterPanel":
       return (
         <TemplatePanel

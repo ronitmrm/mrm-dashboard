@@ -9,13 +9,17 @@ import type {
 } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
@@ -38,7 +42,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -55,9 +59,6 @@ import {
 } from "@/app/hr/actions"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
-import { RoleProfileFields } from "@/components/hr/role-profile-fields"
-import { roleProfileComplete } from "@workspace/db/recruitment-role-profile"
-import { StatusBadge } from "@workspace/ui/components/badge"
 
 type FilterKey =
   | "code"
@@ -85,7 +86,10 @@ export function JobTemplateEditor({
   template: RecruitmentTemplateRow
 }) {
   return (
-    <form action={canWrite ? saveTemplateAction : undefined} className="flex min-h-full flex-col">
+    <form
+      action={canWrite ? saveTemplateAction : undefined}
+      className="flex min-h-full flex-col"
+    >
       <input name="panel" type="hidden" value={panelId} />
       {masterView ? (
         <input name="master_view" type="hidden" value={masterView} />
@@ -98,14 +102,19 @@ export function JobTemplateEditor({
         value={template.rowVersion}
       />
       <SheetHeader>
-        <SheetTitle>{canWrite ? "Edit" : "View"} {template.templateCode}</SheetTitle>
+        <SheetTitle>
+          {canWrite ? "Edit" : "View"} {template.templateCode}
+        </SheetTitle>
         <SheetDescription>
           {canWrite
-            ? "Update roles, responsibilities and company-confirmed authority. The role code remains fixed."
-            : "Roles, Responsibilities and Authority profile."}
+            ? "Update the job description and questions. The template code remains fixed."
+            : "Job description and interview questions."}
         </SheetDescription>
       </SheetHeader>
-      <fieldset disabled={!canWrite} className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
+      <fieldset
+        disabled={!canWrite}
+        className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2"
+      >
         <Field>
           <FieldLabel>Template Code</FieldLabel>
           <Input readOnly value={template.templateCode} />
@@ -184,14 +193,18 @@ export function JobTemplateEditor({
             name="shift_type"
             required
           >
-            <NativeSelectOption disabled value="">Select Shift Type</NativeSelectOption>
+            <NativeSelectOption disabled value="">
+              Select Shift Type
+            </NativeSelectOption>
             <NativeSelectOption value="Day">Day</NativeSelectOption>
             <NativeSelectOption value="Night">Night</NativeSelectOption>
             <NativeSelectOption value="Rotation">Rotation</NativeSelectOption>
           </NativeSelect>
         </Field>
         <Field>
-          <FieldLabel htmlFor="edit-template-shift-start">Shift Start Time</FieldLabel>
+          <FieldLabel htmlFor="edit-template-shift-start">
+            Shift Start Time
+          </FieldLabel>
           <Input
             defaultValue={template.shiftStartTime ?? ""}
             id="edit-template-shift-start"
@@ -201,7 +214,9 @@ export function JobTemplateEditor({
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor="edit-template-shift-end">Shift End Time</FieldLabel>
+          <FieldLabel htmlFor="edit-template-shift-end">
+            Shift End Time
+          </FieldLabel>
           <Input
             defaultValue={template.shiftEndTime ?? ""}
             id="edit-template-shift-end"
@@ -212,7 +227,7 @@ export function JobTemplateEditor({
         </Field>
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="edit-template-responsibilities">
-            Responsibilities / duties
+            Job Description
           </FieldLabel>
           <Textarea
             defaultValue={template.roleResponsibilities ?? ""}
@@ -221,7 +236,15 @@ export function JobTemplateEditor({
             rows={8}
           />
         </Field>
-        <RoleProfileFields profile={template.roleProfile} />
+        <Field className="sm:col-span-2">
+          <FieldLabel htmlFor="edit-template-questions">Questions</FieldLabel>
+          <Textarea
+            defaultValue={template.questions}
+            id="edit-template-questions"
+            name="questions"
+            rows={8}
+          />
+        </Field>
         {canWrite ? (
           <Field className="sm:col-span-2">
             <FieldLabel htmlFor="edit-template-apply-to-posts">
@@ -236,9 +259,7 @@ export function JobTemplateEditor({
               <NativeSelectOption disabled value="">
                 Choose Where To Apply Changes
               </NativeSelectOption>
-              <NativeSelectOption value="no">
-                Template Only
-              </NativeSelectOption>
+              <NativeSelectOption value="no">Template Only</NativeSelectOption>
               <NativeSelectOption value="yes">
                 Also Update Matching Approved Posts
               </NativeSelectOption>
@@ -278,8 +299,10 @@ export function JobTemplatesTable({
   templates: RecruitmentTemplateRow[]
 }) {
   const [editingTemplate, setEditingTemplate] =
-    useState<RecruitmentTemplateRow | null>(() =>
-      templates.find((row) => row.templateCode === initialTemplateCode) ?? null
+    useState<RecruitmentTemplateRow | null>(
+      () =>
+        templates.find((row) => row.templateCode === initialTemplateCode) ??
+        null
     )
   const [deletingTemplate, setDeletingTemplate] =
     useState<RecruitmentTemplateRow | null>(null)
@@ -308,7 +331,9 @@ export function JobTemplatesTable({
               : key === "shiftType"
                 ? row.shiftType
                 : key === "shiftTiming"
-                  ? [row.shiftStartTime, row.shiftEndTime].filter(Boolean).join("–")
+                  ? [row.shiftStartTime, row.shiftEndTime]
+                      .filter(Boolean)
+                      .join("–")
                   : String(row[key]),
       ],
     })),
@@ -324,12 +349,11 @@ export function JobTemplatesTable({
       }}
       open={editingTemplate !== null}
     >
- <SectionCard>
+      <SectionCard>
         <CardHeader>
-          <CardTitle>Roles, Responsibilities &amp; Authority</CardTitle>
+          <CardTitle>Job Description Templates</CardTitle>
           <CardDescription>
-            Showing {visibleTemplates.length} Of {templates.length} Reusable
-            Profiles
+            Showing {visibleTemplates.length} Of {templates.length} Templates
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0 space-y-2">
@@ -344,13 +368,12 @@ export function JobTemplatesTable({
               Clear All Filters
             </Button>
           </div>
- <OperationalTable>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
-                <TableHead>RRA assessment</TableHead>
                 {canWrite || canDelete ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
@@ -364,7 +387,6 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
-                <TableHead />
                 {canWrite || canDelete ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
@@ -391,26 +413,6 @@ export function JobTemplatesTable({
                     {row.shiftStartTime && row.shiftEndTime
                       ? `${row.shiftStartTime}–${row.shiftEndTime}`
                       : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      value={
-                        roleProfileComplete(
-                          row.roleProfile,
-                          row.roleResponsibilities
-                        )
-                          ? "RRA fields complete"
-                          : "Needs RRA assessment"
-                      }
-                      tone={
-                        roleProfileComplete(
-                          row.roleProfile,
-                          row.roleResponsibilities
-                        )
-                          ? "information"
-                          : "warning"
-                      }
-                    />
                   </TableCell>
                   {canWrite || canDelete ? (
                     <TableCell className="space-x-2 text-right">
@@ -449,9 +451,9 @@ export function JobTemplatesTable({
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
       {editingTemplate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <JobTemplateEditor

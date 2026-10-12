@@ -1,25 +1,19 @@
-# Recruitment role profiles
+# Job description templates
 
-Existing `recruitment.requirement_templates` remain the single role/template
-source. `role_profile` holds purpose, reporting, decision authority, limits,
-escalation, results and competence. `role_responsibilities` holds duties.
-`interview_questions` holds stable question IDs, round, focus, scenario and
-response indicators. Original descriptions and migrated questions remain retained.
+`recruitment.requirement_templates` is the single template source.
+`role_responsibilities` stores the free-text Job Description; `questions` stores
+optional free-text Questions. Create/edit forms save both in one transaction
+using the existing job-template grants, stale-version check and before/after audit.
+PostgreSQL bigint `row_version` is normalized to a number before comparison.
 
-Master Data → Roles, Responsibilities & Authority edits profiles; HR → HR
-Questions edits banks. Both use the existing job-template read/save grants.
-Role previews and Interview Workspace expose separate profile/questions tabs.
-Generic interview criteria, rounds, scores and hiring decisions stay authoritative.
-Questions are prompts; evidence goes into interview comments.
+Master Data → Job Description Templates edits both areas. Linked previews and
+Interview Workspace show separate description/questions sections on the same
+screen. Generic interview criteria, rounds, scores and hiring decisions remain
+authoritative. Questions are prompts; evidence goes into interview comments.
+CSV import/export includes Questions; imports without that column preserve it.
 
-Profile/question saves retain before/after audit and reject stale versions.
-PostgreSQL `row_version` is bigint and arrives as text; convert it to a number
-for displayed versions and both profile/question optimistic checks.
-Changing a profile does not rewrite existing job descriptions or question banks.
-CSV profile imports preserve profile data when no role columns are supplied.
-The display completeness check requires duties, purpose, reporting, authority,
-limits and escalation; it does not establish delegated approval or employee competence.
-
-Migration 0215 separates numbered screening questions from recognized headings,
-retains the exact original description, improves evidence prompts and adds three
-RRA scenario questions. Authority fields remain empty for company assessment.
+Migration 0222 converts the structured questions to text and folds nonblank
+profile fields into the description. The original `role_profile`,
+`interview_questions` and `original_role_description` columns remain archived
+source data from migration 0215; current application code does not edit them.
+Existing Job Post snapshots and employee assignments remain unchanged.

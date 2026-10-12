@@ -133,21 +133,9 @@ export async function importJobTemplatesCsvAction(formData: FormData) {
             name,
             organizationId: context.organizationId,
             roleResponsibilities:
-              csvValue(row, "role_responsibilities") || null,
-            roleProfile: Object.keys(row).some(
-              (key) =>
-                key.startsWith("role_") && key !== "role_responsibilities"
-            )
-              ? {
-                  purpose: csvValue(row, "role_purpose"),
-                  reportsTo: csvValue(row, "role_reports_to"),
-                  authority: csvValue(row, "role_authority"),
-                  limits: csvValue(row, "role_limits"),
-                  escalation: csvValue(row, "role_escalation"),
-                  measures: csvValue(row, "role_measures"),
-                  competence: csvValue(row, "role_competence"),
-                }
-              : undefined,
+              csvValue(row, "job_description", "role_responsibilities") || null,
+            questions:
+              "questions" in row ? csvValue(row, "questions") : undefined,
             shiftEndTime: csvValue(row, "shift_end_time"),
             shiftStartTime: csvValue(row, "shift_start_time"),
             shiftType: csvValue(row, "shift_type"),
