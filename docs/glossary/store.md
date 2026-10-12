@@ -126,6 +126,11 @@ The selector defaults to the most recently used location where that Asset Code
 is currently stored in the receiving Store; when none exists, it uses that
 Store's default location. The storekeeper can change it for the incoming stock
 without relocating earlier stock. A location from another Store is rejected.
+For a received Non Consumable Unit ID, the accountable storekeeper can assign
+or change its rack/bin through **Assign asset location** in that Store's Stock
+Register. The selected location appears under **Location / holder** so users can
+find the unit. This records a physical movement; responsibility and company
+quantity stay unchanged.
 
 **Store Balance**: Unused quantity of one Consumable at one accountable store.
 An internal transfer decreases the source balance and increases the destination

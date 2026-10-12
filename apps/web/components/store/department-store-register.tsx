@@ -95,6 +95,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
           </p> : null}
           {canWrite ? <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer or move stock</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Assign asset location</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID responsibility</Link></Button>
             {consumables.length ? <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
               <Link href={`${basePath}?select=use`}>Record use</Link>
@@ -143,7 +144,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <TableHead>Asset Name</TableHead><TableHead>Make/Model</TableHead>
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
               <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
-              <TableHead>Physical holder</TableHead>
+              <TableHead>Location / holder</TableHead>
               {store.kind === "PRODUCTION" ? <TableHead>Responsible Store</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
