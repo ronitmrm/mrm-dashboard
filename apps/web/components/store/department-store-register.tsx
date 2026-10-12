@@ -59,8 +59,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         tableId="department-store-stock" /> : undefined}
       description={view === "stock"
         ? store.kind === "PRODUCTION"
-          ? `Stock accountable to ${store.name}, plus Unit IDs held by its departments. Company on-hand includes all Stores.`
-          : `Stock accountable to ${store.name}. Company on-hand includes all Stores.`
+          ? `Stock accountable to ${store.name}, plus Unit IDs assigned to its departments.`
+          : `Stock accountable to ${store.name}.`
         : view === "movement"
           ? `Transfers, physical moves, consumption and adjustments for ${store.name}.`
           : `Supplier repair orders originated by ${store.name}.`}
@@ -83,6 +83,10 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         scope={`Stock accountable to ${store.name} · before table filters`}
       />
       {canWrite && action ? <DepartmentStoreForms action={action} assets={accountableAssets}
+        storageAssets={[
+          ...accountableAssets.filter((asset) => asset.storageAssignable && !asset.inGaugeSet),
+          ...otherStoreAllocations.filter((asset) => !asset.inGaugeSet),
+        ]}
         consumables={consumables} departments={departments} gaugeSets={gaugeSets}
         storageLocations={workspace.storageLocations}
         machines={machines} recorderId={recorderId} selectedItemIds={selectedItemIds} store={store}
@@ -91,11 +95,11 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         <CardHeader className="gap-3">
           <CardTitle>Stock Register</CardTitle>
           {store.kind === "PRODUCTION" ? <p className="text-sm text-muted-foreground">
-            Units assigned to this floor by another Store appear here for visibility. That Store controls their movements and return.
+            Set a storage location for units assigned here. Their Responsible Store controls movements and return.
           </p> : null}
           {canWrite ? <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer or move stock</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Assign asset location</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer consumable stock</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Set storage location</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID responsibility</Link></Button>
             {consumables.length ? <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
               <Link href={`${basePath}?select=use`}>Record use</Link>
@@ -143,8 +147,8 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
               <TableHead>Asset Category</TableHead><TableHead>Asset Subcategory</TableHead>
               <TableHead>Asset Name</TableHead><TableHead>Make/Model</TableHead>
               <TableHead>Type</TableHead><TableHead>Available here</TableHead>
-              <TableHead>Company on hand</TableHead><TableHead>Status</TableHead>
-              <TableHead>Location / holder</TableHead>
+              {store.kind === "MAIN" ? <TableHead>Company on hand</TableHead> : null}<TableHead>Status</TableHead>
+              <TableHead>Assigned location</TableHead><TableHead>Storage location</TableHead>
               {store.kind === "PRODUCTION" ? <TableHead>Responsible Store</TableHead> : null}
             </TableRow></TableHeader>
             <TableBody>
@@ -159,9 +163,9 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{item.assetName}</TableCell>
                 <TableCell>{item.makeModel}</TableCell>
                 <TableCell>Consumable</TableCell><TableCell>{item.availableQuantity} {item.unit}</TableCell>
-                <TableCell>{item.companyQuantity} {item.unit}</TableCell>
+                {store.kind === "MAIN" ? <TableCell>{item.companyQuantity} {item.unit}</TableCell> : null}
                 <TableCell><StatusBadge value={Number(item.availableQuantity) > 0 ? "AVAILABLE" : "OUT OF STOCK"} /></TableCell>
-                <TableCell>{item.storageLocations || "—"}</TableCell>
+                <TableCell>{store.name}</TableCell><TableCell>{item.storageLocations || "—"}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {accountableAssets.map((asset) => <TableRow key={asset.assetCode}>
@@ -177,9 +181,10 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.assetName}</TableCell>
                 <TableCell>{asset.makeModel}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>{asset.availableHere ? "1" : "0"} {asset.unit}</TableCell>
-                <TableCell>1 {asset.unit}</TableCell>
+                {store.kind === "MAIN" ? <TableCell>1 {asset.unit}</TableCell> : null}
                 <TableCell><StatusBadge tone={asset.status === "LOST" ? "danger" : undefined} value={asset.status} /></TableCell>
-                <TableCell>{asset.holderName || asset.holderType}</TableCell>
+                <TableCell>{asset.assignedLocation || asset.holderName || asset.holderType}</TableCell>
+                <TableCell>{asset.storageLocation || "—"}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{store.name}</TableCell> : null}
               </TableRow>)}
               {otherStoreAllocations.map((asset) => <TableRow key={asset.assetCode}>
@@ -191,11 +196,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
                 <TableCell>{asset.assetName}</TableCell>
                 <TableCell>{asset.makeModel}</TableCell>
                 <TableCell>Non Consumable</TableCell><TableCell>0 {asset.unit}</TableCell>
-                <TableCell>1 {asset.unit}</TableCell><TableCell><StatusBadge value={asset.status} /></TableCell>
+                {store.kind === "MAIN" ? <TableCell>1 {asset.unit}</TableCell> : null}<TableCell><StatusBadge value={asset.status} /></TableCell>
                 <TableCell>{asset.departmentName}</TableCell>
+                <TableCell>{asset.storageLocation || "—"}</TableCell>
                 {store.kind === "PRODUCTION" ? <TableCell>{asset.accountableStoreName}</TableCell> : null}
               </TableRow>)}
-              {!stockCount ? <TableRow><TableCell colSpan={(selectMode ? 12 : 11) + (store.kind === "PRODUCTION" ? 1 : 0)}>
+              {!stockCount ? <TableRow><TableCell colSpan={11 + (selectMode ? 1 : 0) + (store.kind !== "QUALITY" ? 1 : 0)}>
                 {store.kind === "PRODUCTION" ? "No stock or Department allocations recorded." : "No stock accountable to this Store."}
               </TableCell></TableRow> : null}
             </TableBody>

@@ -2959,6 +2959,55 @@ describe("Store requests", () => {
     expect(cncStock.assets.some((asset) => asset.assetCode === assetCode)).toBe(false)
   })
 
+  test("keeps separate Store storage without moving an assigned unit", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`, [organizationId]
+    )
+    const main = await departmentStore.getStoreByCode(organizationId, "MAIN")
+    const cnc = await departmentStore.getStoreByCode(organizationId, "cnc")
+    const mainRack = await store.createLocation({
+      organizationId, storeCode: "MAIN", code: `MAIN-RACK-${suffix}`, name: "Main Rack", locationType: "STORE",
+    })
+    const cncRack = await store.createLocation({
+      organizationId, storeCode: "cnc", code: `CNC-RACK-${suffix}`, name: "CNC Rack", locationType: "STORE",
+    })
+    const assetCodes = [`STORAGE-A-${suffix}`, `STORAGE-B-${suffix}`]
+    for (const assetCode of assetCodes) {
+      await pool.query(
+        `INSERT INTO store.assets (organization_id, item_type_id, asset_code, identification_name,
+           current_location_id, current_holder_type, current_holder_name, accountable_store_id)
+         VALUES ($1, $2, $3, 'Storage verification', $4, 'STORE', 'Main Rack', $5)`,
+        [organizationId, legacyItemTypeId, assetCode, mainRack.id, main.id]
+      )
+      await pool.query(
+        `UPDATE store.assets SET current_holder_type = 'DEPARTMENT', current_location_id = NULL,
+           current_holder_reference = 'PPC-CNC', current_holder_name = 'PPAC CNC-01', status = 'ASSIGNED'
+         WHERE organization_id = $1 AND asset_code = $2`, [organizationId, assetCode]
+      )
+    }
+    const before = await store.listAssets({ organizationId })
+    const countsBefore = (await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })).serializedTotals
+    const movementsBefore = await pool.query(`SELECT count(*) FROM store.stock_movements WHERE organization_id = $1`, [organizationId])
+    for (const assetCode of assetCodes) await departmentStore.assignAssetStorageLocation({
+      organizationId, storeCode: "cnc", assetCode, locationId: cncRack.id,
+    })
+    const allocations = await departmentStore.listDepartmentAllocations({ organizationId, productionFloorCode: "cnc" })
+    for (const assetCode of assetCodes) expect(allocations.find((asset) => asset.assetCode === assetCode)).toMatchObject({
+      storageLocation: "CNC Rack", departmentName: "PPAC CNC-01", accountableStoreCode: "MAIN", status: "ASSIGNED",
+    })
+    expect(await store.listAssets({ organizationId })).toEqual(before)
+    expect((await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })).serializedTotals).toEqual(countsBefore)
+    expect((await pool.query(`SELECT count(*) FROM store.stock_movements WHERE organization_id = $1`, [organizationId])).rows).toEqual(movementsBefore.rows)
+    const mainStock = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" })
+    expect(mainStock.assets.find((asset) => asset.assetCode === assetCodes[0])?.storageLocation).toBe("Main Rack")
+    await expect(departmentStore.assignAssetStorageLocation({
+      organizationId, storeCode: "cnc", assetCode: assetCodes[0]!, locationId: mainRack.id,
+    })).rejects.toThrow("Choose a location in the accountable Store")
+    expect(cnc.id).not.toBe(main.id)
+  })
+
   test("shows each Store leg and one consumption without double-debiting company stock", async () => {
     await pool.query(
       `INSERT INTO manufacturing.production_floors (organization_id, code, name)

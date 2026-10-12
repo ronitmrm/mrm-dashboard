@@ -4,10 +4,10 @@ import { expect, test, vi } from "vitest"
 vi.mock("@/components/ui/golden-patterns", () => import("../ui/golden-patterns"))
 
 vi.mock("@/app/department-store/actions", () => ({
+  assignDepartmentAssetStorageAction: vi.fn(),
   consumeDepartmentQuantityAction: vi.fn(),
   createQualityGaugeSetAction: vi.fn(),
   disbandQualityGaugeSetAction: vi.fn(),
-  moveDepartmentAssetAction: vi.fn(),
   moveQualityGaugeSetAction: vi.fn(),
   recordDepartmentAssetLossAction: vi.fn(),
   replaceQualityGaugeSetMemberAction: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("@/app/department-store/actions", () => ({
 
 import { DepartmentStoreForms } from "./department-store-forms"
 
-test("offers the Store's racks for assigning an asset location", () => {
+test("offers only local storage controls for an assigned Unit ID", () => {
   const html = renderToStaticMarkup(
     <DepartmentStoreForms
       action="physical"
@@ -27,6 +27,7 @@ test("offers the Store's racks for assigning an asset location", () => {
       gaugeSets={[]}
       machines={[]}
       recorderId="storekeeper"
+      storageAssets={[{ assetCode: "NC459-0001", assetName: "Crate Trolley" }]}
       storageLocations={{
         defaults: [],
         locations: [
@@ -44,9 +45,13 @@ test("offers the Store's racks for assigning an asset location", () => {
       vendors={[]}
     />
   )
-  expect(html).toContain("Store location")
+  expect(html).toContain("Storage location")
   expect(html).toContain('value="cnc-default" selected=""')
   expect(html).toContain('value="cnc-rack-a"')
   expect(html).not.toContain('value="main-rack"')
-  expect(html).toContain('name="holder_reference"')
+  expect(html).toContain('name="storage_location_id"')
+  expect(html).toContain('value="NC459-0001"')
+  expect(html).not.toContain('name="stock_type"')
+  expect(html).not.toContain('name="holder_type"')
+  expect(html).not.toContain('name="holder_reference"')
 })

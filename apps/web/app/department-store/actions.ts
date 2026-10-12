@@ -174,17 +174,17 @@ function movementDestination(formData: FormData) {
   }
 }
 
-export async function moveDepartmentAssetAction(
+export async function assignDepartmentAssetStorageAction(
   _state: DepartmentStoreActionState,
   formData: FormData
 ) {
   return withStoreWrite(formData, (repository, context) =>
-    repository.moveAsset({
+    repository.assignAssetStorageLocation({
       ...context,
       assetCode: required(formData, "asset_code"),
-      ...movementDestination(formData),
+      locationId: required(formData, "storage_location_id"),
       remark: optional(formData, "remark"),
-    }), "store.asset_movement.write", "/store/movement"
+    }), "store.asset_movement.write", "/store/stock"
   )
 }
 
