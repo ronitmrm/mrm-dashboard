@@ -150,6 +150,10 @@ ten branches.
   30 seconds for compute cold start and use native `pg`, as recommended for
   persistent Node processes. Check local routing to the Neon endpoint on port
   5432 before changing application settings.
+- Hosted web pools use a five-second idle timeout before `attachDatabasePool`.
+  Vercel waits for idle cleanup after connection release; a five-minute idle
+  timeout exceeds its request limit once the cleanup grace period is added.
+  Continuous worker pools retain their existing idle timeout.
 - The continuous worker logs a redacted `poll-error` category and retries with
   bounded exponential backoff instead of terminating the web launcher. A
   one-shot `runtime:worker:managed:status` command still exits nonzero when the
