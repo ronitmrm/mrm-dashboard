@@ -8,6 +8,15 @@ export const isoAnalysisCapabilities = {
 
 export const isoAnalysisPageAccess = [
   {
+    href: "/iso-document/analysis/risk",
+    id: "iso.analysis.risk",
+    label: "Risk-Based Thinking",
+    module: "ISO Document",
+    submodule: "Risk-Based Thinking",
+    navigation: true,
+    readPermissionKey: isoAnalysisCapabilities.read,
+  },
+  {
     href: "/iso-document/analysis/pest",
     id: "iso.analysis.pest",
     label: "PEST Analysis",

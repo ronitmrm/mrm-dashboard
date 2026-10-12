@@ -97,3 +97,5 @@ next-env.d.ts
 # local database tooling
 /.neon
 
+!apps/web/app/iso-document/customer-satisfaction/export.xlsx/
+!apps/web/app/iso-document/customer-satisfaction/export.xlsx/route.ts

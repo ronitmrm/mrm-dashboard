@@ -298,3 +298,10 @@ export {
   type SipocRevision,
   type SipocHistory,
 } from "./sipoc"
+export {
+  createCustomerSatisfactionRepository,
+  authorizeSatisfactionUpload,
+  type SatisfactionAccess,
+  type SatisfactionReport,
+  type SatisfactionFile,
+} from "./customer-satisfaction"

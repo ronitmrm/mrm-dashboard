@@ -2,10 +2,22 @@ import { notFound } from "next/navigation"
 import {
   analysisReference,
   isAnalysisKind,
+  analysisStatusLabel,
 } from "@workspace/db/iso-analysis-domain"
 import { withIsoAnalysis } from "@/lib/iso-document/analysis-server"
 import { xlsxResponse } from "@/lib/xlsx-response"
 import * as XLSX from "xlsx"
+import { riskScore, riskPriority } from "@workspace/db/risk-thinking-domain"
+function retainedFields(
+  value: unknown,
+  path = ""
+): Array<{ Field: string; Value: string }> {
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return Object.entries(value).flatMap(([key, content]) =>
+      retainedFields(content, path ? `${path}.${key}` : key)
+    )
+  return [{ Field: path, Value: value == null ? "" : String(value) }]
+}
 
 export async function GET(
   request: Request,
@@ -38,7 +50,35 @@ export async function GET(
         "Responsible Staff": row.ownerName ?? "Not assigned",
         "Issue Date": row.identifiedOn ?? "",
         "Target Date": row.dueOn ?? "",
-        Status: row.status,
+        Status: analysisStatusLabel(row),
+        ...(kind === "RISK"
+          ? {
+              ...Object.fromEntries(
+                Object.entries(row.risk ?? {}).map(([key, value]) => [
+                  `Risk ${key}`,
+                  value,
+                ])
+              ),
+              "Current Score": riskScore(
+                row.risk?.likelihood ?? null,
+                row.risk?.severity ?? null
+              ),
+              "Residual Score": riskScore(
+                row.riskReview?.likelihood ?? null,
+                row.riskReview?.severity ?? null
+              ),
+              "Residual Priority": riskPriority(
+                row.riskReview?.likelihood ?? null,
+                row.riskReview?.severity ?? null
+              ),
+              ...Object.fromEntries(
+                Object.entries(row.riskReview ?? {}).map(([key, value]) => [
+                  `Residual ${key}`,
+                  value,
+                ])
+              ),
+            }
+          : {}),
         "Work Done": row.completionNotes,
         "Evidence Location": row.evidenceLocation,
         "Completed By": row.completedBy ?? "",
@@ -64,18 +104,42 @@ export async function GET(
       { wch: 25 },
     ]
     XLSX.utils.book_append_sheet(workbook, sheet, `${kind} Analysis`)
+    if (kind === "RISK")
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.json_to_sheet(
+          rows.flatMap((row) =>
+            Object.entries(row.source?.columns ?? {}).map(
+              ([column, value]) => ({
+                Reference: analysisReference(kind, row.number),
+                File: row.source?.fileName,
+                Hash: row.source?.sha256,
+                Sheet: row.source?.sheet,
+                Row: row.source?.row,
+                Column: column,
+                Original: value,
+              })
+            )
+          )
+        ),
+        "Original Source"
+      )
     if (dossier)
       XLSX.utils.book_append_sheet(
         workbook,
         XLSX.utils.json_to_sheet(
-          dossier.history.map((event) => ({
-            Timestamp: event.occurredAt,
-            Actor: event.actorName,
-            Action: event.eventType,
-            Notes: event.remarks,
-            Before: JSON.stringify(event.before),
-            After: JSON.stringify(event.after),
-          }))
+          dossier.history.flatMap((event) =>
+            (["before", "after"] as const).flatMap((state) =>
+              retainedFields(event[state]).map((field) => ({
+                Timestamp: event.occurredAt,
+                Actor: event.actorName,
+                Action: event.eventType,
+                Notes: event.remarks,
+                State: state,
+                ...field,
+              }))
+            )
+          )
         ),
         "Action History"
       )

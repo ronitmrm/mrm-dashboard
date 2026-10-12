@@ -21,6 +21,7 @@ type CommercialDesignPurpose =
   | "internal_drawing"
 
 export type PendingUploadIntent =
+  | { kind: "iso-customer-satisfaction"; reportId: string }
   | {
       enquiryId: string
       enquiryItemId?: string
@@ -84,6 +85,8 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
   const input = object(value)
   const kind = text(input.kind, "kind")
   switch (kind) {
+    case "iso-customer-satisfaction":
+      return { kind, reportId: text(input.reportId, "reportId") }
     case "commercial-enquiry-item": {
       const operation = text(input.operation, "operation")
       if (operation !== "create" && operation !== "update") {
@@ -167,7 +170,8 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
     case "maintenance-request-photo":
     case "maintenance-work-photo": {
       const index = Number(input.index)
-      const maxIndex = kind === "maintenance-work-photo" ? MAX_MAINTENANCE_WORK_PHOTOS : 8
+      const maxIndex =
+        kind === "maintenance-work-photo" ? MAX_MAINTENANCE_WORK_PHOTOS : 8
       if (!Number.isSafeInteger(index) || index < 1 || index > maxIndex) {
         throw new Error("Upload intent photo index is invalid.")
       }

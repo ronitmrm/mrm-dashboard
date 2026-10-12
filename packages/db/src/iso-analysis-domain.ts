@@ -1,6 +1,23 @@
+import {
+  parseRiskAssessment,
+  riskPriority,
+  type RiskAssessment,
+} from "./risk-thinking-domain"
+
 export const analysisCategories = {
   PEST: ["Political", "Economic", "Social", "Technological"],
   SWOT: ["Strength", "Weakness", "Opportunity", "Threat"],
+  RISK: [
+    "Process",
+    "Product / Quality",
+    "Customer",
+    "Supplier",
+    "People",
+    "Equipment",
+    "Safety / Compliance",
+    "Business continuity",
+    "Other",
+  ],
 } as const
 
 export type AnalysisKind = keyof typeof analysisCategories
@@ -43,6 +60,7 @@ export type AnalysisFields = {
   dueOn: string | null
   reviewedOn: string | null
   nextReviewOn: string | null
+  risk?: RiskAssessment | null
 }
 export type AnalysisSource = {
   fileName: string
@@ -54,7 +72,7 @@ export type AnalysisSource = {
 }
 
 export function isAnalysisKind(value: unknown): value is AnalysisKind {
-  return value === "PEST" || value === "SWOT"
+  return value === "PEST" || value === "SWOT" || value === "RISK"
 }
 function text(value: unknown, label: string, required = false) {
   const result = typeof value === "string" ? value.trim() : ""
@@ -80,7 +98,7 @@ export function parseAnalysisFields(input: unknown): AnalysisFields {
     throw new AnalysisError("Analysis details are required.")
   const data = input as Record<string, unknown>
   if (!isAnalysisKind(data.kind))
-    throw new AnalysisError("Choose PEST or SWOT.")
+    throw new AnalysisError("Choose PEST, SWOT or Risk-Based Thinking.")
   const categories: readonly string[] = analysisCategories[data.kind]
   if (typeof data.category !== "string" || !categories.includes(data.category))
     throw new AnalysisError("Choose a category for this analysis type.")
@@ -93,7 +111,10 @@ export function parseAnalysisFields(input: unknown): AnalysisFields {
     throw new AnalysisError("Enter an analysis year from 2000 to 2100.")
   const ownerUserId = text(data.ownerUserId, "Responsible staff") || null
   const focus = data.focus ?? "Not assessed"
-  const priority = data.priority ?? "Not assessed"
+  const risk = data.kind === "RISK" ? parseRiskAssessment(data.risk) : null
+  const priority = risk
+    ? riskPriority(risk.likelihood, risk.severity)
+    : (data.priority ?? "Not assessed")
   if (
     !analysisFocuses.some((value) => value === focus) ||
     !analysisPriorities.some((value) => value === priority)
@@ -122,6 +143,7 @@ export function parseAnalysisFields(input: unknown): AnalysisFields {
     dueOn: analysisDate(data.dueOn),
     reviewedOn: analysisDate(data.reviewedOn),
     nextReviewOn: analysisDate(data.nextReviewOn),
+    risk,
   }
 }
 export function nextAnalysisStatus(
@@ -144,6 +166,19 @@ export function nextAnalysisStatus(
 }
 export function analysisReference(kind: AnalysisKind, number: number) {
   return `${kind}-${String(number).padStart(5, "0")}`
+}
+export function analysisStatusLabel(entry: {
+  kind: AnalysisKind
+  status: AnalysisStatus
+  riskState?: "Active" | "Retired"
+}) {
+  return entry.kind === "RISK"
+    ? entry.riskState === "Retired"
+      ? "Retired"
+      : entry.status === "Closed"
+        ? "Monitoring"
+        : entry.status
+    : entry.status
 }
 export function analysisToday() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })

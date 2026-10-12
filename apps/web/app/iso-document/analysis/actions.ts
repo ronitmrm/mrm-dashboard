@@ -13,6 +13,7 @@ import { parseAnalysisWorkbook } from "./workbook"
 function refresh() {
   revalidatePath("/iso-document/analysis/pest")
   revalidatePath("/iso-document/analysis/swot")
+  revalidatePath("/iso-document/analysis/risk")
   revalidatePath("/iso-document/analysis/[kind]/[id]", "page")
 }
 function errorMessage(error: unknown) {
@@ -25,10 +26,25 @@ export async function saveAnalysisAction(formData: FormData) {
   try {
     const id = formData.get("id")?.toString()
     const fields = Object.fromEntries(formData.entries())
+    const risk = Object.fromEntries(
+      [
+        "process",
+        "cause",
+        "controls",
+        "likelihood",
+        "severity",
+        "basis",
+        "treatment",
+        "monitoring",
+        "frequency",
+        "triggers",
+        "references",
+      ].map((key) => [key, formData.get(`risk_${key}`)])
+    )
     const savedId = await withIsoAnalysis(({ repository, access }) =>
       repository.save(
         access,
-        fields,
+        { ...fields, risk },
         id
           ? {
               id,
@@ -67,6 +83,15 @@ export async function updateAnalysisAction(formData: FormData) {
         effectivenessNotes: formData.get("effectivenessNotes")?.toString(),
         reviewedOn: formData.get("reviewedOn")?.toString(),
         nextReviewOn: formData.get("nextReviewOn")?.toString(),
+        riskReview: Object.fromEntries(
+          [
+            "likelihood",
+            "severity",
+            "decision",
+            "acceptance",
+            "authorization",
+          ].map((key) => [key, formData.get(`residual_${key}`)])
+        ),
       })
     )
     refresh()
@@ -86,7 +111,9 @@ export async function importAnalysisAction(formData: FormData) {
       file.size === 0 ||
       file.size > 5 * 1024 * 1024
     )
-      throw new AnalysisError("Choose a PEST/SWOT Excel workbook up to 5 MB.")
+      throw new AnalysisError(
+        "Choose a PEST, SWOT or risk Excel workbook up to 5 MB."
+      )
     return await withIsoAnalysis(async ({ repository, access }) => {
       if (!access.canManage)
         throw new AnalysisError("Manage Analyses permission is required.")

@@ -51,6 +51,71 @@ export function parseAnalysisWorkbook(
       raw: true,
       defval: "",
     })
+    if (kind === "RISK") {
+      const headerIndex = rows.findIndex((row) =>
+        ["risk", "p", "s", "current action plan"].every((header) =>
+          row.some((value) => String(value).trim().toLowerCase() === header)
+        )
+      )
+      if (headerIndex < 0) continue
+      const headers = rows[headerIndex]!.map((value) => String(value).trim())
+      const read = (row: unknown[], label: string) =>
+        row[
+          headers.findIndex((h) => h.toLowerCase() === label.toLowerCase())
+        ] ?? ""
+      for (let index = headerIndex + 1; index < rows.length; index++) {
+        const row = rows[index]!,
+          description = String(read(row, "Risk")).trim()
+        if (!description) continue
+        const identifiedOn = date(read(row, "Date"))
+        const originalPlan = String(read(row, "Current Action Plan")).trim()
+        result.push({
+          fields: parseAnalysisFields({
+            kind,
+            analysisYear: identifiedOn
+              ? Number(identifiedOn.slice(0, 4))
+              : Number(
+                  new Date()
+                    .toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+                    .slice(0, 4)
+                ),
+            category: "Other",
+            description,
+            actionPlan: ["", "_", "-"].includes(originalPlan)
+              ? "Treatment plan awaiting assessment."
+              : originalPlan,
+            focus: "Risk",
+            ownerUserId: null,
+            identifiedOn,
+          }),
+          status: "Open",
+          completionNotes: "",
+          sourceKey: `${sha256}:${sheetName}:${index + 1}`,
+          source: {
+            fileName,
+            sha256,
+            sheet: sheetName,
+            row: index + 1,
+            documentNumber: "MRM-QA-027",
+            columns: Object.fromEntries(
+              headers.flatMap((header, cell) =>
+                header
+                  ? [
+                      [
+                        header,
+                        header.toLowerCase() === "date"
+                          ? (identifiedOn ?? "")
+                          : String(row[cell] ?? ""),
+                      ],
+                    ]
+                  : []
+              )
+            ),
+          },
+        })
+      }
+      continue
+    }
     const expected =
       kind === "PEST"
         ? ["Issue Identified", "Factor", "Action Required"]
