@@ -15,6 +15,29 @@ export type StoreStorageLocations = Awaited<
   ReturnType<ReturnType<typeof createStoreRepository>["listStorageLocations"]>
 >
 
+export function storeStorageLocationSelection(
+  storage: StoreStorageLocations,
+  storeCode: string,
+  itemTypeId: string
+) {
+  const locations = storage.locations.filter(
+    (location) => location.storeCode.toLowerCase() === storeCode.toLowerCase()
+  )
+  const existing = storage.defaults.find(
+    (entry) =>
+      entry.itemTypeId === itemTypeId &&
+      entry.storeCode.toLowerCase() === storeCode.toLowerCase()
+  )
+  return {
+    locations,
+    existing,
+    defaultId:
+      existing?.locationId ??
+      locations.find((location) => location.isDefault)?.id ??
+      "",
+  }
+}
+
 export function StoreStorageLocationField({
   id,
   itemTypeId,
@@ -36,18 +59,11 @@ export function StoreStorageLocationField({
   onValueChange?: (value: string) => void
   value?: string
 }) {
-  const locations = storage.locations.filter(
-    (location) => location.storeCode.toLowerCase() === storeCode.toLowerCase()
+  const { locations, existing, defaultId } = storeStorageLocationSelection(
+    storage,
+    storeCode,
+    itemTypeId
   )
-  const existing = storage.defaults.find(
-    (entry) =>
-      entry.itemTypeId === itemTypeId &&
-      entry.storeCode.toLowerCase() === storeCode.toLowerCase()
-  )
-  const defaultId =
-    existing?.locationId ??
-    locations.find((location) => location.isDefault)?.id ??
-    ""
 
   return (
     <Field>

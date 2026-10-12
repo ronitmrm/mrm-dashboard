@@ -821,12 +821,13 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           manufacturerSerialNumber: string | null
           status: string
           typeCode: string
+          unit: string
         }>(
           `SELECT asset.asset_code AS "assetCode", asset.item_type_id AS "itemTypeId",
             item.type_code AS "typeCode",
             item.asset_category AS "assetCategory",
             item.asset_subcategory AS "assetSubcategory",
-            item.asset_name AS "assetName", make_model.name AS "makeModel",
+            item.asset_name AS "assetName", make_model.name AS "makeModel", item.unit,
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
             COALESCE(asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
@@ -1092,11 +1093,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         makeModel: string
         status: string
         typeCode: string
+        unit: string
       }>(
         `SELECT asset.asset_code AS "assetCode", item.type_code AS "typeCode",
            item.asset_category AS "assetCategory",
            item.asset_subcategory AS "assetSubcategory",
-           item.asset_name AS "assetName", make_model.name AS "makeModel",
+           item.asset_name AS "assetName", make_model.name AS "makeModel", item.unit,
            asset.current_holder_reference AS "holderReference",
            COALESCE(asset.current_holder_name, asset.current_holder_reference, 'Unknown')
              AS "departmentName",
