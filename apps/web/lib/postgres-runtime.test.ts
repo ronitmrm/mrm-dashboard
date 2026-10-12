@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { readWebPostgresEnvironment } from "./postgres-runtime"
+import { getWebPostgresPool, readWebPostgresEnvironment } from "./postgres-runtime"
 
 describe("web PostgreSQL environment", () => {
   it("keeps the explicit local development contract", () => {
@@ -15,7 +15,7 @@ describe("web PostgreSQL environment", () => {
     })
   })
 
-  it("requires a dedicated TLS web role in hosted mode", () => {
+  it("requires a dedicated TLS web role and bounded cleanup in hosted mode", async () => {
     const connectionString =
       "postgresql://mrmpl_staging_web:secret@example.neon.tech/neondb?sslmode=require"
 
@@ -26,6 +26,13 @@ describe("web PostgreSQL environment", () => {
         WEB_DATABASE_URL: connectionString,
       })
     ).toEqual({ connectionString, hosted: true, max: 3 })
+
+    const pool = getWebPostgresPool({
+      MRM_MANAGED_RUNTIME: "1",
+      WEB_DATABASE_URL: connectionString,
+    })
+    expect(pool.options.idleTimeoutMillis).toBe(5_000)
+    await pool.end()
 
     expect(() =>
       readWebPostgresEnvironment({

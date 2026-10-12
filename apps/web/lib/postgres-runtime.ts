@@ -54,6 +54,8 @@ export function getWebPostgresPool(environment: Environment = process.env) {
   })
 
   if (config.hosted && pool !== attachedPool) {
+    // Vercel waits for idle cleanup after each release; keep it below request limits.
+    pool.options.idleTimeoutMillis = 5_000
     attachDatabasePool(pool)
     attachedPool = pool
   }
