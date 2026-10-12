@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg"
-import { listStoreStorageLocations, resolveStoreStorageLocation } from "./store-storage-locations"
+import { listStoreStorageLocations, resolveStoreStorageLocation, saveAssetStorageLocation } from "./store-storage-locations"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { productionFloorFromDepartment } from "./production-floors"
@@ -407,19 +407,26 @@ async function moveOwnedAsset(
     currentHolderReference: string | null
     currentHolderType: string
     currentLocationId: string | null
+    currentStorageLocationId: string | null
+    currentLocationStoreId: string | null
     id: string
     itemTypeId: string
     status: string
   }>(
-    `SELECT id, item_type_id AS "itemTypeId", status,
-      accountable_store_id AS "accountId",
-      current_holder_type AS "currentHolderType",
-      current_holder_reference AS "currentHolderReference",
-      current_holder_name AS "currentHolderName",
-      current_location_id AS "currentLocationId"
-     FROM store.assets
-     WHERE organization_id = $1 AND lower(asset_code) = lower($2)
-     FOR UPDATE`,
+    `SELECT asset.id, asset.item_type_id AS "itemTypeId", asset.status,
+      asset.accountable_store_id AS "accountId",
+      asset.current_holder_type AS "currentHolderType",
+      asset.current_holder_reference AS "currentHolderReference",
+      asset.current_holder_name AS "currentHolderName",
+      asset.current_location_id AS "currentLocationId",
+      COALESCE(storage.location_id, asset.current_location_id) AS "currentStorageLocationId",
+      location.accountable_store_id AS "currentLocationStoreId"
+     FROM store.assets asset
+     LEFT JOIN store.locations location ON location.id = asset.current_location_id
+     LEFT JOIN store.asset_storage_locations storage ON storage.asset_id = asset.id
+       AND storage.accountable_store_id = asset.accountable_store_id
+     WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
+     FOR UPDATE OF asset`,
     [input.organizationId, requiredText(input.assetCode, "Unit ID")]
   )
   const asset = result.rows[0]
@@ -483,9 +490,9 @@ async function moveOwnedAsset(
     vendorId: input.vendorId,
   })
   if (
-    asset.currentHolderType === input.holderType &&
-    asset.currentHolderReference === destination.holderReference &&
-    asset.currentLocationId === destination.locationId
+    asset.currentHolderType === input.holderType && (input.holderType === "STORE"
+      ? asset.currentLocationStoreId === input.store.id && asset.currentStorageLocationId === destination.locationId
+      : asset.currentHolderReference === destination.holderReference && asset.currentLocationId === destination.locationId)
   ) {
     throw new Error("The Unit ID is already at that destination.")
   }
@@ -507,6 +514,10 @@ async function moveOwnedAsset(
       destination.machineId, destination.vendorId,
       input.actorUserId ?? null, asset.id]
   )
+  if (input.holderType === "STORE") await saveAssetStorageLocation(client, {
+    organizationId: input.organizationId, assetId: asset.id, storeId: input.store.id,
+    locationId: destination.locationId!, actorUserId: input.actorUserId, remark: input.remark,
+  })
   await client.query(
     `INSERT INTO store.stock_movements (
        organization_id, item_type_id, asset_id, location_id,
@@ -807,12 +818,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         ),
         pool.query<{
           accountableStoreCode: string
+          assignedLocation: string
+          assignedStoreId: string | null
           assetCode: string
           assetCategory: string
           assetName: string
           assetSubcategory: string
           availableHere: boolean
           holderName: string | null
+          holderReference: string | null
           holderType: string
           inGaugeSet: boolean
           isGauge: boolean
@@ -820,6 +834,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           makeModel: string
           manufacturerSerialNumber: string | null
           status: string
+          storageLocation: string | null
           typeCode: string
           unit: string
         }>(
@@ -830,6 +845,13 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             item.asset_name AS "assetName", make_model.name AS "makeModel", item.unit,
             asset.status, asset.current_holder_type AS "holderType",
             asset.current_holder_name AS "holderName",
+            asset.current_holder_reference AS "holderReference",
+            CASE WHEN asset.current_holder_type = 'STORE' THEN held_store.name
+              ELSE COALESCE(asset.current_holder_name, asset.current_holder_reference,
+                asset.current_holder_type) END AS "assignedLocation",
+            held_store.id AS "assignedStoreId",
+            COALESCE(storage.name, CASE WHEN location.accountable_store_id = $2
+              THEN location.name END) AS "storageLocation",
             COALESCE(asset.status = 'AVAILABLE' AND asset.current_holder_type = 'STORE'
               AND location.accountable_store_id = $2 AND location.active, false) AS "availableHere",
             asset.manufacturer_serial_number AS "manufacturerSerialNumber",
@@ -846,6 +868,10 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            JOIN store.accountable_stores accountable
              ON accountable.id = asset.accountable_store_id
            LEFT JOIN store.locations location ON location.id = asset.current_location_id
+           LEFT JOIN store.accountable_stores held_store ON held_store.id = location.accountable_store_id
+           LEFT JOIN store.asset_storage_locations saved_storage
+             ON saved_storage.asset_id = asset.id AND saved_storage.accountable_store_id = $2
+           LEFT JOIN store.locations storage ON storage.id = saved_storage.location_id
            WHERE asset.organization_id = $1 AND asset.accountable_store_id = $2
            ORDER BY asset.asset_code`,
           [input.organizationId, store.id]
@@ -875,12 +901,18 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
                   )
               ))
               AND count(DISTINCT (asset.current_holder_type,
-                asset.current_holder_reference, asset.current_location_id)) = 1
+                CASE WHEN asset.current_holder_type = 'STORE' THEN asset.accountable_store_id::text
+                  ELSE asset.current_holder_reference END,
+                CASE WHEN asset.current_holder_type = 'STORE'
+                  THEN COALESCE(saved_storage.location_id, asset.current_location_id)
+                  ELSE asset.current_location_id END)) = 1
               THEN 'COMPLETE' ELSE 'INCOMPLETE' END AS status
            FROM store.gauge_sets gauge_set
            JOIN store.gauge_set_memberships member
              ON member.gauge_set_id = gauge_set.id AND member.removed_at IS NULL
            JOIN store.assets asset ON asset.id = member.asset_id
+           LEFT JOIN store.asset_storage_locations saved_storage ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = asset.accountable_store_id
            WHERE gauge_set.organization_id = $1
              AND gauge_set.accountable_store_id = $2 AND gauge_set.active
            GROUP BY gauge_set.id ORDER BY gauge_set.set_code`,
@@ -976,7 +1008,12 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         stores: stores.rows,
         consumables: consumables.rows,
         serializedTotals: serializedTotals.rows,
-        assets: assets.rows,
+        assets: assets.rows.map(({ assignedStoreId, ...asset }) => ({
+          ...asset,
+          storageAssignable: asset.holderType === "STORE" ? assignedStoreId === store.id
+            : asset.holderType === "DEPARTMENT" && store.productionFloorCode !== null &&
+              productionFloorFromDepartment(asset.holderName, asset.holderReference) === store.productionFloorCode,
+        })),
         gaugeSets: gaugeSets.rows,
         movements: movements.rows,
       }
@@ -1090,8 +1127,10 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         assetSubcategory: string
         departmentName: string
         holderReference: string | null
+        inGaugeSet: boolean
         makeModel: string
         status: string
+        storageLocation: string | null
         typeCode: string
         unit: string
       }>(
@@ -1103,17 +1142,27 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
            COALESCE(asset.current_holder_name, asset.current_holder_reference, 'Unknown')
              AS "departmentName",
            accountable.code AS "accountableStoreCode",
-           accountable.name AS "accountableStoreName", asset.status
+           accountable.name AS "accountableStoreName", asset.status,
+           storage.name AS "storageLocation",
+           EXISTS (SELECT 1 FROM store.gauge_set_memberships member
+             WHERE member.asset_id = asset.id AND member.removed_at IS NULL) AS "inGaugeSet"
          FROM store.assets asset
          JOIN store.item_types item ON item.id = asset.item_type_id
          JOIN store.make_models make_model ON make_model.id = item.make_model_id
          JOIN store.accountable_stores accountable
            ON accountable.id = asset.accountable_store_id
+         LEFT JOIN store.accountable_stores receiving_store
+           ON receiving_store.organization_id = asset.organization_id
+             AND receiving_store.production_floor_code = $2
+         LEFT JOIN store.asset_storage_locations saved_storage
+           ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = receiving_store.id
+         LEFT JOIN store.locations storage ON storage.id = saved_storage.location_id
          WHERE asset.organization_id = $1
            AND asset.current_holder_type = 'DEPARTMENT'
            AND asset.status NOT IN ('SCRAPPED', 'LOST')
          ORDER BY "departmentName", asset.asset_code`,
-        [input.organizationId]
+        [input.organizationId, input.productionFloorCode]
       )
       // Store issues may record a Department name; direct moves record its code.
       return result.rows.filter((asset) => productionFloorFromDepartment(
@@ -1527,6 +1576,55 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       })
     },
 
+    async assignAssetStorageLocation(input: MutationIdentity & {
+      assetCode: string
+      locationId: string
+      storeCode: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const store = await findStore(client, input.organizationId, input.storeCode)
+        const result = await client.query<{
+          id: string
+          holderType: string
+          holderName: string | null
+          holderReference: string | null
+          holderStoreId: string | null
+          inGaugeSet: boolean
+          status: string
+        }>(
+          `SELECT asset.id, asset.status, asset.current_holder_type AS "holderType",
+             asset.current_holder_name AS "holderName",
+             asset.current_holder_reference AS "holderReference",
+             location.accountable_store_id AS "holderStoreId",
+             EXISTS (SELECT 1 FROM store.gauge_set_memberships member
+               WHERE member.asset_id = asset.id AND member.removed_at IS NULL) AS "inGaugeSet"
+           FROM store.assets asset
+           LEFT JOIN store.locations location ON location.id = asset.current_location_id
+           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
+           FOR UPDATE OF asset`,
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
+        )
+        const asset = result.rows[0]
+        if (!asset || ["SCRAPPED", "LOST"].includes(asset.status)) {
+          throw new Error("Choose an active Unit ID assigned to this Store.")
+        }
+        const assignedHere = asset.holderType === "STORE" ? asset.holderStoreId === store.id
+          : asset.holderType === "DEPARTMENT" && store.productionFloorCode !== null &&
+            productionFloorFromDepartment(asset.holderName, asset.holderReference) === store.productionFloorCode
+        if (!assignedHere) throw new Error("This Unit ID is not assigned to this Store.")
+        if (asset.inGaugeSet) throw new Error("Move this Unit ID with its gauge set to keep both gauges together.")
+        const destination = await resolveDestination(client, {
+          organizationId: input.organizationId, storeId: store.id,
+          holderType: "STORE", holderReference: input.locationId,
+        })
+        await saveAssetStorageLocation(client, {
+          organizationId: input.organizationId, assetId: asset.id, storeId: store.id,
+          locationId: destination.locationId!, actorUserId: input.actorUserId, remark: input.remark,
+        })
+        return { assetId: asset.id }
+      })
+    },
+
     async moveAsset(input: MutationIdentity & {
       assetCode: string
       holderReference: string
@@ -1572,9 +1670,11 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           `SELECT asset.id, asset.asset_code AS "assetCode", asset.status,
             asset.current_holder_type AS "currentHolderType",
             asset.current_holder_reference AS "currentHolderReference",
-            asset.current_location_id AS "currentLocationId"
+            COALESCE(saved_storage.location_id, asset.current_location_id) AS "currentLocationId"
            FROM store.assets asset
            JOIN store.item_types item ON item.id = asset.item_type_id
+           LEFT JOIN store.asset_storage_locations saved_storage ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = asset.accountable_store_id
            WHERE asset.organization_id = $1
              AND asset.accountable_store_id = $2
              AND lower(asset.asset_code) IN (lower($3), lower($4))
@@ -1673,10 +1773,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         }>(
           `SELECT asset.asset_code AS "assetCode", asset.status,
             asset.current_holder_type AS "holderType",
-            asset.current_holder_reference AS "holderReference",
-            asset.current_location_id AS "locationId"
+            CASE WHEN asset.current_holder_type = 'STORE' THEN asset.accountable_store_id::text
+              ELSE asset.current_holder_reference END AS "holderReference",
+            CASE WHEN asset.current_holder_type = 'STORE'
+              THEN COALESCE(saved_storage.location_id, asset.current_location_id)
+              ELSE asset.current_location_id END AS "locationId"
            FROM store.gauge_set_memberships member
            JOIN store.assets asset ON asset.id = member.asset_id
+           LEFT JOIN store.asset_storage_locations saved_storage ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = asset.accountable_store_id
            WHERE member.organization_id = $1 AND member.gauge_set_id = $2
              AND member.removed_at IS NULL
              AND asset.accountable_store_id = $3
@@ -1756,10 +1861,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           `SELECT member.id AS "membershipId", asset.id AS "assetId",
             asset.asset_code AS "assetCode", asset.status,
             asset.current_holder_type AS "holderType",
-            asset.current_holder_reference AS "holderReference",
-            asset.current_location_id AS "locationId"
+            CASE WHEN asset.current_holder_type = 'STORE' THEN asset.accountable_store_id::text
+              ELSE asset.current_holder_reference END AS "holderReference",
+            CASE WHEN asset.current_holder_type = 'STORE'
+              THEN COALESCE(saved_storage.location_id, asset.current_location_id)
+              ELSE asset.current_location_id END AS "locationId"
            FROM store.gauge_set_memberships member
            JOIN store.assets asset ON asset.id = member.asset_id
+           LEFT JOIN store.asset_storage_locations saved_storage ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = asset.accountable_store_id
            WHERE member.organization_id = $1 AND member.gauge_set_id = $2
              AND member.removed_at IS NULL
            ORDER BY asset.id FOR UPDATE OF asset`,
@@ -1782,10 +1892,15 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         }>(
           `SELECT asset.id, asset.asset_code AS "assetCode", asset.status,
             asset.current_holder_type AS "holderType",
-            asset.current_holder_reference AS "holderReference",
-            asset.current_location_id AS "locationId"
+            CASE WHEN asset.current_holder_type = 'STORE' THEN asset.accountable_store_id::text
+              ELSE asset.current_holder_reference END AS "holderReference",
+            CASE WHEN asset.current_holder_type = 'STORE'
+              THEN COALESCE(saved_storage.location_id, asset.current_location_id)
+              ELSE asset.current_location_id END AS "locationId"
            FROM store.assets asset
            JOIN store.item_types item ON item.id = asset.item_type_id
+           LEFT JOIN store.asset_storage_locations saved_storage ON saved_storage.asset_id = asset.id
+             AND saved_storage.accountable_store_id = asset.accountable_store_id
            WHERE asset.organization_id = $1 AND
              asset.accountable_store_id = $2
              AND lower(asset.asset_code) = lower($3)

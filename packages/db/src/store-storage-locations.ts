@@ -1,19 +1,43 @@
 import type { Pool, PoolClient } from "pg"
 
+export async function saveAssetStorageLocation(database: PoolClient, input: {
+  organizationId: string
+  assetId: string
+  storeId: string
+  locationId: string
+  actorUserId?: string | null
+  remark?: string | null
+}) {
+  await database.query(
+    `INSERT INTO store.asset_storage_locations (
+       organization_id, asset_id, accountable_store_id, location_id,
+       updated_by_user_id, remark
+     ) VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (asset_id, accountable_store_id) DO UPDATE SET
+       location_id = EXCLUDED.location_id, updated_at = now(),
+       updated_by_user_id = EXCLUDED.updated_by_user_id, remark = EXCLUDED.remark`,
+    [input.organizationId, input.assetId, input.storeId, input.locationId,
+      input.actorUserId ?? null, input.remark?.trim() || null]
+  )
+}
+
 // Current holdings determine defaults; an exhausted balance is not a location.
 const storedItems = `
   WITH stored_items AS (
-    SELECT asset.item_type_id, asset.current_location_id AS location_id,
-      max(COALESCE(movement.moved_at, asset.created_at)) AS last_used
+    SELECT asset.item_type_id, COALESCE(storage.location_id, asset.current_location_id) AS location_id,
+      max(GREATEST(COALESCE(storage.updated_at, asset.created_at),
+        COALESCE(movement.moved_at, asset.created_at))) AS last_used
     FROM store.assets asset
     JOIN store.locations held ON held.id = asset.current_location_id
       AND held.accountable_store_id = asset.accountable_store_id
+    LEFT JOIN store.asset_storage_locations storage ON storage.asset_id = asset.id
+      AND storage.accountable_store_id = asset.accountable_store_id
     LEFT JOIN store.stock_movements movement ON movement.asset_id = asset.id
-      AND movement.location_id = asset.current_location_id
+      AND movement.location_id = COALESCE(storage.location_id, asset.current_location_id)
       AND movement.to_holder_type = 'STORE' AND movement.quantity >= 0
     WHERE asset.organization_id = $1 AND asset.current_holder_type = 'STORE'
       AND asset.status NOT IN ('SCRAPPED', 'LOST')
-    GROUP BY asset.item_type_id, asset.current_location_id
+    GROUP BY asset.item_type_id, COALESCE(storage.location_id, asset.current_location_id)
     UNION ALL
     SELECT movement.item_type_id, movement.location_id,
       max(movement.moved_at) FILTER (WHERE movement.quantity > 0) AS last_used

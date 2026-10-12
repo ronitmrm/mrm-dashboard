@@ -112,7 +112,8 @@ Transfers between two non-Main Stores pass through Main Store: the sending
 Store returns quantity or Unit ID accountability to Main, then Main transfers
 it to the receiving Store. Each leg is a separate ledger event.
 
-**Physical Holder / Location**: Where a Unit ID is currently kept or used,
+**Assigned Location / Physical Holder**: The Store, Department, Machine or
+Supplier to which a Unit ID is assigned,
 including a store, production area, machine, or supplier. It may differ from
 the Accountable Store. For example, a compressor accountable to Main Store can
 be physically at a CNC machine; Main Store remains responsible until a formal
@@ -126,11 +127,15 @@ The selector defaults to the most recently used location where that Asset Code
 is currently stored in the receiving Store; when none exists, it uses that
 Store's default location. The storekeeper can change it for the incoming stock
 without relocating earlier stock. A location from another Store is rejected.
-For a received Non Consumable Unit ID, the accountable storekeeper can assign
-or change its rack/bin through **Assign asset location** in that Store's Stock
-Register. The selected location appears under **Location / holder** so users can
-find the unit. This records a physical movement; responsibility and company
-quantity stay unchanged.
+Each Store keeps its own rack/bin entry for a Non Consumable Unit ID through
+**Set storage location**. A receiving production Store may record storage for a
+unit assigned to one of its Departments even when Main Store remains responsible.
+Multiple Asset Codes and Unit IDs can share a rack/bin. **Storage location** is
+separate from **Assigned location**: changing a rack/bin does not change the
+assigned Store, Department, Machine or Supplier, the unit's status, responsibility,
+quantities, or another Store's saved rack/bin. A Store may update storage only for
+units currently assigned there and may select only its own active locations.
+An active Gauge Set changes storage together through its Set Movement.
 
 **Store Balance**: Unused quantity of one Consumable at one accountable store.
 An internal transfer decreases the source balance and increases the destination
@@ -429,7 +434,9 @@ Repair orders have a separate register.
 Each production Store's Stock Register also shows Unit IDs held by that floor's
 Departments, including Unit IDs still accountable to Main Store. The Responsible
 Store column identifies who controls each Unit ID's movements and return. These
-read-only rows do not increase the production Store's accountable stock.
+rows do not increase the production Store's accountable stock. The receiving
+Store can record its own storage location; the Responsible Store still controls
+physical movements and return. Company on-hand is shown only in Main Store Stock.
 Consumable use starts by selecting one or more available Asset Codes in Stock
 and records their quantities together with the same operator and work context.
 Stock also starts transfers, physical moves, adjustments, Unit ID history,

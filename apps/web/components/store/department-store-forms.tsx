@@ -7,10 +7,10 @@ import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 
 import {
+  assignDepartmentAssetStorageAction,
   consumeDepartmentQuantityAction,
   createQualityGaugeSetAction,
   disbandQualityGaugeSetAction,
-  moveDepartmentAssetAction,
   moveQualityGaugeSetAction,
   recordDepartmentAssetLossAction,
   replaceQualityGaugeSetMemberAction,
@@ -115,7 +115,7 @@ function DestinationFields({
 
 export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
 
-export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], storageLocations, store, stores, today, vendors }: {
+export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], storageAssets, storageLocations, store, stores, today, vendors }: {
   action: DepartmentStoreAction
   assets: Workspace["assets"]
   consumables: Workspace["consumables"]
@@ -125,6 +125,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   recorderId: string
   selectedItemIds?: string[]
   store: Workspace["store"]
+  storageAssets: Array<{ assetCode: string; assetName: string }>
   storageLocations: Workspace["storageLocations"]
   stores: Workspace["stores"]
   today: string
@@ -144,21 +145,39 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   const [transferItemId, setTransferItemId] = useState("")
   const [transferAssetCode, setTransferAssetCode] = useState("")
   const [destinationStoreCode, setDestinationStoreCode] = useState("")
-  const [transferMode, setTransferMode] = useState<"quantity" | "physical">(
-    action === "physical" ? "physical" : "quantity"
+  const ownStorageLocations = storageLocations.locations.filter((location) =>
+    location.storeCode.toLowerCase() === store.code.toLowerCase()
   )
   const replacementSet = gaugeSets.find((set) => set.id === replacementSetId)
   return <div className="grid gap-5">
-    {action === "quantity" || action === "physical" ? <FormSection
-      title={transferMode === "physical" ? "Assign asset location" : "Transfer or move stock"}
-      description="Choose a rack/bin for a Unit ID in this Store, move it to another physical holder, or transfer Consumable quantity."
+    {action === "physical" ? <FormSection title="Set storage location"
+      description={`Choose where a Unit ID is kept within ${store.name}. Its assigned destination and responsibility stay unchanged.`}
+      width="standard">
+      <ActionForm action={assignDepartmentAssetStorageAction} storeCode={store.code}
+        submitLabel="Save storage location" disabled={!storageAssets.length}>
+        <FormGrid className="xl:grid-cols-2">
+          <SelectField label="Unit ID" name="asset_code" required>
+            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
+            {storageAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
+              {asset.assetCode} · {asset.assetName}
+            </NativeSelectOption>)}
+          </SelectField>
+          <SelectField label="Storage location" name="storage_location_id" required defaultValue={store.defaultLocationId}>
+            {ownStorageLocations.map((location) => <NativeSelectOption key={location.id} value={location.id}>
+              {location.code} · {location.name}
+            </NativeSelectOption>)}
+          </SelectField>
+          <TextField label="Note" name="remark" />
+        </FormGrid>
+        {!storageAssets.length ? <p className="text-sm text-muted-foreground">No Unit IDs are currently assigned to this Store.</p> : null}
+      </ActionForm>
+    </FormSection> : null}
+
+    {action === "quantity" ? <FormSection
+      title="Transfer consumable stock"
+      description="Transfer Consumable quantity to another Store."
       width="wide">
-      <SelectField label="Stock to move" name="stock_type" value={transferMode}
-        onValueChange={(value) => setTransferMode(value as typeof transferMode)}>
-        <NativeSelectOption value="quantity">Consumable quantity to another Store</NativeSelectOption>
-        <NativeSelectOption value="physical">Non Consumable Unit ID to a physical holder</NativeSelectOption>
-      </SelectField>
-      {transferMode === "quantity" ? <ActionForm key="quantity" action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
+      <ActionForm action={transferDepartmentQuantityAction} storeCode={store.code} submitLabel="Transfer Quantity">
         <FormGrid className="xl:grid-cols-2">
           <SelectField label="Consumable Asset Code" name="item_type_id" required
             value={transferItemId} onValueChange={setTransferItemId}>
@@ -179,19 +198,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
             storage={storageLocations} storeCode={destinationStoreCode} />
           <TextField label="Remark" name="remark" />
         </FormGrid>
-      </ActionForm> : <ActionForm key="physical" action={moveDepartmentAssetAction} storeCode={store.code} submitLabel="Record Movement">
-        <FormGrid className="xl:grid-cols-2">
-          <SelectField label="Unit ID" name="asset_code" required>
-            <NativeSelectOption value="">Select Unit ID</NativeSelectOption>
-            {movableAssets.map((asset) => <NativeSelectOption key={asset.assetCode} value={asset.assetCode}>
-              {asset.assetCode} · {asset.assetName} · {asset.holderName || asset.holderType}
-            </NativeSelectOption>)}
-          </SelectField>
-          <DestinationFields departments={departments} machines={machines}
-            storageLocations={storageLocations} store={store} vendors={vendors} />
-          <TextField label="Movement note" name="remark" />
-        </FormGrid>
-      </ActionForm>}
+      </ActionForm>
     </FormSection> : null}
 
     {action === "accountability" ? <FormSection title="Transfer Unit ID accountability"
