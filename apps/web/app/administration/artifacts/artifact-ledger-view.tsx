@@ -1,4 +1,4 @@
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import type { ArtifactLedgerFilters } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -21,7 +21,6 @@ import {
 } from "@workspace/ui/components/table"
 import {
   ExternalLink,
-  FileArchive,
   FileDown,
   Files,
   HardDrive,
@@ -99,16 +98,7 @@ export function ArtifactLedgerView({
 
   return (
     <div className="grid gap-4">
-      <section className="grid gap-1">
-        <div className="flex items-center gap-2">
-          <FileArchive className="size-5 text-primary" aria-hidden="true" />
-          <h1 className="text-2xl font-semibold tracking-tight">Artifacts</h1>
-        </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Canonical uploaded and generated files for your Organization, with
-          audited lifecycle history.
-        </p>
-      </section>
+      <PageHeader title="Artifacts" />
 
       <MetricSummary
         scope="Organization storage · filtered results reflect current search"

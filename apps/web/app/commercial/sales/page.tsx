@@ -41,7 +41,8 @@ import {
   type SalesWorkspaceView,
 } from "@/components/sales-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
+import { DataDownloadButton } from "@/components/data-download-button"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { salesTaskRows } from "@/lib/sales-task-rows"
 
@@ -141,14 +142,21 @@ export default async function SalesPage({
 
     return (
       <div className="grid gap-6">
+        <PageHeader
+          title="Sales"
+          actions={
+            <DataDownloadButton
+              href={
+                salesWorkspaceViews.find((view) => view.id === activeView)!.exportHref
+              }
+            />
+          }
+        />
         {termsRevisions.length ? <SectionCard><CardHeader><CardTitle>Enquiry Terms Revisions</CardTitle></CardHeader><CardContent>
           <OperationalTable><TableHeader><TableRow><TableHead>Enquiry</TableHead><TableHead>Requested Changes</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>
             {termsRevisions.map(revision=><TableRow key={revision.id}><TableCell>{revision.enquiryNumber}</TableCell><TableCell>{revision.reason}</TableCell><TableCell><Button asChild size="sm" variant="outline"><Link href={`/commercial/enquiries/${revision.enquiryId}`}>Update Terms</Link></Button></TableCell></TableRow>)}
           </TableBody></OperationalTable>
         </CardContent></SectionCard>:null}
-        <section className="grid gap-2">
-          <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
-        </section>
 
         <SalesWorkspaceTabs activeView={activeView} />
 

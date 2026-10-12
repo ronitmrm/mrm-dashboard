@@ -27,7 +27,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -124,9 +124,7 @@ export default async function EnquiriesPage({
         }
         masterTablesHref="/commercial/enquiries?operationalView=masterTables"
       />
-      <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Enquiries</h2>
-      </section>
+      <PageHeader title="Enquiries" />
 
       {operationalView === "masterTables" ? (
         <MetricSummary

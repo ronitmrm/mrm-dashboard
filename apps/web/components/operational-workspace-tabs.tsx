@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import type { ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
+import { ActionToolbar } from "@/components/ui/golden-patterns"
 
 import {
   operationalEntrySelectionFromContext,
@@ -46,51 +47,55 @@ export function OperationalWorkspaceTabs({
   })
 
   return (
-    <div className="flex flex-wrap items-center border-b">
-      <Link
-        className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
-        href={operationalEntrySelectionHref(selection, activeView)}
-      >
-        <ArrowLeft className="size-4" />
-        Back to Modules
-      </Link>
-      <nav
-        aria-label="Operational Entry views"
-        className="flex shrink-0"
-        role="tablist"
-      >
+    <>
+      {transferAction ? (
+        <ActionToolbar className="w-full">
+          {transferAction === "csvImport" ? csvDownloadAction : null}
+          {transferAction === "csvImport" ? csvImportAction : null}
+          {transferAction === "export" ? exportAction : null}
+        </ActionToolbar>
+      ) : null}
+      <div className="flex flex-wrap items-center border-b">
         <Link
-          aria-selected={activeView === "dataEntry"}
-          className={[
-            linkClass,
-            activeView === "dataEntry"
-              ? "border-[var(--color-accent)] text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          ].join(" ")}
-          href={lockedDataEntryHref}
-          role="tab"
+          className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground"
+          href={operationalEntrySelectionHref(selection, activeView)}
         >
-          Data Entry
+          <ArrowLeft className="size-4" />
+          Back to Modules
         </Link>
-        <Link
-          aria-selected={activeView === "masterTables"}
-          className={[
-            linkClass,
-            activeView === "masterTables"
-              ? "border-[var(--color-accent)] text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          ].join(" ")}
-          href={lockedMasterTablesHref}
-          role="tab"
+        <nav
+          aria-label="Operational Entry views"
+          className="flex shrink-0"
+          role="tablist"
         >
-          View Records
-        </Link>
-      </nav>
-      <div className="ml-auto flex items-center gap-2">
-        {transferAction === "csvImport" ? csvDownloadAction : null}
-        {transferAction === "csvImport" ? csvImportAction : null}
-        {transferAction === "export" ? exportAction : null}
+          <Link
+            aria-selected={activeView === "dataEntry"}
+            className={[
+              linkClass,
+              activeView === "dataEntry"
+                ? "border-[var(--color-accent)] text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+            href={lockedDataEntryHref}
+            role="tab"
+          >
+            Data Entry
+          </Link>
+          <Link
+            aria-selected={activeView === "masterTables"}
+            className={[
+              linkClass,
+              activeView === "masterTables"
+                ? "border-[var(--color-accent)] text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+            href={lockedMasterTablesHref}
+            role="tab"
+          >
+            View Records
+          </Link>
+        </nav>
       </div>
-    </div>
+    </>
   )
 }

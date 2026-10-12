@@ -1,4 +1,4 @@
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
@@ -45,9 +45,7 @@ export default async function TechnicalReviewPage() {
   return (
     <div className="grid gap-6">
       <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Technical Review
-        </h2>
+        <PageHeader title="Technical Review" />
         <BoundedResultNotice
           actionHref="/commercial/enquiries/register/export.xlsx"
           actionLabel="Export the complete enquiry register"

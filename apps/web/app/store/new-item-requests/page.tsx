@@ -25,7 +25,7 @@ import {
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { formatIstDateTime } from "@/lib/date-time"
@@ -64,15 +64,15 @@ export default async function NewItemRequestsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          New Item Requests
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Use this only when the required item cannot be found in Current Stock
-          and has no Asset Code.
-        </p>
-      </div>
+      <PageHeader
+        title="New Item Requests"
+        description={
+          <>
+            Use this only when the required item cannot be found in Current Stock and
+            has no Asset Code.
+          </>
+        }
+      />
 
       <MetricSummary
         scope="New item request register · before table filters"

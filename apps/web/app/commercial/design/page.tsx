@@ -20,7 +20,7 @@ import {
 } from "@workspace/ui/components/table"
 
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -56,9 +56,7 @@ export default async function DesignPage({
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Design Tasks</h2>
-      </section>
+      <PageHeader title="Design Tasks" />
 
       {view==='active' && revisions.length ? <SectionCard><CardHeader><CardTitle>Enquiry Design Revisions</CardTitle></CardHeader><CardContent>
         <OperationalTable><TableHeader><TableRow><TableHead>Enquiry</TableHead><TableHead>Line</TableHead><TableHead>Part</TableHead><TableHead>Requested Changes</TableHead><TableHead>Status</TableHead><TableHead>Action</TableHead></TableRow></TableHeader><TableBody>

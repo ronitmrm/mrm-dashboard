@@ -1,6 +1,7 @@
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 
 import { FullPageWorkspace } from "@/components/full-page-workspace"
+import { PageHeader } from "@/components/ui/golden-patterns"
 
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
@@ -58,13 +59,7 @@ export default async function OperationalEntrySelectionPage({
 
   return (
     <FullPageWorkspace>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {view === "masterTables"
-            ? "View Records"
-            : "Data Entry"}
-        </h1>
-      </div>
+      <PageHeader title={view === "masterTables" ? "View Records" : "Data Entry"} />
       {value(query.error) === "invalid-selection" ? (
         <Alert className="w-full" variant="destructive">
           <AlertDescription>

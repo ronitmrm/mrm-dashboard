@@ -29,7 +29,16 @@ and permission identifiers stable when changing these display labels.
 
 Use `OperationalTable` for comparable records, scanning, filtering, sorting, selection, totals, or spreadsheet-like work. Use `MetricCard` only for one prominent measure with optional comparison, status, icon, or compact chart. Use `SectionCard` for related controls, narrative content, forms, or a table shell. Never use cards as decorative wrappers around every element.
 
-Use `PageHeader` once per dashboard screen. Put primary and secondary page actions in its `actions` slot or an adjacent `ActionToolbar`. Use `FormSection` to group related fields and `FormGrid` for responsive field layout.
+Use `PageHeader` once per dashboard screen. Page identity belongs in the navigation
+shell; omit duplicate body title/description banners and decorative header icons.
+`PageHeader` retains its title and description for assistive technology, preserves
+record-status badges, and places actions at the top-right of the content without
+a panel. Pages without actions or badges reserve no header space. Put primary and
+secondary page actions in its `actions` slot or an adjacent `ActionToolbar`.
+Page-level Download Excel, Download CSV and Upload CSV use this top-right row, before view
+tabs and summary cards, including `MasterDataViewTabs`. Keep card titles and
+summary cards. Use `FormSection` to group related fields and `FormGrid` for
+responsive field layout.
 
 `ActionToolbar` stays within the available page width and wraps its buttons on
 narrow screens. Long tab lists scroll inside a bounded strip; they must not

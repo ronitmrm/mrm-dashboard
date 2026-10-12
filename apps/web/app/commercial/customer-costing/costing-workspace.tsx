@@ -1,4 +1,4 @@
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import Link from "next/link"
 
 import { createCommercialCostingRepository } from "@workspace/db"
@@ -154,16 +154,14 @@ export async function CustomerParameterCostingView({
       {!standalone ? (
         <>
           <section className="grid gap-2">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  Customer Parameter Costing
-                </h1>
-              </div>
-              <Button asChild variant="outline">
-                <Link href="/commercial/quotes">View Quote Register</Link>
-              </Button>
-            </div>
+            <PageHeader
+              title="Customer Parameter Costing"
+              actions={
+                <Button asChild variant="outline">
+                  <Link href="/commercial/quotes">View Quote Register</Link>
+                </Button>
+              }
+            />
             <BoundedResultNotice
               coverage={queue.coverage}
               section="Customer Parameter Costing queue"

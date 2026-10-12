@@ -1,5 +1,5 @@
 import { headers } from "next/headers"
-import { KeyRound, ShieldCheck } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import {
@@ -11,6 +11,7 @@ import {
 } from "@workspace/ui/components/card"
 
 import { FullPageWorkspace } from "@/components/full-page-workspace"
+import { PageHeader } from "@/components/ui/golden-patterns"
 import { PasswordResetForm } from "@/components/password-reset-form"
 import { getAuth } from "@/lib/auth/auth"
 import { createPasswordResetService } from "@/lib/auth/password-reset"
@@ -21,26 +22,16 @@ export default async function PasswordPage() {
 
   return (
     <FullPageWorkspace>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid gap-1">
-          <div className="flex items-center gap-2">
-            <KeyRound className="size-5 text-primary" />
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Password &amp; Security
-            </h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {context.isAdministrator
-              ? "Reset any account password and sign that user out everywhere."
-              : "Change your password after confirming your current password."}
-          </p>
-        </div>
-        {context.isAdministrator ? (
-          <Badge variant="outline">
-            <ShieldCheck /> Administrator
-          </Badge>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Password & Security"
+        badge={
+          context.isAdministrator ? (
+            <Badge variant="outline">
+              <ShieldCheck /> Administrator
+            </Badge>
+          ) : null
+        }
+      />
 
  <SectionCard width="standard">
         <CardHeader>

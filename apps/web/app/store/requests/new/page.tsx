@@ -29,6 +29,7 @@ import {
   StoreRequestPurposeFields,
 } from "@/components/store/store-request-purpose-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { PageHeader } from "@/components/ui/golden-patterns"
 import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
 import { requireStoreAction } from "@/lib/auth/store-action-access"
@@ -116,14 +117,7 @@ export default async function NewStoreRequestPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          New Store Request
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          One automatic Request Number will contain all selected coded items.
-        </p>
-      </div>
+      <PageHeader title="New Store Request" />
 
       {params.saved ? (
         <SectionCard role="status">

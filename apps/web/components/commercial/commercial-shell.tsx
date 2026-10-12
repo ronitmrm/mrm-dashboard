@@ -9,6 +9,7 @@ import { Settings2 } from "lucide-react"
 import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
+  productionFloors,
 } from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
@@ -40,6 +41,7 @@ import {
   personalDashboardNavigation,
   storeNavigation,
   isoDocumentNavigation,
+  maintenanceNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -90,14 +92,27 @@ export function CommercialShell({
   const activeProductionFloor = normalizeProductionFloorCode(
     searchParams.get("floor") ?? defaultProductionFloorCode
   )
+  const storeFloor = productionFloors.find((floor) => {
+    const storePath = `/production-store/${floor.code}`
+    return pathname === storePath || pathname.startsWith(`${storePath}/`)
+  })
   const current =
     (pathname === "/commercial/price-master"
       ? { label: "Price Master" }
       : pathname === "/account/password"
         ? { label: "Password & Security" }
-        : pathname.startsWith("/operational-entry")
-          ? { label: "Operational Entry" }
-          : productionPage) ??
+        : pathname === "/masters" || pathname === "/operational-entry"
+          ? {
+              label:
+                searchParams.get("view") === "masterTables"
+                  ? "View Records"
+                  : "Data Entry",
+            }
+          : storeFloor
+            ? {
+                label: `${storeFloor.label} · ${pathname.endsWith("/movement") ? "Store Movement" : pathname.endsWith("/repairs") ? "Store Repairs" : "Store Stock"}`,
+              }
+            : productionPage) ??
     [
       personalDashboardNavigation,
       ...commercialNavigation,
@@ -110,9 +125,12 @@ export function CommercialShell({
       ...publishedRegisterNavigation,
       ...storeNavigation,
       ...isoDocumentNavigation,
-    ].find((item) =>
-      navigationHrefMatches(pathname, searchParams, item.href)
-    ) ??
+      ...maintenanceNavigation,
+    ]
+      .sort((left, right) => right.href.length - left.href.length)
+      .find((item) =>
+        navigationHrefMatches(pathname, searchParams, item.href)
+      ) ??
     personalDashboardNavigation
 
   return (

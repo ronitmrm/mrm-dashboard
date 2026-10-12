@@ -353,6 +353,7 @@ export function ProductionSessionsWorkspace({
             {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
             <Badge variant="outline" className="h-8 px-3">{shift ? `${shift.shift} · ${shift.productionDate}` : "Outside production shift"}</Badge>
+            {view !== "start" ? <DataDownloadButton label="Download CSV" onClick={exportCsv} /> : null}
         </>} />
 
  <SectionCard>
@@ -366,7 +367,6 @@ export function ProductionSessionsWorkspace({
             {view !== "start" ? <div className="flex flex-wrap gap-2">
               <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input className="h-11 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search machine, job, part or operator" /></div>
               {view === "register" ? <NativeSelect className="h-11 w-52" aria-label="Session status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SessionStatusFilter)}><NativeSelectOption value="all">All statuses</NativeSelectOption><NativeSelectOption value="closing_required">Closing Required ({closingRequiredSessions.length})</NativeSelectOption><NativeSelectOption value="open">Open</NativeSelectOption><NativeSelectOption value="closed">Closed</NativeSelectOption></NativeSelect> : null}
-              <DataDownloadButton label="Download CSV" onClick={exportCsv} />
             </div> : null}
           </CardHeader>
           <CardContent>
