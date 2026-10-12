@@ -12,6 +12,9 @@ CREATE TABLE store.asset_storage_locations (
 CREATE INDEX store_asset_storage_locations_store_idx
   ON store.asset_storage_locations (organization_id, accountable_store_id);
 
+GRANT SELECT, INSERT, UPDATE ON store.asset_storage_locations TO mrmpl_web;
+GRANT SELECT ON store.asset_storage_locations TO mrmpl_worker, mrmpl_reporting;
+
 -- Retain each Store's last recorded rack, including Main's before an issue.
 INSERT INTO store.asset_storage_locations (
   organization_id, asset_id, accountable_store_id, location_id, updated_at
