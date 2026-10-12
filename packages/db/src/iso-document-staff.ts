@@ -11,6 +11,8 @@ export async function listIsoDocumentStaff(
         WHERE link.user_id = u.id AND link.organization_id = $1 AND
           (post.status = 'Occupied' OR (post.status = 'Appointed' AND post.joining_date <= current_date)
            OR (post.status = 'Resigned' AND post.last_working_date >= current_date)))
+      OR EXISTS (SELECT 1 FROM workforce.employees employee
+        WHERE employee.user_id = u.id AND employee.organization_id = $1 AND employee.active)
       OR (NOT EXISTS (SELECT 1 FROM identity.employee_links WHERE user_id = u.id)
         AND EXISTS (SELECT 1 FROM identity.user_roles ur JOIN identity.roles role ON role.id = ur.role_id
           WHERE ur.user_id = u.id AND role.key IN ('administrator', 'administrative')))

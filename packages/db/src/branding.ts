@@ -44,6 +44,14 @@ export type BrandingDocument = {
 }
 export type DocumentControlFields = DocumentControlMetadata & {
   metadataVersion: number
+  workflowTitle: string
+  workflowDepartment: string
+  workflowText: string
+  workflowVersion: number
+  responsibleUserId: string | null
+  responsibleName: string | null
+  isoModule: string | null
+  workTargetOn: string | null
 }
 export type MasterDocumentRow = BrandingDocument &
   DocumentControlFields & {
@@ -99,7 +107,11 @@ const controlFieldsSelect = `d.document_type AS "documentType",
   COALESCE(d.data_frequency_detail, '') AS "dataFrequencyDetail",
   COALESCE(d.data_retention, '') AS "dataRetention",
   d.record_locations AS "recordLocations", d.content_access AS "contentAccess",
-  d.metadata_version AS "metadataVersion"`
+  d.metadata_version AS "metadataVersion",d.workflow_title AS "workflowTitle",
+  d.workflow_department AS "workflowDepartment",d.workflow_text AS "workflowText",
+  d.workflow_version AS "workflowVersion",d.responsible_user_id AS "responsibleUserId",
+  (SELECT name FROM identity.users WHERE id=d.responsible_user_id) AS "responsibleName",
+  d.iso_module AS "isoModule",d.work_target_on::text AS "workTargetOn"`
 
 async function appendDocumentAudit(
   client: { query: (text: string, values?: unknown[]) => Promise<unknown> },
@@ -162,8 +174,8 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
           }
         >(
           `SELECT d.id, d.type, d.number, ${controlFieldsSelect},
-            COALESCE(current_revision.content->>'title', draft.content->>'title', '') AS title,
-            COALESCE(current_revision.content->>'department', draft.content->>'department', '') AS department,
+            COALESCE(current_revision.content->>'title', draft.content->>'title', NULLIF(d.workflow_title,''), '') AS title,
+            COALESCE(NULLIF(d.workflow_department,''),current_revision.content->>'department', draft.content->>'department', '') AS department,
             draft.content->>'title' AS "draftTitle",
             draft.content->>'department' AS "draftDepartment",
             current_revision.revision, current_revision.issued_at::text AS "revisionDate",
@@ -188,6 +200,7 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         )
       ).rows
       return {
+        all: rows,
         released: rows.filter((row) => row.revision !== null),
         pending: rows
           .filter((row) => row.hasDraft)

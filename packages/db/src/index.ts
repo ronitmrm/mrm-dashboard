@@ -1,4 +1,5 @@
 export { createAccessAdministrationRepository } from "./access-administration"
+export { createIsoWorkflowRepository, type IsoWorkflowAccess, type IsoWorkflowDocument, type IsoPendingTask } from "./iso-workflows"
 export {
   appendAccessAuditChanges,
   type AccessAuditChange,

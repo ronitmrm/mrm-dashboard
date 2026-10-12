@@ -15,6 +15,11 @@ export function buildMasterDocumentWorkbook(rows: MasterDocumentRow[]) {
       "Document Type": documentTypeLabels[row.documentType],
       Department: row.department,
       "Responsible Role": row.responsibleRole,
+      "Responsible Person": row.responsibleName ?? "Not assigned",
+      "Target Date": row.workTargetOn ?? "",
+      "Task Workflow Version": row.workflowVersion,
+      "Task Workflow": row.workflowText,
+      "Release Position": row.revision === null ? "Not released" : "Released",
       "Record Location":
         row.recordLocations.map(({ label }) => label).join(", ") || "None",
       "Current Revision":
@@ -40,6 +45,11 @@ export function buildMasterDocumentWorkbook(rows: MasterDocumentRow[]) {
     { wch: 28 },
     { wch: 20 },
     { wch: 24 },
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 65 },
+    { wch: 18 },
     { wch: 36 },
     { wch: 16 },
     { wch: 18 },

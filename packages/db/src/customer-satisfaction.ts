@@ -331,7 +331,7 @@ export function createCustomerSatisfactionRepository(
           requireSatisfactionSubmission(before.fields, before.fileCount > 0)
         }
         await client.query(
-          `UPDATE document_control.customer_satisfaction_reports SET status=$3,decision_notes=$4,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
+          `UPDATE document_control.customer_satisfaction_reports SET status=$3,work_target_on=CASE WHEN $3='Approved' THEN NULL ELSE work_target_on END,decision_notes=$4,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
           [access.organizationId, input.id, status, notes]
         )
         await audit(

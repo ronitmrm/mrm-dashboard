@@ -2,13 +2,13 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import type { DocumentControlFields } from "@workspace/db"
 import {
   dataFrequencyLabels,
   dataFrequencyTypes,
   documentTypeLabels,
   documentTypes,
   type RecordLocation,
+  type DocumentControlMetadata,
 } from "@workspace/db/document-control-domain"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -51,7 +51,7 @@ export function DocumentControlMetadataForm({
   initial,
 }: {
   documentId: string
-  initial: DocumentControlFields
+  initial: DocumentControlMetadata & {metadataVersion:number}
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()

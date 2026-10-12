@@ -405,7 +405,7 @@ export function createInterestedPartiesRepository(
         await client.query(
           `UPDATE document_control.interested_party_requirements SET
           last_verified_review_id=CASE WHEN $3='Verified' THEN $4 ELSE last_verified_review_id END,
-          next_review_on=CASE WHEN $3='Verified' THEN $5 ELSE next_review_on END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
+          next_review_on=CASE WHEN $3='Verified' THEN $5 ELSE next_review_on END,work_target_on=CASE WHEN $3='Verified' THEN NULL ELSE work_target_on END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
           [
             access.organizationId,
             input.id,

@@ -37,9 +37,42 @@ relevance decisions, evidence and planned dates are not inferred.
 
 ## Master Document List
 
+The central index includes all controlled documents and ISO module workflow
+entries. Released Documents remains a filtered view of issued formats; draft
+and workflow-only entries explicitly display Not released. Each ISO module has
+one master entry linking its live records, pending work and Task Workflow.
+Task Workflow is a concise QA-controlled text document describing the task,
+performer, evidence, review and closure. Named document ownership, responsible
+department and workflow text are editable, version checked and audited; earlier
+text remains in history. This does not change an issued PDF revision.
+
+## Shared ISO pending actions
+
+One Pending Actions view reads existing module records and linked document
+actions. It includes preparation, approval, outstanding actions and due reviews,
+with source/master links, department, responsible account, target date and QA
+position. An action referenced from several meetings/documents appears once.
+Document approval and action closure remain separate; ongoing monitoring keeps
+its next review after the work is verified. Missing assignments/dates stay explicit.
+
+Department HODs assign active staff and change target dates only within their
+current assigned departments. QA may allocate previously unassigned work and
+controls workflow text, verification and final closure. Assignment/date changes
+require a reason and preserve before/after history. Assigned staff records work
+and evidence; Completed remains pending until QA verifies the expected result.
+QA can return or reopen with reasons; closed details remain locked. Native
+module verification rules still apply, including risk residual acceptance.
+Assigned meeting coordinators can prepare and submit their draft minutes; QA
+retains final minutes approval and control of linked meeting points. Interested
+party relevance and monitoring plans remain QA-controlled before staff monitoring.
+Additional work for any document is retained as a linked ISO action; each action
+keeps the workflow text/version applicable when created. Maintenance/calibration
+execution stays in its operational register, with ISO verification retaining
+the actual result and evidence rather than changing technical pass/fail results.
+
 One row represents one controlled document or format, including every individual
 SOP. Generated transactions and completed records do not create more document
-rows. The current row represents the latest released revision; opening it shows
+rows. A released row represents the latest issued revision; opening it shows
 the document dossier, retained revisions, workflow transactions, monitoring
 configuration and links to records in MRM, another approved system or a physical
 location. Inactive documents remain in the list as `Not In Use`.

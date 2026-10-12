@@ -18,6 +18,7 @@ export type SipocAccess = {
   canRead: boolean
   canManage: boolean
   canApprove: boolean
+  permittedDepartments?: readonly string[] | null
 }
 export type SipocRecord = {
   id: string
@@ -149,7 +150,7 @@ export function createSipocRepository(options: RepositoryPoolOptions) {
       access: SipocAccess,
       input: { id?: string; version?: number; fields: unknown; reason: string }
     ) {
-      if (!access.canManage)
+      if (!access.canManage && !input.id)
         throw new Error("SIPOC preparation permission is required.")
       const fields = parseSipoc(input.fields),
         reason = sipocText(input.reason)
@@ -157,6 +158,9 @@ export function createSipocRepository(options: RepositoryPoolOptions) {
         const before = input.id
           ? await current(client, access, input.id, input.version ?? 0)
           : null
+        if(!access.canManage && (!before || before.fields.ownerUserId!==access.userId)) throw new Error("Only the assigned process owner may prepare this map.")
+        if(!access.canManage && before && (fields.ownerUserId!==before.fields.ownerUserId || fields.department!==before.fields.department)) throw new Error("The HOD or QA must change assignments.")
+        if(access.permittedDepartments && (!access.permittedDepartments.some(value=>value.toLowerCase()===fields.department.toLowerCase()) || (before&&!access.permittedDepartments.some(value=>value.toLowerCase()===before.fields.department.toLowerCase())))) throw new Error("Prepare SIPOC maps only in your own department.")
         if (before?.status === "Submitted")
           throw new Error(
             "QA must decide the submitted map before it can change."
@@ -201,15 +205,13 @@ export function createSipocRepository(options: RepositoryPoolOptions) {
         notes: string
       }
     ) {
-      if (input.action === "submit" ? !access.canManage : !access.canApprove)
-        throw new Error(
-          input.action === "submit"
-            ? "SIPOC preparation permission is required."
-            : "QA approval permission is required."
-        )
+      if (input.action !== "submit" && !access.canApprove)
+        throw new Error("QA approval permission is required.")
       const notes = sipocText(input.notes)
       return withTransaction(pool, async (client) => {
         const before = await current(client, access, input.id, input.version)
+        if(input.action==='submit' && !access.canManage && before.fields.ownerUserId!==access.userId) throw new Error("Only the assigned process owner may submit this map.")
+        if(input.action==='submit' && access.permittedDepartments && !access.permittedDepartments.some(value=>value.toLowerCase()===before.fields.department.toLowerCase())) throw new Error("Submit SIPOC maps only in your own department.")
         const status =
           input.action === "submit"
             ? "Submitted"
@@ -260,7 +262,7 @@ export function createSipocRepository(options: RepositoryPoolOptions) {
           }
         }
         await client.query(
-          `UPDATE document_control.sipoc_maps SET status=$3,approved_revision=CASE WHEN $3='Approved' THEN revision ELSE approved_revision END,decision_notes=CASE WHEN $3='Submitted' THEN decision_notes ELSE $4 END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
+          `UPDATE document_control.sipoc_maps SET status=$3,work_target_on=CASE WHEN $3='Approved' THEN NULL ELSE work_target_on END,approved_revision=CASE WHEN $3='Approved' THEN revision ELSE approved_revision END,decision_notes=CASE WHEN $3='Submitted' THEN decision_notes ELSE $4 END,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2`,
           [access.organizationId, input.id, status, notes]
         )
         await audit(
