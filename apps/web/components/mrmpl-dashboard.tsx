@@ -2470,21 +2470,21 @@ function SetupChecklistShell({
   return (
     <section className="grid w-full gap-4 text-foreground">
       <div className="mx-auto grid w-full max-w-6xl gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Setup Checklist</h1>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              window.location.assign(dashboardReturnHref("machinistTasksTab"))
-            }}
-          >
-            <LayoutDashboard className="size-4" />
-            Machinist
-          </Button>
-        </div>
+        <PageHeader
+          title="Setup Checklist"
+          actions={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                window.location.assign(dashboardReturnHref("machinistTasksTab"))
+              }}
+            >
+              <LayoutDashboard className="size-4" />
+              Machinist
+            </Button>
+          }
+        />
         {isSaving ? (
           <ProcessingNotice message="Saving checklist progress..." />
         ) : null}
@@ -13248,23 +13248,18 @@ function MaintenancePanel({
     )
     return (
       <section className="grid min-w-0 gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Maintenance Checklist</h1>
-            <p className="text-sm text-muted-foreground">
-              {displayValue(selectedSchedule.assetCode || selectedSchedule.machineNo)} /{" "}
-              {displayValue(selectedSchedule.maintenanceCode)} -{" "}
-              {displayValue(selectedSchedule.maintenanceTitle)}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setSelectedSchedule(null)}
-          >
-            <ArrowLeft className="size-4" /> Back to Tasks
-          </Button>
-        </div>
+        <PageHeader
+          title="Maintenance Checklist"
+          actions={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedSchedule(null)}
+            >
+              <ArrowLeft className="size-4" /> Back to Tasks
+            </Button>
+          }
+        />
         <SectionCard>
           <CardHeader>
             <CardTitle>
@@ -13273,6 +13268,10 @@ function MaintenancePanel({
                 : "Maintenance work"}
             </CardTitle>
             <CardDescription>
+              {displayValue(selectedSchedule.assetCode || selectedSchedule.machineNo)} /{" "}
+              {displayValue(selectedSchedule.maintenanceCode)} -{" "}
+              {displayValue(selectedSchedule.maintenanceTitle)}
+              <br />
               {answeredCount} of {checklistSteps.length} points answered. Save
               progress to finish later.
             </CardDescription>
