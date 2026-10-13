@@ -3,6 +3,7 @@
 import { useActionState, useState, type ReactNode } from "react"
 import type { createDepartmentStoreRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 
@@ -51,18 +52,18 @@ function TextField({ label, name, ...props }: React.ComponentProps<typeof Input>
   label: string
   name: string
 }) {
-  return <label className="grid gap-1.5 text-sm font-medium">
-    <span>{label}</span><Input name={name} {...props} />
-  </label>
+  return <Field>
+    <FieldLabel htmlFor={name}>{label}</FieldLabel><Input id={name} name={name} {...props} />
+  </Field>
 }
 
 function SelectField({ children, label, name, ...props }: React.ComponentProps<typeof NativeSelect> & {
   label: string
   name: string
 }) {
-  return <label className="grid gap-1.5 text-sm font-medium">
-    <span>{label}</span><NativeSelect className="w-full" name={name} {...props}>{children}</NativeSelect>
-  </label>
+  return <Field>
+    <FieldLabel htmlFor={name}>{label}</FieldLabel><NativeSelect id={name} className="w-full" name={name} {...props}>{children}</NativeSelect>
+  </Field>
 }
 
 function DestinationFields({
@@ -113,16 +114,15 @@ function DestinationFields({
   </>
 }
 
-export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
+export type DepartmentStoreAction = "quantity" | "accountability" | "physical" | "consume" | "consume-single" | "adjust" | "gauge-create" | "gauge-move" | "gauge-replace" | "gauge-disband"
 
-export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, recorderId, selectedItemIds = [], storageAssets, storageLocations, store, stores, today, vendors }: {
+export function DepartmentStoreForms({ action, assets, consumables, departments, gaugeSets, machines, selectedItemIds = [], storageAssets, storageLocations, store, stores, today, vendors }: {
   action: DepartmentStoreAction
   assets: Workspace["assets"]
   consumables: Workspace["consumables"]
   departments: Array<{ code: string; id: string; name: string }>
   gaugeSets: Workspace["gaugeSets"]
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
-  recorderId: string
   selectedItemIds?: string[]
   store: Workspace["store"]
   storageAssets: Array<{ assetCode: string; assetName: string }>
@@ -144,6 +144,7 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
   const [replacementSetId, setReplacementSetId] = useState("")
   const [transferItemId, setTransferItemId] = useState("")
   const [transferAssetCode, setTransferAssetCode] = useState("")
+  const [useItemId, setUseItemId] = useState("")
   const [destinationStoreCode, setDestinationStoreCode] = useState("")
   const ownStorageLocations = storageLocations.locations.filter((location) =>
     location.storeCode.toLowerCase() === store.code.toLowerCase() && !location.isDefault
@@ -196,8 +197,8 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Quantity" name="quantity" min="0.001" step="0.001" type="number" required />
-          <StoreStorageLocationField id="quantity-transfer-location" itemTypeId={transferItemId}
-            storage={storageLocations} storeCode={destinationStoreCode} />
+          {store.kind === "MAIN" ? <StoreStorageLocationField id="quantity-transfer-location" itemTypeId={transferItemId}
+            storage={storageLocations} storeCode={destinationStoreCode} /> : null}
           <TextField label="Remark" name="remark" />
         </FormGrid>
       </ActionForm>
@@ -223,30 +224,44 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
             </NativeSelectOption>)}
           </SelectField>
           <TextField label="Reason / handover note" name="remark" />
-          <StoreStorageLocationField id="asset-transfer-location"
+          {store.kind === "MAIN" ? <StoreStorageLocationField id="asset-transfer-location"
             itemTypeId={assets.find((asset) => asset.assetCode === transferAssetCode)?.itemTypeId ?? ""}
-            storage={storageLocations} storeCode={destinationStoreCode} />
+            storage={storageLocations} storeCode={destinationStoreCode} /> : null}
         </FormGrid>
       </ActionForm>
     </FormSection> : null}
 
-    {action === "consume" && store.kind !== "MAIN" ? <FormSection title="Record consumable use"
+    {(action === "consume" || action === "consume-single") && store.kind !== "MAIN" ? <FormSection
+      title={action === "consume-single" ? "Record use" : "Record multiple uses"}
       description="Record only the quantity actually used. Unused stock stays available here."
-      width="wide">
-      <ActionForm action={consumeDepartmentQuantityAction} disabled={!selectedConsumables.length}
-        storeCode={store.code} submitLabel="Record Consumption">
+      width={action === "consume-single" ? "standard" : "wide"}>
+      <ActionForm action={consumeDepartmentQuantityAction}
+        disabled={action === "consume-single" ? !useItemId : !selectedConsumables.length}
+        storeCode={store.code} submitLabel="Record Use">
         <FormGrid className="xl:grid-cols-2">
-          {selectedConsumables.map((item) => <div className="grid gap-2" key={item.itemTypeId}>
+          {action === "consume-single" ? <>
+            <SelectField label="Asset Code" name="item_type_id" required
+              value={useItemId} onValueChange={setUseItemId}>
+              <NativeSelectOption value="">Select Asset Code</NativeSelectOption>
+              {availableConsumables.map((item) => <NativeSelectOption key={item.itemTypeId} value={item.itemTypeId}>
+                {item.typeCode} · {item.assetName} · available {item.availableQuantity} {item.unit}
+              </NativeSelectOption>)}
+            </SelectField>
+            <TextField label="Quantity used" name={`quantity_${useItemId}`} min="0.001"
+              max={availableConsumables.find((item) => item.itemTypeId === useItemId)?.availableQuantity}
+              step="0.001" type="number" required />
+          </> : selectedConsumables.map((item) => <div className="grid gap-2" key={item.itemTypeId}>
             <input name="item_type_id" type="hidden" value={item.itemTypeId} />
             <TextField label={`${item.typeCode} · ${item.assetName} · available ${item.availableQuantity} ${item.unit}`}
               name={`quantity_${item.itemTypeId}`} min="0.001" max={item.availableQuantity}
               step="0.001" type="number" required />
           </div>)}
-          <TextField label="Operator ID" name="operator_id" value={recorderId} readOnly />
+          <TextField label="Operator ID" name="operator_id" required />
           <TextField label="Used on" name="consumed_on" type="date" defaultValue={today} max={today} required />
           <TextField label="Remark" name="remark" />
         </FormGrid>
-        {!selectedConsumables.length ? <p className="text-sm text-muted-foreground">Select available consumables from Stock first.</p> : null}
+        {!(action === "consume-single" ? availableConsumables : selectedConsumables).length ?
+          <p className="text-sm text-muted-foreground">No available consumables selected.</p> : null}
       </ActionForm>
     </FormSection> : null}
 

@@ -16,19 +16,17 @@ type Workspace = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepos
 type DepartmentAllocations = Awaited<ReturnType<ReturnType<typeof createDepartmentStoreRepository>["listDepartmentAllocations"]>>
 type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>["listPurchaseOrders"]>>
 
-export function DepartmentStoreRegister({ action, basePath, canRepair, canRequest, canWrite,
-  departmentAllocations, departments, machines, recorderId, repairOrders, saved, selectedItemIds,
+export function DepartmentStoreRegister({ action, basePath, canRepair, canWrite,
+  departmentAllocations, departments, machines, repairOrders, saved, selectedItemIds,
   selectMode: requestedSelectMode, today, vendors, view, workspace,
 }: {
   action?: DepartmentStoreAction
   basePath: string
   canRepair: boolean
-  canRequest: boolean
   canWrite: boolean
   departmentAllocations: DepartmentAllocations
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
-  recorderId: string
   repairOrders: RepairOrders
   saved: boolean
   selectedItemIds?: string[]
@@ -70,10 +68,6 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
     {saved ? <p role="status" className="text-sm">Store record saved.</p> : null}
 
     {view === "stock" ? <>
-      {canRequest ? <Button asChild className="w-fit" variant="outline"><Link
-        href={`/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=${encodeURIComponent(store.code)}`}>
-        Request stock or responsibility from Main Store
-      </Link></Button> : null}
       <MetricSummary
         items={[
           { label: "Consumable codes in stock", value: availableConsumables.length, tone: "information" },
@@ -89,7 +83,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
         ]}
         consumables={consumables} departments={departments} gaugeSets={gaugeSets}
         storageLocations={workspace.storageLocations}
-        machines={machines} recorderId={recorderId} selectedItemIds={selectedItemIds} store={store}
+        machines={machines} selectedItemIds={selectedItemIds} store={store}
         stores={stores} today={today} vendors={vendors} /> : null}
       <SectionCard>
         <CardHeader className="gap-3">
@@ -101,9 +95,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=quantity`}>Transfer consumable stock</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=physical`}>Set storage location</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=accountability`}>Transfer Unit ID responsibility</Link></Button>
-            {consumables.length ? <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
-              <Link href={`${basePath}?select=use`}>Record use</Link>
-            </Button> : null}
+            {consumables.length ? <>
+              <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=consume-single`}>Record use</Link></Button>
+              <Button asChild size="sm" variant={selectMode === "use" ? "default" : "outline"}>
+                <Link href={`${basePath}?select=use`}>Record multiple uses</Link>
+              </Button>
+            </> : null}
             <Button asChild size="sm" variant="outline"><Link href={`${basePath}?action=adjust`}>Record Unit ID loss</Link></Button>
             {isQuality ? ([
               ["gauge-create", "Combine gauges"], ["gauge-move", "Move gauge set"],
@@ -131,8 +128,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canReques
           </div> : null}
           {selectMode === "use" && !availableConsumables.length ? <p className="text-sm text-muted-foreground">
             No consumables are available in {store.name}. Company on-hand is stock across all Stores;
-            {canRequest ? <> <Link className="text-primary underline" href={`/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=${encodeURIComponent(store.code)}`}>
-              request a transfer into this Store</Link> before recording use.</> : " arrange a transfer into this Store before recording use."}
+            Arrange a transfer into this Store before recording use.
           </p> : null}
         </CardHeader>
         <CardContent className="min-w-0">

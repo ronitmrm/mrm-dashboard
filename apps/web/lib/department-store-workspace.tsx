@@ -3,14 +3,13 @@ import { createDepartmentStoreRepository, createStoreRepository } from "@workspa
 import { DepartmentStoreRegister } from "@/components/store/department-store-register"
 import type { DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { listGrantedCapabilities, requireCapability } from "@/lib/auth/require-capability"
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import { istDateValue } from "@/lib/date-time"
 
 const departmentStoreActions: DepartmentStoreAction[] = [
-  "quantity", "accountability", "physical", "consume", "adjust",
+  "quantity", "accountability", "physical", "consume", "consume-single", "adjust",
   "gauge-create", "gauge-move", "gauge-replace", "gauge-disband",
 ]
 
@@ -32,11 +31,8 @@ export async function renderDepartmentStoreWorkspace(input: {
   const session = await requireCapability(input.readCapability, input.basePath)
   const granted = new Set(await listGrantedCapabilities(session.user.id, [
     input.writeCapability,
-    accountableStorePermission(input.storeCode, "request"),
   ]))
   const canWrite = granted.has(input.writeCapability)
-  const canRequest = granted.has(accountableStorePermission(input.storeCode, "request")) &&
-    (await listGrantedStoreActions(session.user.id)).has("store.requests.submit")
   const canRepair = input.storeCode === "MAIN"
     ? (await listGrantedStoreActions(session.user.id)).has("store.asset_repair.write")
     : canWrite
@@ -86,7 +82,6 @@ export async function renderDepartmentStoreWorkspace(input: {
       action={input.action}
       basePath={input.basePath}
       canWrite={canWrite}
-      canRequest={canRequest}
       canRepair={canRepair}
       saved={input.saved ?? false}
       selectedItemIds={input.selectedItemIds}
@@ -94,7 +89,6 @@ export async function renderDepartmentStoreWorkspace(input: {
       departments={options.departments}
       departmentAllocations={departmentAllocations}
       machines={options.machines}
-      recorderId={session.user.id}
       repairOrders={equipmentRepairOrders}
       today={istDateValue()}
       vendors={options.vendors}

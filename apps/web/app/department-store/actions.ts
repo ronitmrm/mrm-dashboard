@@ -102,7 +102,7 @@ export async function transferDepartmentQuantityAction(
       ...context,
       sourceStoreCode: context.storeCode,
       destinationStoreCode: required(formData, "destination_store_code"),
-      destinationLocationId: required(formData, "destination_location_id"),
+      destinationLocationId: optional(formData, "destination_location_id"),
       itemTypeId: required(formData, "item_type_id"),
       quantity: quantity(formData),
       remark: optional(formData, "remark"),
@@ -129,6 +129,7 @@ export async function consumeDepartmentQuantityAction(
         quantity: Number(required(formData, `quantity_${itemTypeId}`)),
       })),
       consumedOn,
+      movedBy: required(formData, "operator_id"),
       remark: optional(formData, "remark"),
     })
   }, "store.asset_movement.write", "/store/movement")
@@ -155,11 +156,34 @@ export async function transferDepartmentAssetAction(
       ...context,
       sourceStoreCode: context.storeCode,
       destinationStoreCode: required(formData, "destination_store_code"),
-      destinationLocationId: required(formData, "destination_location_id"),
+      destinationLocationId: optional(formData, "destination_location_id"),
       assetCode: required(formData, "asset_code"),
       remark: optional(formData, "remark"),
     }), "store.asset_movement.write", "/store/movement", true
   )
+}
+
+export async function transferStockResponsibilityAction(
+  _state: DepartmentStoreActionState,
+  formData: FormData
+) {
+  return withStoreWrite(formData, (repository, context) => {
+    if (context.storeCode !== "MAIN") throw new Error("Start this transfer from Main Store Stock.")
+    const itemTypeIds = formData.getAll("item_type_id").map((value) => value.toString().trim())
+    const assetCodes = formData.getAll("asset_code").map((value) => value.toString().trim())
+    return repository.transferStockResponsibility({
+      ...context,
+      sourceStoreCode: context.storeCode,
+      destinationStoreCode: required(formData, "destination_store_code"),
+      items: [
+        ...itemTypeIds.map((itemTypeId) => ({
+          itemTypeId, quantity: Number(required(formData, `quantity_${itemTypeId}`)),
+        })),
+        ...assetCodes.map((assetCode) => ({ assetCode })),
+      ],
+      remark: optional(formData, "remark"),
+    })
+  }, "store.asset_movement.write", "/store/stock", true)
 }
 
 function movementDestination(formData: FormData) {

@@ -111,6 +111,8 @@ quantity. A physical issue for use does not.
 Transfers between two non-Main Stores pass through Main Store: the sending
 Store returns quantity or Unit ID accountability to Main, then Main transfers
 it to the receiving Store. Each leg is a separate ledger event.
+Main Stock can transfer multiple selected Unit IDs and Consumable quantities to
+one receiving Store in one save. All selected lines succeed together or none do.
 
 **Assigned Location / Physical Holder**: The Store, Department, Machine or
 Supplier to which a Unit ID is assigned,
@@ -124,12 +126,15 @@ Store and is maintained by its Code in Location Master (for example, a rack or
 bin). A storage location has no separate user-entered Name. Storage is blank
 until an actual rack/bin is selected; the default Store location represents
 assignment to that Store and is not a rack/bin. Every
-goods receipt line and incoming Store transfer selects its own receiving
+goods receipt line and confirmed incoming Store request selects its own receiving
 location. The same Asset Code can use different locations in different Stores.
 The selector defaults to the most recently used location where that Asset Code
 is currently stored in the receiving Store; when none exists, it uses that
 Store's default location. The storekeeper can change it for the incoming stock
 without relocating earlier stock. A location from another Store is rejected.
+Returns from Production or Quality to Main do not select Main's rack/bin. They
+arrive at Main's default Store assignment; Main records its own storage later.
+Direct bulk transfers likewise leave receiving storage for the receiving Store.
 Each Store keeps its own rack/bin entry for a Non Consumable Unit ID through
 **Set storage location**. A receiving production Store may record storage for a
 unit assigned to one of its Departments even when Main Store remains responsible.
@@ -442,8 +447,12 @@ Store column identifies who controls each Unit ID's movements and return. These
 rows do not increase the production Store's accountable stock. The receiving
 Store can record its own storage location; the Responsible Store still controls
 physical movements and return. Company on-hand is shown only in Main Store Stock.
-Consumable use starts by selecting one or more available Asset Codes in Stock
-and records their quantities together with the same operator and work context.
+Record use offers one available Consumable Asset Code, quantity, used-on date,
+Operator ID and remark. Record multiple uses selects several available Asset
+Codes and records their quantities with the same date, operator and remark.
+Operator ID identifies the person using stock; the authenticated recorder is
+retained separately as the audit actor. Recording use reduces local and company
+stock by the used quantity; unused stock remains available.
 Stock also starts transfers, physical moves, adjustments, Unit ID history,
 repair orders, and calibration service. Stock selection can include multiple
 eligible Unit IDs for repair or calibration service; each calibration Unit ID

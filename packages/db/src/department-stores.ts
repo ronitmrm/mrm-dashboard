@@ -1176,9 +1176,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
       itemTypeId: string
       quantity: number
       sourceStoreCode: string
-    }) {
+    }, transactionClient?: PoolClient) {
       const quantity = positiveQuantity(input.quantity)
-      return withTransaction(pool, async (client) => {
+      const transfer = async (client: PoolClient) => {
         await lockToolingAllocation(client, input.organizationId)
         const request = await storeTransferRequest(client, input)
         if (request && (input.sourceStoreCode !== "MAIN" ||
@@ -1202,7 +1202,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         await lockConsumable(client, input.organizationId, input.itemTypeId)
         const destinationLocation = await resolveStoreStorageLocation(client, {
           itemTypeId: input.itemTypeId,
-          locationId: input.destinationLocationId,
+          locationId: source.kind === "MAIN" ? input.destinationLocationId : destination.defaultLocationId,
           organizationId: input.organizationId,
           storeId: destination.id,
         })
@@ -1235,7 +1235,8 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
           await queueDashboardRefresh(client, input.organizationId)
         }
         return { operationId }
-      })
+      }
+      return transactionClient ? transfer(transactionClient) : withTransaction(pool, transfer)
     },
 
     async consumeQuantities(input: MutationIdentity & {
@@ -1401,7 +1402,7 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         const destinationLocation = physicalHandover
           ? await resolveStoreStorageLocation(client, {
             itemTypeId: unit.itemTypeId,
-            locationId: input.destinationLocationId,
+            locationId: source.kind === "MAIN" ? input.destinationLocationId : destination.defaultLocationId,
             organizationId: input.organizationId,
             storeId: destination.id,
           })
@@ -1454,6 +1455,44 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         return { assetCode: input.assetCode, destinationStoreCode: destination.code }
       }
       return transactionClient ? transfer(transactionClient) : withTransaction(pool, transfer)
+    },
+
+    async transferStockResponsibility(input: MutationIdentity & {
+      destinationStoreCode: string
+      items: Array<{ assetCode: string } | { itemTypeId: string; quantity: number }>
+      sourceStoreCode: string
+    }) {
+      if (!input.items.length || input.items.length > 500) {
+        throw new Error("Select 1 to 500 stock items.")
+      }
+      const keys = input.items.map((item) => "assetCode" in item
+        ? `unit:${requiredText(item.assetCode, "Unit ID").toLowerCase()}`
+        : `item:${requiredText(item.itemTypeId, "Asset Code")}`)
+      if (new Set(keys).size !== keys.length) {
+        throw new Error("Select each stock item only once.")
+      }
+      return withTransaction(pool, async (client) => {
+        await lockToolingAllocation(client, input.organizationId)
+        const destination = await findStore(client, input.organizationId, input.destinationStoreCode)
+        // Receiving stores choose their own rack/bin after the handover.
+        for (const item of input.items) {
+          const transfer = {
+            actorUserId: input.actorUserId,
+            destinationLocationId: destination.defaultLocationId,
+            destinationStoreCode: input.destinationStoreCode,
+            movedBy: input.movedBy,
+            organizationId: input.organizationId,
+            remark: input.remark,
+            sourceStoreCode: input.sourceStoreCode,
+          }
+          if ("assetCode" in item) {
+            await this.transferAssetAccountability({ ...transfer, assetCode: item.assetCode }, client)
+          } else {
+            await this.transferQuantity({ ...transfer, ...item }, client)
+          }
+        }
+        return { transferred: input.items.length }
+      })
     },
 
     async transferRequestedAssetsBatch(input: MutationIdentity & {

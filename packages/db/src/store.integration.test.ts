@@ -2844,6 +2844,54 @@ describe("Store requests", () => {
     expect(rows.find((row) => row.id === second.lineIds[0])?.status).toBe("Pending")
   })
 
+  test("transfers selected stock together and rolls back an invalid line", async () => {
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const rack = await store.createLocation({ code: `BULK-MAIN-${suffix}`, name: "Main rack",
+      organizationId, storeCode: "MAIN" })
+    const consumable = await store.createItemType({
+      ...(await createClassification("Bulk Transfer Consumable")),
+      assetType: "CONSUMABLE", organizationId, unit: "Nos",
+      identificationName: `Bulk Consumable ${suffix}`,
+    })
+    const equipment = await store.createItemType({
+      ...(await createClassification("Bulk Transfer Equipment")),
+      assetType: "NON_CONSUMABLE", organizationId, unit: "Nos",
+      identificationName: `Bulk Equipment ${suffix}`,
+    })
+    await store.receiveStock({ locationId: rack.id, organizationId, quantity: 10,
+      purchaseOrderLineId: (await createPurchaseOrder(consumable.id, 10, "10.00")).id })
+    const receipt = await store.receiveStock({ locationId: rack.id, organizationId, quantity: 2,
+      purchaseOrderLineId: (await createPurchaseOrder(equipment.id, 2, "100.00")).id })
+    const transfer = { organizationId, sourceStoreCode: "MAIN", destinationStoreCode: "QUALITY", remark: "Handover" }
+    await expect(departmentStore.transferStockResponsibility({ ...transfer,
+      items: [{ itemTypeId: consumable.id, quantity: 2 }, { assetCode: "missing-unit" }],
+    })).rejects.toThrow("Unit ID was not found")
+    const unchanged = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" })
+    expect(unchanged.consumables.find((item) => item.itemTypeId === consumable.id)?.availableQuantity).toBe("10")
+    await departmentStore.transferStockResponsibility({ ...transfer,
+      items: [{ itemTypeId: consumable.id, quantity: 3 }, ...receipt.assetCodes.map((assetCode) => ({ assetCode }))],
+    })
+    const quality = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "QUALITY" })
+    expect(quality.consumables.find((item) => item.itemTypeId === consumable.id)).toMatchObject({
+      availableQuantity: "3", companyQuantity: "10", storageLocations: "",
+    })
+    expect(quality.assets.filter((asset) => receipt.assetCodes.includes(asset.assetCode))).toHaveLength(2)
+    expect(quality.assets.filter((asset) => receipt.assetCodes.includes(asset.assetCode))
+      .every((asset) => !asset.storageLocation && asset.holderType === "STORE")).toBe(true)
+    await departmentStore.transferQuantity({ organizationId, sourceStoreCode: "QUALITY",
+      destinationStoreCode: "MAIN", itemTypeId: consumable.id, quantity: 1 })
+    await departmentStore.transferAssetAccountability({ organizationId, sourceStoreCode: "QUALITY",
+      destinationStoreCode: "MAIN", assetCode: receipt.assetCodes[0]! })
+    const main = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "MAIN" })
+    expect(main.consumables.find((item) => item.itemTypeId === consumable.id)?.availableQuantity).toBe("8")
+    expect(main.assets.find((asset) => asset.assetCode === receipt.assetCodes[0])?.storageLocation).toBeNull()
+    const returnedQuantity = await pool.query<{ location_id: string }>(
+      `SELECT location_id FROM store.stock_movements WHERE organization_id = $1
+       AND item_type_id = $2 AND movement_type = 'TRANSFER_IN' AND location_id = $3`,
+      [organizationId, consumable.id, location.id])
+    expect(returnedQuantity.rows).toHaveLength(1)
+  })
+
   test("routes a Unit ID between department Stores through Main", async () => {
     await pool.query(
       `INSERT INTO manufacturing.production_floors (organization_id, code, name)
@@ -3063,6 +3111,7 @@ describe("Store requests", () => {
     })
     await departmentStore.consumeQuantities({
       consumedOn: "2026-08-17", items: [{ itemTypeId: item.id, quantity: 10 }],
+      movedBy: "OP-0042",
       organizationId, storeCode: "cnc",
     })
 
@@ -3095,7 +3144,7 @@ describe("Store requests", () => {
       expect.objectContaining({ kind: "TRANSFER_OUT", quantity: "-10", storeName: main.store.name }),
       expect.objectContaining({ kind: "TRANSFER_IN", quantity: "+10", storeName: cnc.store.name }),
       expect.objectContaining({ kind: "CONSUMPTION", quantity: "-10",
-        storeName: cnc.store.name, usedOn: "2026-08-17" }),
+        storeName: cnc.store.name, usedOn: "2026-08-17", performedBy: "OP-0042" }),
     ]))
   })
 })
