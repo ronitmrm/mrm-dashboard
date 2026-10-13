@@ -258,12 +258,18 @@ export function DepartmentStoreForms({ action, assets, consumables, departments,
             <TextField label="Available Units" name="use_available_units" readOnly
               value={useItem ? `${useItem.availableQuantity} ${useItem.unit}` : ""}
               placeholder="Select Asset Code first" />
-          </> : selectedConsumables.map((item) => <div className="grid gap-2" key={item.itemTypeId}>
+          </> : selectedConsumables.map((item) => <FormGrid className="sm:col-span-2 xl:grid-cols-2" key={item.itemTypeId}>
             <input name="item_type_id" type="hidden" value={item.itemTypeId} />
-            <TextField label={`${item.typeCode} · ${item.assetName} · available ${item.availableQuantity} ${item.unit}`}
+            <TextField label="Asset Code" name={`use_asset_code_${item.itemTypeId}`} readOnly
+              value={`${item.typeCode} · ${item.assetName}`} />
+            <TextField label="Quantity used"
               name={`quantity_${item.itemTypeId}`} min="0.001" max={item.availableQuantity}
               step="0.001" type="number" required />
-          </div>)}
+            <TextField label="Storage Location" name={`use_storage_location_${item.itemTypeId}`} readOnly
+              value={item.storageLocations} placeholder="Not assigned" />
+            <TextField label="Available Units" name={`use_available_units_${item.itemTypeId}`} readOnly
+              value={`${item.availableQuantity} ${item.unit}`} />
+          </FormGrid>)}
           <TextField label="Operator ID" name="operator_id" value={operatorId} readOnly required />
           <TextField label="Used on" name="consumed_on" type="date" defaultValue={today} max={today} required />
           <TextField label="Remark" name="remark" />

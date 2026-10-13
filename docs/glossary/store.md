@@ -450,8 +450,9 @@ physical movements and return. Company on-hand is shown only in Main Store Stock
 Record use offers one available Consumable Asset Code, quantity, used-on date,
 the selected item's storage locations and available units, Operator ID and remark.
 Storage and availability come from the current Store's stock register and are
-read-only. Record multiple uses selects several available Asset
-Codes and records their quantities with the same date, operator and remark.
+read-only. Record multiple uses selects several available Asset Codes, shows
+each item's storage locations and available units separately, and records their
+quantities with the same date, operator and remark.
 Operator ID is automatically the signed-in account's ID and cannot be edited.
 The server uses the authenticated account when saving use; the authenticated
 recorder is also retained separately as the audit actor. Recording use reduces
