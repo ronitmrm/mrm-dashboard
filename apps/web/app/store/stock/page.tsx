@@ -83,6 +83,9 @@ export default async function StoreStockPage({
           : requestedMode === "adjust" &&
               storeActions.has("store.asset_movement.write")
             ? "adjust"
+          : requestedMode === "transfer" &&
+              storeActions.has("store.asset_movement.write")
+            ? "transfer"
           : "view"
   const orderItemId = firstValue(params.orderItemId)
   const requestedIssuanceId = firstValue(params.issuance_id)
@@ -150,7 +153,7 @@ export default async function StoreStockPage({
 
       {firstValue(params.saved) === "1" ? (
         <SectionCard role="status">
-          <CardContent className="py-4 text-sm">Unit ID loss recorded.</CardContent>
+          <CardContent className="py-4 text-sm">Store record saved.</CardContent>
         </SectionCard>
       ) : null}
 
@@ -229,6 +232,8 @@ export default async function StoreStockPage({
               <CardDescription>
                 {mode === "repair"
                   ? "Select physical Unit IDs, then continue to enter repair details and Suppliers for each unit."
+                  : mode === "transfer"
+                    ? "Select Consumable Asset Codes or Unit IDs, then choose the receiving Store and quantities."
                   : mode === "order"
                     ? "Select Asset Codes and quantities. The cheapest active Supplier quote is selected by default."
                   : mode === "request"
@@ -272,6 +277,11 @@ export default async function StoreStockPage({
                 </Button>
               ) : null}
               {storeActions.has("store.asset_movement.write") ? (
+                <Button asChild variant={mode === "transfer" ? "default" : "outline"}>
+                  <Link href="/store/stock?mode=transfer">Transfer responsibility</Link>
+                </Button>
+              ) : null}
+              {storeActions.has("store.asset_movement.write") ? (
                 <Button
                   asChild
                   variant={mode === "adjust" ? "default" : "outline"}
@@ -296,6 +306,8 @@ export default async function StoreStockPage({
             <form action="/store/stock/repair" id={actionFormId} method="get">
               <input name="issuance_id" type="hidden" value={repairIssuanceId} />
             </form>
+          ) : mode === "transfer" ? (
+            <form action="/store/stock/transfer" id={actionFormId} method="get" />
           ) : null}
 
           <OperationalTable
@@ -306,7 +318,9 @@ export default async function StoreStockPage({
                 ? undefined
                 : {
                     checkboxName:
-                      mode === "request"
+                      mode === "transfer"
+                        ? "transfer_item"
+                        : mode === "request"
                         ? "itemTypeId"
                         : mode === "repair"
                           ? "asset_code"
@@ -370,7 +384,14 @@ export default async function StoreStockPage({
                   <TableRow key={item.rowKey}>
                     {mode !== "view" && mode !== "adjust" ? (
                       <TableCell>
-                        {mode === "repair" ? (
+                        {mode === "transfer" ? (
+                          (item.physicalUnit?.isMainAccountable ||
+                            (item.trackingMode === "CONSUMABLE" && Number(item.availableStock) > 0)) ? (
+                            <input aria-label={`Select ${item.displayedCode} for transfer`}
+                              className="size-4 accent-primary" form={actionFormId} name="transfer_item"
+                              type="checkbox" value={item.physicalUnit ? `unit:${item.displayedCode}` : `item:${item.id}`} />
+                          ) : null
+                        ) : mode === "repair" ? (
                           canSelectRepairUnit ? (
                             <input
                               aria-label={`Select Unit ID ${item.displayedCode} for repair`}
@@ -560,9 +581,9 @@ export default async function StoreStockPage({
               orderDate={today}
               remark={requestNumber ? `For ${requestNumber}` : ""}
             />
-          ) : mode === "repair" ? (
+          ) : mode === "repair" || mode === "transfer" ? (
             <Button className="w-fit" form={actionFormId} type="submit">
-              Continue with Selected Unit IDs
+              {mode === "transfer" ? "Continue with Selected Items" : "Continue with Selected Unit IDs"}
             </Button>
           ) : null}
 

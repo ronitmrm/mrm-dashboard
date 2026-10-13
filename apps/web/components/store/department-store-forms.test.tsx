@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { expect, test, vi } from "vitest"
 
@@ -17,6 +18,28 @@ vi.mock("@/app/department-store/actions", () => ({
 
 import { DepartmentStoreForms } from "./department-store-forms"
 
+const emptyStoreProps = {
+  assets: [], consumables: [], departments: [], gaugeSets: [], machines: [],
+  storageAssets: [], storageLocations: { defaults: [], locations: [] }, stores: [],
+  store: { id: "cnc", code: "CNC", name: "CNC Store", kind: "PRODUCTION",
+    defaultLocationId: "cnc-default", productionFloorCode: "cnc" },
+  today: "2026-10-12", vendors: [],
+} satisfies Omit<ComponentProps<typeof DepartmentStoreForms>, "action">
+
+test("returns omit receiving storage and single use offers editable operator entry", () => {
+  const quantity = renderToStaticMarkup(<DepartmentStoreForms {...emptyStoreProps} action="quantity" />)
+  const accountability = renderToStaticMarkup(<DepartmentStoreForms {...emptyStoreProps} action="accountability" />)
+  expect(quantity + accountability).not.toContain('name="destination_location_id"')
+  expect(quantity + accountability).not.toContain("Storage Location")
+  const use = renderToStaticMarkup(<DepartmentStoreForms {...emptyStoreProps} action="consume-single" />)
+  expect(use).toContain("Asset Code")
+  expect(use).toContain('name="item_type_id"')
+  expect(use).toContain('name="consumed_on"')
+  const operator = use.match(/<input[^>]*name="operator_id"[^>]*>/)?.[0]
+  expect(operator).toContain('required=""')
+  expect(operator).not.toMatch(/readonly/i)
+})
+
 test("offers only local storage controls for an assigned Unit ID", () => {
   const html = renderToStaticMarkup(
     <DepartmentStoreForms
@@ -26,7 +49,6 @@ test("offers only local storage controls for an assigned Unit ID", () => {
       departments={[]}
       gaugeSets={[]}
       machines={[]}
-      recorderId="storekeeper"
       storageAssets={[{ assetCode: "NC459-0001", assetName: "Crate Trolley" }]}
       storageLocations={{
         defaults: [],
