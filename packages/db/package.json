@@ -26,17 +26,10 @@
     "vitest": "4.1.10"
   },
   "exports": {
-    "./iso-workflow-domain": "./src/iso-workflow-domain.ts",
-    "./risk-thinking-domain": "./src/risk-thinking-domain.ts",
-    "./customer-satisfaction-domain": "./src/customer-satisfaction-domain.ts",
-    "./sipoc-domain": "./src/sipoc-domain.ts",
-    "./interested-parties-domain": "./src/interested-parties-domain.ts",
     "./job-card-progress": "./src/job-card-progress.ts",
     "./rejection-domain": "./src/rejection-domain.ts",
     "./branding-domain": "./src/branding-domain.ts",
     "./document-control-domain": "./src/document-control-domain.ts",
-    "./iso-analysis-domain": "./src/iso-analysis-domain.ts",
-    "./management-review-domain": "./src/management-review-domain.ts",
     "./quality-parameter-code": "./src/quality-parameter-code.ts",
     ".": "./src/index.ts",
     "./commercial-design-domain": "./src/commercial-design-domain.ts",

@@ -21,7 +21,6 @@ type CommercialDesignPurpose =
   | "internal_drawing"
 
 export type PendingUploadIntent =
-  | { kind: "iso-customer-satisfaction"; reportId: string }
   | {
       enquiryId: string
       enquiryItemId?: string
@@ -85,8 +84,6 @@ export function parsePendingUploadIntent(value: unknown): PendingUploadIntent {
   const input = object(value)
   const kind = text(input.kind, "kind")
   switch (kind) {
-    case "iso-customer-satisfaction":
-      return { kind, reportId: text(input.reportId, "reportId") }
     case "commercial-enquiry-item": {
       const operation = text(input.operation, "operation")
       if (operation !== "create" && operation !== "update") {

@@ -8,7 +8,6 @@ import {
   authorizeRecruitmentCandidateArtifactTarget,
   authorizeStoreItemTypeArtifactTarget,
   authorizeStoreSupplierPriceArtifactTarget,
-  authorizeSatisfactionUpload,
 } from "@workspace/db"
 import type { PoolClient } from "pg"
 
@@ -123,23 +122,6 @@ export async function authorizePendingUploadIntent(
 ) {
   const actorUserId = authorization.userId
   switch (intent.kind) {
-    case "iso-customer-satisfaction": {
-      const organizationId = await organizationForCode(client, "MRMPL")
-      await authorizeSatisfactionUpload(
-        client,
-        {
-          organizationId,
-          userId: actorUserId,
-          canManage: authorization.grantedCapabilities.has(
-            "iso.satisfaction.manage"
-          ),
-        },
-        intent.reportId,
-        undefined,
-        options.finalizing === true
-      )
-      return organizationId
-    }
     case "commercial-enquiry-item": {
       requireCapability(
         authorization,
@@ -369,29 +351,6 @@ export function validatePendingUploadBytes(input: {
     throw new Error("Upload exceeds the size limit for this attachment.")
   }
   switch (intent.kind) {
-    case "iso-customer-satisfaction": {
-      if (!/\.(pdf|xlsx|png|jpe?g)$/i.test(fileName))
-        throw new Error(
-          "Satisfaction report must be a PDF, Excel workbook, JPG or PNG."
-        )
-      const validated = validateUserAttachment({
-        bytes,
-        fileName,
-        purpose: "purchase-order",
-      })
-      const extension = path.extname(fileName).toLowerCase()
-      return {
-        ...validated,
-        mediaType:
-          extension === ".pdf"
-            ? "application/pdf"
-            : extension === ".xlsx"
-              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              : extension === ".png"
-                ? "image/png"
-                : "image/jpeg",
-      }
-    }
     case "commercial-enquiry-import": {
       const rows = parseEnquiryImportFile(bytes, fileName)
       if (!rows.length) throw new Error("Template has no line items.")

@@ -16,7 +16,8 @@ Only one editable draft exists at a time. Final release freezes metadata and
 exact PDF bytes; released revisions cannot be overwritten or deleted. A draft
 never replaces the current release. Release takes effect immediately. Document
 control requires QA HOD submission, responsible Department Manager approval and
-QA HOD final release; see `iso-documents.md`.
+QA HOD final release. Control metadata, including the responsible role and
+content access, is edited on the document’s Document Control tab.
 
 ISO Document → Controlled Document Register lists the latest released revision
 of every controlled document. Authoring and all revision history remain under
@@ -180,3 +181,31 @@ published version. Document Templates remains the authoring and retained-history
   There is no anonymous PDF delivery or automatic distribution.
 
 - Visual Guide has exactly two fixed entries per selected language: Bad Picture/Bad Text and Good Picture/Good Text. Symbols, order and format are locked; only pictures and captions are editable. It cannot mix with other Work Instruction formats.
+
+## Lifecycle and ownership
+
+- Quality Assurance HOD creates and revises documents, manages control metadata,
+  submits drafts and performs final release.
+- The responsible Department Manager approves or rejects documents for their
+  own department. Rejection returns the revision to Draft with remarks.
+- Final release is a separate Quality Assurance action. It takes effect
+  immediately and its date is the revision date.
+- Revision states are `Draft`, `Pending Approval`, `Approved`, `Released` and
+  `Superseded`. A released revision is immutable.
+- Initial release is revision `00`; later revisions are `01`, `02`, and so on.
+  The letter `R` is never displayed.
+- New permanent document numbers are organization-wide, sequential and
+  immutable: `MRM-QA-###`. Existing numbers are preserved. Related variants may
+  use `MRM-QA-###-##`. Numbers are assigned only by final release and are never
+  reused or manually changed.
+- Every later revision requires a change reason. All released and superseded
+  revisions remain available permanently.
+- The audit trail is append-only and records each create, edit, submit,
+  approve, reject, release, revision, status, ownership, department and record
+  location change with actor, timestamp, remarks and before/after state. Normal
+  viewing is not audited.
+
+Documents may use MRM structured templates or a controlled file upload,
+depending on type. Primary types are SOP/Procedure, Policy/Manual, Work
+Instruction, Form/Format, Plan, Register/List, Checklist, Technical Document,
+External Document and Other Controlled Document.

@@ -1,7 +1,7 @@
 import { brandingType } from "@/lib/branding/server"
 import { attachmentContentDisposition } from "@/lib/attachment-viewer"
 import { revisionLabel } from "@workspace/db/branding-domain"
-import { withDocumentContentAccess } from "@/lib/iso-document/server"
+import { withDocumentContentAccess } from "@/lib/branding/document-control"
 export async function GET(
   request: Request,
   {
@@ -17,7 +17,7 @@ export async function GET(
       documentId: id,
       type,
       draft: false,
-      returnPath: `/iso-document/documents/${id}`,
+      returnPath: `/branding/${type}/${id}`,
     },
     async ({ repository, organizationId }) => {
       const pdf = await repository.pdf(organizationId, type, id, revisionId)

@@ -9,7 +9,7 @@ import {
   decideDocumentApproval,
   releaseDocumentRevision,
   submitDocumentRevision,
-} from "@/app/iso-document/documents/actions"
+} from "@/app/branding/document-control-actions"
 import type { BrandingType } from "@workspace/db/branding-domain"
 import type { DocumentWorkflowState } from "@workspace/db/document-control-domain"
 import { Textarea } from "@workspace/ui/components/textarea"

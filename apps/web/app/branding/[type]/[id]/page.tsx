@@ -1,3 +1,4 @@
+import { DocumentControlMetadataForm } from "@/components/branding/document-control-metadata-form"
 import { BrandingBookContent } from "@/components/branding/book-content"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -36,7 +37,7 @@ import { BrandingIssueControls } from "@/components/branding/issue-controls"
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
-import { isoDocumentCapabilities } from "@/lib/auth/iso-document-capabilities"
+import { documentControlCapabilities } from "@/lib/auth/document-control-capabilities"
 
 export const maxDuration = 60
 
@@ -53,26 +54,27 @@ export default async function BrandingDocumentPage({
   const { document, canWrite, controlAccess } = await withBranding(
     type,
     "read",
-    async ({ repository, organizationId, userId }) => {
+    async ({ repository, organizationId, userId, permittedDepartments }) => {
       const granted = new Set(
         await listGrantedCapabilities(userId, [
           brandingCapability(type, "write"),
-          ...Object.values(isoDocumentCapabilities),
+          ...Object.values(documentControlCapabilities),
         ])
       )
       return {
-        document: await repository.get(organizationId, type, id),
+        document: await repository.get(organizationId, type, id, permittedDepartments),
         canWrite: granted.has(brandingCapability(type, "write")),
         controlAccess: {
-          canManage: granted.has(isoDocumentCapabilities.manage),
-          canApprove: granted.has(isoDocumentCapabilities.approve),
-          canRelease: granted.has(isoDocumentCapabilities.release),
+          canManage: granted.has(documentControlCapabilities.manage),
+          canApprove: granted.has(documentControlCapabilities.approve),
+          canRelease: granted.has(documentControlCapabilities.release),
         },
       }
     }
   )
   if (!document?.revisions.length) notFound()
-  const availableRevisions = document.revisions.filter(
+  const { revisions, ...controlMetadata } = document
+  const availableRevisions = revisions.filter(
     (revision) =>
       type !== "notice" || !document.number || revision.state === "issued"
   )
@@ -154,8 +156,11 @@ export default async function BrandingDocumentPage({
             <TabsTrigger value="edit">Data Entry</TabsTrigger>
           ) : null}
           <TabsTrigger value="content">Saved Content</TabsTrigger>
+          {controlAccess.canManage ? (
+            <TabsTrigger value="control">Document Control</TabsTrigger>
+          ) : null}
           {type !== "notice" ||
-          document.revisions.filter((revision) => revision.state === "issued")
+          revisions.filter((revision) => revision.state === "issued")
             .length > 1 ? (
             <TabsTrigger value="history">
               {type === "notice" ? "Earlier PDFs" : "Revision History"}
@@ -189,8 +194,13 @@ export default async function BrandingDocumentPage({
             )}
           </TabsContent>
         ) : null}
+        {controlAccess.canManage ? (
+          <TabsContent value="control">
+            <DocumentControlMetadataForm documentId={id} initial={controlMetadata} />
+          </TabsContent>
+        ) : null}
         <TabsContent value="content" className="grid gap-4">
-          {canWrite && draft?.id === selected.id ? (
+          {draft?.id === selected.id ? (
             <ActionToolbar>
               <span className="text-sm text-muted-foreground">
                 {type === "controlled-document"
