@@ -20,13 +20,14 @@ import { DepartmentStoreForms } from "./department-store-forms"
 
 const emptyStoreProps = {
   assets: [], consumables: [], departments: [], gaugeSets: [], machines: [],
+  operatorId: "signed-in-user-id",
   storageAssets: [], storageLocations: { defaults: [], locations: [] }, stores: [],
   store: { id: "cnc", code: "CNC", name: "CNC Store", kind: "PRODUCTION",
     defaultLocationId: "cnc-default", productionFloorCode: "cnc" },
   today: "2026-10-12", vendors: [],
 } satisfies Omit<ComponentProps<typeof DepartmentStoreForms>, "action">
 
-test("returns omit receiving storage and single use offers editable operator entry", () => {
+test("returns omit receiving storage and single use shows the signed-in operator and stock facts", () => {
   const quantity = renderToStaticMarkup(<DepartmentStoreForms {...emptyStoreProps} action="quantity" />)
   const accountability = renderToStaticMarkup(<DepartmentStoreForms {...emptyStoreProps} action="accountability" />)
   expect(quantity + accountability).not.toContain('name="destination_location_id"')
@@ -37,7 +38,10 @@ test("returns omit receiving storage and single use offers editable operator ent
   expect(use).toContain('name="consumed_on"')
   const operator = use.match(/<input[^>]*name="operator_id"[^>]*>/)?.[0]
   expect(operator).toContain('required=""')
-  expect(operator).not.toMatch(/readonly/i)
+  expect(operator).toContain('value="signed-in-user-id"')
+  expect(operator).toMatch(/readonly/i)
+  expect(use).toContain("Storage Location")
+  expect(use).toContain("Available Units")
 })
 
 test("offers only local storage controls for an assigned Unit ID", () => {
@@ -49,6 +53,7 @@ test("offers only local storage controls for an assigned Unit ID", () => {
       departments={[]}
       gaugeSets={[]}
       machines={[]}
+      operatorId="signed-in-user-id"
       storageAssets={[{ assetCode: "NC459-0001", assetName: "Crate Trolley" }]}
       storageLocations={{
         defaults: [],

@@ -129,7 +129,7 @@ export async function consumeDepartmentQuantityAction(
         quantity: Number(required(formData, `quantity_${itemTypeId}`)),
       })),
       consumedOn,
-      movedBy: required(formData, "operator_id"),
+      movedBy: context.actorUserId,
       remark: optional(formData, "remark"),
     })
   }, "store.asset_movement.write", "/store/movement")

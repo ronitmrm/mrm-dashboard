@@ -448,11 +448,14 @@ rows do not increase the production Store's accountable stock. The receiving
 Store can record its own storage location; the Responsible Store still controls
 physical movements and return. Company on-hand is shown only in Main Store Stock.
 Record use offers one available Consumable Asset Code, quantity, used-on date,
-Operator ID and remark. Record multiple uses selects several available Asset
+the selected item's storage locations and available units, Operator ID and remark.
+Storage and availability come from the current Store's stock register and are
+read-only. Record multiple uses selects several available Asset
 Codes and records their quantities with the same date, operator and remark.
-Operator ID identifies the person using stock; the authenticated recorder is
-retained separately as the audit actor. Recording use reduces local and company
-stock by the used quantity; unused stock remains available.
+Operator ID is automatically the signed-in account's ID and cannot be edited.
+The server uses the authenticated account when saving use; the authenticated
+recorder is also retained separately as the audit actor. Recording use reduces
+local and company stock by the used quantity; unused stock remains available.
 Stock also starts transfers, physical moves, adjustments, Unit ID history,
 repair orders, and calibration service. Stock selection can include multiple
 eligible Unit IDs for repair or calibration service; each calibration Unit ID
