@@ -3080,16 +3080,45 @@ function DashboardShell({
             <h1 className="truncate text-base font-semibold">
               {selectedTab.title}
             </h1>
-            <p className="truncate text-xs text-muted-foreground">
-              <span>
-                {isAllProductionUnitsTab
-                  ? "All Production Units"
-                  : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "PostgreSQL records"}`}
-              </span>
-              {planningRecalculatedAt && view.updatedAt ? (
-                <span> - Workbook Updated {formatDate(view.updatedAt)}</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <p className="text-muted-foreground">
+                <span>
+                  {isAllProductionUnitsTab
+                    ? "All Production Units"
+                    : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "PostgreSQL records"}`}
+                </span>
+                {planningRecalculatedAt && view.updatedAt ? (
+                  <span> - Workbook Updated {formatDate(view.updatedAt)}</span>
+                ) : null}
+              </p>
+              {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
+                <div
+                  className="flex min-w-0 flex-wrap items-center gap-2"
+                  role="status"
+                  aria-atomic="true"
+                  aria-live="polite"
+                >
+                  <div className="flex min-w-0 flex-col gap-1">
+                    {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
+                    {dashboardPartialCoverageNotice ? (
+                      <p className="text-muted-foreground">
+                        {dashboardPartialCoverageNotice}
+                      </p>
+                    ) : null}
+                  </div>
+                  {dashboardDeliveryState.lastError ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={retryDashboardDelivery}
+                    >
+                      Retry
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
-            </p>
+            </div>
           </div>
 
           <fieldset className="contents" disabled={Boolean(processingAction)}>
@@ -3119,33 +3148,6 @@ function DashboardShell({
               >
                 {actionStatus.message}
               </Badge>
-            ) : null}
-            {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
-              <div
-                className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
-                role="status"
-                aria-atomic="true"
-                aria-live="polite"
-              >
-                <div className="min-w-0 flex-1 space-y-1">
-                  {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
-                  {dashboardPartialCoverageNotice ? (
-                    <p className="text-muted-foreground">
-                      {dashboardPartialCoverageNotice}
-                    </p>
-                  ) : null}
-                </div>
-                {dashboardDeliveryState.lastError ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={retryDashboardDelivery}
-                  >
-                    Retry
-                  </Button>
-                ) : null}
-              </div>
             ) : null}
             {isDashboardUnavailable ? (
               <DashboardErrorState
@@ -3907,9 +3909,13 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
                 Automatically.
               </div>
             ) : null}
-            <div className="min-w-0 rounded-lg border">
-              <OperationalTable excelFilters>
-                <TableHeader className="sticky top-0 z-10 bg-background">
+            <div className="min-w-0">
+              <OperationalTable
+                excelFilters
+                fitViewport
+                containerClassName="rounded-lg border [--table-viewport-bottom:3.25rem]"
+              >
+                <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-28">JC No.</TableHead>
                     <TableHead className="min-w-32">FG PO No.</TableHead>
