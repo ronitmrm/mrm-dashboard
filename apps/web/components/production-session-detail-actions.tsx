@@ -8,6 +8,7 @@ export type ProductionSessionDetailAction =
   | "downtimeEnd"
   | "correctClose"
   | "correctStart"
+  | "correctStartCount"
   | "rejection"
   | "lateDowntime"
   | "lateRejection"
@@ -27,6 +28,12 @@ export function ProductionSessionDetailActions({
       .toLowerCase() === "closed"
   const hasOpenDowntime = session.hasOpenDowntime === true
   const hasOpenBreakdownDowntime = session.hasOpenBreakdownDowntime === true
+  const countCorrection = String(session.measurementMethod).toLowerCase() === "counter" ? (
+    <Button variant="outline" onClick={() => onAction("correctStartCount")}>
+      <Pencil data-icon="inline-start" />
+      Correct start count
+    </Button>
+  ) : null
 
   if (closed) {
     return (
@@ -35,6 +42,7 @@ export function ProductionSessionDetailActions({
           <Pencil />
           Correct start date / time
         </Button>
+        {countCorrection}
         <Button onClick={() => onAction("correctClose")}>
           <Pencil />
           {session.outputPending === true
@@ -60,6 +68,7 @@ export function ProductionSessionDetailActions({
           <Pencil />
           Correct start date / time
         </Button>
+        {countCorrection}
         <Button
           disabled={hasOpenDowntime && !hasOpenBreakdownDowntime}
           title={

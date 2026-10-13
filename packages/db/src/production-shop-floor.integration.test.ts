@@ -1020,6 +1020,45 @@ describe("production and shop-floor workflows", () => {
       .filter((row) => row.jobCard === cncJobCard)
     expect(revisedRejects.find((row) => row.id === editable.id)).toMatchObject({ pieces: 4, kg: 2 })
     expect(revisedRejects.find((row) => row.id !== editable.id)).toMatchObject({ pieces: 7 })
+
+    const readSession = async (sessionId: string) => (await repository.readProductionSessions({
+      organizationId, productionFloorCode: "cnc", sessionId,
+    })).rows[0]!
+    const correctCount = async (sessionId: string, startCount: number) => repository.correctProductionSessionStartCount({
+      organizationId, productionFloorCode: "cnc", actorUserId: actor, sessionId, startCount,
+      expectedRowVersion: Number((await readSession(sessionId)).rowVersion), correctionReason: "Wrong counter reading",
+    })
+    const beforeCount = await readSession(first.id)
+    await correctCount(first.id, 10_100)
+    const afterCount = await readSession(first.id)
+    expect(afterCount).toMatchObject({ startCount: 10_100, endCount: 10_850, totalPieces: 750,
+      goodPieces: 743, rejectedPieces: 7, targetPieces: beforeCount.targetPieces,
+      runtimeMinutes: beforeCount.runtimeMinutes, endReason: beforeCount.endReason, status: "closed" })
+    const correctedEntry = (await pool.query(`SELECT entry.quantity_good::int AS good, entry.source_payload
+      FROM manufacturing.production_entries entry JOIN manufacturing.production_sessions session
+        ON session.production_entry_id = entry.id WHERE session.id = $1`, [first.id])).rows[0]!
+    expect(correctedEntry).toMatchObject({ good: 743,
+      source_payload: { startCount: 10_100, totalPieces: 750, actualQty: 743, outputQty: 743, rejectQty: 7 } })
+    expect(await readSession(second.id)).toMatchObject({ startCount: 10_850, endCount: 10_900, carriedFromSessionId: first.id })
+    await expect(correctCount(first.id, 10_844)).rejects.toThrow("Rejected pieces cannot exceed")
+    expect(await readSession(first.id)).toMatchObject({ startCount: 10_100, rowVersion: afterCount.rowVersion })
+
+    const next = await repository.startProductionSession({
+      organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard, machineNumber: cncMachine,
+      measurementMethod: "counter", operationSetupCode: "1", operatorCode: secondOperator,
+      pieceWeightGrams: 489, startedAt: "2026-08-15T16:00:00+05:30",
+    })
+    expect(next).toMatchObject({ startCount: 10_900, carriedFromSessionId: second.id })
+    await correctCount(next.id, 0)
+    expect(await readSession(next.id)).toMatchObject({ startCount: 0, carriedFromSessionId: null, status: "open", goodPieces: 0 })
+    const countAudit = (await pool.query(`SELECT actor_user_id, before_state, after_state, reason
+      FROM audit.events WHERE target_id = $1 AND metadata->>'correctionType' = 'start_count'`, [next.id])).rows
+    expect(countAudit).toMatchObject([{ actor_user_id: actor, reason: "Wrong counter reading",
+      before_state: { start_count: 10_900, carried_from_session_id: second.id },
+      after_state: { start_count: 0, carried_from_session_id: null } }])
+    await repository.closeProductionSession({ organizationId, sessionId: next.id,
+      endCount: 20, endedAt: "2026-08-15T17:00:00+05:30", endReason: "shift_end" })
+    expect(await readSession(next.id)).toMatchObject({ totalPieces: 20, goodPieces: 20 })
   })
 
   test("allows delayed weight and missed events to correct a closed session", async () => {
