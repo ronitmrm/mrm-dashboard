@@ -89,6 +89,7 @@ export async function renderDepartmentStoreWorkspace(input: {
       departments={options.departments}
       departmentAllocations={departmentAllocations}
       machines={options.machines}
+      operatorId={session.user.id}
       repairOrders={equipmentRepairOrders}
       today={istDateValue()}
       vendors={options.vendors}

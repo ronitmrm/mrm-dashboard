@@ -17,7 +17,7 @@ type DepartmentAllocations = Awaited<ReturnType<ReturnType<typeof createDepartme
 type RepairOrders = Awaited<ReturnType<ReturnType<typeof createStoreRepository>["listPurchaseOrders"]>>
 
 export function DepartmentStoreRegister({ action, basePath, canRepair, canWrite,
-  departmentAllocations, departments, machines, repairOrders, saved, selectedItemIds,
+  departmentAllocations, departments, machines, operatorId, repairOrders, saved, selectedItemIds,
   selectMode: requestedSelectMode, today, vendors, view, workspace,
 }: {
   action?: DepartmentStoreAction
@@ -27,6 +27,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canWrite,
   departmentAllocations: DepartmentAllocations
   departments: Array<{ code: string; id: string; name: string }>
   machines: Array<{ id: string; machineNumber: string; name: string | null }>
+  operatorId: string
   repairOrders: RepairOrders
   saved: boolean
   selectedItemIds?: string[]
@@ -83,7 +84,7 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canWrite,
         ]}
         consumables={consumables} departments={departments} gaugeSets={gaugeSets}
         storageLocations={workspace.storageLocations}
-        machines={machines} selectedItemIds={selectedItemIds} store={store}
+        machines={machines} operatorId={operatorId} selectedItemIds={selectedItemIds} store={store}
         stores={stores} today={today} vendors={vendors} /> : null}
       <SectionCard>
         <CardHeader className="gap-3">
