@@ -41,6 +41,7 @@ import {
 
 type OperationalTableProps = React.ComponentProps<"table"> & {
   containerClassName?: string
+  fitViewport?: boolean
   toolbarStart?: React.ReactNode
   excelFilters?: boolean
   filteredSelection?: {
@@ -189,6 +190,7 @@ function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
 function OperationalTable({
   className,
   containerClassName,
+  fitViewport = false,
   toolbarStart,
   excelFilters = true,
   filteredSelection,
@@ -203,6 +205,26 @@ function OperationalTable({
   ...props
 }: OperationalTableProps) {
   const tableRef = React.useRef<HTMLTableElement>(null)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const container = containerRef.current
+    if (!fitViewport || !container) return
+    const measure = () => {
+      const top = container.getBoundingClientRect().top + window.scrollY
+      container.style.setProperty("--table-viewport-top", `${top}px`)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(document.body)
+    observer.observe(container.parentElement!)
+    window.addEventListener("resize", measure)
+    measure()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", measure)
+      container.style.removeProperty("--table-viewport-top")
+    }
+  }, [fitViewport, state])
   const automaticFilterStorageId = React.useId()
   const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
   const hydratedFilterSchemaRef = React.useRef<string | null>(null)
@@ -632,8 +654,12 @@ function OperationalTable({
       ) : null}
       <div
         data-slot="table-container"
+        ref={containerRef}
+        tabIndex={fitViewport ? 0 : undefined}
         className={cn(
           "relative max-h-[calc(100svh-var(--header-height)-8rem)] w-full overflow-auto",
+          fitViewport &&
+            "max-h-[max(12rem,calc(100dvh-var(--table-viewport-top,0px)-var(--table-viewport-bottom,1.5rem)))]",
           containerClassName
         )}
       >

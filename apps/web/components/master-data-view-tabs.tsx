@@ -7,6 +7,7 @@ import { type ReactNode, useEffect } from "react"
 
 import { DataDownloadButton } from "@/components/data-download-button"
 import { ActionToolbar } from "@/components/ui/golden-patterns"
+import { PageActions } from "@/components/ui/page-actions"
 
 import { masterDataTransferAction } from "@/lib/master-data-transfer"
 import { MasterDataUnsavedGuard } from "./master-data-unsaved-guard"
@@ -79,22 +80,24 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
     <>
       <MasterDataUnsavedGuard enabled={props.activeView === "dataEntry"} />
       {transferAction ? (
-        <ActionToolbar className="w-full">
-          {transferAction === "csvImport" ? props.csvDownloadAction : null}
-          {transferAction === "csvImport" ? props.csvImportAction : null}
-          {transferAction === "export" && props.exportAction
-            ? props.exportAction
-            : null}
-          {transferAction === "export" &&
-          !props.exportAction &&
-          props.onExport ? (
-            <DataDownloadButton
-              disabled={props.exportDisabled}
-              label="Download CSV"
-              onClick={props.onExport}
-            />
-          ) : null}
-        </ActionToolbar>
+        <PageActions>
+          <ActionToolbar className="w-full">
+            {transferAction === "csvImport" ? props.csvDownloadAction : null}
+            {transferAction === "csvImport" ? props.csvImportAction : null}
+            {transferAction === "export" && props.exportAction
+              ? props.exportAction
+              : null}
+            {transferAction === "export" &&
+            !props.exportAction &&
+            props.onExport ? (
+              <DataDownloadButton
+                disabled={props.exportDisabled}
+                label="Download CSV"
+                onClick={props.onExport}
+              />
+            ) : null}
+          </ActionToolbar>
+        </PageActions>
       ) : null}
       <div className="flex flex-wrap items-center border-b">
         <Link

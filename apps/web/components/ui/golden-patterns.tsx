@@ -22,6 +22,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import { cn } from "@workspace/ui/lib/utils"
+import { PageActions } from "./page-actions"
 
 import {
   StandardState,
@@ -86,22 +87,28 @@ function PageHeader({
   title: ReactNode
 }) {
   return (
-    <header
-      className={cn(
-        actions || badge
-          ? "flex w-full min-w-0 flex-wrap items-center justify-end gap-2"
-          : "sr-only",
-        className
-      )}
-      data-slot="page-header"
-    >
-      <div className="sr-only">
-        <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
-      </div>
-      {badge ? <div className="mr-auto">{badge}</div> : null}
-      {actions ? <ActionToolbar>{actions}</ActionToolbar> : null}
-    </header>
+    <>
+      <header
+        className={cn(
+          badge
+            ? "flex w-full min-w-0 flex-wrap items-center justify-end gap-2"
+            : "sr-only",
+          className
+        )}
+        data-slot="page-header"
+      >
+        <div className="sr-only">
+          <h1>{title}</h1>
+          {description ? <p>{description}</p> : null}
+        </div>
+        {badge ? <div className="mr-auto">{badge}</div> : null}
+      </header>
+      {actions ? (
+        <PageActions>
+          <ActionToolbar>{actions}</ActionToolbar>
+        </PageActions>
+      ) : null}
+    </>
   )
 }
 
