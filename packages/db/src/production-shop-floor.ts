@@ -2687,6 +2687,100 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async correctProductionSessionStartCount(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: string
+      sessionId: string
+      startCount: number
+      expectedRowVersion: number
+      correctionReason: string
+      enteredRole?: string
+    }) {
+      const startCount = nonNegativeWholeNumber(input.startCount, "Start count")
+      const reason = requiredText(input.correctionReason, "Correction reason")
+      const enteredRole = productionEntryRole(input.enteredRole ?? "authorized_staff")
+      if (enteredRole === "machinist") throw new Error("Machinist cannot correct a production session.")
+      return transaction(pool, async client => {
+        await lockProductionSessionMachine(client, input)
+        const result = await client.query<{
+          work_order_id: string; operation_setup_id: string; machine_id: string
+          production_entry_id: string; measurement_method: ProductionMeasurementMethod
+          status: "open" | "closed"; start_count: string | null; end_count: string | null
+          total_pieces: string | null; quantity_good: string; quantity_rejected: string
+          production_floor_code: ProductionFloorCode; row_version: string
+          source_payload: Record<string, unknown>; snapshot: Record<string, unknown>
+        }>(`SELECT session.work_order_id, session.operation_setup_id, session.machine_id,
+            session.production_entry_id, session.measurement_method, session.status,
+            session.start_count, session.end_count, session.total_pieces,
+            session.quantity_good, session.quantity_rejected, session.row_version,
+            session.source_payload, floor.code AS production_floor_code, to_jsonb(session) AS snapshot
+          FROM manufacturing.production_sessions session
+          JOIN catalog.machines machine ON machine.id = session.machine_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          WHERE session.id = $1 AND session.organization_id = $2 AND floor.code = $3
+            AND session.reversed_at IS NULL
+          FOR UPDATE OF session`,
+          [input.sessionId, input.organizationId, normalizeProductionFloorCode(input.productionFloorCode)])
+        const current = result.rows[0]
+        if (!current || Number(current.row_version) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start count.")
+        }
+        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
+          throw new Error("Quality can correct production sessions only in CNC.")
+        }
+        if (current.measurement_method !== "counter") {
+          throw new Error("Start count can be corrected only for a machine-counter session.")
+        }
+        if (startCount === Number(current.start_count)) {
+          throw new Error("Enter a different start count to save a correction.")
+        }
+        const output = current.status === "closed"
+          ? calculateProductionSessionOutput({
+              measurementMethod: "counter", startCount,
+              endCount: nonNegativeWholeNumber(current.end_count === null ? undefined : Number(current.end_count), "End count"),
+              rejectedPieces: Number(current.quantity_rejected),
+            })
+          : null
+        if (output) {
+          await assertEarlyDownstreamWip(client, {
+            workOrderId: current.work_order_id, operationSetupId: current.operation_setup_id,
+            machineId: current.machine_id, excludeProductionEntryId: current.production_entry_id,
+            requestedTotalPieces: output.totalPieces,
+          })
+        }
+        const sourcePayload = {
+          ...current.source_payload, startCount, carriedFromSessionId: null,
+          correctionReason: reason, correctedAt: new Date().toISOString(),
+          ...(output ? {
+            actualQty: output.goodPieces, outputQty: output.goodPieces,
+            rejectQty: output.rejectedPieces, totalPieces: output.totalPieces,
+          } : {}),
+        }
+        await client.query(`UPDATE manufacturing.production_entries
+          SET quantity_good = $1, source_payload = $2
+          WHERE id = $3 AND organization_id = $4`,
+          [output?.goodPieces ?? current.quantity_good, sourcePayload,
+            current.production_entry_id, input.organizationId])
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(`
+          UPDATE manufacturing.production_sessions
+          SET start_count = $1, carried_from_session_id = NULL, total_pieces = $2,
+            quantity_good = $3, source_payload = $4, updated_at = now(), row_version = row_version + 1
+          WHERE id = $5 RETURNING to_jsonb(production_sessions) AS snapshot`,
+          [startCount, output?.totalPieces ?? current.total_pieces,
+            output?.goodPieces ?? current.quantity_good, sourcePayload, input.sessionId])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+          target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
+          VALUES ($1, 'production.session.corrected', 'manufacturing', 'production_sessions', $2, $3, $4, $5, $6,
+            jsonb_build_object('correctionType', 'start_count', 'enteredRole', $7::text),
+            'mrm-dashboard', 'production_session_correction', $8)`,
+          [input.organizationId, input.sessionId, input.actorUserId ?? null, reason,
+            current.snapshot, updated.rows[0]!.snapshot, enteredRole, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: input.sessionId, ok: true }
+      })
+    },
+
     async correctProductionSessionStart(input: {
       actorUserId?: string | null
       organizationId: string

@@ -7,7 +7,7 @@ import { sessionTimelineDetail } from "../lib/production-session-timeline"
 test("offers accident reporting on an open session", () => {
   const markup = renderToStaticMarkup(
     <ProductionSessionDetailActions
-      session={{ status: "open" }}
+      session={{ status: "open", measurementMethod: "counter" }}
       onAction={() => {}}
     />
   )
@@ -15,6 +15,9 @@ test("offers accident reporting on an open session", () => {
   expect(markup).toContain("End session")
   expect(markup).toContain("Record accident")
   expect(markup).toContain("Correct start date / time")
+  expect(markup).toContain("Correct start count")
+  expect(renderToStaticMarkup(<ProductionSessionDetailActions session={{ status: "closed", measurementMethod: "counter" }} onAction={() => {}} />)).toContain("Correct start count")
+  expect(renderToStaticMarkup(<ProductionSessionDetailActions session={{ status: "closed", measurementMethod: "weight" }} onAction={() => {}} />)).not.toContain("Correct start count")
 })
 
 test("shows the selected close reason in the session timeline", () => {

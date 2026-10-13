@@ -18,6 +18,7 @@ const dependencies = vi.hoisted(() => ({
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
   correctProductionSessionStart: vi.fn(),
+  correctProductionSessionStartCount: vi.fn(),
   startBulkProductionSessionDowntime: vi.fn(),
   recordShopFloorStage: vi.fn(),
   recordDispatchApproval: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
     correctProductionSessionStart: dependencies.correctProductionSessionStart,
+    correctProductionSessionStartCount: dependencies.correctProductionSessionStartCount,
     startBulkProductionSessionDowntime: dependencies.startBulkProductionSessionDowntime,
     recordShopFloorStage: dependencies.recordShopFloorStage,
     recordDispatchApproval: dependencies.recordDispatchApproval,
@@ -212,12 +214,23 @@ describe("production entry mutation API authorization", () => {
       enteredRole: "authorized_staff", expectedRowVersion: 2,
       startedAt: "2026-09-29T03:30:00Z", correctionReason: "Wrong Start Date",
     })
+    dependencies.correctProductionSessionStartCount.mockResolvedValue({ id: "session-1", ok: true })
+    const countBody = { ...body, payload: { ...body.payload, correctionType: "start_count", startCount: 0 } }
+    expect((await post("data-entry", countBody)).status).toBe(200)
+    expect(dependencies.correctProductionSessionStartCount).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", sessionId: "session-1",
+      productionFloorCode: "cnc", enteredRole: "authorized_staff", expectedRowVersion: 2,
+      startCount: 0, correctionReason: "Wrong Start Date",
+    })
     dependencies.listAllGrantedCapabilities.mockResolvedValue([
       "operations.production.write", "operations.floors.conventional.production_sessions.production_recording.write",
     ])
     dependencies.correctProductionSessionStart.mockClear()
+    dependencies.correctProductionSessionStartCount.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)
+    expect((await post("data-entry", countBody)).status).toBe(403)
     expect(dependencies.correctProductionSessionStart).not.toHaveBeenCalled()
+    expect(dependencies.correctProductionSessionStartCount).not.toHaveBeenCalled()
   })
 
   it("no longer exposes session deletion even to a Planner", async () => {

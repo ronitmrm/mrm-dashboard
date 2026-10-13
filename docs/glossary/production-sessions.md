@@ -154,6 +154,22 @@ details in the existing session; use **Reopen Setup** when Item Complete itself
 was mistaken. Previously reversed records remain excluded from active totals,
 with their audit and deletion events retained as history.
 
+**Correct start count** is available for open and closed Counter sessions under
+the Production Unit's existing session-recording permission. It requires a
+reason and the current saved session version. The new count must be a
+non-negative whole number. For a closed session, end count minus corrected
+start count must cover all recorded rejected pieces. Total and good pieces
+are recalculated in both the session and its linked Production Entry;
+efficiency and planning use that corrected output. Open sessions retain their
+unsettled output until closed.
+
+A changed start count is an explicit manual reading: its previous automatic
+carry link is cleared, with the original link and count retained in audit
+history. Other sessions' counters remain unchanged. End count, times, downtime,
+rejections, Item Complete status and machine ownership remain unchanged.
+The correction records the actor, reason, time and before/after values, and
+queues planning refresh in the same transaction.
+
 **Correct start date / time** is available for open and closed sessions under
 the Production Unit's existing session-correction permission. A reason is
 required. The correction updates the session and linked Production Entry's

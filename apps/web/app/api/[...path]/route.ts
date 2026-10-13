@@ -1778,6 +1778,16 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               productionFloorCode: payload.productionFloorCode,
             })
+            if (text(payload.correctionType).toLowerCase() === "start_count") {
+              return repository.correctProductionSessionStartCount({
+                actorUserId, organizationId, enteredRole,
+                productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
+                sessionId: requiredDashboardText(payload.sessionId, "Production session"),
+                startCount: Number(requiredDashboardText(String(payload.startCount ?? ""), "Start count")),
+                expectedRowVersion: numeric(payload.expectedRowVersion),
+                correctionReason: text(payload.correctionReason),
+              })
+            }
             if (text(payload.correctionType).toLowerCase() === "start") {
               return repository.correctProductionSessionStart({
                 actorUserId, organizationId, enteredRole,
