@@ -40,6 +40,15 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("uses the full period for machining even when an older draft has finishing days", () => {
+    const lines = [line("new", 8)]
+    const savedInput = { ...input, lines, dispatchDays: 60 }
+    const plan = calculateProposal(savedInput, context, lines)
+    expect(plan.lines[0]).toMatchObject({
+      selected: true,
+      completion: "2026-09-14",
+    })
+  })
   test("keeps machines and schedules routes with equivalent family capitalization", () => {
     const routes = ["JL", "Jl"].map((machineFamily, index) => ({
       partNo: String(index),
@@ -118,13 +127,23 @@ describe("Proposed Order capacity review", () => {
   test("unknown existing RM blocks dated promises instead of dropping existing workload", () => {
     const proposed = line("new", 2)
     proposed.rmDate = "2026-09-14"
+    const missingMaster = {
+      ...proposed,
+      id: "missing",
+      issue: "Missing product route",
+    }
+    const lines = [proposed, missingMaster]
     const plan = calculateProposal(
-      { ...input, mode: "dates", lines: [proposed] },
+      { ...input, mode: "dates", lines },
       { ...context, existing: [line("existing", 2)] },
-      [proposed]
+      lines
     )
     expect(plan.blockers).toEqual(["existing: awaiting tentative RM date"])
     expect(plan.lines[0]?.selected).toBe(false)
     expect(plan.lines[0]?.completion).toBe("")
+    expect(plan.lines[1]).toMatchObject({
+      selected: false,
+      reason: "Missing product route",
+    })
   })
 })

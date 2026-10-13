@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Input } from "@workspace/ui/components/input"
@@ -20,13 +21,19 @@ import {
   TableCell,
 } from "@workspace/ui/components/table"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { ActionToolbar, FormGrid } from "@/components/ui/golden-patterns"
+import {
+  ActionToolbar,
+  FormGrid,
+  FormSection,
+} from "@/components/ui/golden-patterns"
+import { PageActions } from "@/components/ui/page-actions"
 import {
   type PlanningContext,
   type ProposalInput,
   type ProposalPlan,
 } from "@/lib/order-acceptance"
-import { istDateValue } from "@/lib/date-time"
+import { formatIstDate, istDateValue } from "@/lib/date-time"
+import { groupWorkloadBlockers } from "@/lib/order-acceptance-review"
 import {
   proposalTemplate,
   importProposedOrder,
@@ -62,7 +69,7 @@ function emptyInput(): ProposalInput {
     efficiency: 100,
     setupHours: 0,
     dispatchDays: 0,
-    mode: "dates",
+    mode: "deadline",
     lines: [],
     existingRmDates: {},
   }
@@ -157,18 +164,31 @@ export function OrderAcceptanceWorkspace({
       setContext(refreshed.context)
     })
   }
-  const fields = [
-    ["startDate", "Planning start", "date"],
-    ["deadline", "Dispatch deadline / utilisation period end", "date"],
-    ["hoursPerDay", "Working hours per day", "number"],
-    ["efficiency", "Available time (%)", "number"],
-    ["setupHours", "Setup/changeover hours per operation", "number"],
+  const dateFields = [
+    ["startDate", "Machining start date"],
     [
-      "dispatchDays",
-      "Finishing, inspection and packing (calendar days)",
-      "number",
+      "deadline",
+      input.mode === "deadline"
+        ? "Machining deadline"
+        : "Capacity review end date",
     ],
   ] as const
+  const machineFields = [
+    ["hoursPerDay", "Working hours per day"],
+    ["efficiency", "Usable machine time (%)"],
+    ["setupHours", "Setup/changeover hours per operation"],
+  ] as const
+  const groups = groupWorkloadBlockers(
+    plan?.blockers ?? [],
+    context?.existing ?? []
+  )
+  const selected = plan?.lines.filter((line) => line.selected).length ?? 0
+  const blocked = !!plan?.blockers.length
+  const productIssues = blocked
+    ? plan.lines.filter(
+        (line) => line.reason !== "Resolve existing workload blockers"
+      )
+    : []
   return (
     <div className="grid min-w-0 gap-5">
       {error ? (
@@ -185,65 +205,67 @@ export function OrderAcceptanceWorkspace({
           description="Reading the selected unit's latest production plan."
         />
       ) : null}
-      <ActionToolbar>
-        {canWrite ? (
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setSaved(null)
-              setPlan(null)
-              setInput(emptyInput())
-            }}
-          >
-            New Proposed Order
-          </Button>
-        ) : null}
-        <label className="grid gap-1 text-sm">
-          Saved proposals (latest 100)
-          <SearchableSelect
-            aria-label="Saved proposals"
-            className="h-9 rounded-md border bg-background px-3"
-            value={saved?.id ?? ""}
-            disabled={busy}
-            onChange={(event) => {
-              const id = event.target.value
-              if (id)
-                void run(async () => {
-                  const data = await request<{ proposal?: SavedProposal }>(
-                    `${endpoint}&id=${encodeURIComponent(id)}`
-                  )
-                  if (!data.proposal) throw new Error("Proposal not found.")
-                  setSaved(data.proposal)
-                  setInput(data.proposal.input)
-                  setPlan(data.proposal.result)
+      <PageActions>
+        <ActionToolbar>
+          {canWrite ? (
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setSaved(null)
+                setPlan(null)
+                setInput(emptyInput())
+              }}
+            >
+              New Proposal
+            </Button>
+          ) : null}
+          <label className="grid gap-1 text-sm">
+            Open a saved proposal
+            <SearchableSelect
+              aria-label="Saved proposals"
+              className="h-9 rounded-md border bg-background px-3"
+              value={saved?.id ?? ""}
+              disabled={busy}
+              onChange={(event) => {
+                const id = event.target.value
+                if (id)
+                  void run(async () => {
+                    const data = await request<{ proposal?: SavedProposal }>(
+                      `${endpoint}&id=${encodeURIComponent(id)}`
+                    )
+                    if (!data.proposal) throw new Error("Proposal not found.")
+                    setSaved(data.proposal)
+                    setInput(data.proposal.input)
+                    setPlan(data.proposal.result)
+                  })
+              }}
+            >
+              <option value="">Choose a proposal</option>
+              {register.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.reference} — {row.state}
+                </option>
+              ))}
+            </SearchableSelect>
+          </label>
+          {saved?.state === "approved" && canWrite ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                change({
+                  ...input,
+                  reference: `${input.reference} revision`,
+                  revisionOf: saved.id,
                 })
-            }}
-          >
-            <option value="">Choose a proposal</option>
-            {register.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.reference} — {row.state}
-              </option>
-            ))}
-          </SearchableSelect>
-        </label>
-        {saved?.state === "approved" && canWrite ? (
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => {
-              change({
-                ...input,
-                reference: `${input.reference} revision`,
-                revisionOf: saved.id,
-              })
-              setSaved(null)
-            }}
-          >
-            Create Revised Proposal
-          </Button>
-        ) : null}
-      </ActionToolbar>
+                setSaved(null)
+              }}
+            >
+              Create Revised Proposal
+            </Button>
+          ) : null}
+        </ActionToolbar>
+      </PageActions>
       {saved?.state === "approved" ? (
         <StandardState
           variant="empty"
@@ -251,12 +273,12 @@ export function OrderAcceptanceWorkspace({
           description="Obtain Purchase approval separately. Enter the confirmed PO through Purchase Order flow. This proposal reserves no capacity."
         />
       ) : null}
-      <SectionCard>
-        <CardHeader>
-          <CardTitle>Proposed Order</CardTitle>
-        </CardHeader>
-        <CardContent className="grid min-w-0 gap-4">
-          <FormGrid>
+      <FormSection
+        title="Order details"
+        description="Check which products can be machined using this unit's available capacity."
+      >
+        <div className="grid min-w-0 gap-4">
+          <FormGrid className="xl:grid-cols-2">
             <label className="grid gap-1 text-sm">
               Proposal reference
               <Input
@@ -267,28 +289,24 @@ export function OrderAcceptanceWorkspace({
                 }
               />
             </label>
-            {fields.map(([key, label, type]) => (
+            {dateFields.map(([key, label]) => (
               <label className="grid gap-1 text-sm" key={key}>
                 {label}
                 <Input
-                  type={type}
+                  type="date"
                   disabled={locked}
                   value={input[key]}
-                  step={type === "number" ? "any" : undefined}
                   onChange={(event) =>
                     change({
                       ...input,
-                      [key]:
-                        type === "number"
-                          ? Number(event.target.value)
-                          : event.target.value,
+                      [key]: event.target.value,
                     })
                   }
                 />
               </label>
             ))}
             <label className="grid gap-1 text-sm">
-              Planning mode
+              What do you want to check?
               <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3"
                 disabled={locked}
@@ -302,150 +320,209 @@ export function OrderAcceptanceWorkspace({
                 }
               >
                 <option value="dates">
-                  Tentative dates using planner RM dates
+                  When will machining finish after RM arrives?
                 </option>
                 <option value="deadline">
-                  Select lines by deadline; ignore tentative RM dates
+                  Which products fit before the deadline?
                 </option>
               </SearchableSelect>
             </label>
           </FormGrid>
           <p className="text-sm text-muted-foreground">
-            Friday and configured plant holidays are excluded. Each operation
-            runs as a whole batch on one compatible machine. Existing scheduled
-            work keeps its machine dates. Zero allowances mean no additional
-            time is included.
+            {input.mode === "deadline"
+              ? `Machining can run from ${formatIstDate(input.startDate)} to ${formatIstDate(input.deadline)}. The whole period is available for machining.`
+              : "Enter RM-ready dates to estimate when machining will finish. The review end date sets the period for the machine-capacity summary."}{" "}
+            Fridays and plant holidays are excluded.
           </p>
-          <ActionToolbar>
-            <Button variant="outline" onClick={proposalTemplate}>
-              Download Excel Template
-            </Button>
-            <label className="grid gap-1 text-sm">
-              Upload Proposed Order Excel
-              <Input
-                type="file"
-                accept=".xlsx"
-                disabled={locked}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file)
-                    void run(async () =>
-                      change({
-                        ...input,
-                        lines: await importProposedOrder(file),
-                      })
-                    )
-                  event.target.value = ""
-                }}
-              />
-            </label>
-            <Button
-              variant="outline"
-              disabled={!context || !input.lines.length || busy}
-              onClick={() => context && exportRmDates(input, context)}
-            >
-              Export RM Date Workbook
-            </Button>
-            <label className="grid gap-1 text-sm">
-              Import completed RM workbook
-              <Input
-                type="file"
-                accept=".xlsx"
-                disabled={locked || !context}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file && context)
-                    void run(async () =>
-                      change(await importRmDates(file, input, context))
-                    )
-                  event.target.value = ""
-                }}
-              />
-            </label>
-          </ActionToolbar>
-          <OperationalTable
-            filterStorageKey={`proposed-lines-${floor}`}
-            containerClassName="max-h-96 border rounded-md"
-          >
-            <TableHeader>
-              <TableRow>
-                <TableHead>Line</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Route option</TableHead>
-                <TableHead>Quantity pcs</TableHead>
-                <TableHead>Tentative RM-ready date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {input.lines.map((line, index) => (
-                <TableRow key={`${line.id}-${index}`}>
-                  <TableCell>{line.id}</TableCell>
-                  <TableCell>{line.part}</TableCell>
-                  <TableCell>{line.option || "Auto if single route"}</TableCell>
-                  <TableCell>{line.quantity.toLocaleString("en-IN")}</TableCell>
-                  <TableCell>
-                    <Input
-                      aria-label={`RM date for proposed line ${line.id}`}
-                      type="date"
-                      disabled={locked}
-                      value={line.rmDate}
-                      onChange={(event) =>
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">
+              Machine time settings — {input.hoursPerDay} hours/day,{" "}
+              {input.efficiency}% usable
+            </summary>
+            <FormGrid className="mt-4">
+              {machineFields.map(([key, label]) => (
+                <label key={key} className="grid gap-1 text-sm">
+                  {label}
+                  <Input
+                    type="number"
+                    step="any"
+                    disabled={locked}
+                    value={input[key]}
+                    onChange={(event) =>
+                      change({ ...input, [key]: Number(event.target.value) })
+                    }
+                  />
+                </label>
+              ))}
+            </FormGrid>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Usable time allows for normal lost machine time. Each setup runs
+              as one complete batch on one compatible machine. Existing job
+              plans keep their machine dates.
+            </p>
+          </details>
+        </div>
+      </FormSection>
+      <SectionCard>
+        <CardHeader>
+          <CardTitle>Proposed products ({input.lines.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="grid min-w-0 gap-4">
+          <p className="text-sm text-muted-foreground">
+            {input.mode === "deadline"
+              ? "Upload your product list. This check assumes RM is ready when needed; selected lines show the required RM date."
+              : "Upload your product list and enter expected RM-ready dates, directly or using the RM workbook."}
+          </p>
+          <PageActions>
+            <ActionToolbar>
+              <Button variant="outline" onClick={proposalTemplate}>
+                Download Excel Template
+              </Button>
+              <label className="grid gap-1 text-sm">
+                Upload Proposed Order Excel
+                <Input
+                  type="file"
+                  accept=".xlsx"
+                  disabled={locked}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file)
+                      void run(async () =>
                         change({
                           ...input,
-                          lines: input.lines.map((row, rowIndex) =>
-                            rowIndex === index
-                              ? { ...row, rmDate: event.target.value }
-                              : row
-                          ),
+                          lines: await importProposedOrder(file),
                         })
-                      }
+                      )
+                    event.target.value = ""
+                  }}
+                />
+              </label>
+              {input.mode === "dates" ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={!context || !input.lines.length || busy}
+                    onClick={() => context && exportRmDates(input, context)}
+                  >
+                    Export RM Date Workbook
+                  </Button>
+                  <label className="grid gap-1 text-sm">
+                    Import completed RM workbook
+                    <Input
+                      type="file"
+                      accept=".xlsx"
+                      disabled={locked || !context}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file && context)
+                          void run(async () =>
+                            change(await importRmDates(file, input, context))
+                          )
+                        event.target.value = ""
+                      }}
                     />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </OperationalTable>
-          {context?.existing.some((line) => !line.rmDate) ? (
+                  </label>
+                </>
+              ) : null}
+            </ActionToolbar>
+          </PageActions>
+          <details open={!plan}>
+            <summary className="mb-3 cursor-pointer text-sm font-medium">
+              View uploaded products ({input.lines.length})
+            </summary>
             <OperationalTable
-              filterStorageKey={`proposal-existing-rm-${floor}`}
-              containerClassName="max-h-72 border rounded-md"
+              filterStorageKey={`proposed-lines-${floor}`}
+              containerClassName="max-h-96 border rounded-md"
             >
               <TableHeader>
                 <TableRow>
-                  <TableHead>Existing job card</TableHead>
+                  <TableHead>Line</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead>Awaiting RM: tentative date</TableHead>
+                  <TableHead>Route option</TableHead>
+                  <TableHead>Quantity pcs</TableHead>
+                  {input.mode === "dates" ? (
+                    <TableHead>Expected RM-ready date</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {context.existing
-                  .filter((line) => !line.rmDate)
-                  .map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell>{line.id}</TableCell>
-                      <TableCell>{line.part}</TableCell>
+                {input.lines.map((line, index) => (
+                  <TableRow key={`${line.id}-${index}`}>
+                    <TableCell>{line.id}</TableCell>
+                    <TableCell>{line.part}</TableCell>
+                    <TableCell>
+                      {line.option || "Auto if single route"}
+                    </TableCell>
+                    <TableCell>
+                      {line.quantity.toLocaleString("en-IN")}
+                    </TableCell>
+                    {input.mode === "dates" ? (
                       <TableCell>
                         <Input
-                          aria-label={`RM date for existing ${line.id}`}
+                          aria-label={`RM date for proposed line ${line.id}`}
                           type="date"
                           disabled={locked}
-                          value={input.existingRmDates[line.id] ?? ""}
+                          value={line.rmDate}
                           onChange={(event) =>
                             change({
                               ...input,
-                              existingRmDates: {
-                                ...input.existingRmDates,
-                                [line.id]: event.target.value,
-                              },
+                              lines: input.lines.map((row, rowIndex) =>
+                                rowIndex === index
+                                  ? { ...row, rmDate: event.target.value }
+                                  : row
+                              ),
                             })
                           }
                         />
                       </TableCell>
-                    </TableRow>
-                  ))}
+                    ) : null}
+                  </TableRow>
+                ))}
               </TableBody>
             </OperationalTable>
-          ) : null}
+            {input.mode === "dates" &&
+            context?.existing.some((line) => !line.rmDate) ? (
+              <OperationalTable
+                filterStorageKey={`proposal-existing-rm-${floor}`}
+                containerClassName="max-h-72 border rounded-md"
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Existing job card</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Expected RM-ready date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {context.existing
+                    .filter((line) => !line.rmDate)
+                    .map((line) => (
+                      <TableRow key={line.id}>
+                        <TableCell>{line.id}</TableCell>
+                        <TableCell>{line.part}</TableCell>
+                        <TableCell>
+                          <Input
+                            aria-label={`RM date for existing ${line.id}`}
+                            type="date"
+                            disabled={locked}
+                            value={input.existingRmDates[line.id] ?? ""}
+                            onChange={(event) =>
+                              change({
+                                ...input,
+                                existingRmDates: {
+                                  ...input.existingRmDates,
+                                  [line.id]: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </OperationalTable>
+            ) : null}
+          </details>
           <ActionToolbar>
             <Button
               variant="outline"
@@ -459,8 +536,8 @@ export function OrderAcceptanceWorkspace({
               onClick={() => void mutate("calculate")}
             >
               {input.mode === "deadline"
-                ? "Select Feasible Lines"
-                : "Calculate Tentative Dates"}
+                ? "Check Capacity"
+                : "Calculate Machining Dates"}
             </Button>
           </ActionToolbar>
         </CardContent>
@@ -468,86 +545,199 @@ export function OrderAcceptanceWorkspace({
       {plan ? (
         <SectionCard>
           <CardHeader>
-            <CardTitle>Planner Review</CardTitle>
+            <CardTitle>Capacity result</CardTitle>
           </CardHeader>
           <CardContent className="grid min-w-0 gap-4">
-            <p className="text-sm">
-              {plan.lines.filter((line) => line.selected).length} of{" "}
-              {plan.lines.length} complete lines selected. {plan.method}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              RM required by is the first-operation start date supporting this
-              specific schedule. Dispatch remains conditional on RM, tooling,
-              staffing and downstream readiness. Family figures cover the review
-              period.
-            </p>
-            {plan.blockers.map((blocker) => (
+            <StatusBadge
+              value={
+                blocked
+                  ? "Needs attention"
+                  : `${selected} of ${plan.lines.length} lines can be machined`
+              }
+              tone={blocked ? "warning" : selected ? "positive" : "warning"}
+            />
+            {blocked ? (
               <StandardState
-                key={blocker}
                 variant="error"
-                title="Existing workload needs attention"
-                description={blocker}
+                title="Resolve existing work before checking this order"
+                description={`${plan.blockers.length} production checks are preventing the capacity calculation. Capacity for the ${plan.lines.length} proposed lines has not been assessed yet. Resolve the checks below, then click Check Capacity again.`}
+                action={
+                  <ActionToolbar>
+                    <Button variant="outline" asChild>
+                      <Link href={`/?tab=productionControlTab&floor=${floor}`}>
+                        Open Planner Actions
+                      </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link href={`/?tab=masterGapsTab&floor=${floor}`}>
+                        Open Part Readiness
+                      </Link>
+                    </Button>
+                  </ActionToolbar>
+                }
               />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {input.mode === "deadline"
+                  ? `These complete product lines fit the machining deadline of ${formatIstDate(input.deadline)}. RM must be ready by the dates below.`
+                  : "Completion dates show when machining finishes, based on the entered RM-ready dates."}
+              </p>
+            )}
+            {groups.map((group) => (
+              <details key={group.title}>
+                <summary className="cursor-pointer text-sm font-medium">
+                  {group.title} ({group.rows.length})
+                  <span className="mt-1 block text-sm font-normal text-muted-foreground">
+                    {group.action}
+                  </span>
+                </summary>
+                <OperationalTable
+                  filterStorageKey={`proposal-checks-${floor}-${group.title}`}
+                  containerClassName="max-h-64 rounded-md border"
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Job card</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>What needs attention</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.rows.map((row) => (
+                      <TableRow key={`${row.job}-${row.detail}`}>
+                        <TableCell>{row.job}</TableCell>
+                        <TableCell>{row.part}</TableCell>
+                        <TableCell>{row.detail}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </OperationalTable>
+              </details>
             ))}
-            <OperationalTable
-              filterStorageKey={`proposal-decisions-${floor}`}
-              containerClassName="max-h-96 border rounded-md"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Line</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Selected</TableHead>
-                  <TableHead>Tentative dispatch</TableHead>
-                  <TableHead>RM required by</TableHead>
-                  <TableHead>Reason</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plan.lines.map((line) => (
-                  <TableRow key={line.id}>
-                    <TableCell>{line.id}</TableCell>
-                    <TableCell>{line.part}</TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        value={line.selected ? "Selected" : "Excluded"}
-                        tone={line.selected ? "positive" : "warning"}
-                      />
-                    </TableCell>
-                    <TableCell>{line.completion || "—"}</TableCell>
-                    <TableCell>{line.rmRequiredBy || "—"}</TableCell>
-                    <TableCell>{line.reason}</TableCell>
+            {productIssues.length ? (
+              <details>
+                <summary className="cursor-pointer text-sm font-medium">
+                  Proposed product masters need attention (
+                  {productIssues.length})
+                  <span className="mt-1 block text-sm font-normal text-muted-foreground">
+                    Complete these product masters in Part Readiness before
+                    checking capacity again.
+                  </span>
+                </summary>
+                <OperationalTable
+                  filterStorageKey={`proposal-product-checks-${floor}`}
+                  containerClassName="max-h-64 rounded-md border"
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Line</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>What needs attention</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productIssues.map((line) => (
+                      <TableRow key={line.id}>
+                        <TableCell>{line.id}</TableCell>
+                        <TableCell>{line.part}</TableCell>
+                        <TableCell>{line.reason}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </OperationalTable>
+              </details>
+            ) : null}
+            {!blocked ? (
+              <>
+                <OperationalTable
+                  filterStorageKey={`proposal-decisions-${floor}`}
+                  containerClassName="max-h-96 border rounded-md"
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Line</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Can be machined</TableHead>
+                      <TableHead>Machining finishes</TableHead>
+                      <TableHead>RM needed by</TableHead>
+                      <TableHead>Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {plan.lines.map((line) => (
+                      <TableRow key={line.id}>
+                        <TableCell>{line.id}</TableCell>
+                        <TableCell>{line.part}</TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            value={line.selected ? "Yes" : "No"}
+                            tone={line.selected ? "positive" : "warning"}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {line.completion
+                            ? formatIstDate(line.completion)
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {line.rmRequiredBy
+                            ? formatIstDate(line.rmRequiredBy)
+                            : "—"}
+                        </TableCell>
+                        <TableCell>{line.reason}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </OperationalTable>
+              </>
+            ) : null}
+            <details>
+              <summary className="mb-3 cursor-pointer text-sm font-medium">
+                Machine family capacity
+              </summary>
+              <OperationalTable
+                filterStorageKey={`proposal-families-${floor}`}
+                containerClassName="max-h-72 border rounded-md"
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Family</TableHead>
+                    <TableHead>Machines</TableHead>
+                    <TableHead>Available hours</TableHead>
+                    <TableHead>Existing job hours</TableHead>
+                    <TableHead>Hours for this order</TableHead>
+                    <TableHead>Utilisation</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </OperationalTable>
-            <OperationalTable
-              filterStorageKey={`proposal-families-${floor}`}
-              containerClassName="max-h-72 border rounded-md"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Family</TableHead>
-                  <TableHead>Machines</TableHead>
-                  <TableHead>Available hours</TableHead>
-                  <TableHead>Committed hours</TableHead>
-                  <TableHead>Proposed hours</TableHead>
-                  <TableHead>Utilisation</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plan.families.map((row) => (
-                  <TableRow key={row.family}>
-                    <TableCell>{row.family}</TableCell>
-                    <TableCell>{row.machines}</TableCell>
-                    <TableCell>{row.available.toFixed(1)}</TableCell>
-                    <TableCell>{row.committed.toFixed(1)}</TableCell>
-                    <TableCell>{row.proposed.toFixed(1)}</TableCell>
-                    <TableCell>{(row.utilisation * 100).toFixed(1)}%</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </OperationalTable>
+                </TableHeader>
+                <TableBody>
+                  {plan.families.map((row) => (
+                    <TableRow key={row.family}>
+                      <TableCell>{row.family}</TableCell>
+                      <TableCell>{row.machines}</TableCell>
+                      <TableCell>{row.available.toFixed(1)}</TableCell>
+                      <TableCell>{row.committed.toFixed(1)}</TableCell>
+                      <TableCell>{row.proposed.toFixed(1)}</TableCell>
+                      <TableCell>
+                        {(row.utilisation * 100).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </OperationalTable>
+            </details>
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">
+                How this check works
+              </summary>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {input.mode === "deadline"
+                  ? "We compare four scheduling orders and keep the one that fits the most complete lines. This is an estimate; it does not guarantee the best possible combination."
+                  : "Products are planned in the uploaded order, after their expected RM-ready dates."}{" "}
+                RM needed by is the first machining date in this schedule.
+                Approval saves the reviewed proposal; it does not create a PO or
+                reserve machines.
+              </p>
+            </details>
             <ActionToolbar>
               <Button
                 variant="outline"
@@ -563,7 +753,7 @@ export function OrderAcceptanceWorkspace({
                 }
                 onClick={() => void mutate("approve")}
               >
-                Approve Proposal and Finish
+                Approve Reviewed Proposal
               </Button>
             </ActionToolbar>
           </CardContent>

@@ -156,7 +156,7 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
         Product: line.part,
         "Quantity pcs": line.quantity,
         Selected: line.selected ? "Yes" : "No",
-        "Tentative dispatch": line.completion,
+        "Machining completion": line.completion,
         "RM required by": line.rmRequiredBy,
         Reason: line.reason,
       })),
@@ -176,12 +176,12 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
       name: "Assumptions",
       rows: [
         {
-          "Planning start": input.startDate,
-          "Review deadline": input.deadline,
+          "Machining start": input.startDate,
+          "Machining deadline": input.deadline,
           "Daily hours": input.hoursPerDay,
           "Time factor %": input.efficiency,
           "Setup hours per operation": input.setupHours,
-          "Dispatch allowance calendar days": input.dispatchDays,
+          Scope: "Machining only; no finishing, inspection or packing days.",
           Method: plan.method,
           Qualification:
             "Conditional on RM; approval does not create a PO or reserve capacity.",
