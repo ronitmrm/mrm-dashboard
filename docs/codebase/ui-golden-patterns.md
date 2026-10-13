@@ -36,6 +36,11 @@ record-status badges, and places actions in the navigation shell's top-right row
 Pages without badges reserve no body header space. Put primary and
 secondary page actions in its `actions` slot. Wrap a separate page-level
 `ActionToolbar` in `PageActions` to use the same shell row.
+Keep the shell title readable when controls wrap; never squeeze it into an
+ellipsis to fit actions. Avoid database-provider labels in the operational header.
+Use compact buttons for uploads and group secondary workbook actions in the
+shared `Popover` when they would crowd the row. Preserve visible action labels
+and accessible names for selectors.
 Page-level Excel/CSV downloads and uploads use this shell row, including
 `MasterDataViewTabs` and `OperationalWorkspaceTabs`. The shell wraps actions on
 narrow screens and measures its height so pinned summaries remain below it.

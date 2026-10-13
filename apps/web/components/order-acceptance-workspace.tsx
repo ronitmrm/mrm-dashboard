@@ -1,7 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import {
+  ChevronDown,
+  Download,
+  FileSpreadsheet,
+  Plus,
+  Upload,
+} from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Input } from "@workspace/ui/components/input"
@@ -21,6 +28,11 @@ import {
   TableCell,
 } from "@workspace/ui/components/table"
 import { StandardState } from "@workspace/ui/components/standard-state"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@workspace/ui/components/popover"
 import {
   ActionToolbar,
   FormGrid,
@@ -88,6 +100,9 @@ export function OrderAcceptanceWorkspace({
   const [plan, setPlan] = useState<ProposalPlan | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [excelOpen, setExcelOpen] = useState(false)
+  const productUploadRef = useRef<HTMLInputElement>(null)
+  const rmUploadRef = useRef<HTMLInputElement>(null)
   const endpoint = `/api/order-acceptance?floor=${encodeURIComponent(floor)}`
   const locked = !canWrite || saved?.state === "approved" || busy
   async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -205,25 +220,43 @@ export function OrderAcceptanceWorkspace({
           description="Reading the selected unit's latest production plan."
         />
       ) : null}
+      <input
+        ref={productUploadRef}
+        type="file"
+        accept=".xlsx"
+        hidden
+        disabled={locked}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file)
+            void run(async () =>
+              change({ ...input, lines: await importProposedOrder(file) })
+            )
+          event.target.value = ""
+        }}
+      />
+      <input
+        ref={rmUploadRef}
+        type="file"
+        accept=".xlsx"
+        hidden
+        disabled={locked || !context || input.mode !== "dates"}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file && context)
+            void run(async () =>
+              change(await importRmDates(file, input, context))
+            )
+          event.target.value = ""
+        }}
+      />
       <PageActions>
-        <ActionToolbar>
-          {canWrite ? (
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setSaved(null)
-                setPlan(null)
-                setInput(emptyInput())
-              }}
-            >
-              New Proposal
-            </Button>
-          ) : null}
-          <label className="grid gap-1 text-sm">
-            Open a saved proposal
+        <ActionToolbar className="justify-start max-sm:w-full">
+          <label className="w-full min-w-0 sm:w-60">
+            <span className="sr-only">Open a saved proposal</span>
             <SearchableSelect
               aria-label="Saved proposals"
-              className="h-9 rounded-md border bg-background px-3"
+              className="h-9 w-full rounded-md border bg-background px-3"
               value={saved?.id ?? ""}
               disabled={busy}
               onChange={(event) => {
@@ -240,7 +273,7 @@ export function OrderAcceptanceWorkspace({
                   })
               }}
             >
-              <option value="">Choose a proposal</option>
+              <option value="">Open saved proposal</option>
               {register.map((row) => (
                 <option key={row.id} value={row.id}>
                   {row.reference} — {row.state}
@@ -248,8 +281,24 @@ export function OrderAcceptanceWorkspace({
               ))}
             </SearchableSelect>
           </label>
+          {canWrite ? (
+            <Button
+              className="h-9"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setSaved(null)
+                setPlan(null)
+                setInput(emptyInput())
+              }}
+            >
+              <Plus aria-hidden="true" />
+              New Proposal
+            </Button>
+          ) : null}
           {saved?.state === "approved" && canWrite ? (
             <Button
+              className="h-9"
               variant="outline"
               disabled={busy}
               onClick={() => {
@@ -264,6 +313,75 @@ export function OrderAcceptanceWorkspace({
               Create Revised Proposal
             </Button>
           ) : null}
+          {canWrite ? (
+            <Button
+              className="h-9"
+              disabled={locked}
+              onClick={() => productUploadRef.current?.click()}
+            >
+              <Upload aria-hidden="true" />
+              Upload Products
+            </Button>
+          ) : null}
+          <Popover open={excelOpen} onOpenChange={setExcelOpen}>
+            <PopoverTrigger asChild>
+              <Button className="h-9" variant="outline" disabled={busy}>
+                <FileSpreadsheet aria-hidden="true" />
+                Excel Files
+                <ChevronDown aria-hidden="true" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              aria-label="Excel files"
+              className="w-72 gap-1 p-2"
+            >
+              <Button
+                variant="ghost"
+                className="justify-start"
+                onClick={() => {
+                  proposalTemplate()
+                  setExcelOpen(false)
+                }}
+              >
+                <Download aria-hidden="true" />
+                Download Product Template
+              </Button>
+              {input.mode === "dates" ? (
+                <>
+                  <p className="mt-1 border-t px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">
+                    Raw material dates
+                  </p>
+                  <Button
+                    variant="ghost"
+                    className="justify-start"
+                    disabled={!context || !input.lines.length || busy}
+                    onClick={() => {
+                      if (context) exportRmDates(input, context)
+                      setExcelOpen(false)
+                    }}
+                  >
+                    <Download aria-hidden="true" />
+                    Download RM Workbook
+                  </Button>
+                  {canWrite ? (
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      disabled={locked || !context}
+                      onClick={() => {
+                        rmUploadRef.current?.click()
+                        setExcelOpen(false)
+                      }}
+                    >
+                      <Upload aria-hidden="true" />
+                      Upload RM Dates
+                    </Button>
+                  ) : null}
+                </>
+              ) : null}
+            </PopoverContent>
+          </Popover>
         </ActionToolbar>
       </PageActions>
       {saved?.state === "approved" ? (
@@ -373,59 +491,6 @@ export function OrderAcceptanceWorkspace({
               ? "Upload your product list. This check assumes RM is ready when needed; selected lines show the required RM date."
               : "Upload your product list and enter expected RM-ready dates, directly or using the RM workbook."}
           </p>
-          <PageActions>
-            <ActionToolbar>
-              <Button variant="outline" onClick={proposalTemplate}>
-                Download Excel Template
-              </Button>
-              <label className="grid gap-1 text-sm">
-                Upload Proposed Order Excel
-                <Input
-                  type="file"
-                  accept=".xlsx"
-                  disabled={locked}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file)
-                      void run(async () =>
-                        change({
-                          ...input,
-                          lines: await importProposedOrder(file),
-                        })
-                      )
-                    event.target.value = ""
-                  }}
-                />
-              </label>
-              {input.mode === "dates" ? (
-                <>
-                  <Button
-                    variant="outline"
-                    disabled={!context || !input.lines.length || busy}
-                    onClick={() => context && exportRmDates(input, context)}
-                  >
-                    Export RM Date Workbook
-                  </Button>
-                  <label className="grid gap-1 text-sm">
-                    Import completed RM workbook
-                    <Input
-                      type="file"
-                      accept=".xlsx"
-                      disabled={locked || !context}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0]
-                        if (file && context)
-                          void run(async () =>
-                            change(await importRmDates(file, input, context))
-                          )
-                        event.target.value = ""
-                      }}
-                    />
-                  </label>
-                </>
-              ) : null}
-            </ActionToolbar>
-          </PageActions>
           <details open={!plan}>
             <summary className="mb-3 cursor-pointer text-sm font-medium">
               View uploaded products ({input.lines.length})

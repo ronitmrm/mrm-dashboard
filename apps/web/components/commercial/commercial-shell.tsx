@@ -4,14 +4,12 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Settings2 } from "lucide-react"
 
 import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
   productionFloors,
 } from "@workspace/db/production-floors"
-import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import {
   Sidebar,
@@ -184,20 +182,14 @@ export function CommercialShell({
         >
           <SidebarTrigger />
           <Separator className="h-5" orientation="vertical" />
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold">
-              {current.label}
-            </h1>
+          <div className="min-w-[min(100%,16rem)] flex-1">
+            <h1 className="text-base font-semibold">{current.label}</h1>
           </div>
           <div
             className="flex max-w-full min-w-0 flex-wrap items-center gap-2 empty:hidden max-sm:order-last max-sm:basis-full"
             data-slot="shell-page-actions"
             ref={setActionsTarget}
           />
-          <Badge variant="outline">
-            <Settings2 />
-            Postgresql
-          </Badge>
         </header>
         <PageActionsTarget value={actionsTarget}>
           <main className="@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6">

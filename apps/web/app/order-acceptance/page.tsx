@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ClipboardCheck } from "lucide-react"
+import { ArrowLeft, ClipboardCheck } from "lucide-react"
 import { notFound } from "next/navigation"
 import {
   parseProductionFloorCode,
@@ -45,9 +45,10 @@ export default async function OrderAcceptancePage({
           icon={ClipboardCheck}
           description={`${productionFloors.find((item) => item.code === floor)?.label} — Proposed Orders`}
           actions={
-            <Button variant="outline" asChild>
+            <Button className="h-9" variant="ghost" asChild>
               <Link href={`/?tab=productionControlTab&floor=${floor}`}>
-                Back to Planner Actions
+                <ArrowLeft aria-hidden="true" />
+                Planner Actions
               </Link>
             </Button>
           }
