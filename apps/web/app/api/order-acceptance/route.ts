@@ -29,7 +29,7 @@ function inputFrom(value: unknown): ProposalInput {
     mode: body.mode === "deadline" ? "deadline" : "dates",
     hoursPerDay: Number(body.hoursPerDay),
     efficiency: Number(body.efficiency),
-    dispatchDays: Number(body.dispatchDays),
+    dispatchDays: 0,
     setupHours: Number(body.setupHours),
     existingRmDates: Object.fromEntries(
       Object.entries(record(body.existingRmDates)).map(([id, date]) => [

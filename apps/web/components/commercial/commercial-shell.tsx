@@ -53,6 +53,10 @@ const productionPageNavigation: Record<
   string,
   { label: string; parentTab: DashboardTabId }
 > = {
+  "/order-acceptance": {
+    label: "Order Acceptance Planning",
+    parentTab: "productionControlTab",
+  },
   "/dashboard/production-sessions": {
     label: "Production Sessions",
     parentTab: "productionSessionsTab",

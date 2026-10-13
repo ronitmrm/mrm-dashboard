@@ -10,9 +10,10 @@ orders, job cards, reservations, priorities or production commitments.
    and every proposed line. The planner supplies production-ready RM dates.
    Blank dates remain unknown; no tentative completion is promised for them.
 3. Calculate tentative line completion using remaining operations, actual cycle
-   times, active machines and the working calendar. Include an explicit allowance
-   for finishing, inspection and packing before dispatch.
-4. Optionally set a dispatch deadline and select complete proposed lines. Ignore
+   times, active machines and the working calendar. This workflow plans machining
+   only. The full start-to-deadline period is available for machining; no separate
+   finishing, inspection or packing allowance is added.
+4. Optionally set a machining deadline and select complete proposed lines. Ignore
    tentative RM dates in this capacity-only selection, including existing waiting
    work, but protect existing commitments first. Compare candidate mixes by
    completed line count, then machine-family utilisation. Report the search
@@ -20,6 +21,8 @@ orders, job cards, reservations, priorities or production commitments.
 5. Report the RM-ready deadline supporting each selected schedule. Dispatch
    remains conditional on material being ready by this date. Family output
    capacities cannot be summed as finished output across shared routings.
+   Existing-work warnings describe the jobs to resolve once; proposed lines stay
+   awaiting this check rather than being reported as individual capacity failures.
 6. Planner approval freezes the reviewed proposal and ends this workflow.
    The planner obtains Purchase approval separately and manually enters the
    confirmed PO in the existing Purchase Order flow. Corrections create a new

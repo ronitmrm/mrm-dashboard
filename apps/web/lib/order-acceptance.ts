@@ -12,6 +12,7 @@ export type ProposalInput = {
   deadline: string
   hoursPerDay: number
   efficiency: number
+  // Saved proposals retain this field at zero; completion is machining only.
   dispatchDays: number
   setupHours: number
   mode: "dates" | "deadline"
@@ -85,14 +86,11 @@ export function validateProposal(input: ProposalInput) {
   )
     throw new Error("Enter valid daily hours and available time percentage.")
   if (
-    !Number.isInteger(input.dispatchDays) ||
-    input.dispatchDays < 0 ||
-    input.dispatchDays > 365 ||
     !Number.isFinite(input.setupHours) ||
     input.setupHours < 0 ||
     input.setupHours > 720
   )
-    throw new Error("Enter valid dispatch days and setup hours.")
+    throw new Error("Enter valid setup hours.")
   if (!["dates", "deadline"].includes(input.mode))
     throw new Error("Invalid planning mode.")
   if (!input.lines.length || input.lines.length > 1000)
@@ -192,7 +190,7 @@ export function calculateProposal(
     }
     const productionEnd = dateAt(ready)
     if (!productionEnd) return null
-    const completion = addDays(productionEnd, input.dispatchDays)
+    const completion = productionEnd
     if (input.mode === "deadline" && completion > input.deadline) return null
     return {
       calendar: trial,
@@ -277,10 +275,11 @@ export function calculateProposal(
           selected: Boolean(result),
           completion: result?.completion ?? "",
           rmRequiredBy: result?.rmRequiredBy ?? "",
-          reason: blockers.length
-            ? "Resolve existing workload blockers"
-            : line.issue ||
-              (!rm
+          reason:
+            line.issue ||
+            (blockers.length
+              ? "Resolve existing workload blockers"
+              : !rm
                 ? "Awaiting RM date"
                 : result
                   ? input.mode === "deadline"

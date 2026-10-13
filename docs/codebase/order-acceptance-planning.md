@@ -21,7 +21,17 @@ occupying its assigned working dates. Waiting-RM work is scheduled before propos
 lines. Unknown remaining work, overdue unrefreshed schedules, ambiguous masters
 and truncated source snapshots block approval. The first scheduled operation's
 date is reported as RM required by for that schedule, not a global latest-start
-optimisation. Finishing/inspection/packing use an explicit calendar-day allowance.
+optimisation. Completion is the last machining operation's date. No additional
+finishing, inspection or packing days are accepted or applied, including when
+recalculating older drafts that retained that input. Approved records stay frozen.
+The persisted `dispatchDays` field is always written as zero to preserve the
+saved-proposal format; it is not editable or used by the scheduler.
+
+The workspace separates order details, product upload and capacity review. RM
+dates appear only in the RM-date mode. Existing-work blockers are grouped into
+one action list with job/product references; blocked proposed rows are not shown
+as individually rejected. Detailed scheduling assumptions and family hours use
+disclosures to keep the first view focused on the next action.
 
 `order-acceptance-workbook.ts` implements the browser Excel round trip. Template
 headers identify line reference, product, route option, quantity pcs and RM date.
