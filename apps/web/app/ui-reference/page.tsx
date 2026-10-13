@@ -227,14 +227,16 @@ export default async function UiReferencePage() {
           <CardTitle>Operational table</CardTitle>
           <CardDescription>
             Searchable Excel-style filters, sorting, selected and exception
-            states, sticky headers, overflow, summaries, and persisted filters.
+            states, sticky headers, viewport-fitting scroll areas, summaries, and
+            persisted filters.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <OperationalTable
+            fitViewport
             toolbarStart={<h3 className="font-semibold">Job register</h3>}
             filterStorageKey="mrmpl:ui-reference:operational-table"
-            containerClassName="max-h-96 rounded-lg border"
+            containerClassName="rounded-lg border"
           >
             <TableHeader>
               <TableRow>

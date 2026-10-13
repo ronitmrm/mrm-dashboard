@@ -98,6 +98,10 @@ import {
 } from "@/components/dashboard/dashboard-components"
 
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import {
+  PageActionsTarget,
+  useShellPageActions,
+} from "@/components/ui/page-actions"
 import { PlanningControlReview } from "@/components/planning-control-review"
 import { plannerWorkflowResolutionPayload } from "@/lib/planner-workflow-resolution"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -3020,13 +3024,15 @@ function DashboardShell({
         )
 
   const view = useMemo(() => toDashboardViewModel(payload), [payload])
+  const { actionsTarget, setActionsTarget, headerHeight, headerRef } =
+    useShellPageActions()
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "19rem",
-          "--header-height": "4rem",
+          "--header-height": `${headerHeight}px`,
         } as React.CSSProperties
       }
     >
@@ -3063,8 +3069,11 @@ function DashboardShell({
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-(--header-height) items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-6">
+      <SidebarInset className="min-w-0">
+        <header
+          ref={headerRef}
+          className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur lg:px-6"
+        >
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 flex-1">
@@ -3083,6 +3092,13 @@ function DashboardShell({
             </p>
           </div>
 
+          <fieldset className="contents" disabled={Boolean(processingAction)}>
+            <div
+              className="flex max-w-full min-w-0 flex-wrap items-center gap-2 empty:hidden max-sm:order-last max-sm:basis-full"
+              data-slot="shell-page-actions"
+              ref={setActionsTarget}
+            />
+          </fieldset>
           <HeaderActions
             showPlanningRefresh={!scopedStateUrl}
             canRefreshSnapshot={hasDashboardData}
@@ -3090,92 +3106,94 @@ function DashboardShell({
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
           />
         </header>
-        <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          {processingAction ? (
-            <ProcessingNotice message={processingAction} />
-          ) : actionStatus ? (
-            <Badge
-              variant={
-                actionStatus.tone === "destructive" ? "destructive" : "outline"
-              }
-              className="w-fit"
-            >
-              {actionStatus.message}
-            </Badge>
-          ) : null}
-          {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
-            <div
-              className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
-              role="status"
-              aria-atomic="true"
-              aria-live="polite"
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
-                {dashboardPartialCoverageNotice ? (
-                  <p className="text-muted-foreground">
-                    {dashboardPartialCoverageNotice}
-                  </p>
+        <PageActionsTarget value={actionsTarget}>
+          <main className="@container/main flex min-w-0 flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+            {processingAction ? (
+              <ProcessingNotice message={processingAction} />
+            ) : actionStatus ? (
+              <Badge
+                variant={
+                  actionStatus.tone === "destructive" ? "destructive" : "outline"
+                }
+                className="w-fit"
+              >
+                {actionStatus.message}
+              </Badge>
+            ) : null}
+            {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
+                role="status"
+                aria-atomic="true"
+                aria-live="polite"
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
+                  {dashboardPartialCoverageNotice ? (
+                    <p className="text-muted-foreground">
+                      {dashboardPartialCoverageNotice}
+                    </p>
+                  ) : null}
+                </div>
+                {dashboardDeliveryState.lastError ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={retryDashboardDelivery}
+                  >
+                    Retry
+                  </Button>
                 ) : null}
               </div>
-              {dashboardDeliveryState.lastError ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={retryDashboardDelivery}
-                >
-                  Retry
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          {isDashboardUnavailable ? (
-            <DashboardErrorState
-              action={
-                <Button type="button" onClick={retryDashboardDelivery}>
-                  Retry Dashboard Load
-                </Button>
-              }
-              description={
-                dashboardDeliveryState.lastError ??
-                "Dashboard data could not be loaded."
-              }
-              title="Dashboard Unavailable"
-            />
-          ) : isDashboardLoading ? (
-            <DashboardSkeleton />
-          ) : (
-            <fieldset
-              aria-busy={Boolean(processingAction)}
-              className="contents"
-              disabled={Boolean(processingAction)}
-            >
-              <DashboardContent
-                activeTab={activeTab}
-                canDeleteMasters={canDeleteMasters}
-                canManageStoreMasters={canManageStoreMasters}
-                payload={payload}
-                submitAction={submitAction}
-                correctionCandidates={correctionCandidates}
-                openDataEntry={openDataEntry}
-                openMasterReadiness={openMasterReadiness}
-                openFirstPieceInspection={openFirstPieceInspection}
-                closeFirstPieceInspection={closeFirstPieceInspection}
-                firstPieceInspectionTasks={firstPieceInspectionTasks}
-                navigationAccess={navigationAccess}
-                onMasterEntryTypeChange={setPreferredDataEntryType}
-                preferredDataEntryType={preferredDataEntryType}
-                preferredDataEntryDefaults={preferredDataEntryDefaults}
-                productionFloorCode={activeProductionFloor}
-                storeMasterData={storeMasterData}
-                onProductionFloorChange={(floorCode) =>
-                  selectDashboardDestination(activeTab, floorCode)
+            ) : null}
+            {isDashboardUnavailable ? (
+              <DashboardErrorState
+                action={
+                  <Button type="button" onClick={retryDashboardDelivery}>
+                    Retry Dashboard Load
+                  </Button>
                 }
+                description={
+                  dashboardDeliveryState.lastError ??
+                  "Dashboard data could not be loaded."
+                }
+                title="Dashboard Unavailable"
               />
-            </fieldset>
-          )}
-        </main>
+            ) : isDashboardLoading ? (
+              <DashboardSkeleton />
+            ) : (
+              <fieldset
+                aria-busy={Boolean(processingAction)}
+                className="contents"
+                disabled={Boolean(processingAction)}
+              >
+                <DashboardContent
+                  activeTab={activeTab}
+                  canDeleteMasters={canDeleteMasters}
+                  canManageStoreMasters={canManageStoreMasters}
+                  payload={payload}
+                  submitAction={submitAction}
+                  correctionCandidates={correctionCandidates}
+                  openDataEntry={openDataEntry}
+                  openMasterReadiness={openMasterReadiness}
+                  openFirstPieceInspection={openFirstPieceInspection}
+                  closeFirstPieceInspection={closeFirstPieceInspection}
+                  firstPieceInspectionTasks={firstPieceInspectionTasks}
+                  navigationAccess={navigationAccess}
+                  onMasterEntryTypeChange={setPreferredDataEntryType}
+                  preferredDataEntryType={preferredDataEntryType}
+                  preferredDataEntryDefaults={preferredDataEntryDefaults}
+                  productionFloorCode={activeProductionFloor}
+                  storeMasterData={storeMasterData}
+                  onProductionFloorChange={(floorCode) =>
+                    selectDashboardDestination(activeTab, floorCode)
+                  }
+                />
+              </fieldset>
+            )}
+          </main>
+        </PageActionsTarget>
       </SidebarInset>
     </SidebarProvider>
   )

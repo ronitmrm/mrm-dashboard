@@ -32,11 +32,14 @@ Use `OperationalTable` for comparable records, scanning, filtering, sorting, sel
 Use `PageHeader` once per dashboard screen. Page identity belongs in the navigation
 shell; omit duplicate body title/description banners and decorative header icons.
 `PageHeader` retains its title and description for assistive technology, preserves
-record-status badges, and places actions at the top-right of the content without
-a panel. Pages without actions or badges reserve no header space. Put primary and
-secondary page actions in its `actions` slot or an adjacent `ActionToolbar`.
-Page-level Download Excel, Download CSV and Upload CSV use this top-right row, before view
-tabs and summary cards, including `MasterDataViewTabs`. Keep card titles and
+record-status badges, and places actions in the navigation shell's top-right row.
+Pages without badges reserve no body header space. Put primary and
+secondary page actions in its `actions` slot. Wrap a separate page-level
+`ActionToolbar` in `PageActions` to use the same shell row.
+Page-level Excel/CSV downloads and uploads use this shell row, including
+`MasterDataViewTabs` and `OperationalWorkspaceTabs`. The shell wraps actions on
+narrow screens and measures its height so pinned summaries remain below it.
+Outside a shell, actions retain their inline toolbar. Keep card titles and
 summary cards. Use `FormSection` to group related fields and `FormGrid` for
 responsive field layout.
 
@@ -82,6 +85,14 @@ container. `OperationalTable` continues to own scrolling for its rows.
 ## Operational tables
 
 `OperationalTable` owns the shared density, sticky header, scrolling boundary, Excel-style column filters, faceted options, natural sorting, clear-all control, filtered bulk selection, selected-row treatment, and empty/loading/error presentation.
+
+Use `fitViewport` when a register's rows should scroll beneath its heading and
+actions without extending the table below the viewport. It measures the table's
+document position on layout/viewport changes, keeps at least 12rem for rows on
+short screens, and retains the sticky column labels and filters. Reserve space
+for content below using `--table-viewport-bottom` in `containerClassName` (default
+1.5rem). Stock reserves 6rem for its footer. Other tables keep their existing
+height limits.
 
 Use `toolbarStart` for a register heading beside Clear All Filters, above the
 table border. Keep the border on `containerClassName` so it encloses only the

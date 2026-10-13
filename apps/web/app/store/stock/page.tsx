@@ -311,6 +311,8 @@ export default async function StoreStockPage({
           ) : null}
 
           <OperationalTable
+            fitViewport
+            containerClassName="[--table-viewport-bottom:6rem]"
             id="main-store-stock"
             filterStorageKey="store-stock-register-unit-ids"
             filteredSelection={

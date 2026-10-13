@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react"
 import type { ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
 import { ActionToolbar } from "@/components/ui/golden-patterns"
+import { PageActions } from "@/components/ui/page-actions"
 
 import {
   operationalEntrySelectionFromContext,
@@ -49,11 +50,13 @@ export function OperationalWorkspaceTabs({
   return (
     <>
       {transferAction ? (
-        <ActionToolbar className="w-full">
-          {transferAction === "csvImport" ? csvDownloadAction : null}
-          {transferAction === "csvImport" ? csvImportAction : null}
-          {transferAction === "export" ? exportAction : null}
-        </ActionToolbar>
+        <PageActions>
+          <ActionToolbar className="w-full">
+            {transferAction === "csvImport" ? csvDownloadAction : null}
+            {transferAction === "csvImport" ? csvImportAction : null}
+            {transferAction === "export" ? exportAction : null}
+          </ActionToolbar>
+        </PageActions>
       ) : null}
       <div className="flex flex-wrap items-center border-b">
         <Link

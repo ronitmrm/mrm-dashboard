@@ -26,6 +26,10 @@ import {
 
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
 import { UserAccountFooter } from "@/components/user-account-footer"
+import {
+  PageActionsTarget,
+  useShellPageActions,
+} from "@/components/ui/page-actions"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
@@ -78,6 +82,8 @@ export function CommercialShell({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { actionsTarget, setActionsTarget, headerHeight, headerRef } =
+    useShellPageActions()
   const productionPage = pathname.startsWith("/dashboard/job-cards/")
     ? { label: "Job Card", parentTab: "jobCardStatusTab" as const }
     : Object.entries(productionPageNavigation).find(
@@ -137,7 +143,7 @@ export function CommercialShell({
     <SidebarProvider
       style={
         {
-          "--header-height": "4rem",
+          "--header-height": `${headerHeight}px`,
           "--sidebar-width": "19rem",
         } as React.CSSProperties
       }
@@ -168,7 +174,10 @@ export function CommercialShell({
         <SidebarRail />
       </Sidebar>
       <SidebarInset className="min-w-0">
-        <header className="sticky top-0 z-10 flex h-(--header-height) items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-6">
+        <header
+          ref={headerRef}
+          className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur lg:px-6"
+        >
           <SidebarTrigger />
           <Separator className="h-5" orientation="vertical" />
           <div className="min-w-0 flex-1">
@@ -176,14 +185,21 @@ export function CommercialShell({
               {current.label}
             </h1>
           </div>
+          <div
+            className="flex max-w-full min-w-0 flex-wrap items-center gap-2 empty:hidden max-sm:order-last max-sm:basis-full"
+            data-slot="shell-page-actions"
+            ref={setActionsTarget}
+          />
           <Badge variant="outline">
             <Settings2 />
             Postgresql
           </Badge>
         </header>
-        <main className="@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6">
-          {children}
-        </main>
+        <PageActionsTarget value={actionsTarget}>
+          <main className="@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6">
+            {children}
+          </main>
+        </PageActionsTarget>
       </SidebarInset>
     </SidebarProvider>
   )
