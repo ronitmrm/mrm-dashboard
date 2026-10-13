@@ -44,42 +44,6 @@ export type BrandingDocument = {
 }
 export type DocumentControlFields = DocumentControlMetadata & {
   metadataVersion: number
-  workflowTitle: string
-  workflowDepartment: string
-  workflowText: string
-  workflowVersion: number
-  responsibleUserId: string | null
-  responsibleName: string | null
-  isoModule: string | null
-  workTargetOn: string | null
-}
-export type MasterDocumentRow = BrandingDocument &
-  DocumentControlFields & {
-    title: string
-    department: string
-    revision: number | null
-    revisionDate: string | null
-    hasDraft: boolean
-    draftRevision: number | null
-    workflowState: DocumentWorkflowState | null
-  }
-export type DocumentAuditEvent = {
-  id: string
-  eventType: string
-  actorName: string
-  occurredAt: string
-  reason: string | null
-  beforeState: Record<string, unknown> | null
-  afterState: Record<string, unknown> | null
-}
-export type MonitoringConfirmation = {
-  id: string
-  obligationType: "document-review" | "data-record"
-  periodLabel: string
-  evidenceLocation: string | null
-  remarks: string | null
-  completedByName: string
-  completedAt: string
 }
 export type BrandingRegisterRow = BrandingDocument & {
   title: string
@@ -107,11 +71,7 @@ const controlFieldsSelect = `d.document_type AS "documentType",
   COALESCE(d.data_frequency_detail, '') AS "dataFrequencyDetail",
   COALESCE(d.data_retention, '') AS "dataRetention",
   d.record_locations AS "recordLocations", d.content_access AS "contentAccess",
-  d.metadata_version AS "metadataVersion",d.workflow_title AS "workflowTitle",
-  d.workflow_department AS "workflowDepartment",d.workflow_text AS "workflowText",
-  d.workflow_version AS "workflowVersion",d.responsible_user_id AS "responsibleUserId",
-  (SELECT name FROM identity.users WHERE id=d.responsible_user_id) AS "responsibleName",
-  d.iso_module AS "isoModule",d.work_target_on::text AS "workTargetOn"`
+  d.metadata_version AS "metadataVersion"`
 
 async function appendDocumentAudit(
   client: { query: (text: string, values?: unknown[]) => Promise<unknown> },
@@ -165,99 +125,16 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
       if (!result.rows[0]) throw new Error("Organization not found.")
       return result.rows[0].id
     },
-    async listMasterDocuments(organizationId: string) {
-      const rows = (
-        await pool.query<
-          MasterDocumentRow & {
-            draftTitle: string | null
-            draftDepartment: string | null
-          }
-        >(
-          `SELECT d.id, d.type, d.number, ${controlFieldsSelect},
-            COALESCE(current_revision.content->>'title', draft.content->>'title', NULLIF(d.workflow_title,''), '') AS title,
-            COALESCE(NULLIF(d.workflow_department,''),current_revision.content->>'department', draft.content->>'department', '') AS department,
-            draft.content->>'title' AS "draftTitle",
-            draft.content->>'department' AS "draftDepartment",
-            current_revision.revision, current_revision.issued_at::text AS "revisionDate",
-            draft.id IS NOT NULL AS "hasDraft", draft.revision AS "draftRevision",
-            draft.workflow_state AS "workflowState"
-          FROM branding.documents d
-          LEFT JOIN LATERAL (
-            SELECT content, revision, issued_at
-            FROM branding.revisions
-            WHERE document_id = d.id AND state = 'issued'
-            ORDER BY revision DESC LIMIT 1
-          ) current_revision ON true
-          LEFT JOIN LATERAL (
-            SELECT id, content, revision, workflow_state
-            FROM branding.revisions
-            WHERE document_id = d.id AND state = 'draft'
-            LIMIT 1
-          ) draft ON true
-          WHERE d.organization_id = $1 AND d.type <> 'notice'
-          ORDER BY d.number NULLS LAST, d.created_at, d.id`,
-          [organizationId]
-        )
-      ).rows
-      return {
-        all: rows,
-        released: rows.filter((row) => row.revision !== null),
-        pending: rows
-          .filter((row) => row.hasDraft)
-          .map((row) => ({
-            ...row,
-            title: row.draftTitle ?? row.title,
-            department: row.draftDepartment ?? row.department,
-          })),
-      }
-    },
-    async getControlDossier(organizationId: string, documentId: string) {
-      const document = (
-        await pool.query<BrandingDocument & DocumentControlFields>(
-          `SELECT d.id, d.type, d.number, ${controlFieldsSelect}
-           FROM branding.documents d
-           WHERE d.organization_id = $1 AND d.id = $2`,
-          [organizationId, documentId]
-        )
-      ).rows[0]
-      if (!document) return null
-      const [revisions, audit, monitoring] = await Promise.all([
-        pool.query<BrandingRevision>(
-          `SELECT ${revisionSelect} FROM branding.revisions
-           WHERE document_id = $1 ORDER BY revision DESC`,
-          [documentId]
-        ),
-        pool.query<DocumentAuditEvent>(
-          `SELECT event.id, event.event_type AS "eventType",
-             COALESCE(actor.name, 'System') AS "actorName",
-             event.occurred_at::text AS "occurredAt", event.reason,
-             event.before_state AS "beforeState", event.after_state AS "afterState"
-           FROM audit.events event
-           LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
-           WHERE event.target_schema = 'branding'
-             AND event.target_table = 'documents' AND event.target_id = $1
-           ORDER BY event.occurred_at DESC, event.id DESC`,
-          [documentId]
-        ),
-        pool.query<MonitoringConfirmation>(
-          `SELECT id, obligation_type AS "obligationType",
-             period_label AS "periodLabel", evidence_location AS "evidenceLocation",
-             remarks, completed_by_name AS "completedByName",
-             completed_at::text AS "completedAt"
-           FROM document_control.monitoring_confirmations
-           WHERE organization_id = $1 AND document_id = $2
-           ORDER BY completed_at DESC, id DESC`,
-          [organizationId, documentId]
-        ),
-      ])
-      return {
-        ...document,
-        revisions: revisions.rows,
-        audit: audit.rows,
-        monitoring: monitoring.rows,
-      }
-    },
-    async list(organizationId: string, type: BrandingType, page = 1) {
+    async list(
+      organizationId: string,
+      type: BrandingType,
+      page = 1,
+      permittedDepartments: string[] | null = null
+    ) {
+      const departments =
+        permittedDepartments?.map((department) =>
+          department.trim().toLowerCase()
+        ) ?? null
       const summary = (
         await pool.query<{
           total: number
@@ -270,11 +147,15 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         count(*) FILTER (WHERE NOT issued)::integer AS drafts,
         count(*) FILTER (WHERE issued AND draft AND type <> 'notice')::integer AS "revisionsInProgress"
         FROM (SELECT d.type,
-          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'issued') AS issued,
-          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'draft') AS draft
+          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'issued'
+            AND ($3::text[] IS NULL OR lower(btrim(r.content->>'department')) = ANY($3))) AS issued,
+          EXISTS(SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id AND r.state = 'draft'
+            AND ($3::text[] IS NULL OR lower(btrim(r.content->>'department')) = ANY($3))) AS draft
           FROM branding.documents d WHERE d.organization_id = $1 AND d.type = $2
+            AND EXISTS (SELECT 1 FROM branding.revisions r WHERE r.document_id = d.id
+              AND ($3::text[] IS NULL OR lower(btrim(r.content->>'department')) = ANY($3)))
         ) documents`,
-          [organizationId, type]
+          [organizationId, type, departments]
         )
       ).rows[0]!
       const result = await pool.query<BrandingRegisterRow>(
@@ -282,13 +163,15 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         r.content->>'title' AS title, r.content->>'department' AS department,
         r.content->'languages' AS languages, r.content->>'effectiveDate' AS "effectiveDate",
         r.revision, r.state, r.author_name AS "authorName", r.updated_at::text AS "updatedAt",
-        EXISTS(SELECT 1 FROM branding.revisions draft WHERE draft.document_id = d.id AND draft.state = 'draft') AS "hasDraft"
+        EXISTS(SELECT 1 FROM branding.revisions draft WHERE draft.document_id = d.id AND draft.state = 'draft'
+          AND ($4::text[] IS NULL OR lower(btrim(draft.content->>'department')) = ANY($4))) AS "hasDraft"
         FROM branding.documents d JOIN LATERAL (
           SELECT * FROM branding.revisions WHERE document_id = d.id
+            AND ($4::text[] IS NULL OR lower(btrim(content->>'department')) = ANY($4))
           ORDER BY (state = 'issued') DESC, revision DESC LIMIT 1
         ) r ON true WHERE d.organization_id = $1 AND d.type = $2
         ORDER BY d.created_at DESC, d.id LIMIT 101 OFFSET $3`,
-        [organizationId, type, (page - 1) * 100]
+        [organizationId, type, (page - 1) * 100, departments]
       )
       return {
         summary,
@@ -318,18 +201,31 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
         )
       ).rows
     },
-    async get(organizationId: string, type: BrandingType, documentId: string) {
+    async get(
+      organizationId: string,
+      type: BrandingType,
+      documentId: string,
+      permittedDepartments: string[] | null = null
+    ) {
       const document = (
-        await pool.query<BrandingDocument>(
-          "SELECT id, type, number FROM branding.documents WHERE organization_id = $1 AND type = $2 AND id = $3",
+        await pool.query<BrandingDocument & DocumentControlFields>(
+          `SELECT d.id, d.type, d.number, ${controlFieldsSelect}
+           FROM branding.documents d WHERE d.organization_id = $1 AND d.type = $2 AND d.id = $3`,
           [organizationId, type, documentId]
         )
       ).rows[0]
       if (!document) return null
       const revisions = (
         await pool.query<BrandingRevision>(
-          `SELECT ${revisionSelect} FROM branding.revisions WHERE document_id = $1 ORDER BY revision DESC`,
-          [documentId]
+          `SELECT ${revisionSelect} FROM branding.revisions WHERE document_id = $1
+           AND ($2::text[] IS NULL OR lower(btrim(content->>'department')) = ANY($2))
+           ORDER BY revision DESC`,
+          [
+            documentId,
+            permittedDepartments?.map((department) =>
+              department.trim().toLowerCase()
+            ) ?? null,
+          ]
         )
       ).rows
       return { ...document, revisions }
@@ -705,61 +601,6 @@ export function createBrandingRepository(options: RepositoryPoolOptions) {
           beforeState: { workflowState: revision.workflowState },
           afterState: { workflowState: nextState },
           metadata: { revisionId: revision.id, revision: revision.revision },
-        })
-      })
-    },
-    async confirmMonitoring(input: {
-      organizationId: string
-      documentId: string
-      obligationType: "document-review" | "data-record"
-      periodLabel: string
-      evidenceLocation: string
-      remarks: string
-      userId: string
-      userName: string
-    }) {
-      const periodLabel = input.periodLabel.trim()
-      if (!periodLabel) throw new Error("Monitoring period is required.")
-      return withTransaction(pool, async (client) => {
-        const document = await client.query(
-          `SELECT 1 FROM branding.documents
-           WHERE id = $1 AND organization_id = $2`,
-          [input.documentId, input.organizationId]
-        )
-        if (!document.rowCount) throw new Error("Document not found.")
-        await client.query(
-          `INSERT INTO document_control.monitoring_confirmations (
-             organization_id, document_id, obligation_type, period_label,
-             evidence_location, remarks, completed_by_user_id, completed_by_name
-           ) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8)
-           ON CONFLICT (document_id, obligation_type, period_label) DO UPDATE SET
-             evidence_location = EXCLUDED.evidence_location,
-             remarks = EXCLUDED.remarks,
-             completed_by_user_id = EXCLUDED.completed_by_user_id,
-             completed_by_name = EXCLUDED.completed_by_name,
-             completed_at = now()`,
-          [
-            input.organizationId,
-            input.documentId,
-            input.obligationType,
-            periodLabel,
-            input.evidenceLocation.trim(),
-            input.remarks.trim(),
-            input.userId,
-            input.userName,
-          ]
-        )
-        await appendDocumentAudit(client, {
-          organizationId: input.organizationId,
-          documentId: input.documentId,
-          actorUserId: input.userId,
-          eventType: "document.monitoring.completed",
-          reason: input.remarks.trim() || null,
-          afterState: {
-            obligationType: input.obligationType,
-            periodLabel,
-            evidenceLocation: input.evidenceLocation.trim() || null,
-          },
         })
       })
     },

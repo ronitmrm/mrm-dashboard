@@ -50,15 +50,7 @@ export function sidebarModuleForPermission(
   storedModule: string
 ) {
   if (permissionKey.startsWith("iso.documents."))
-    return sidebarModuleLabels.isoDocument
-  if (permissionKey.startsWith("iso.tasks."))
-    return sidebarModuleLabels.isoDocument
-  if (permissionKey.startsWith("iso.analysis."))
-    return sidebarModuleLabels.isoDocument
-  if (permissionKey.startsWith("iso.management_review."))
-    return sidebarModuleLabels.isoDocument
-  if (permissionKey.startsWith("iso.interested_parties."))
-    return sidebarModuleLabels.isoDocument
+    return sidebarModuleLabels.branding
   if (permissionKey.startsWith("iso.calibration_plan."))
     return sidebarModuleLabels.isoDocument
   if (permissionKey.startsWith("quality.store."))
@@ -115,7 +107,7 @@ export function sidebarSubmoduleForPermission(
     ["iso.calibration_plan.", "Calibration Plan"],
     ["quality.control.calibration.", "Calibration"],
     ["quality.store.", "Quality Store"],
-    ["iso.documents.", "Master Document List"],
+    ["iso.documents.", "Document Control"],
     ["quality.control.", "Rejection Entry"],
     ["quality.rejection_register.", "Rejection Register"],
     ["branding.sop.", "SOPs"],

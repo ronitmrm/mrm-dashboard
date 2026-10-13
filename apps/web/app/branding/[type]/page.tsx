@@ -19,7 +19,7 @@ import {
 import { brandingType, withBranding } from "@/lib/branding/server"
 import { brandingCapability } from "@/lib/auth/branding-capabilities"
 import { listGrantedCapabilities } from "@/lib/auth/require-capability"
-import { isoDocumentCapabilities } from "@/lib/auth/iso-document-capabilities"
+import { documentControlCapabilities } from "@/lib/auth/document-control-capabilities"
 
 export default async function BrandingRegisterPage({
   params,
@@ -37,13 +37,13 @@ export default async function BrandingRegisterPage({
   const { register, canWrite } = await withBranding(
     type,
     "read",
-    async ({ repository, organizationId, userId }) => ({
-      register: await repository.list(organizationId, type, page),
+    async ({ repository, organizationId, userId, permittedDepartments }) => ({
+      register: await repository.list(organizationId, type, page, permittedDepartments),
       canWrite:
         (
           await listGrantedCapabilities(userId, [
             brandingCapability(type, "write"),
-            isoDocumentCapabilities.manage,
+            documentControlCapabilities.manage,
           ])
         ).length === 2,
     })

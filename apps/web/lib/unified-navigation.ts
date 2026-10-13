@@ -1,7 +1,6 @@
 import {
   ArrowRightLeft,
   Boxes,
-  BookOpenCheck,
   BriefcaseBusiness,
   Calculator,
   CalendarDays,
@@ -109,43 +108,6 @@ export const publishedRegisterNavigation = [
 ] as const
 
 export const isoDocumentNavigation = [
-  { href: "/iso-document/pending-actions", icon: ListChecks, label: "Pending Actions" },
-  { href: "/iso-document/sipoc", icon: Route, label: "SIPOC Process Maps" },
-  {
-    href: "/iso-document/customer-satisfaction",
-    icon: Route,
-    label: "Customer Satisfaction Reports",
-  },
-  {
-    href: "/iso-document/analysis/risk",
-    icon: Route,
-    label: "Risk-Based Thinking",
-  },
-  {
-    href: "/iso-document/interested-parties",
-    icon: UsersRound,
-    label: "Interested Parties Requirements",
-  },
-  {
-    href: "/iso-document/management-review",
-    icon: UsersRound,
-    label: "Management Review Meetings",
-  },
-  {
-    href: "/iso-document/analysis/pest",
-    icon: ClipboardList,
-    label: "PEST Analysis",
-  },
-  {
-    href: "/iso-document/analysis/swot",
-    icon: ClipboardList,
-    label: "SWOT Analysis",
-  },
-  {
-    href: "/iso-document/documents",
-    icon: BookOpenCheck,
-    label: "Master Document List",
-  },
   {
     href: "/iso-document/rejections",
     icon: ShieldCheck,

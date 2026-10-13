@@ -1,7 +1,7 @@
 import { brandingType } from "@/lib/branding/server"
 import { generateBrandingPdf } from "@/lib/branding/pdf"
 import { attachmentContentDisposition } from "@/lib/attachment-viewer"
-import { withDocumentContentAccess } from "@/lib/iso-document/server"
+import { withDocumentContentAccess } from "@/lib/branding/document-control"
 export const maxDuration = 60
 export async function GET(
   request: Request,

@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import { SoftwareProcessingProvider } from "@/components/software-processing-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { RetiredPageStorageCleanup } from "@/components/retired-page-storage-cleanup"
 import { themeInitializationScript } from "../lib/theme-initialization"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -55,6 +56,7 @@ export default async function RootLayout({
         />
       </head>
       <body className={cn("min-h-svh antialiased")}>
+        <RetiredPageStorageCleanup />
         <ThemeProvider>
           <SoftwareProcessingProvider>{children}</SoftwareProcessingProvider>
         </ThemeProvider>
