@@ -36,12 +36,14 @@ test("shows the saved finish and changing current forecast for the matching Job 
       routeRows={[]} productionRows={[]}
       rows={[{ jcNo: "P2132", partCode: "R131", poDate: "2026-09-12" }]}
       finishDateRows={[
-        { jcNo: "P2132", partCode: "R131", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate, actualFinishDate: "24-Sept-26" },
+        { jcNo: "P2132", partCode: "R131", rmReceivedDate: "20-Sept-26", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate, actualFinishDate: "24-Sept-26" },
         { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26", actualFinishDate: "4-Nov-26" },
       ]} />
   )
   const initial = render("28-Sept-26")
   expect(initial).toContain("Planned Finish Date")
+  expect(initial).toContain("RM Received Date")
+  expect(initial).toContain("20-Sept-26")
   expect(initial).toContain("Current Estimated Finish")
   expect(initial).toContain("Actual Finish Date")
   expect(initial).toContain("FG PO Date")
