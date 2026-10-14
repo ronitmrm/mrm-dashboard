@@ -13,6 +13,8 @@ import {
   machineTypeForFamily,
   machineFamilyMatches,
   isActivePlannerDecision,
+  planningCalendarScope,
+  planningCalendarShift,
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
 } from "./planning-rules"
@@ -1677,7 +1679,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       sourcePayload?: unknown
     }) {
       return transaction(pool, async (client) => {
-        const exceptionType = "calendar"
+        const payload = sourcePayloadRecord(input.sourcePayload)
+        const calendarScope = planningCalendarScope(payload.calendarScope)
+        const shift = planningCalendarShift(payload.shift, calendarScope)
+        const exceptionType = calendarScope === "factory" && shift === "All"
+          ? "calendar" : `calendar:${calendarScope}:${shift}`
         const date = (await client.query<{ date: string | null }>(
           "SELECT migration.try_date($1)::text AS date", [input.exceptionDate.trim()]
         )).rows[0]?.date
@@ -1687,6 +1693,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (requestedType !== "holiday" && requestedType !== "working friday")
           throw new RangeError("Choose Holiday or Working Friday.")
         const dayType = requestedType === "working friday" ? "Working Friday" : "Holiday"
+        if (dayType === "Working Friday" && shift !== "All")
+          throw new RangeError("Working Friday applies to all shifts of the selected unit.")
         if (dayType === "Working Friday" && parsedDate.getUTCDay() !== 5)
           throw new RangeError("Choose a Friday to cancel its weekly holiday.")
         await businessKeyLock(
@@ -1706,9 +1714,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         )
         if (input.recordId && existing.rows[0]?.source_id !== input.recordId)
           throw new RangeError("The calendar entry changed. Reload View Records and edit it again.")
-        const payload = input.sourcePayload && typeof input.sourcePayload === "object" && !Array.isArray(input.sourcePayload)
-          ? input.sourcePayload as Record<string, unknown> : {}
-        const sourcePayload = { date, dayType, reason: requiredText(input.name, "Reason"), remark: String(payload.remark ?? "") }
+        const sourcePayload = { date, dayType, reason: requiredText(input.name, "Reason"), remark: String(payload.remark ?? ""),
+          ...(calendarScope !== "factory" || shift !== "All" ? { calendarScope, shift } : {}) }
         rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(

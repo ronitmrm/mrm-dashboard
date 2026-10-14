@@ -135,6 +135,52 @@ export function isWorkingFriday(row: Record<string, unknown>) {
   return text(row.dayType).toLowerCase() === "working friday";
 }
 
+export function planningCalendarScope(value: unknown) {
+  const scope = text(value).toLowerCase() || "factory";
+  if (!["factory", "cnc", "conventional", "conventional-02", "forging"].includes(scope))
+    throw new RangeError("Choose Whole Factory or a production unit.");
+  return scope;
+}
+
+export function planningCalendarShift(value: unknown, scope: string) {
+  const shift = text(value) || "All";
+  const allowed = scope === "cnc" ? ["All", "A", "B", "C"]
+    : scope === "factory" ? ["All", "A", "B", "C", "General"] : ["All", "General"];
+  if (!allowed.includes(shift)) throw new RangeError("Choose a shift used by the selected unit.");
+  return shift;
+}
+
+// Dates supplied here are ISO Production Dates, including overnight CNC Shift C.
+export function planningCalendarExceptions(rows: Record<string, unknown>[], floor: string) {
+  const shifts = floor === "cnc" ? ["A", "B", "C"] : ["General"];
+  const closed = new Map<string, Set<string>>();
+  const workingDates = new Set<string>();
+  for (const row of rows) {
+    const scope = text(row.calendarScope) || "factory";
+    if (scope !== "factory" && scope !== floor) continue;
+    const date = text(row.date);
+    if (!date) continue;
+    if (isWorkingFriday(row)) {
+      workingDates.add(date);
+      continue;
+    }
+    const shift = text(row.shift) || "All";
+    const stopped = closed.get(date) ?? new Set<string>();
+    for (const selected of shifts) {
+      if (shift === "All" || shift === selected) stopped.add(selected);
+    }
+    if (stopped.size) closed.set(date, stopped);
+  }
+  const holidayDates = new Set<string>();
+  const capacityFractions: Record<string, number> = {};
+  for (const [date, stopped] of closed) {
+    const fraction = (shifts.length - stopped.size) / shifts.length;
+    capacityFractions[date] = fraction;
+    if (!fraction) holidayDates.add(date);
+  }
+  return { holidayDates, workingDates, capacityFractions };
+}
+
 export function isPlanningWorkday(value: Date, workingFriday = false) {
   return workingFriday || !planningHolidayWeekdays.has(value.getDay());
 }

@@ -146,6 +146,11 @@ describe("Proposed Order capacity review", () => {
     expect(calculateProposal(friday, context, lines).lines[0]?.selected).toBe(false)
     expect(calendar.holidays).toEqual(["2026-10-17"])
     expect(calculateProposal(friday, { ...context, holidays: calendar.holidays, workingDates: calendar.workingDates }, lines).lines[0]).toMatchObject({ selected: true, completion: "2026-10-16" })
+    const partial = proposalContext({ productionFloorCode: "cnc", productionControl: {
+      planningHolidayRows: [{ date: "16-Oct-26", dayType: "Working Friday" },
+        { date: "16-Oct-26", dayType: "Holiday", calendarScope: "cnc", shift: "A" }],
+    } }).context
+    expect(calculateProposal(friday, { ...context, holidays: partial.holidays, workingDates: partial.workingDates, capacityFractions: partial.capacityFractions }, lines).lines[0]?.selected).toBe(false)
   })
   test("uses the full period for machining even when an older draft has finishing days", () => {
     const lines = [line("new", 8)]

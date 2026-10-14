@@ -86,7 +86,7 @@ describe("master data workspaces", () => {
     expect(masterEditDefaults("planning_holiday", {
       _id: "calendar-17", date: "16-Oct-26", dateValue: "2026-10-16", dayType: "Working Friday",
     })).toMatchObject({ __entryId: "calendar-17", date: "2026-10-16", dayType: "Working Friday" })
-    expect(immutableMasterFields("planning_holiday")).toEqual(["date"])
+    expect(immutableMasterFields("planning_holiday")).toEqual(["date", "calendarScope", "shift"])
     expect(
       masterEditDefaults("rejection_type_master", {
         _id: "source-17",

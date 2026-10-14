@@ -1,6 +1,6 @@
 import {
   isActivePlannerDecision,
-  isWorkingFriday,
+  planningCalendarExceptions,
   machineFamilyMatches,
   machineMasterFamily,
 } from "@workspace/db/planning-rules"
@@ -48,6 +48,7 @@ function date(value: unknown) {
 export function proposalContext(snapshot: unknown, planningStart?: string) {
   const root = record(snapshot)
   const source = record(root.productionControl)
+  const calendar = planningCalendarExceptions(rows(source.planningHolidayRows).map((row) => ({ ...row, date: date(row.dateValue ?? row.date ?? row.holidayDate) })), text(root.productionFloorCode) || "conventional")
   const routes = rows(source.routeMasterRows)
   const cycles = rows(source.cycleMasterRows)
   const families = [
@@ -80,14 +81,9 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
   const context: PlanningContext = {
     version: Number(root.readModelVersion),
     machines,
-    holidays: rows(source.planningHolidayRows)
-      .filter((row) => !isWorkingFriday(row))
-      .map((row) => date(row.date ?? row.holidayDate))
-      .filter(Boolean),
-    workingDates: rows(source.planningHolidayRows)
-      .filter(isWorkingFriday)
-      .map((row) => date(row.date ?? row.holidayDate))
-      .filter(Boolean),
+    holidays: [...calendar.holidayDates],
+    workingDates: [...calendar.workingDates],
+    capacityFractions: calendar.capacityFractions,
     weeklyHoliday: 5,
     existing: [],
     reservations: [],

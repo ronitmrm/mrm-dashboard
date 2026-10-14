@@ -784,9 +784,11 @@ const dataEntrySpecs: DataEntrySpec[] = [
     entryType: "planning_holiday",
     title: "Planning Calendar",
     description:
-      "Applies to all production units. Fridays are closed by default. Choose Working Friday to cancel the holiday for one Friday. Delete that entry in View Records to restore the Friday holiday.",
+      "Choose Whole Factory or a production unit, then All shifts or one shift. CNC uses A/B/C; other units use General. Fridays remain closed unless marked Working Friday (All shifts).",
     fields: [
       { name: "date", label: "Date", type: "date", required: true },
+      { name: "calendarScope", label: "Applies to", options: ["factory", ...productionFloors.map((floor) => floor.code)], defaultValue: "factory", required: true },
+      { name: "shift", label: "Shift", options: ["All", "A", "B", "C", "General"], defaultValue: "All", required: true },
       {
         name: "dayType",
         label: "Day type",
@@ -16673,6 +16675,16 @@ function LegacyActionForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [values, setValues] = useState(defaults)
   const derivedValues = deriveValues?.(values) ?? {}
+  const displayedFields = fields.map((field) => {
+    if (field.name === "dayType" && fields.some((candidate) => candidate.name === "shift" && candidate.readOnly) && str(defaults.shift) !== "All")
+      return { ...field, options: ["Holiday"] }
+    if (field.name !== "shift" || !fields.some((candidate) => candidate.name === "calendarScope")) return field
+    const scope = str(values.calendarScope) || "factory"
+    const options = str(values.dayType) === "Working Friday" ? ["All"]
+      : scope === "factory" ? ["All", "A", "B", "C", "General"]
+        : scope === "cnc" ? ["All", "A", "B", "C"] : ["All", "General"]
+    return { ...field, options }
+  })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -16710,22 +16722,25 @@ function LegacyActionForm({
                 : "grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-3"
           }
         >
-          {fields.map((field) => (
+          {displayedFields.map((field) => (
             <Field key={field.name} label={field.label}>
+              {field.options && field.readOnly ? (
+                <input type="hidden" name={field.name} value={str(defaults[field.name]) || field.defaultValue || field.options[0]} />
+              ) : null}
               {field.options ? (
                 <SearchableSelect
+                  key={field.options.join("|")}
                   className="h-9 rounded-md border bg-background px-3 text-sm"
                   name={field.name}
                   disabled={field.readOnly}
                   defaultValue={
-                    str(defaults[field.name]) ||
+                    (field.options.includes(str(values[field.name])) ? str(values[field.name]) : "") ||
                     field.defaultValue ||
                     field.options[0]
                   }
                   required={field.required}
                   onChange={(event) => {
-                    if (deriveValues)
-                      setValues((current) => ({
+                    setValues((current) => ({
                         ...current,
                         [field.name]: event.target.value,
                       }))
@@ -16733,7 +16748,11 @@ function LegacyActionForm({
                 >
                   {field.options.map((option) => (
                     <option key={option} value={option}>
-                      {field.name === "productionFloorCode"
+                      {field.name === "calendarScope" && option === "factory"
+                        ? "Whole Factory"
+                        : field.name === "shift" && option === "All"
+                          ? "All shifts"
+                          : field.name === "productionFloorCode" || field.name === "calendarScope"
                         ? (productionFloors.find(
                             (floor) => floor.code === option
                           )?.label ?? option)
@@ -19231,7 +19250,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   )
     return str(payload.code).toLowerCase()
   if (entryType === "planning_holiday") {
-    return str(payload.date)
+    return [str(payload.date), str(payload.calendarScope) || "factory", str(payload.shift) || "All"].join("|")
   }
   if (entryType === "work_order" || entryType === "rm_inward")
     return str(payload.jcNo)

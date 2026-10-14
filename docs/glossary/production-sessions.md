@@ -319,7 +319,10 @@ For example, Conventional downtime from 16:00 until the 20:00 shift end records 
 Production Date is the date on which the shift starts. CNC Shift C therefore keeps its starting date after midnight until 06:00.
 
 Friday is the default weekly off by Production Date. A Universal Planning Calendar
-Working Friday entry opens that Production Date for all units. Thursday's CNC Shift C continues
+Working Friday entry opens that Production Date for its selected unit or Whole Factory.
+Shift holidays reduce forecast capacity only for the named shift and scope;
+existing entries close all factory shifts. See `job-cards.md` for overlaps and capacity.
+Thursday's CNC Shift C continues
 until Friday 06:00; the weekly off lasts until Saturday 06:00. For example,
 8-Oct Shift C runs from 8-Oct 22:00 to 9-Oct 06:00, retaining 8-Oct as its
 Production Date. CNC planning and planned-date task readiness use this same

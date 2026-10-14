@@ -51,6 +51,9 @@ test("holidays are shared and a Friday can be changed to a working day", async (
   expect((await pool.query("SELECT source_payload FROM manufacturing.planning_calendar_exceptions WHERE id = $1", [saved.id])).rows[0].source_payload).toEqual({ date: "2026-10-16", dayType: "Working Friday", reason: "Extra machining day", remark: "" })
   await expect(planning.upsertPlanningCalendarException({ ...input, exceptionDate: "2026-10-17", dayType: "Working Friday" })).rejects.toThrow("Choose a Friday")
   await expect(planning.upsertPlanningCalendarException({ ...input, rejectDuplicates: true })).rejects.toThrow()
+  await planning.upsertPlanningCalendarException({ ...input, sourcePayload: { calendarScope: "cnc", shift: "A" }, rejectDuplicates: true })
+  expect((await pool.query("SELECT count(*)::integer AS count FROM manufacturing.planning_calendar_exceptions WHERE organization_id = $1 AND exception_date = '2026-10-16'", [organizationId])).rows[0].count).toBe(2)
+  await expect(planning.upsertPlanningCalendarException({ ...input, sourcePayload: { calendarScope: "conventional", shift: "A" } })).rejects.toThrow("Choose a shift")
 })
 
 test("saving a machine from another unit is rejected instead of moving or overwriting it", async () => {
