@@ -8,9 +8,17 @@ import {
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProductionCurrent,
+  shopFloorRowIsProducedHistory,
 } from "./shop-floor-workflow";
 
 describe("shop-floor workflow action labels", () => {
+  it("excludes moved setup production history while retaining remaining machine work", () => {
+    const history = { machine: "CNC-12", machineUnavailableSplitRole: "produced_on_unavailable_machine", pendingGoodQty: 0, rawActualQty: 179 }
+    const remaining = { machine: "CNC-13", machineUnavailableSplitRole: "remaining_moved_to_alternate_machine", pendingGoodQty: 1321 }
+    const rows = [history, remaining]
+    expect(rows.filter((row) => !shopFloorRowIsProducedHistory(row))).toEqual([remaining])
+    expect(rows).toEqual([history, remaining])
+  })
   it("keeps reopened production out of Running until the machine starts again", () => {
     const reopened = { shopFloorStage: "planned", runningStatus: "Planned", rawRows: 18, rawOutputQty: 7336, rawActualQty: 7336 }
     expect(shopFloorRowIsProductionCurrent(reopened)).toBe(false)

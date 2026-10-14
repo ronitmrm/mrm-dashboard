@@ -259,6 +259,7 @@ import {
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
+  shopFloorRowIsProducedHistory,
   shopFloorRowIsProductionCurrent,
 } from "@/lib/shop-floor-workflow"
 import {
@@ -17032,12 +17033,13 @@ function MachinePlanningTile({
   const machine = machineValue(row, "machine")
   const machineType = machineValue(row, "machineType")
   const status = machineMasterStatusText(row)
-  const plannedCount = plannedRows.length
-  const planningStatus = machinePlanningStatus(plannedRows)
-  const currentSetup = currentShopFloorItem(plannedRows)
-  const nextSetup = nextShopFloorItem(plannedRows, currentSetup)
+  const machineWorkRows = plannedRows.filter((plan) => !shopFloorRowIsProducedHistory(plan))
+  const plannedCount = machineWorkRows.length
+  const planningStatus = machinePlanningStatus(machineWorkRows)
+  const currentSetup = currentShopFloorItem(machineWorkRows)
+  const nextSetup = nextShopFloorItem(machineWorkRows, currentSetup)
   const focusSetup =
-    currentSetup ?? nextSetup ?? machineTileFocusSetup(plannedRows)
+    currentSetup ?? nextSetup ?? machineTileFocusSetup(machineWorkRows)
   const focusIsCurrent = Boolean(
     currentSetup &&
     focusSetup &&
@@ -17094,15 +17096,12 @@ function MachinePlanningTile({
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
         <TileField
           label={focusIsCurrent ? "Current Job Card" : "Next Job Card"}
-          value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo}
+          value={focusSetup?.jcNo}
         />
         <TileField
           label={focusIsCurrent ? "Current Part" : "Next Part To Setup"}
           value={
-            focusSetup?.partCode ||
-            row.partCode ||
-            row["PART CODE"] ||
-            row.itemCode
+            focusSetup?.partCode
           }
         />
         <TileField
@@ -18558,6 +18557,7 @@ function nextShopFloorItem(
   const currentKey = current ? shopFloorPlanKey(current) : ""
   return rows
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
+    .filter((row) => !shopFloorRowIsProducedHistory(row))
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
     .filter((row) => !shopFloorItemIsProductionCurrent(row))
     .sort(shopFloorPlanSort)[0]
