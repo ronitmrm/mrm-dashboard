@@ -30,6 +30,7 @@ export type PlanningContext = {
   machines: { id: string; family: string }[]
   holidays: string[]
   workingDates?: string[]
+  capacityFractions?: Record<string, number>
   weeklyHoliday: number
   existing: PlanningLine[]
   reservations: Reservation[]
@@ -139,10 +140,15 @@ export function calculateProposal(
   }
   const slot = (date: string) => {
     const index = dates.findIndex((day) => day >= date)
-    return index < 0 ? dates.length * daily : index * daily
+    return index < 0 ? totalCapacity : offsets[index]!
   }
-  const dateAt = (hour: number) =>
-    dates[Math.max(0, Math.ceil(hour / daily - 1e-9) - 1)] ?? ""
+  const offsets = [0]
+  for (const date of dates) offsets.push(offsets[offsets.length - 1]! + daily * (context.capacityFractions?.[date] ?? 1))
+  const totalCapacity = offsets[offsets.length - 1]!
+  const dateAt = (hour: number) => {
+    const index = offsets.findIndex((end, index) => index > 0 && end + 1e-9 >= hour)
+    return index < 1 ? "" : dates[index - 1] ?? ""
+  }
   type Interval = { start: number; end: number }
   type Calendar = Map<string, Interval[]>
   const clone = (calendar: Calendar): Calendar =>
@@ -191,7 +197,7 @@ export function calculateProposal(
       const limit =
         proposed && input.mode === "deadline"
           ? slot(addDays(input.deadline, 1))
-          : dates.length * daily
+          : totalCapacity
       if (!best || best.end > limit) return null
       if (first < 0) first = best.start
       const intervals = trial.get(best.machine)!
@@ -207,7 +213,7 @@ export function calculateProposal(
     return {
       calendar: trial,
       completion,
-      rmRequiredBy: dates[Math.floor(first / daily)] ?? "",
+      rmRequiredBy: dates[offsets.findIndex((end, index) => index > 0 && end > first + 1e-9) - 1] ?? "",
     }
   }
   const blockers = [...context.blockers]
@@ -231,7 +237,7 @@ export function calculateProposal(
   }
   const load = (target: Calendar, machine: string) => {
     const boundary = Math.min(
-      dates.length * daily,
+      totalCapacity,
       slot(addDays(input.deadline, 1))
     )
     let total = 0,
@@ -312,7 +318,7 @@ export function calculateProposal(
     .sort((a, b) => b.selected - a.selected || b.utilisation - a.utilisation)
   const best = trials[0]!
   const availablePerMachine = Math.min(
-    dates.length * daily,
+    totalCapacity,
     slot(addDays(input.deadline, 1))
   )
   return {

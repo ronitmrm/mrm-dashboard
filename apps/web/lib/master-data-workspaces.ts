@@ -79,7 +79,7 @@ const identityFieldsByEntryType: Record<string, readonly string[]> = {
   machine_master: ["machineNo"],
   maintenance_checklist_master: ["checklistCode", "sequence"],
   maintenance_master: ["maintenanceCode"],
-  planning_holiday: ["date"],
+  planning_holiday: ["date", "calendarScope", "shift"],
   quality_parameter_master: [
     "partNo",
     "optionNumber",
@@ -108,7 +108,7 @@ export function masterEditDefaults(
   const entryId = String(row._id ?? "").trim()
   return {
     ...row,
-    ...(entryType === "planning_holiday" ? { date: row.dateValue ?? row.date } : {}),
+    ...(entryType === "planning_holiday" ? { date: row.dateValue ?? row.date, calendarScope: row.calendarScope || "factory", shift: row.shift || "All" } : {}),
     __editingMaster: true,
     ...(entryId ? { __entryId: entryId } : {}),
     __returnTab: "masterTablesTab",

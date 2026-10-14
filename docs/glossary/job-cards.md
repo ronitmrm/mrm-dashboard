@@ -137,13 +137,21 @@ CNC-01 has 22.5 productive machine hours per working day: three shifts of
 Finish estimates retain fractional working days, shown as productive hours
 into the finish date, rather than invented wall-clock shift times. Machine
 queue reservations still use whole dates. The Universal Planning Calendar applies
-to every Production Unit. Fridays are closed by default. A dated **Working Friday**
-entry cancels that Friday's weekly off and gives it normal productive capacity;
-removing that entry restores the weekly off. A dated **Holiday** entry closes the
-date. Each date has one editable calendar entry, with a reason. These rules apply
+to the selected production unit (CNC, Conventional-01, Conventional-02 or Forging),
+or Whole Factory. Existing entries apply factory-wide to all shifts. Fridays are
+closed by default. A dated **Working Friday** entry opens all shifts of its scope;
+removing it restores the weekly off. A **Holiday** closes All shifts or a selected
+shift: CNC A/B/C each removes 7.5 productive hours; General removes the other
+units' 8 productive hours. Factory entries for a named shift affect units using
+that shift. CNC Shift C belongs to the date it starts, including its next-morning
+hours. Overlapping holidays close each shift once; a holiday takes precedence
+over a Working Friday. Each date/unit/shift combination has one editable entry
+with a reason; its identity is fixed (delete and recreate to change it). These rules apply
 to forecast production capacity, setup/Job Card finish dates, Order Acceptance,
 priority previews and delivery working-day targets. They do not prevent planning,
-setup preparation, or a setup start.
+setup preparation, or a setup start. Delivery working-day targets count any date
+with remaining productive capacity as a working date; partial shift holidays
+reduce machining capacity rather than removing that date from the target calendar.
 Setup start dates retain their calendar dates, including offs. Material and WIP
 availability, active machine ownership, tooling, reviewed queue order, and explicit
 machine-unavailable constraints still apply.

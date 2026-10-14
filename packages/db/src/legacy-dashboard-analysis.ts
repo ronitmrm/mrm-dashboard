@@ -1,7 +1,7 @@
 import { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
-import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningCalendarExceptions, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 import type { ProductionFloorCode } from "./production-floors";
 
 type DataEntry = {
@@ -86,6 +86,7 @@ type PlanningCalendar = {
   workingDates?: Set<string>;
   productiveHoursPerDay: number;
   currentProductionDate?: string;
+  capacityFractions?: Record<string, number>;
 };
 type WipProductionStream = {
   machine: string;
@@ -411,6 +412,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     : normalizedProductionEntries(input.productionEntries);
 
   const snapshot = buildProductionAnalysis({
+    productionFloorCode: input.productionFloorCode ?? "conventional",
     includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
     currentProductionDate: planningProductionDate(input.productionFloorCode),
     productiveHoursPerDay:
@@ -495,6 +497,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
 }
 
 function buildProductionAnalysis({
+  productionFloorCode,
   includeToolFixtureNumbers,
   currentProductionDate,
   productiveHoursPerDay,
@@ -549,6 +552,7 @@ function buildProductionAnalysis({
   updatedAt,
 }: {
   includeToolFixtureNumbers: boolean;
+  productionFloorCode: string;
   currentProductionDate: string;
   productiveHoursPerDay: number;
   productionRows: ProductionRow[];
@@ -879,6 +883,7 @@ function buildProductionAnalysis({
   }
   const productionControl = buildProductionControl({
     currentProductionDate,
+    productionFloorCode,
     productiveHoursPerDay,
     setupNameMasterRows,
     productionRows,
@@ -1072,6 +1077,7 @@ function buildProductionAnalysis({
 }
 
 function buildProductionControl({
+  productionFloorCode,
   currentProductionDate,
   productiveHoursPerDay,
   setupNameMasterRows,
@@ -1117,6 +1123,7 @@ function buildProductionControl({
   productionFinishBaselineRows,
 }: {
   currentProductionDate: string;
+  productionFloorCode: string;
   productiveHoursPerDay: number;
   productionRows: ProductionRow[];
   sourceProductionEntries: ProductionEntry[];
@@ -1166,6 +1173,7 @@ function buildProductionControl({
     planningHolidayRows,
     productiveHoursPerDay,
     currentProductionDate,
+    productionFloorCode,
   );
   const routeOptionsByPart = routeOptionSummariesByPart(dedupedRouteRows);
   const cycleKeys = new Set(latestMasterRows(cycleRows).keys());
@@ -1624,6 +1632,7 @@ function buildProductionControl({
       weeklyHoliday: "Friday",
       holidayDates: [...planningCalendar.holidayDates].sort(),
       workingDates: [...(planningCalendar.workingDates ?? [])].sort(),
+      capacityFractions: planningCalendar.capacityFractions ?? {},
     },
     workflowExceptionRows,
     machineConstraints,
@@ -2388,7 +2397,7 @@ function setupChecklistSessionEntryKey(row: Record<string, unknown>) {
 }
 
 function planningHolidayEntryKey(row: Record<string, unknown>) {
-  return parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")) || rowText(row, "date", "holidayDate", "fromDate", "startDate");
+  return [parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")) || rowText(row, "date", "holidayDate", "fromDate", "startDate"), row.calendarScope || "factory", row.shift || "All"].join("|");
 }
 
 function loadRouteLookup(rows: Record<string, unknown>[]) {
@@ -5309,18 +5318,19 @@ function isPlanningDate(dateValue: string, planningCalendar: PlanningCalendar) {
   return !Number.isNaN(date.getTime()) && isPlanningWorkday(date, planningCalendar.workingDates?.has(normalized));
 }
 
+function planningCapacityFraction(date: string, calendar: PlanningCalendar) {
+  return isPlanningDate(date, calendar) ? calendar.capacityFractions?.[date] ?? 1 : 0;
+}
+
 function planningCalendarFromRows(
   rows: Record<string, unknown>[],
   productiveHoursPerDay: number,
   currentProductionDate: string,
+  productionFloorCode: string,
 ): PlanningCalendar {
   return {
-    holidayDates: new Set(rows.filter((row) => !isWorkingFriday(row))
-      .map((row) => parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")))
-      .filter(Boolean)),
-    workingDates: new Set(rows.filter(isWorkingFriday)
-      .map((row) => parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")))
-      .filter(Boolean)),
+    ...planningCalendarExceptions(rows.map((row) => ({ ...row,
+      date: parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")) })), productionFloorCode),
     productiveHoursPerDay,
     currentProductionDate,
   };
@@ -5339,6 +5349,8 @@ function planningHolidayViewRows(rows: Record<string, unknown>[]) {
       dayType: isWorkingFriday(row) ? "Working Friday" : "Holiday",
       reason: rowText(row, "reason", "holidayReason") || "Plant holiday",
       scope: rowText(row, "scope") || "Plant",
+      calendarScope: rowText(row, "calendarScope") || "factory",
+      shift: rowText(row, "shift") || "All",
       machine: rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO"),
       department: rowText(row, "department"),
       remark: rowText(row, "remark", "remarks"),
@@ -5920,11 +5932,11 @@ function plannedProductionDays(startDate: string, endDate: string, planningCalen
   let days = 0;
   let guard = 0;
   while (current && current <= end && guard < 1000) {
-    if (isPlanningDate(current, planningCalendar)) days += 1;
+    if (isPlanningDate(current, planningCalendar)) days += planningCapacityFraction(current, planningCalendar);
     current = addCalendarDays(current, 1);
     guard += 1;
   }
-  return Math.max(1, days);
+  return days;
 }
 
 function dispatchTargetDate(rmInwardDate: string, planningCalendar: PlanningCalendar) {
@@ -5965,14 +5977,15 @@ function plannedProductionFinish(
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
   if (!orderPcs || !cycleSeconds) return { date: remainingStartDate, workingHours: null };
   const estimatedHours = (Math.max(orderPcs - (actual?.actualQty ?? 0), 0) * cycleSeconds) / 3600;
-  const productionDays = Math.max(
-    1,
-    Math.ceil(estimatedHours / planningCalendar.productiveHoursPerDay),
-  );
-  return {
-    date: addDays(remainingStartDate, productionDays - 1, planningCalendar),
-    workingHours: round(estimatedHours - (productionDays - 1) * planningCalendar.productiveHoursPerDay, 4),
-  };
+  let date = addDays(remainingStartDate, 0, planningCalendar);
+  let remainingHours = estimatedHours;
+  for (let guard = 0; date && guard < 5000; guard += 1) {
+    const hours = planningCalendar.productiveHoursPerDay * planningCapacityFraction(date, planningCalendar);
+    if (remainingHours <= hours + 0.000001) return { date, workingHours: round(remainingHours, 4) };
+    remainingHours -= hours;
+    date = addDays(date, 1, planningCalendar);
+  }
+  return { date: "", workingHours: null };
 }
 
 function cycleRevisionEffectiveDate(
@@ -6125,7 +6138,7 @@ function downstreamWipRunIsFeasible(
   let guard = 0;
   while (current && downstreamConsumedQty < orderPcs && guard < 1000) {
     if (isPlanningDate(current, planningCalendar)) {
-      downstreamConsumedQty = Math.min(orderPcs, downstreamConsumedQty + nextDailyQty);
+      downstreamConsumedQty = Math.min(orderPcs, downstreamConsumedQty + nextDailyQty * planningCapacityFraction(current, planningCalendar));
       const availableWipQty = availableWipQtyThroughDate(current);
       if (availableWipQty + 0.001 < downstreamConsumedQty) return false;
     }
@@ -6155,7 +6168,7 @@ function pooledWipSupplyThroughDate(streams: WipProductionStream[], orderPcs: nu
         if (through < countedThrough) count = plannedProductionDays(start, through, planningCalendar);
         else {
           while (current && current <= through && guard < 1000) {
-            if (isPlanningDate(current, planningCalendar)) days += 1;
+            if (isPlanningDate(current, planningCalendar)) days += stream.recorded ? 1 : planningCapacityFraction(current, planningCalendar);
             counts.set(current, days);
             countedThrough = current;
             current = addCalendarDays(current, 1);
@@ -6164,7 +6177,7 @@ function pooledWipSupplyThroughDate(streams: WipProductionStream[], orderPcs: nu
           count = days;
         }
       }
-      return Math.min(stream.quantity, Math.max(1, count) * stream.dailyQty);
+      return Math.min(stream.quantity, (stream.recorded ? Math.max(1, count) : count) * stream.dailyQty);
     };
   });
   // Candidate runs revisit the same supply dates. Bound retention even for

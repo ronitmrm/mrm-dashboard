@@ -83,8 +83,8 @@ the reference names required to select a related record; that does not grant
 maintenance access to the referenced master. Operational workspaces retain
 their own permissions for the records and reference data used by their workflow.
 
-Existing globally unique machine numbers and holiday date/type identities remain
-unchanged. A unit grant cannot move or overwrite a record belonging to another
+Machine numbers remain globally unique. Calendar entries are centrally managed
+under Universal permissions, with date/unit/shift identities. A unit grant cannot move or overwrite a record belonging to another
 unit. A conflicting identity is rejected; independent duplicate identities would
 require a separate storage change.
 

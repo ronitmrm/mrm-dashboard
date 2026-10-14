@@ -83,6 +83,21 @@ test("keeps a future CNC plan blocked during the preceding overnight shift", () 
   })
 })
 
+test("scopes shift holidays and reduces only the affected CNC production capacity", () => {
+  const input = inputFor(0)
+  input.productionEntries = []
+  input.dataEntries = input.dataEntries.filter(row => row.entryType !== "shop_floor_status" && row.payload.setupNo !== "2")
+  Object.assign(input.dataEntries.find(row => row.entryType === "work_order")!.payload, { orderPcs: 1000, rmInwardDate: "2026-09-21" })
+  const plan = () => buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "21-Sept-26" })
+  for (const calendarScope of ["cnc", "factory", "conventional"]) {
+    input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-09-21", calendarScope, shift: calendarScope === "conventional" ? "All" : "A", reason: "Shift holiday" }, createdAt: "2026-09-20T06:00:00Z" })
+  }
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "22-Sept-26", plannedProductionEndWorkingHours: 1.6667 })
+  input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-09-22", shift: "All", reason: "Factory holiday" }, createdAt: "2026-09-20T06:00:00Z" })
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "23-Sept-26" })
+})
+
 test("plans available WIP after an upstream setup completes below its order", () => {
   const input = inputFor(992)
   vi.setSystemTime(new Date("2026-09-20T09:00:00Z"))

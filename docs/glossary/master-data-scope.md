@@ -69,7 +69,9 @@ changing the saved records. Universal maintenance checklists and schedules
 are available in every Production Unit; unit-owned masters stay scoped to their unit.
 
 Setup Checklist Master belongs to one unit, while its SC codes use one shared
-sequence across all units. Planning Calendar dates apply to every unit.
+sequence across all units. Planning Calendar is managed centrally; each entry
+selects Whole Factory or one production unit and All shifts or a named shift.
+Existing entries remain factory-wide. See the planning rules in `job-cards.md`.
 
 Master Tables opens only after Unit, Main Master, and Sub Master are chosen on
 **Master Table Selection**. The selected table and Unit stay locked. Changing
