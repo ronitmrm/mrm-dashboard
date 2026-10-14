@@ -204,7 +204,7 @@ describe("independent master permissions", () => {
     expect(selectedStoreMasterData(data, "SUPPLIER_PRICE", false).items).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(81)
+    expect(scopedMasters).toHaveLength(78)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")
@@ -213,6 +213,8 @@ describe("independent master permissions", () => {
     expect(masterPermissionKey("cnc", "tooling", "read")).not.toBe(
       masterPermissionKey("forging", "tooling", "read")
     )
+    expect(scopedMasters.filter(({ master }) => master === "planning_holiday").map(({ unit }) => unit)).toEqual(["universal"])
+    expect(masterRecordCapability({ kind: "planning_holiday", productionFloorCode: null, termType: null }, "delete")).toBe("masters.universal.planning_holiday.delete")
     expect(new Set(masterPermissionOptions.map(({ key }) => key)).size).toBe(
       masterPermissionOptions.length
     )

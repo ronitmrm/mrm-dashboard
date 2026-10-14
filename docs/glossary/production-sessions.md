@@ -41,8 +41,9 @@ Retrying that same task keeps the same report identity. A new task's readings
 must not overwrite an earlier approval or require an old-report correction
 reason. Earlier reports remain available for review and reasoned correction.
 
-Setup Checklist masters belong to one production unit. Codes and revisions are
-unique within that unit; tasks may only select and complete that unit's templates.
+Setup Checklist masters belong to one production unit. New checklist codes use
+one shared SC sequence across all units and are assigned when saved. A code cannot
+belong to another unit; tasks may only select and complete their unit's templates.
 Editing a unit's checklist does not change another unit's checklist. Existing
 checklist and completion records retain their identities when assigned to a unit.
 
@@ -317,12 +318,13 @@ For example, Conventional downtime from 16:00 until the 20:00 shift end records 
 
 Production Date is the date on which the shift starts. CNC Shift C therefore keeps its starting date after midnight until 06:00.
 
-Friday is the weekly off by Production Date. Thursday's CNC Shift C continues
+Friday is the default weekly off by Production Date. A Universal Planning Calendar
+Working Friday entry opens that Production Date for all units. Thursday's CNC Shift C continues
 until Friday 06:00; the weekly off lasts until Saturday 06:00. For example,
 8-Oct Shift C runs from 8-Oct 22:00 to 9-Oct 06:00, retaining 8-Oct as its
 Production Date. CNC planning and planned-date task readiness use this same
 06:00 boundary, including when a Planning Calendar holiday follows a working
-day. Finish forecasts still exclude Friday and holiday Production Dates; those
+day. Finish forecasts exclude closed Friday and holiday Production Dates; those
 offs do not block planning, setup preparation, or setup starts.
 
 Start Session pre-fills the selected shift's scheduled start. End Session pre-fills that session's scheduled shift end. Both remain editable for exceptions; for example, Conventional starts at 08:30 and ends at 20:00.

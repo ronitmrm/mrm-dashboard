@@ -29,6 +29,7 @@ export type PlanningContext = {
   version: number
   machines: { id: string; family: string }[]
   holidays: string[]
+  workingDates?: string[]
   weeklyHoliday: number
   existing: PlanningLine[]
   reservations: Reservation[]
@@ -130,7 +131,8 @@ export function calculateProposal(
     input.mode === "deadline" ? input.deadline : addDays(input.startDate, 730)
   for (let date = input.startDate; date <= end; date = addDays(date, 1)) {
     if (
-      new Date(`${date}T00:00:00Z`).getUTCDay() !== context.weeklyHoliday &&
+      (context.workingDates?.includes(date) ||
+        new Date(`${date}T00:00:00Z`).getUTCDay() !== context.weeklyHoliday) &&
       !context.holidays.includes(date)
     )
       dates.push(date)

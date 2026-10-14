@@ -250,12 +250,12 @@ supported actions. Master selection and server authorization use those same
 keys. The catalogue's legacy mapping supports the initial migration and UI
 adapters; it is not an authorization fallback.
 
-Setup Checklist, Maintenance Checklist and Maintenance Master are confirmed
-company-wide definitions. Master Selection lists each under Universal and their
-payloads omit production-floor scope; existing records remain shared. The
-catalogue has 70 entries: 42 Universal and seven in each of four units.
+Planning Calendar, Maintenance Checklist and Maintenance Master appear under
+Universal; their payloads omit production-floor scope. Setup Checklist remains
+unit-owned, with an organisation-wide SC code sequence. The catalogue derives
+the current inventory and scope from `lib/master-module.ts`.
 
-Access Administration includes all 70 masters directly in Capabilities. The
+Access Administration includes all masters directly in Capabilities. The
 separate Included masters table and replaced grouped master rows are removed.
 
 The No Access preset removes all keys owned by its row. It must not fall through

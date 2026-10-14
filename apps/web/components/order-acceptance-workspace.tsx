@@ -450,7 +450,7 @@ export function OrderAcceptanceWorkspace({
             {input.mode === "deadline"
               ? `Machining can run from ${formatIstDate(input.startDate)} to ${formatIstDate(input.deadline)}. The whole period is available for machining.`
               : "Enter RM-ready dates to estimate when machining will finish. The review end date sets the period for the machine-capacity summary."}{" "}
-            Fridays and plant holidays are excluded.
+            Closed Fridays and holidays follow the Universal Planning Calendar.
           </p>
           <details>
             <summary className="cursor-pointer text-sm font-medium">

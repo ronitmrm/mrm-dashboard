@@ -131,8 +131,12 @@ export function priorityLabel(value: unknown) {
   return text(value) || "Normal";
 }
 
-export function isPlanningWorkday(value: Date) {
-  return !planningHolidayWeekdays.has(value.getDay());
+export function isWorkingFriday(row: Record<string, unknown>) {
+  return text(row.dayType).toLowerCase() === "working friday";
+}
+
+export function isPlanningWorkday(value: Date, workingFriday = false) {
+  return workingFriday || !planningHolidayWeekdays.has(value.getDay());
 }
 
 function text(value: unknown) {

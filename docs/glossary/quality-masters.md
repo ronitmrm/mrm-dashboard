@@ -37,6 +37,11 @@ Rejection Type, Defect / Downtime Reason, Rejection Remark, Setup Checklist,
 and Maintenance Checklist codes are assigned by the system in their established
 sequences (`RT`, `DC`, `RR`, `SC`, and `MC`). Users cannot choose these codes.
 
+Setup Checklist uses one organisation-wide SC sequence, including checklists in
+other units. New forms show **Assigned on save** until the server allocates the
+code. Concurrent saves receive different codes. Checklist ownership and task
+access remain unit-specific; existing codes and completion history are preserved.
+
 CSV templates therefore omit the code column. Older CSV files containing a code
 remain importable, but that value is used only to group rows belonging to the
 same checklist. It never becomes the saved master code or changes the sequence.

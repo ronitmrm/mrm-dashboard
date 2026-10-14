@@ -30,6 +30,7 @@ export function priorityPlanWindow({
   heldBlockerKeys = new Set<string>(),
   minimumStartDate,
   holidays = [],
+  workingDates = [],
   toolingCapacity = {},
   toolingReservations = [],
 }: {
@@ -40,6 +41,7 @@ export function priorityPlanWindow({
   heldBlockerKeys?: Set<string>;
   minimumStartDate?: unknown;
   holidays?: unknown[];
+  workingDates?: unknown[];
   toolingCapacity?: Record<string, number>;
   toolingReservations?: PriorityToolingReservation[];
 }): PriorityPlanWindow {
@@ -48,7 +50,8 @@ export function priorityPlanWindow({
   if (!targetStart) return { startDate: "", endDate: "" };
 
   const holidayDates = new Set(holidays.map(normalizedDate).filter((date) => date !== undefined).map(Number));
-  const workday = (date: Date) => isPlanningWorkday(date) && !holidayDates.has(Number(date));
+  const workingFridays = new Set(workingDates.map(normalizedDate).filter((date) => date !== undefined).map(Number));
+  const workday = (date: Date) => isPlanningWorkday(date, workingFridays.has(Number(date))) && !holidayDates.has(Number(date));
   let durationDays = 0;
   for (let day = targetStart; day <= (targetEnd ?? targetStart); day = addCalendarDays(day, 1)) {
     if (workday(day)) durationDays += 1;

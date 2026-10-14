@@ -752,10 +752,8 @@ describe("dashboard planning writes", () => {
     })
     await repository.upsertPlanningCalendarException({
       exceptionDate: "2026-08-15",
-      exceptionType: "holiday",
       name: "Independence Day",
       organizationId,
-      workingMinutes: 0,
     })
 
     const counts = await pool.query<{

@@ -3880,6 +3880,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const holidayDates = Array.isArray(planningCalendar.holidayDates)
         ? planningCalendar.holidayDates.map(String)
         : []
+      const workingDates = Array.isArray(planningCalendar.workingDates)
+        ? planningCalendar.workingDates.map(String)
+        : []
       const workOrderSource = objectRecord(jobCard.workOrderSource)
       const itemSource = objectRecord(jobCard.itemSource)
       const deliveryTarget = normalizeDeliveryTargets({
@@ -4057,6 +4060,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         ),
         asOfDate: new Date().toISOString(),
         holidayDates,
+        workingDates,
         rawMaterialCompleteDate: material.rawMaterialCompleteDate,
         targetWorkingDays: deliveryTarget.effectiveWorkingDays,
       })

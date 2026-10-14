@@ -265,6 +265,10 @@ describe("job card workspace", () => {
       status: "3 working days late",
       targetDate: "2026-08-10",
     })
+    expect(buildDeliveryPerformance({
+      asOfDate: "2026-08-07", rawMaterialCompleteDate: "2026-08-06",
+      targetWorkingDays: 1, workingDates: ["2026-08-07"],
+    }).targetDate).toBe("2026-08-07")
   })
 
   it("uses a Job Card delivery override when provided", () => {

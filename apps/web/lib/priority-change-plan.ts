@@ -1,4 +1,5 @@
 import { dateSortValue } from "./dashboard-view-model";
+import { isWorkingFriday } from "@workspace/db/planning-rules";
 import { shopFloorRowIsProductionCurrent } from "./shop-floor-workflow";
 import { nextCalendarDateLabel, priorityPlanWindow, type PriorityPlanWindow, type PriorityPlanWindowBlocker, type PriorityToolingReservation } from "./priority-plan-scenarios";
 
@@ -26,6 +27,7 @@ export type PriorityPlanStep = {
   endDate: string;
   blockers: PriorityPlanBlocker[];
   holidays?: unknown[];
+  workingDates?: unknown[];
   toolingCapacity?: Record<string, number>;
   toolingReservations?: PriorityToolingReservation[];
 };
@@ -70,7 +72,8 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
         startDate: displayValue(isRunning ? targetRow.actualProductionStartDate || targetRow.actualStartDate || plannedSetupDate(targetRow) : plannedSetupDate(targetRow)),
         endDate: displayValue(targetRow.plannedProductionEndDate || targetRow.endDate),
         blockers,
-        holidays: asArray(productionControl.planningHolidayRows).map((row) => row.date ?? row.holidayDate),
+        holidays: asArray(productionControl.planningHolidayRows).filter((row) => !isWorkingFriday(row)).map((row) => row.date ?? row.holidayDate),
+        workingDates: asArray(productionControl.planningHolidayRows).filter(isWorkingFriday).map((row) => row.date ?? row.holidayDate),
         toolingCapacity: Object.fromEntries(toolingCodes(targetRow).map((code) => [code,
           Number(asRecord(targetRow.toolingAllocatedQuantities)[code] ?? 0) - Math.max(0,
             Number(asRecord(targetRow.toolingOccupiedQuantities)[code] ?? 0) - plannedRows.filter((row) =>
@@ -101,6 +104,7 @@ function priorityPlanStepWindow(
     heldBlockerKeys: priorityPlanHeldBlockerKeys(step, queueAfterKey),
     minimumStartDate,
     holidays: step.holidays,
+    workingDates: step.workingDates,
     toolingCapacity: step.toolingCapacity,
     toolingReservations: step.toolingReservations,
   });

@@ -136,16 +136,22 @@ CNC-01 has 22.5 productive machine hours per working day: three shifts of
 7 hours 30 minutes each. Other Production Floors retain 8 productive hours.
 Finish estimates retain fractional working days, shown as productive hours
 into the finish date, rather than invented wall-clock shift times. Machine
-queue reservations still use whole dates. Friday weekly offs and Planning Calendar
-holidays are excluded from forecast production capacity and setup/Job Card finish
-dates only. They do not prevent planning, setup preparation, or a setup start.
+queue reservations still use whole dates. The Universal Planning Calendar applies
+to every Production Unit. Fridays are closed by default. A dated **Working Friday**
+entry cancels that Friday's weekly off and gives it normal productive capacity;
+removing that entry restores the weekly off. A dated **Holiday** entry closes the
+date. Each date has one editable calendar entry, with a reason. These rules apply
+to forecast production capacity, setup/Job Card finish dates, Order Acceptance,
+priority previews and delivery working-day targets. They do not prevent planning,
+setup preparation, or a setup start.
 Setup start dates retain their calendar dates, including offs. Material and WIP
 availability, active machine ownership, tooling, reviewed queue order, and explicit
 machine-unavailable constraints still apply.
 
 For CNC, the current planning Production Date changes at 06:00 IST, matching
 Shift C's end. Thursday work remains due after midnight through Friday 06:00;
-Friday's weekly off then lasts until Saturday 06:00 for finish forecasting.
+Friday's weekly off then lasts until Saturday 06:00 for finish forecasting unless
+that Production Date is marked Working Friday in the Universal Planning Calendar.
 Recalculation must not roll setup starts to Saturday or block their workflow
 because of midnight, a weekly off, or a Planning Calendar holiday.
 
@@ -338,8 +344,8 @@ cumulatively from preserved production history and the normal WIP rules.
 
 The Product Master stores the default working days after full RM receipt. A Job
 Card can optionally override that default. Full RM receipt is the first receipt
-date when cumulative received kilograms reach ordered RM kilograms. Fridays and
-Planning Calendar holidays are excluded.
+date when cumulative received kilograms reach ordered RM kilograms. Closed Fridays
+and holidays follow the Universal Planning Calendar; Working Fridays count normally.
 
 - A: on or before target.
 - B: 1–2 working days late.

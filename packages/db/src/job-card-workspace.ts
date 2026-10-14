@@ -111,27 +111,28 @@ function formatDateOnly(value: Date) {
   return value.toISOString().slice(0, 10)
 }
 
-function isWorkingDay(value: Date, holidays: Set<string>) {
-  return value.getUTCDay() !== 5 && !holidays.has(formatDateOnly(value))
+function isWorkingDay(value: Date, holidays: Set<string>, workingDates: Set<string>) {
+  const date = formatDateOnly(value)
+  return (workingDates.has(date) || value.getUTCDay() !== 5) && !holidays.has(date)
 }
 
-function addWorkingDays(start: Date, days: number, holidays: Set<string>) {
+function addWorkingDays(start: Date, days: number, holidays: Set<string>, workingDates: Set<string>) {
   const result = new Date(start)
   let remaining = days
   while (remaining > 0) {
     result.setUTCDate(result.getUTCDate() + 1)
-    if (isWorkingDay(result, holidays)) remaining -= 1
+    if (isWorkingDay(result, holidays, workingDates)) remaining -= 1
   }
   return result
 }
 
-function workingDaysBetween(start: Date, end: Date, holidays: Set<string>) {
+function workingDaysBetween(start: Date, end: Date, holidays: Set<string>, workingDates: Set<string>) {
   if (end <= start) return 0
   const cursor = new Date(start)
   let total = 0
   while (cursor < end) {
     cursor.setUTCDate(cursor.getUTCDate() + 1)
-    if (cursor <= end && isWorkingDay(cursor, holidays)) total += 1
+    if (cursor <= end && isWorkingDay(cursor, holidays, workingDates)) total += 1
   }
   return total
 }
@@ -265,6 +266,7 @@ export function buildDeliveryPerformance(input: {
   actualOrProjectedDate?: string | null
   asOfDate: string
   holidayDates?: string[]
+  workingDates?: string[]
   rawMaterialCompleteDate?: string | null
   targetWorkingDays?: number | null
 }) {
@@ -282,7 +284,8 @@ export function buildDeliveryPerformance(input: {
     }
   }
   const holidays = new Set(input.holidayDates ?? [])
-  const targetDate = addWorkingDays(rawMaterialCompleteDate, targetWorkingDays, holidays)
+  const workingDates = new Set(input.workingDates ?? [])
+  const targetDate = addWorkingDays(rawMaterialCompleteDate, targetWorkingDays, holidays, workingDates)
   const comparisonDate = dateOnly(input.actualOrProjectedDate) ?? dateOnly(input.asOfDate)
   if (!comparisonDate || comparisonDate <= targetDate) {
     return {
@@ -292,7 +295,7 @@ export function buildDeliveryPerformance(input: {
       targetDate: formatDateOnly(targetDate),
     }
   }
-  const daysLate = workingDaysBetween(targetDate, comparisonDate, holidays)
+  const daysLate = workingDaysBetween(targetDate, comparisonDate, holidays, workingDates)
   const rating = daysLate <= 2 ? "B" : daysLate <= 5 ? "C" : "D"
   return {
     daysLate,

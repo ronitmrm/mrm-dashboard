@@ -1,7 +1,7 @@
 import { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
-import { isActivePlannerDecision, isPlanningWorkday, machineFamilyMatches, machineMasterFamily, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 import type { ProductionFloorCode } from "./production-floors";
 
 type DataEntry = {
@@ -83,6 +83,7 @@ type ReadinessSetupGap = {
 };
 type PlanningCalendar = {
   holidayDates: Set<string>;
+  workingDates?: Set<string>;
   productiveHoursPerDay: number;
   currentProductionDate?: string;
 };
@@ -1622,6 +1623,7 @@ function buildProductionControl({
     planningCalendar: {
       weeklyHoliday: "Friday",
       holidayDates: [...planningCalendar.holidayDates].sort(),
+      workingDates: [...(planningCalendar.workingDates ?? [])].sort(),
     },
     workflowExceptionRows,
     machineConstraints,
@@ -2386,12 +2388,7 @@ function setupChecklistSessionEntryKey(row: Record<string, unknown>) {
 }
 
 function planningHolidayEntryKey(row: Record<string, unknown>) {
-  return [
-    parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")) || rowText(row, "date", "holidayDate", "fromDate", "startDate"),
-    canonicalKey(rowText(row, "scope")),
-    canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")),
-    canonicalKey(rowText(row, "department")),
-  ].join("|");
+  return parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")) || rowText(row, "date", "holidayDate", "fromDate", "startDate");
 }
 
 function loadRouteLookup(rows: Record<string, unknown>[]) {
@@ -3763,7 +3760,7 @@ function machinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : earlyDownstream ? "Planner-approved early downstream setup" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Friday and manual planning holidays affect finish forecasts only; setup starts may use off dates; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same calendar date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added compatible machine overrides only that minimum-run split rule`,
+        planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Universal Planning Calendar holidays and closed Fridays affect finish forecasts only; setup starts may use off dates; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same calendar date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added compatible machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -5309,7 +5306,7 @@ function isPlanningDate(dateValue: string, planningCalendar: PlanningCalendar) {
   const normalized = parseDate(dateValue) || dateValue;
   if (!normalized || planningCalendar.holidayDates.has(normalized)) return false;
   const date = new Date(`${normalized}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && isPlanningWorkday(date);
+  return !Number.isNaN(date.getTime()) && isPlanningWorkday(date, planningCalendar.workingDates?.has(normalized));
 }
 
 function planningCalendarFromRows(
@@ -5318,7 +5315,10 @@ function planningCalendarFromRows(
   currentProductionDate: string,
 ): PlanningCalendar {
   return {
-    holidayDates: new Set(rows
+    holidayDates: new Set(rows.filter((row) => !isWorkingFriday(row))
+      .map((row) => parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")))
+      .filter(Boolean)),
+    workingDates: new Set(rows.filter(isWorkingFriday)
       .map((row) => parseDate(rowValue(row, "date", "holidayDate", "fromDate", "startDate")))
       .filter(Boolean)),
     productiveHoursPerDay,
@@ -5336,6 +5336,7 @@ function planningHolidayViewRows(rows: Record<string, unknown>[]) {
     return {
       date: dateLabel(date),
       dateValue: date,
+      dayType: isWorkingFriday(row) ? "Working Friday" : "Holiday",
       reason: rowText(row, "reason", "holidayReason") || "Plant holiday",
       scope: rowText(row, "scope") || "Plant",
       machine: rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO"),

@@ -404,6 +404,7 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
 }
 
 export const companyWideMasterEntryTypes = new Set([
+  "planning_holiday",
   "parameter_master",
   "measuring_instrument_master",
   "maintenance_checklist_master",

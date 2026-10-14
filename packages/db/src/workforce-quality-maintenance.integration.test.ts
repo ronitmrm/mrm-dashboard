@@ -299,7 +299,7 @@ describe("workforce, quality, and maintenance workflows", () => {
       [organizationId]
     )
     const cncTemplate = await quality.upsertSetupChecklistTemplate({
-      code: template.code,
+      code: `CNC-${template.code}`,
       items: [{ inputType: "checkbox", itemKey: "cnc", prompt: "CNC program checked", required: true, sequence: 1 }],
       name: "CNC setup checklist",
       organizationId,
