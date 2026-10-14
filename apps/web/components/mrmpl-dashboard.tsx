@@ -464,7 +464,6 @@ const storeMasterCsvColumns = {
   ASSET_NAME: ["asset_name", "asset_category", "asset_subcategory"],
   CATEGORY: ["asset_category_name"],
   ITEM_TYPE: [
-    "applicable_item_code",
     "asset_category",
     "asset_name",
     "asset_subcategory",

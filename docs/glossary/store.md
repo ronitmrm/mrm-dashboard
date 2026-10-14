@@ -31,9 +31,8 @@ Asset Subcategory, Asset Name, and Make/Model combination is checked before savi
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
 Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, Make/Model, and
-Identification in separate columns. When a Store Item Type applies to a
-manufactured product, its Product Portfolio UID is selected from active internal
-Portfolio products instead of entered as free text.
+Identification in separate columns. Store Item Types are maintained independently
+of Product Portfolio products and have no Product Portfolio UID linkage.
 
 Item Type CSV imports use Category, Subcategory, Asset Name, and Make/Model text from the
 existing classification masters, matched ignoring letter case and outer spaces.

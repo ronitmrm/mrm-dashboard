@@ -94,7 +94,6 @@ export type StoreMasterData = {
     assetSubcategory: string
     assetSubcategoryId: string
     assetType: string
-    applicableItemCode?: string | null
     drawingNumber?: string | null
     id: string
     identificationName: string
@@ -131,12 +130,6 @@ export type StoreMasterData = {
       name: string
     }>
   }
-  portfolioProducts: Array<{
-    description: string
-    id: string
-    itemType: string
-    uid: string
-  }>
   suppliers: Array<{
     address: string | null
     code: string
@@ -503,7 +496,6 @@ function masterRows(
         name: item.identificationName,
         editable: true,
         editDefaults: {
-          applicable_item_code: item.applicableItemCode ?? "",
           asset_category_id: item.assetCategoryId,
           asset_name_id: item.assetNameId,
           asset_subcategory_id: item.assetSubcategoryId,
@@ -1095,20 +1087,6 @@ function StoreItemTypeForm({
   )
     ? [...STORE_UNIT_OPTIONS]
     : [{ label: selectedUnit, value: selectedUnit }, ...STORE_UNIT_OPTIONS]
-  const selectedProductUid = defaults.applicable_item_code ?? ""
-  const productOptions = data.portfolioProducts.map((product) => ({
-    label: `${product.uid} — ${product.description}`,
-    value: product.uid,
-  }))
-  if (
-    selectedProductUid &&
-    !productOptions.some((option) => option.value === selectedProductUid)
-  ) {
-    productOptions.unshift({
-      label: `${selectedProductUid} — Saved value`,
-      value: selectedProductUid,
-    })
-  }
   const subcategories = data.masters.subcategories.filter(
     (row) => row.categoryId === categoryId
   )
@@ -1252,14 +1230,6 @@ function StoreItemTypeForm({
             value: row.id,
           }))}
           value={makeModelId}
-        />
-        <SelectField
-          defaultValue={selectedProductUid}
-          label="Product Portfolio UID"
-          name="applicable_item_code"
-          options={productOptions}
-          placeholder="Not applicable"
-          required={false}
         />
         <TextField
           defaultValue={editing ? defaults.type_code : undefined}
