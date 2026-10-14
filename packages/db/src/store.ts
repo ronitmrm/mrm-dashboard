@@ -4144,7 +4144,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetNameId: string
       assetSubcategoryId: string
       assetType: StoreAssetType
-      applicableItemCode?: string | null
       identificationName?: string
       makeModelId?: string
       minimumStock?: number
@@ -4204,13 +4203,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               organization_id, type_code, asset_type, asset_category,
               asset_subcategory, asset_name, asset_category_id,
               asset_subcategory_id, asset_name_id, identification_name,
-              applicable_item_code, drawing_number, tracking_mode, unit,
+              drawing_number, tracking_mode, unit,
               minimum_stock, model_number, rated_load,
               make_model_id,
               created_by_user_id, updated_by_user_id
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-              $13, $14, $15, $16, $17, $18, $19, $19
+              $13, $14, $15, $16, $17, $18, $18
             )
             RETURNING id
           `,
@@ -4225,7 +4224,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetSubcategoryId,
             input.assetNameId,
             input.identificationName?.trim() ?? "",
-            input.applicableItemCode?.trim() || null,
             typeCode,
             trackingMode,
             requiredText(input.unit, "Unit"),
@@ -4246,7 +4244,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetNameId: string
       assetSubcategoryId: string
       assetType: StoreAssetType
-      applicableItemCode?: string | null
       id: string
       identificationName?: string
       makeModelId?: string
@@ -4277,13 +4274,13 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
            SET asset_type = $1, asset_category = $2, asset_subcategory = $3,
              asset_name = $4, asset_category_id = $5,
              asset_subcategory_id = $6, asset_name_id = $7,
-             identification_name = $8, applicable_item_code = $9,
-             drawing_number = type_code, tracking_mode = $10, unit = $11,
-             minimum_stock = $12, updated_by_user_id = $13,
-             model_number = $16, rated_load = $17,
-             make_model_id = $18,
+             identification_name = $8,
+             drawing_number = type_code, tracking_mode = $9, unit = $10,
+             minimum_stock = $11, updated_by_user_id = $12,
+             model_number = $15, rated_load = $16,
+             make_model_id = $17,
              updated_at = now()
-           WHERE id = $14 AND organization_id = $15
+           WHERE id = $13 AND organization_id = $14
            RETURNING id`,
           [
             assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable",
@@ -4294,7 +4291,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             input.assetSubcategoryId,
             input.assetNameId,
             input.identificationName?.trim() ?? "",
-            input.applicableItemCode?.trim() || null,
             trackingModeForAssetType(assetType),
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
@@ -4321,7 +4317,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         assetSubcategory: string
         assetSubcategoryId: string
         assetType: string
-        applicableItemCode: string | null
         availableStock: string
         availableUnitIds: string[]
         companyOnHand: string
@@ -4358,7 +4353,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.make_model_id AS "makeModelId",
             item.model_number AS "modelNumber",
             item.rated_load AS "ratedLoad",
-            item.applicable_item_code AS "applicableItemCode",
             item.type_code AS "drawingNumber",
             item.tracking_mode AS "trackingMode", item.unit,
             trim_scale(item.minimum_stock)::text AS "minimumStock",

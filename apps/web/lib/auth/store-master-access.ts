@@ -55,7 +55,6 @@ export function selectedStoreMasterData(
           : [],
     supplierPrices: master === "SUPPLIER_PRICE" ? data.supplierPrices : [],
     vendors: master === "VENDOR" ? data.vendors : [],
-    portfolioProducts: classifications ? data.portfolioProducts : [],
     masters: {
       categories:
         master === "CATEGORY" ||

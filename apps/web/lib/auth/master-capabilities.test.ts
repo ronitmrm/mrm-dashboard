@@ -155,7 +155,6 @@ describe("independent master permissions", () => {
         assetNames: [],
         makeModels: [],
       },
-      portfolioProducts: [],
       suppliers: [
         {
           id: "supplier",

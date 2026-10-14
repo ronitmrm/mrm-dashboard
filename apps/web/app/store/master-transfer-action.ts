@@ -271,7 +271,6 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
               .replace(/[\s-]+/g, "_"),
           },
           {
-            applicable_item_code: [],
             asset_category_id: [],
             asset_name_id: [],
             asset_subcategory_id: [],

@@ -122,7 +122,6 @@ export async function GET(request: Request) {
         "Asset Type": row.assetType,
         Identification: row.identificationName,
         "Rated Load / Capacity": row.ratedLoad,
-        "Applicable Item Code": row.applicableItemCode,
         "Drawing Number": row.drawingNumber,
         Unit: row.unit,
         "Minimum Stock": row.minimumStock,

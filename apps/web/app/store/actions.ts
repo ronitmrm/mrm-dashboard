@@ -591,7 +591,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
           assetNameId: requiredText(formData, "asset_name_id"),
           assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
           assetType: assetType(formData),
-          applicableItemCode: optionalText(formData, "applicable_item_code"),
           identificationName:
             optionalText(formData, "identification_name") ?? "",
           makeModelId: requiredText(formData, "make_model_id"),

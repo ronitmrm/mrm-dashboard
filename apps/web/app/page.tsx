@@ -2,10 +2,7 @@ import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
 } from "@workspace/db/production-floors"
-import {
-  createCommercialWorkflowRepository,
-  createStoreRepository,
-} from "@workspace/db"
+import { createStoreRepository } from "@workspace/db"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -209,9 +206,6 @@ export default async function Page({
               selectedStoreMaster
             )
           const repository = createStoreRepository({ connectionString })
-          const workflow = classifications
-            ? createCommercialWorkflowRepository({ connectionString })
-            : null
           try {
             const organizationId =
               await repository.organizationIdForCode("MRMPL")
@@ -223,7 +217,6 @@ export default async function Page({
               vendors,
               masters,
               itemDrawings,
-              portfolioProducts,
             ] = await Promise.all([
               selectedStoreMaster === "ITEM_TYPE" || itemReferences
                 ? repository.listItemTypes(organizationId)
@@ -251,9 +244,6 @@ export default async function Page({
               selectedStoreMaster === "ITEM_TYPE"
                 ? repository.listItemTypeDrawings(organizationId)
                 : Promise.resolve([]),
-              workflow
-                ? workflow.listDesignPortfolioProducts("MRMPL")
-                : Promise.resolve([]),
             ])
             return selectedStoreMasterData(
               {
@@ -261,7 +251,6 @@ export default async function Page({
                 items,
                 locations,
                 masters,
-                portfolioProducts,
                 supplierPrices,
                 suppliers,
                 vendors,
@@ -270,7 +259,7 @@ export default async function Page({
               canSave
             )
           } finally {
-            await Promise.all([repository.close(), workflow?.close()])
+            await repository.close()
           }
         })()
       : null
