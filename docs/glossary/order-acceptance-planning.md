@@ -18,6 +18,10 @@ orders, job cards, reservations, priorities or production commitments.
    work, but protect existing commitments first. Compare candidate mixes by
    completed line count, then machine-family utilisation. Report the search
    method honestly; a heuristic is not a proven global optimum.
+   Existing work may finish after the proposed order's deadline. Reserve that
+   work first across the two-year planning horizon, then select only new lines
+   that fit the original deadline. A busy machine excludes dependent proposed
+   lines without blocking products on other available machines.
 5. Report the RM-ready deadline supporting each selected schedule. Dispatch
    remains conditional on material being ready by this date. Family output
    capacities cannot be summed as finished output across shared routings.
@@ -36,5 +40,11 @@ constraints, including those marked Available, do not reserve machine capacity.
 Existing physical WIP retains its canonical machine reservations even after
 final good output meets customer demand. Demand completion alone does not finish
 a setup or free its capacity.
+An approved route change with zero remaining machining and a recorded canonical
+Actual Finish Date needs no new machine assignment. Unfinished physical machine
+streams still retain their reservations. RM rejected with the saved decision to
+wait for replacement is treated as awaiting RM: retain completed setup output and
+schedule the remaining quantities. RM-date mode requires an assumed replacement
+date; deadline mode assumes readiness at the planning start like other waiting RM.
 An approved proposal reserves no capacity; a later PO needs current capacity
 review if intervening commitments have changed.

@@ -106,6 +106,8 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
       "Production snapshot is truncated; complete workload data is required before proposal approval."
     )
   const details = rows(source.machinePlanDetailRows)
+  const finishes = rows(source.productionDashboardRows)
+  const production = rows(source.productionOutputRows)
   function resolve(line: ProposedLine): PlanningLine {
     const productRoutes = routes.filter((route) =>
       same(route.partNo, line.part)
@@ -161,7 +163,13 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
     )
     if (
       Number(work.finalSetupGoodPieces) >= quantity &&
-      own.length &&
+      (own.length ||
+        finishes.some(
+          (row) =>
+            same(row.jcNo, id) &&
+            same(row.partCode, work.partCode) &&
+            date(row.actualFinishDate)
+        )) &&
       !unfinished.length
     )
       continue
@@ -179,7 +187,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
       context.blockers.push("An existing work order has no job-card reference.")
     if (work.rmStatus === "Received") {
       if (!own.length)
-        line.issue =
+        line.issue ||=
           "Existing received work has no canonical machine schedule; recalculate the production plan."
       for (const row of unfinished) {
         const machine = text(row.machine)
@@ -195,6 +203,33 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
         else context.reservations.push({ machine, start, end })
       }
       line.operations = [] // Existing canonical assignments are reserved, never scheduled twice.
+    } else if (
+      work.rmPlanningAction === "wait_for_replacement" &&
+      !rows(work.routeChangeRemainingSetups).length
+    ) {
+      const actuals = production.filter(
+        (row) => same(row.jobCard, id) && same(row.partCode, work.partCode)
+      )
+      if (Number(work.rawRows) > 0 && !actuals.length) {
+        line.issue =
+          "Waiting-RM work has production but its setup output is unavailable; refresh the production plan."
+      } else {
+        line.operations = line.operations
+          .map((operation) => {
+            const good = actuals
+              .filter((row) => same(row.setupNo, operation.setup))
+              .reduce(
+                (sum, row) => sum + Math.max(0, Number(row.actualQty) || 0),
+                0
+              )
+            return {
+              ...operation,
+              hours:
+                (operation.hours * Math.max(0, quantity - good)) / quantity,
+            }
+          })
+          .filter((operation) => operation.hours > 0)
+      }
     } else if (
       Number(work.rawRows) > 0 ||
       rows(work.routeChangeRemainingSetups).length

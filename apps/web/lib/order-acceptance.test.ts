@@ -40,6 +40,100 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("keeps old work beyond the deadline while selecting new work on other machines", () => {
+    const hx = {
+      ...line("old-hx", 16),
+      operations: [{ family: "C3", setup: "1", hours: 16 }],
+    }
+    const lines = [{ ...hx, id: "new-hx" }, line("new-jl", 2)]
+    const plan = calculateProposal(
+      { ...input, lines },
+      {
+        ...context,
+        machines: [...context.machines, { id: "HX-01", family: "C3" }],
+        existing: [hx],
+      },
+      lines
+    )
+    expect(plan.blockers).toEqual([])
+    expect(plan.lines.map((row) => row.selected)).toEqual([false, true])
+    expect(plan.families.find((row) => row.family === "C3")).toMatchObject({
+      committed: 8,
+      proposed: 0,
+    })
+  })
+  test("honours completed route changes and schedules remaining work awaiting replacement RM", () => {
+    const route = {
+      partNo: "part",
+      optionNumber: "1",
+      setupNo: "1",
+      machineFamily: "JL",
+    }
+    const snapshot = {
+      productionControl: {
+        routeMasterRows: [route],
+        cycleMasterRows: [{ ...route, totalTime: 3600 }],
+        machinePlanningRows: [{ machine: "JL1", machineFamily: "JL" }],
+        workOrders: [
+          {
+            jcNo: "changed",
+            partCode: "part",
+            optionNumber: "1",
+            orderPcs: 2,
+            rmStatus: "Received",
+            finalSetupGoodPieces: 2,
+            routeChangeRemainingSetups: [
+              { setupNo: "1", plan: true, quantity: 0 },
+            ],
+          },
+          {
+            jcNo: "replacement",
+            partCode: "part",
+            optionNumber: "1",
+            orderPcs: 4,
+            rmStatus: "Rejected - wait for replacement",
+            rmPlanningAction: "wait_for_replacement",
+            rawRows: 1,
+          },
+        ],
+        productionDashboardRows: [
+          { jcNo: "changed", partCode: "part", actualFinishDate: "1-Sept-26" },
+        ],
+        productionOutputRows: [
+          {
+            jobCard: "replacement",
+            partCode: "part",
+            setupNo: "1",
+            actualQty: 1,
+          },
+        ],
+      },
+    }
+    const { context: workload } = proposalContext(snapshot)
+    expect(workload.existing.map((row) => row.id)).toEqual(["replacement"])
+    expect(workload.existing[0]).toMatchObject({
+      rmDate: "",
+      issue: "",
+      operations: [{ hours: 3 }],
+    })
+    const lines = [line("new", 5)]
+    expect(
+      calculateProposal({ ...input, lines }, workload, lines).lines[0]?.selected
+    ).toBe(true)
+    expect(
+      calculateProposal({ ...input, lines, mode: "dates" }, workload, lines)
+        .blockers
+    ).toEqual(["replacement: awaiting tentative RM date"])
+    const unconfirmed = proposalContext({
+      productionControl: {
+        ...snapshot.productionControl,
+        productionDashboardRows: [],
+      },
+    }).context
+    expect(
+      unconfirmed.existing.find((row) => row.id === "changed")?.issue
+    ).toContain("no canonical machine schedule")
+  })
   test("uses the shared calendar to open a Friday for machining", () => {
     const { context: calendar } = proposalContext({ productionControl: {
       planningHolidayRows: [

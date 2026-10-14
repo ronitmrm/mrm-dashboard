@@ -18,7 +18,11 @@ Route operation and machine-family keys are normalized to uppercase before
 scheduling; constraint activity uses the shared `isActivePlannerDecision` rule.
 Received existing work retains its canonical machine reservations, conservatively
 occupying its assigned working dates. Waiting-RM work is scheduled before proposed
-lines. Unknown remaining work, overdue unrefreshed schedules, ambiguous masters
+lines across the two-year horizon; the proposal deadline limits new lines only.
+Canonical Actual Finish Date can prove completed work without a new assignment,
+including zero-remaining route changes. Replacement-RM waits use recorded good
+output per setup to schedule remaining quantities, with an assumed RM date in
+RM-date mode. Unknown remaining work, overdue unrefreshed schedules, ambiguous masters
 and truncated source snapshots block approval. The first scheduled operation's
 date is reported as RM required by for that schedule, not a global latest-start
 optimisation. Completion is the last machining operation's date. No additional
