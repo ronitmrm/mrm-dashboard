@@ -18568,6 +18568,7 @@ function currentShopFloorStatusItem(
   productionCardRows: DashboardPayload[] = []
 ) {
   return rows
+    .filter((row) => !shopFloorRowIsProducedHistory(row))
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
     .filter(
       (row) =>
@@ -18584,6 +18585,7 @@ function nextShopFloorStatusItem(
 ) {
   const currentKey = current ? shopFloorPlanKey(current) : ""
   return rows
+    .filter((row) => !shopFloorRowIsProducedHistory(row))
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
     .filter(
