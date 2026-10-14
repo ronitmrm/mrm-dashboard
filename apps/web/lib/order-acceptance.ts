@@ -127,8 +127,8 @@ export function calculateProposal(
   validateProposal(input)
   const daily = (input.hoursPerDay * input.efficiency) / 100
   const dates: string[] = []
-  const end =
-    input.mode === "deadline" ? input.deadline : addDays(input.startDate, 730)
+  // Old commitments can extend beyond the proposed order's deadline.
+  const end = addDays(input.startDate, 730)
   for (let date = input.startDate; date <= end; date = addDays(date, 1)) {
     if (
       (context.workingDates?.includes(date) ||
@@ -165,7 +165,12 @@ export function calculateProposal(
   }
   for (const intervals of calendar.values())
     intervals.sort((a, b) => a.start - b.start)
-  function schedule(line: PlanningLine, target: Calendar, rm: string) {
+  function schedule(
+    line: PlanningLine,
+    target: Calendar,
+    rm: string,
+    proposed = true
+  ) {
     let ready = slot(rm > input.startDate ? rm : input.startDate)
     let first = -1
     const trial = clone(target)
@@ -183,7 +188,11 @@ export function calculateProposal(
         const end = start + duration
         if (!best || end < best.end) best = { machine: machine.id, start, end }
       }
-      if (!best || best.end > dates.length * daily) return null
+      const limit =
+        proposed && input.mode === "deadline"
+          ? slot(addDays(input.deadline, 1))
+          : dates.length * daily
+      if (!best || best.end > limit) return null
       if (first < 0) first = best.start
       const intervals = trial.get(best.machine)!
       intervals.push({ start: best.start, end: best.end })
@@ -193,7 +202,8 @@ export function calculateProposal(
     const productionEnd = dateAt(ready)
     if (!productionEnd) return null
     const completion = productionEnd
-    if (input.mode === "deadline" && completion > input.deadline) return null
+    if (proposed && input.mode === "deadline" && completion > input.deadline)
+      return null
     return {
       calendar: trial,
       completion,
@@ -212,7 +222,7 @@ export function calculateProposal(
       continue
     }
     if (!line.operations.length) continue
-    const result = schedule(line, committed, rm)
+    const result = schedule(line, committed, rm, false)
     if (!result)
       blockers.push(
         `${line.id}: existing work does not fit the planning horizon.`
