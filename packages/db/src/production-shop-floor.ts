@@ -1212,13 +1212,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             ? `UPDATE manufacturing.production_break_schedules schedule
                SET breaks = $1, updated_at = now(), updated_by_user_id = $2
                WHERE id = $3 RETURNING id, to_jsonb(schedule) AS snapshot`
-            : `INSERT INTO manufacturing.production_break_schedules schedule (
+            : `INSERT INTO manufacturing.production_break_schedules AS schedule (
                  breaks, updated_by_user_id, organization_id, production_floor_id
                ) VALUES ($1, $2, $3, $4)
                RETURNING id, to_jsonb(schedule) AS snapshot`,
           existing
-            ? [breaks, input.actorUserId ?? null, existing.id]
-            : [breaks, input.actorUserId ?? null, input.organizationId, floor.rows[0].id]
+            ? [JSON.stringify(breaks), input.actorUserId ?? null, existing.id]
+            : [JSON.stringify(breaks), input.actorUserId ?? null, input.organizationId, floor.rows[0].id]
         )
         await client.query(
           `INSERT INTO audit.events (
