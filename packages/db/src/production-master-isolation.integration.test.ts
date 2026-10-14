@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
+import { createProductionShopFloorRepository } from "./production-shop-floor"
 import { createQualityRepository } from "./quality"
 
 const connectionString = process.env.TEST_DATABASE_URL ?? "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
@@ -12,6 +13,7 @@ const pool = new Pool({ connectionString, max: 2 })
 const planning = createDashboardPlanningRepository({ pool })
 const quality = createQualityRepository({ pool })
 const lifecycle = createMasterDataLifecycleRepository({ pool })
+const production = createProductionShopFloorRepository({ pool })
 const suffix = randomUUID()
 const machineNumber = `UNIT-ISOLATION-${suffix}`
 let organizationId: string
@@ -22,6 +24,8 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await pool.query("DELETE FROM audit.events WHERE organization_id = $1", [organizationId])
+  await pool.query("DELETE FROM manufacturing.production_break_schedules WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM catalog.machines WHERE organization_id = $1 AND machine_number = $2", [organizationId, machineNumber])
   await pool.query("DELETE FROM manufacturing.planning_calendar_exceptions WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM quality.parameter_definitions WHERE organization_id = $1", [organizationId])
@@ -53,6 +57,17 @@ test("saving a machine from another unit is rejected instead of moving or overwr
   const conventional = await planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "conventional", name: "Conventional machine" })
   await expect(planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "cnc", name: "CNC machine" })).rejects.toThrow("another Production Unit")
   expect(await planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "conventional", name: "Edited conventional machine" })).toEqual(conventional)
+})
+
+test("creates and updates the Conventional-02 break schedule", async () => {
+  await pool.query("INSERT INTO manufacturing.production_floors (organization_id, code, name) VALUES ($1, 'conventional-02', 'Conventional-02')", [organizationId])
+  const input = { organizationId, productionFloorCode: "conventional-02" }
+  const breaks = [{ startTime: "10:30", endTime: "10:45" }]
+  await production.saveProductionBreakSchedule({ ...input, breaks })
+  expect((await production.readProductionBreakSchedule(input)).breaks).toEqual(breaks)
+  const updated = [{ startTime: "11:00", endTime: "11:15" }]
+  await production.saveProductionBreakSchedule({ ...input, breaks: updated })
+  expect((await production.readProductionBreakSchedule(input)).breaks).toEqual(updated)
 })
 
 test("allocates setup checklist codes across units without concurrent duplicates", async () => {
