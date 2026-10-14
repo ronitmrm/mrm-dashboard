@@ -1668,28 +1668,35 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
 
     async upsertPlanningCalendarException(input: {
       rejectDuplicates?: boolean
+      recordId?: string
       actorUserId?: string | null
       exceptionDate: string
-      exceptionType: string
+      dayType?: string
       name: string
       organizationId: string
       sourcePayload?: unknown
-      workingMinutes?: number | null
     }) {
       return transaction(pool, async (client) => {
-        const exceptionType = requiredText(
-          input.exceptionType,
-          "Calendar exception type"
-        )
-        const date = requiredText(input.exceptionDate, "Calendar date")
+        const exceptionType = "calendar"
+        const date = (await client.query<{ date: string | null }>(
+          "SELECT migration.try_date($1)::text AS date", [input.exceptionDate.trim()]
+        )).rows[0]?.date
+        if (!date) throw new RangeError("Enter a valid calendar date.")
+        const parsedDate = new Date(`${date}T00:00:00Z`)
+        const requestedType = input.dayType?.trim().toLowerCase() || "holiday"
+        if (requestedType !== "holiday" && requestedType !== "working friday")
+          throw new RangeError("Choose Holiday or Working Friday.")
+        const dayType = requestedType === "working friday" ? "Working Friday" : "Holiday"
+        if (dayType === "Working Friday" && parsedDate.getUTCDay() !== 5)
+          throw new RangeError("Choose a Friday to cancel its weekly holiday.")
         await businessKeyLock(
           client,
           "manufacturing.calendar",
           `${input.organizationId}:${date}:${exceptionType}`
         )
-        const existing = await client.query<{ id: string; source_payload: unknown }>(
+        const existing = await client.query<{ id: string; source_id: string }>(
           `
-            SELECT id, source_payload FROM manufacturing.planning_calendar_exceptions
+            SELECT id, source_id FROM manufacturing.planning_calendar_exceptions
             WHERE organization_id = $1
               AND exception_date = migration.try_date($2)
               AND lower(exception_type) = lower($3)
@@ -1697,15 +1704,12 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [input.organizationId, date, exceptionType]
         )
-        const sourcePayload = input.sourcePayload ?? input
-        if (
-          existing.rows[0] &&
-          productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !==
-            productionFloorCodeForRecord({ sourcePayload })
-        ) {
-          throw new Error("A holiday for this date and scope already belongs to another Production Unit. Edit it in its existing unit.")
-        }
-        rejectDuplicateMaster(input.rejectDuplicates, !!existing.rows[0])
+        if (input.recordId && existing.rows[0]?.source_id !== input.recordId)
+          throw new RangeError("The calendar entry changed. Reload View Records and edit it again.")
+        const payload = input.sourcePayload && typeof input.sourcePayload === "object" && !Array.isArray(input.sourcePayload)
+          ? input.sourcePayload as Record<string, unknown> : {}
+        const sourcePayload = { date, dayType, reason: requiredText(input.name, "Reason"), remark: String(payload.remark ?? "") }
+        rejectDuplicateMaster(input.rejectDuplicates && !input.recordId, !!existing.rows[0])
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
@@ -1718,7 +1722,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               `,
               [
                 requiredText(input.name, "Calendar name"),
-                input.workingMinutes ?? null,
+                dayType === "Holiday" ? 0 : null,
                 input.actorUserId ?? null,
                 sourcePayload,
                 existing.rows[0].id,
@@ -1740,7 +1744,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 date,
                 exceptionType,
                 requiredText(input.name, "Calendar name"),
-                input.workingMinutes ?? null,
+                dayType === "Holiday" ? 0 : null,
                 input.actorUserId ?? null,
                 randomUUID(),
                 sourcePayload,

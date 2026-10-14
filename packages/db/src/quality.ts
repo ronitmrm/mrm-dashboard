@@ -128,7 +128,7 @@ async function generatedQualityMasterCode(
   productionFloorId?: string
 ) {
   const cleaned = requestedCode.trim()
-  if (cleaned) return cleaned
+  if (cleaned && kind !== "setup-checklist") return cleaned
   const definition = {
     "rejection-type": { identityColumn: "name", prefix: "RT", table: "quality.rejection_types" },
     "rejection-reason": { identityColumn: "name", prefix: "DC", table: "quality.rejection_reasons" },
@@ -139,6 +139,16 @@ async function generatedQualityMasterCode(
     "SELECT pg_advisory_xact_lock(hashtext('quality.master-code'), hashtext($1))",
     [`${organizationId}:${kind}`]
   )
+  if (cleaned) {
+    const owner = await client.query(
+      `SELECT 1 FROM quality.setup_checklist_templates
+       WHERE organization_id = $1 AND lower(btrim(code)) = lower($2)
+         AND production_floor_id <> $3 LIMIT 1`,
+      [organizationId, cleaned, productionFloorId]
+    )
+    if (owner.rows.length) throw new Error("This checklist code belongs to another production unit. Create a new checklist to receive a unique code.")
+    return cleaned
+  }
   const identity = dedupeValue?.trim()
   if (identity) {
     const existing = await client.query<{ code: string }>(
@@ -163,9 +173,8 @@ async function generatedQualityMasterCode(
       ), 0) + 1 AS "nextNumber"
       FROM ${definition.table}
       WHERE organization_id = $1
-        ${productionFloorId ? "AND production_floor_id = $3" : ""}
     `,
-    [organizationId, `^${definition.prefix}[0-9]+$`, ...(productionFloorId ? [productionFloorId] : [])]
+    [organizationId, `^${definition.prefix}[0-9]+$`]
   )
   return `${definition.prefix}${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }

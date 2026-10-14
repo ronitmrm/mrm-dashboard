@@ -68,11 +68,11 @@ applicable actions to be selected individually. A modifying action requires
 View when that row has a View action. Removing View removes its dependent
 actions.
 
-**Shared Master Scope**: Setup Checklist, Maintenance Checklist and Maintenance
-Master are company-wide definitions under Universal, shared unchanged across all
-production units. They remain three distinct masters. Universal is a data scope,
-not a permission granting every master. The complete master inventory has 42
-Universal entries and seven entries per production unit (70 across four units).
+**Shared Master Scope**: Planning Calendar, Maintenance Checklist and Maintenance
+Master are company-wide definitions under Universal. Setup Checklist belongs to
+one production unit, with SC codes allocated from one shared sequence. Universal
+is a data scope, not a permission granting every master. The master catalogue
+defines the current inventory and each entry's scope.
 
 **Independent Master Access**: Each named master and scope is one Capabilities
 row. View opens that master's entry/table workspace; changing actions apply only

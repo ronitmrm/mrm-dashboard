@@ -372,8 +372,8 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: dashboardTabHref("planningHolidayTab"),
     icon: CalendarDays,
     id: "planningHolidayTab",
-    subtitle: "Friday Shutdown, Holidays",
-    title: "Planning Holidays",
+    subtitle: "Holidays And Working Fridays",
+    title: "Planning Calendar",
   },
   {
     href: dashboardTabHref("setupChecklistMasterTab"),

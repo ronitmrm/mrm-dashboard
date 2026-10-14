@@ -40,6 +40,19 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("uses the shared calendar to open a Friday for machining", () => {
+    const { context: calendar } = proposalContext({ productionControl: {
+      planningHolidayRows: [
+        { date: "16-Oct-26", dayType: "Working Friday" },
+        { date: "17-Oct-26", dayType: "Holiday" },
+      ],
+    } })
+    const lines = [line("new", 8)]
+    const friday = { ...input, lines, startDate: "2026-10-16", deadline: "2026-10-16" }
+    expect(calculateProposal(friday, context, lines).lines[0]?.selected).toBe(false)
+    expect(calendar.holidays).toEqual(["2026-10-17"])
+    expect(calculateProposal(friday, { ...context, holidays: calendar.holidays, workingDates: calendar.workingDates }, lines).lines[0]).toMatchObject({ selected: true, completion: "2026-10-16" })
+  })
   test("uses the full period for machining even when an older draft has finishing days", () => {
     const lines = [line("new", 8)]
     const savedInput = { ...input, lines, dispatchDays: 60 }

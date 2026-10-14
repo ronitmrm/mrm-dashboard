@@ -73,12 +73,6 @@ const unitMasterDefinitions = [
     scope: "unit",
   },
   {
-    id: "planning_holiday",
-    label: "Planning Holiday",
-    access: "operations",
-    scope: "unit",
-  },
-  {
     id: "production_break_schedule",
     label: "Production Break Schedule",
     access: "operations",
@@ -87,6 +81,7 @@ const unitMasterDefinitions = [
 ] as const satisfies readonly MasterDefinition[]
 
 export const sharedOperationalMasterDefinitions = [
+  { id: "planning_holiday", label: "Planning Calendar", access: "operations", scope: "universal" },
   { id: "parameter_master", label: "Parameter", access: "operations", scope: "universal" },
   { id: "measuring_instrument_master", label: "Measuring Instrument", access: "operations", scope: "universal" },
   {

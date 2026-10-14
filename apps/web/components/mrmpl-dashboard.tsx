@@ -319,15 +319,20 @@ import {
 } from "@/lib/planning-master-contract"
 
 type DashboardPayload = Record<string, unknown>
+type SubmitActionOptions = {
+  throwOnError?: boolean
+  onSuccess?: (result: DashboardApiResult) => void
+}
 type SubmitAction = (
   path: string,
   body: Record<string, unknown>,
-  options?: { throwOnError?: boolean }
+  options?: SubmitActionOptions
 ) => Promise<void>
 
 type ActionStatus = { tone: "default" | "destructive"; message: string } | null
 
 type DashboardApiResult = {
+  code?: string
   message: string
   queued?: boolean
   skipped?: boolean
@@ -777,24 +782,19 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "planning_holiday",
-    title: "Planning Holiday",
+    title: "Planning Calendar",
     description:
-      "Plant Shutdown Dates And Vacation Days That Planning Should Skip.",
+      "Applies to all production units. Fridays are closed by default. Choose Working Friday to cancel the holiday for one Friday. Delete that entry in View Records to restore the Friday holiday.",
     fields: [
-      { name: "date", label: "Holiday Date", type: "date", required: true },
+      { name: "date", label: "Date", type: "date", required: true },
       {
-        name: "reason",
-        label: "Reason",
-        options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"],
-        defaultValue: "Plant holiday",
+        name: "dayType",
+        label: "Day type",
+        options: ["Holiday", "Working Friday"],
+        defaultValue: "Holiday",
+        required: true,
       },
-      {
-        name: "scope",
-        label: "Scope",
-        options: ["Factory", "Department"],
-        defaultValue: "Factory",
-      },
-      { name: "department", label: "Department" },
+      { name: "reason", label: "Reason", required: true },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -2783,7 +2783,7 @@ function DashboardShell({
   async function submitAction(
     path: string,
     body: Record<string, unknown>,
-    options: { throwOnError?: boolean } = {}
+    options: SubmitActionOptions = {}
   ) {
     if (actionInFlightRef.current) return
     const normalizedBody = normalizeUserEnteredPayload(body)
@@ -2799,6 +2799,7 @@ function DashboardShell({
     }
     try {
       const apiResult = await postDashboardApi(path, normalizedBody)
+      options.onSuccess?.(apiResult)
       const message = apiResult.message
       const shopFloorPatch = shopFloorStatusPatchFromAction(
         path,
@@ -3009,7 +3010,9 @@ function DashboardShell({
   const isAllProductionUnitsTab =
     activeTab === "machineMasterTab" ||
     activeTab === "maintenanceTab" ||
-    activeTab === "productionDashboardTab"
+    activeTab === "productionDashboardTab" ||
+    ((activeTab === "dataEntryTab" || activeTab === "masterTablesTab") &&
+      isCompanyWideMasterEntryType(preferredDataEntryType))
   const isSnapshotRefreshActive =
     isRefreshingSnapshot ||
     dashboardRefreshStatus?.isRefreshing === true ||
@@ -3560,16 +3563,6 @@ function DashboardContent({
       </div>
     )
   }
-
-  if (activeTab === "planningHolidayTab") {
-    return (
-      <PlanningHolidayPanel
-        productionControl={productionControl}
-        submitAction={submitAction}
-      />
-    )
-  }
-
   if (activeTab === "setupChecklistMasterTab") {
     return (
       <DataEntryPanel
@@ -10586,11 +10579,7 @@ function DataEntryPanel({
 }: {
   canManageStoreMasters?: boolean
   payload: DashboardPayload
-  submitAction: (
-    path: string,
-    body: Record<string, unknown>,
-    options?: { throwOnError?: boolean }
-  ) => Promise<void>
+  submitAction: SubmitAction
   preferredEntryType: string
   preferredDefaults: Record<string, unknown>
   allowedEntryTypes?: readonly string[]
@@ -14223,162 +14212,6 @@ function MaintenanceChecklistPreview({ rows }: { rows: DashboardPayload[] }) {
     </div>
   )
 }
-function PlanningHolidayPanel({
-  productionControl,
-  submitAction,
-}: {
-  productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
-}) {
-  const holidayRows = asArray(productionControl.planningHolidayRows)
-  const calendar = asRecord(productionControl.planningCalendar)
-  const [isSaving, setIsSaving] = useState(false)
-
-  async function saveHoliday(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (isSaving) return
-    const form = event.currentTarget
-    const formData = new FormData(form)
-    const coverage = str(formData.get("coverage"))
-    const targets =
-      coverage === "all"
-        ? productionFloors
-        : productionFloors.filter((floor) => floor.code === coverage)
-    setIsSaving(true)
-    try {
-      for (const floor of targets) {
-        await submitAction("data-entry", {
-          entryType: "planning_holiday",
-          productionFloorCode: floor.code,
-          returnTab: "planningHolidayTab",
-          payload: {
-            date: str(formData.get("date")),
-            reason: str(formData.get("reason")) || "Plant holiday",
-            scope: coverage === "all" ? "Factory" : "Department",
-            department: floor.code,
-            departmentLabel: floor.shortLabel,
-            factoryWide: coverage === "all",
-            remark: str(formData.get("remark")),
-          },
-        })
-      }
-      form.reset()
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <section className="grid gap-4">
-      <TrackingSummary
-        tones={["accent", "brand", "information"]}
-        items={[
-          ["Weekly shutdown", displayValue(calendar.weeklyHoliday || "Friday")],
-          ["Manual holidays", formatNumber(holidayRows.length)],
-          ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
-        ]}
-      />
-      <SectionCard width="standard">
-        <CardHeader>
-          <CardTitle>Plan A Holiday</CardTitle>
-          <CardDescription>
-            All Factory Applies The Date To Every Production Department. A
-            Department Choice Affects Only That Production Floor.
-          </CardDescription>
-        </CardHeader>
-        {isSaving ? (
-          <div className="px-6">
-            <ProcessingNotice message="Saving the planning holiday..." />
-          </div>
-        ) : null}
-        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
-          <CardContent>
-            <form className="grid gap-3" onSubmit={saveHoliday}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Holiday Date">
-                  <Input name="date" type="date" required />
-                </Field>
-                <Field label="Reason">
-                  <SearchableSelect
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                    name="reason"
-                    defaultValue="Plant holiday"
-                  >
-                    <option value="Plant holiday">Plant Holiday</option>
-                    <option value="Vacation">Vacation</option>
-                    <option value="Maintenance shutdown">
-                      Maintenance Shutdown
-                    </option>
-                    <option value="Other">Other</option>
-                  </SearchableSelect>
-                </Field>
-                <Field label="Applies To">
-                  <SearchableSelect
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                    name="coverage"
-                    defaultValue="all"
-                  >
-                    <option value="all">All Factory</option>
-                    {productionFloors.map((floor) => (
-                      <option key={floor.code} value={floor.code}>
-                        {floor.shortLabel}
-                      </option>
-                    ))}
-                  </SearchableSelect>
-                </Field>
-                <Field label="Remark">
-                  <Input name="remark" />
-                </Field>
-              </div>
-              <Button className="w-fit" type="submit" disabled={isSaving}>
-                <CalendarDays className="size-4" />
-                {isSaving ? "Saving..." : "Save Holiday"}
-              </Button>
-            </form>
-          </CardContent>
-        </fieldset>
-      </SectionCard>
-      <SectionCard>
-        <CardHeader>
-          <CardTitle>Saved Planning Holidays</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {holidayRows.length ? (
-            <div className="min-w-0 rounded-md border">
-              <OperationalTable>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Applies To</TableHead>
-                    <TableHead>Remark</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {holidayRows.map((row, index) => (
-                    <TableRow
-                      key={`${displayValue(row.dateValue || row.date)}-${index}`}
-                    >
-                      <TableCell>{displayValue(row.date)}</TableCell>
-                      <TableCell>{displayValue(row.reason)}</TableCell>
-                      <TableCell>{planningHolidayCoverageLabel(row)}</TableCell>
-                      <TableCell>{displayValue(row.remark)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </OperationalTable>
-            </div>
-          ) : (
-            <EmptyRowsMessage>
-              No Manual Planning Holidays Saved Yet.
-            </EmptyRowsMessage>
-          )}
-        </CardContent>
-      </SectionCard>
-    </section>
-  )
-}
-
 function DataEntryForm({
   spec,
   submitAction,
@@ -14390,11 +14223,7 @@ function DataEntryForm({
   storeMasterData,
 }: {
   spec: DataEntrySpec
-  submitAction: (
-    path: string,
-    body: Record<string, unknown>,
-    options?: { throwOnError?: boolean }
-  ) => Promise<void>
+  submitAction: SubmitAction
   defaults: Record<string, unknown>
   dataEntry?: DashboardPayload
   masterRows?: DashboardPayload[]
@@ -14523,6 +14352,9 @@ function DataEntryForm({
     >
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
+        {spec.entryType === "planning_holiday" ? (
+          <CardDescription>{spec.description}</CardDescription>
+        ) : null}
         {spec.entryType === "route" ? (
           <CardDescription>
             Use a new option for changed setup sequence, setup count or
@@ -16083,7 +15915,7 @@ function SetupChecklistMasterForm({
   rows,
 }: {
   spec: DataEntrySpec
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
   defaults: Record<string, unknown>
   rows: DashboardPayload[]
 }) {
@@ -16102,7 +15934,7 @@ function SetupChecklistMasterForm({
   const defaultCode =
     displayValue(defaults.checklistCode) !== "-"
       ? displayValue(defaults.checklistCode)
-      : nextSetupChecklistCode(savedRows)
+      : ""
   const [selectedCode, setSelectedCode] = useState(defaultCode)
   const selectedRows = useMemo(
     () => setupChecklistRowsForCode(savedRows, selectedCode),
@@ -16149,7 +15981,7 @@ function SetupChecklistMasterForm({
   }, [checklistOptions, savedRows, selectedCode])
 
   function startNewChecklist() {
-    setSelectedCode(nextSetupChecklistCode(savedRows))
+    setSelectedCode("")
     setChecklistTitle("")
     setEffectiveFrom(todayIsoDate())
     setDrafts([newSetupChecklistDraft(1)])
@@ -16187,7 +16019,7 @@ function SetupChecklistMasterForm({
   }
 
   async function saveChecklist() {
-    const code = selectedCode || nextSetupChecklistCode(savedRows)
+    let code = selectedCode
     const title = checklistTitle.trim()
     const activeDrafts = drafts.filter((draft) => draft.checkPoint.trim())
     const duplicateSequences = activeDrafts
@@ -16245,9 +16077,14 @@ function SetupChecklistMasterForm({
         await submitAction("data-entry", {
           entryType: spec.entryType,
           key: dataEntryKey(spec.entryType, payload),
-          returnTab: "setupChecklistMasterTab",
-          payload,
+          payload: { ...payload, checklistCode: code, version: code },
+        }, {
+          throwOnError: true,
+          onSuccess: (result) => { code = result.code || code },
         })
+        if (!code) throw new Error("Checklist code was not returned. Reload View Records before retrying.")
+        payload.checklistCode = code
+        payload.version = code
       }
       setLocalRows((current) =>
         mergeSetupChecklistRows([
@@ -16260,7 +16097,7 @@ function SetupChecklistMasterForm({
       setDrafts(activePayloads.map(setupChecklistDraftFromRow))
       setRemovedRows([])
       setSelectedCode(code)
-      setStatus({ tone: "default", message: "Setup checklist saved." })
+      setStatus({ tone: "default", message: `Setup checklist ${code} saved.` })
     } catch (err) {
       setStatus({
         tone: "destructive",
@@ -16276,6 +16113,7 @@ function SetupChecklistMasterForm({
     <SectionCard>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
+        <CardDescription>New checklist codes are assigned on save from one shared sequence across all production units.</CardDescription>
       </CardHeader>
       {isSaving ? (
         <div className="px-6">
@@ -16291,9 +16129,7 @@ function SetupChecklistMasterForm({
                 value={selectedCode}
                 onChange={(event) => setSelectedCode(event.target.value)}
               >
-                <option value={nextSetupChecklistCode(savedRows)}>
-                  New Checklist ({nextSetupChecklistCode(savedRows)})
-                </option>
+                <option value="">New Checklist</option>
                 {checklistOptions.map((row) => (
                   <option key={row.code} value={row.code}>
                     {row.code} - {row.title}
@@ -16324,7 +16160,7 @@ function SetupChecklistMasterForm({
           </div>
           <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_180px]">
             <Field label="Checklist Code">
-              <Input value={selectedCode} readOnly />
+              <Input value={selectedCode} placeholder="Assigned on save" readOnly />
             </Field>
             <Field label="Checklist Title">
               <Input
@@ -17756,6 +17592,7 @@ async function postDashboardApi(
     )
   }
   return {
+    code: optionalText(payload.code),
     message: str(payload.message || payload.savedText) || "Import complete.",
     queued: payload.queued === true,
     skipped: payload.skipped === true,
@@ -17848,26 +17685,6 @@ function displayValue(value: unknown, numeric = false) {
   if (numeric && Number.isFinite(Number(textValue)))
     return formatNumber(Number(textValue))
   return formatCell(value)
-}
-
-function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
-  const today = istDateValue()
-  const next = rows
-    .map((row) => ({
-      label: displayValue(row.date),
-      value: str(row.dateValue || row.date),
-    }))
-    .filter((row) => row.value && row.value >= today)
-    .sort((a, b) => a.value.localeCompare(b.value))[0]
-  return next?.label ?? "-"
-}
-
-function planningHolidayCoverageLabel(row: DashboardPayload) {
-  if (row.factoryWide === true || str(row.scope).toLowerCase() === "factory")
-    return "All factory"
-  const department = str(row.departmentLabel || row.department)
-  const floor = productionFloors.find((item) => item.code === department)
-  return floor?.shortLabel || department || "Selected production floor"
 }
 
 type MachineConstraintQueuePlacementPayload = {
@@ -19413,9 +19230,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   )
     return str(payload.code).toLowerCase()
   if (entryType === "planning_holiday") {
-    return [payload.date, payload.scope, payload.machine, payload.department]
-      .map((value) => str(value).toLowerCase())
-      .join("|")
+    return str(payload.date)
   }
   if (entryType === "work_order" || entryType === "rm_inward")
     return str(payload.jcNo)
@@ -19661,14 +19476,6 @@ function setupChecklistCode(row: DashboardPayload) {
     : /^(SC\d+|SETUP-)/i.test(version)
       ? version
       : `SETUP-${version}`
-}
-
-function nextSetupChecklistCode(rows: DashboardPayload[]) {
-  const max = rows.reduce((highest, row) => {
-    const match = /^SC(\d+)$/i.exec(setupChecklistCode(row))
-    return match ? Math.max(highest, Number(match[1])) : highest
-  }, 0)
-  return `SC${String(max + 1).padStart(3, "0")}`
 }
 
 function setupChecklistRowKey(row: DashboardPayload) {

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto"
 import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
-import { productionFloorCodeForRecord } from "./production-floors"
 import { applyMasterTextReferences, masterTextReferences } from "./master-text-references"
 import {
   repositoryPool,
@@ -112,8 +111,6 @@ async function authorizeMasterRecord(
       [record.template_id]
     )
     productionFloorCode = floor.rows[0]?.code ?? null
-  } else if (kind === "planning_holiday") {
-    productionFloorCode = productionFloorCodeForRecord({ sourcePayload: record.source_payload })
   } else {
     const floor = typeof record.production_floor_id === "string"
       ? await client.query<{ code: string }>(

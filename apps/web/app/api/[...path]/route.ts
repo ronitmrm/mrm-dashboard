@@ -288,7 +288,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "inputType",
     "remark",
   ],
-  planning_holiday: ["date", "reason", "scope", "department", "remark"],
+  planning_holiday: ["date", "dayType", "reason", "remark"],
   first_piece_inspection_master: [
     "jcNo",
     "uid",
@@ -856,24 +856,21 @@ async function savePlanningMasterEntry(
   }
 
   if (entryType === "planning_holiday") {
-    const exceptionType = [
-      "holiday",
-      optionalText(payload.scope),
-      optionalText(payload.machine),
-      optionalText(payload.department),
-    ]
-      .filter(Boolean)
-      .join(":")
-    return repository.upsertPlanningCalendarException({
-      rejectDuplicates,
-      actorUserId,
-      exceptionDate: text(payload.date),
-      exceptionType,
-      name: text(payload.reason) || text(payload.remark) || "Planning holiday",
-      organizationId,
-      sourcePayload: payload,
-      workingMinutes: 0,
-    })
+    try {
+      return await repository.upsertPlanningCalendarException({
+        rejectDuplicates,
+        recordId,
+        actorUserId,
+        exceptionDate: text(payload.date),
+        dayType: text(payload.dayType) || "Holiday",
+        name: requiredDashboardText(payload.reason, "Reason"),
+        organizationId,
+        sourcePayload: payload,
+      })
+    } catch (error) {
+      if (error instanceof RangeError) throw new RouteError(400, error.message)
+      throw error
+    }
   }
 
   throw new RouteError(
@@ -2626,9 +2623,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
     return text(payload.machineNo)
   }
   if (entryType === "planning_holiday") {
-    return [payload.date, payload.scope, payload.machine, payload.department]
-      .map(text)
-      .join("|")
+    return text(payload.date)
   }
   return undefined
 }

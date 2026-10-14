@@ -37,7 +37,7 @@ viewed Production Unit to these records.
 
 The company-wide masters are:
 
-- Setup Checklist Master;
+- Planning Calendar (holidays and working-Friday exceptions);
 - Maintenance Checklist Master;
 - Maintenance Schedule Master;
 - Rejection Type Master;
@@ -65,8 +65,11 @@ Successful production master saves and uploads automatically queue a dashboard
 refresh. Authorized visible workspaces reconcile committed records and status
 in the background while forecasts retain the last published plan until
 recalculation completes. Explicit Refresh can recover a full plan without
-changing the saved records. Universal checklists and maintenance schedules
+changing the saved records. Universal maintenance checklists and schedules
 are available in every Production Unit; unit-owned masters stay scoped to their unit.
+
+Setup Checklist Master belongs to one unit, while its SC codes use one shared
+sequence across all units. Planning Calendar dates apply to every unit.
 
 Master Tables opens only after Unit, Main Master, and Sub Master are chosen on
 **Master Table Selection**. The selected table and Unit stay locked. Changing

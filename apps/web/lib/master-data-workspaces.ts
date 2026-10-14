@@ -79,7 +79,7 @@ const identityFieldsByEntryType: Record<string, readonly string[]> = {
   machine_master: ["machineNo"],
   maintenance_checklist_master: ["checklistCode", "sequence"],
   maintenance_master: ["maintenanceCode"],
-  planning_holiday: ["date", "reason"],
+  planning_holiday: ["date"],
   quality_parameter_master: [
     "partNo",
     "optionNumber",
@@ -102,12 +102,13 @@ export function immutableMasterFields(entryType: string) {
 }
 
 export function masterEditDefaults(
-  _entryType: string,
+  entryType: string,
   row: Record<string, unknown>
 ) {
   const entryId = String(row._id ?? "").trim()
   return {
     ...row,
+    ...(entryType === "planning_holiday" ? { date: row.dateValue ?? row.date } : {}),
     __editingMaster: true,
     ...(entryId ? { __entryId: entryId } : {}),
     __returnTab: "masterTablesTab",

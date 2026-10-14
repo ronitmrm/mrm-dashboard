@@ -1,5 +1,6 @@
 import {
   isActivePlannerDecision,
+  isWorkingFriday,
   machineFamilyMatches,
   machineMasterFamily,
 } from "@workspace/db/planning-rules"
@@ -80,6 +81,11 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
     version: Number(root.readModelVersion),
     machines,
     holidays: rows(source.planningHolidayRows)
+      .filter((row) => !isWorkingFriday(row))
+      .map((row) => date(row.date ?? row.holidayDate))
+      .filter(Boolean),
+    workingDates: rows(source.planningHolidayRows)
+      .filter(isWorkingFriday)
       .map((row) => date(row.date ?? row.holidayDate))
       .filter(Boolean),
     weeklyHoliday: 5,

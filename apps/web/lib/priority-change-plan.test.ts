@@ -41,13 +41,15 @@ describe("priorityChangePlan", () => {
     const target = row({ jcNo: "A", partCode: "P", setupNo: "1", machine: "M1",
       plannedProductionStartDate: "28-Sept-26", plannedProductionEndDate: "29-Sept-26",
       requiredToolingCodes: ["F1"], toolingAllocatedQuantities: allocation });
-    const source = { planningHolidayRows: [{ date: "26-Sept-26" }], machinePlanDetailRows: [target,
+    const source = { planningHolidayRows: [{ date: "26-Sept-26", dayType: "Holiday" }], machinePlanDetailRows: [target,
       row({ jcNo: "B", machine: "M2", requiredToolingCodes: ["F1"], shopFloorStage: "operator_started",
         plannedProductionStartDate: "21-Sept-26", plannedProductionEndDate: "24-Sept-26" }),
       row({ jcNo: "C", machine: "M1", plannedProductionStartDate: "21-Sept-26", plannedProductionEndDate: "23-Sept-26" }),
     ] };
     const preview = () => { const plan = priorityChangePlan(source, "P", "A"); return priorityPlanStepWindows(plan.steps, {}).get(plan.steps[0]!.key); };
     expect(preview()).toEqual({ startDate: "25-Sept-26", endDate: "28-Sept-26" });
+    source.planningHolidayRows.push({ date: "25-Sept-26", dayType: "Working Friday" });
+    expect(preview()).toEqual({ startDate: "25-Sept-26", endDate: "27-Sept-26" });
     allocation.F1 = 2;
     expect(preview()).toEqual({ startDate: "21-Sept-26", endDate: "22-Sept-26" });
     allocation.F1 = 0;

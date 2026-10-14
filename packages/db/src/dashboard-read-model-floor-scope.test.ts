@@ -27,7 +27,7 @@ describe("dashboard data-entry floor scope", () => {
     expect(payload).not.toHaveProperty("productionFloorSnapshots.conventional.productionControl.setupNameMasterRows.0")
   })
   it("shares universal checklists and maintenance schedules across all units without leaking unit masters", () => {
-    const universal = ["maintenance_checklist_master", "maintenance_master"].map(
+    const universal = ["maintenance_checklist_master", "maintenance_master", "planning_holiday"].map(
       (entryType) => ({ entryType, productionFloorCode: "conventional" })
     )
     for (const floor of productionFloors) {

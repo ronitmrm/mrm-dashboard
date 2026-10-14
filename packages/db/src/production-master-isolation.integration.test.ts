@@ -5,10 +5,12 @@ import { afterAll, beforeAll, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
+import { createQualityRepository } from "./quality"
 
 const connectionString = process.env.TEST_DATABASE_URL ?? "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
-const pool = new Pool({ connectionString, max: 1 })
+const pool = new Pool({ connectionString, max: 2 })
 const planning = createDashboardPlanningRepository({ pool })
+const quality = createQualityRepository({ pool })
 const lifecycle = createMasterDataLifecycleRepository({ pool })
 const suffix = randomUUID()
 const machineNumber = `UNIT-ISOLATION-${suffix}`
@@ -23,26 +25,51 @@ afterAll(async () => {
   await pool.query("DELETE FROM catalog.machines WHERE organization_id = $1 AND machine_number = $2", [organizationId, machineNumber])
   await pool.query("DELETE FROM manufacturing.planning_calendar_exceptions WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM quality.parameter_definitions WHERE organization_id = $1", [organizationId])
+  await pool.query("DELETE FROM quality.setup_checklist_templates WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM manufacturing.route_options WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM catalog.items WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM derived.outbox_events WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM derived.refresh_jobs WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM manufacturing.production_floors WHERE organization_id = $1", [organizationId])
+  await pool.query("UPDATE store.accountable_stores SET default_location_id = NULL WHERE organization_id = $1", [organizationId])
+  await pool.query("DELETE FROM store.locations WHERE organization_id = $1", [organizationId])
+  await pool.query("DELETE FROM store.accountable_stores WHERE organization_id = $1", [organizationId])
+  await pool.query("DELETE FROM derived.dashboard_source_revisions WHERE organization_id = $1", [organizationId])
   await pool.query("DELETE FROM core.organizations WHERE id = $1", [organizationId])
   await pool.end()
 })
 
-test("a holiday cannot overwrite an existing holiday belonging to another unit", async () => {
-  const input = { organizationId, exceptionDate: "2099-01-01", exceptionType: `holiday:${suffix}`, name: "Conventional holiday" }
-  const conventional = await planning.upsertPlanningCalendarException(input)
-  await expect(planning.upsertPlanningCalendarException({ ...input, name: "CNC holiday", sourcePayload: { productionFloorCode: "cnc" } })).rejects.toThrow("another Production Unit")
-  expect(await planning.upsertPlanningCalendarException({ ...input, name: "Edited conventional holiday", sourcePayload: { productionFloorCode: "conventional" } })).toEqual(conventional)
+test("holidays are shared and a Friday can be changed to a working day", async () => {
+  const input = { organizationId, exceptionDate: "2026-10-16", name: "Plant holiday", sourcePayload: { productionFloorCode: "cnc" } }
+  const saved = await planning.upsertPlanningCalendarException(input)
+  const row = (await pool.query<{ source_id: string }>("SELECT source_id FROM manufacturing.planning_calendar_exceptions WHERE id = $1", [saved.id])).rows[0]!
+  expect(await planning.upsertPlanningCalendarException({ ...input, recordId: row.source_id, rejectDuplicates: true, dayType: "Working Friday", name: "Extra machining day" })).toEqual(saved)
+  expect((await pool.query("SELECT source_payload FROM manufacturing.planning_calendar_exceptions WHERE id = $1", [saved.id])).rows[0].source_payload).toEqual({ date: "2026-10-16", dayType: "Working Friday", reason: "Extra machining day", remark: "" })
+  await expect(planning.upsertPlanningCalendarException({ ...input, exceptionDate: "2026-10-17", dayType: "Working Friday" })).rejects.toThrow("Choose a Friday")
+  await expect(planning.upsertPlanningCalendarException({ ...input, rejectDuplicates: true })).rejects.toThrow()
 })
 
 test("saving a machine from another unit is rejected instead of moving or overwriting it", async () => {
   const conventional = await planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "conventional", name: "Conventional machine" })
   await expect(planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "cnc", name: "CNC machine" })).rejects.toThrow("another Production Unit")
   expect(await planning.upsertMachine({ organizationId, machineNumber, productionFloorCode: "conventional", name: "Edited conventional machine" })).toEqual(conventional)
+})
+
+test("allocates setup checklist codes across units without concurrent duplicates", async () => {
+  await pool.query(`INSERT INTO manufacturing.production_floors (organization_id, code, name)
+    SELECT $1, code, code FROM unnest(ARRAY['cnc', 'conventional-02', 'forging']) code
+    ON CONFLICT (organization_id, code) DO NOTHING`, [organizationId])
+  const input = {
+    organizationId, revision: 1, payload: {},
+    items: [{ inputType: "checkbox", itemKey: "1", prompt: "Drawing checked", required: true, sequence: 1 }],
+  }
+  await quality.upsertSetupChecklistTemplate({ ...input, code: "SC001", productionFloorCode: "cnc", name: "CNC checklist" })
+  const checklists = await Promise.all(["conventional-02", "forging"].map(productionFloorCode =>
+    quality.upsertSetupChecklistTemplate({ ...input, code: "", productionFloorCode, name: "New setup checklist" })
+  ))
+  expect(checklists.map(row => row.code).sort()).toEqual(["SC002", "SC003"])
+  await expect(quality.upsertSetupChecklistTemplate({ ...input, code: "SC001", productionFloorCode: "conventional-02", name: "Conflicting checklist" }))
+    .rejects.toThrow("belongs to another production unit")
 })
 
 test("delete authorization resolves the stored route unit rather than trusting its source payload", async () => {
@@ -68,7 +95,7 @@ test("delete authorization resolves the stored route unit rather than trusting i
       recordId: suffix,
       reason: "Check stored unit authorization",
       authorize: async (record) => {
-        expect(record.productionFloorCode).toBe("cnc")
+        expect(record.productionFloorCode).toBe(kind === "planning_holiday" ? null : "cnc")
         throw new Error("Fixture access denied")
       },
     })).rejects.toThrow("Fixture access denied")
