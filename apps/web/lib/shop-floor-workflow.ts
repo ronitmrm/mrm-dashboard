@@ -39,6 +39,11 @@ export function shopFloorRowIsExplicitlyStopped(row: Record<string, unknown>) {
   )
 }
 
+export function shopFloorRowIsProducedHistory(row: Record<string, unknown>) {
+  return row.machineUnavailableSplitRole === "produced_on_unavailable_machine" &&
+    Number(row.pendingGoodQty) === 0
+}
+
 export function shopFloorRowIsProductionCurrent(row: Record<string, unknown>) {
   const stage = normalizeShopFloorStage(row.shopFloorStage)
   if (stage) return stage === "operator_started"
