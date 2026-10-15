@@ -105,6 +105,13 @@ scrolling table.
 
 Filters persist in browser storage. Pass a descriptive `filterStorageKey` for important or conditionally mounted tables. Otherwise the table derives a page-scoped key. Keep `filterMode="external"` only when a feature's shared table adapter owns filtering and persistence.
 
+Date column filters use the shared `ExcelColumnFilter` Year → Month → Day
+checklist, with whole-year/month selection, partial selection, search and
+OK/Cancel. Dates sort chronologically (Oldest to Newest / Newest to Oldest).
+Grouping preserves original cell values for filtering and browser persistence;
+blank and non-date values remain separately selectable. Form date inputs and
+date-range controls retain their existing behavior.
+
 For totals that follow built-in table filters, set `data-row-id` on each data row
 and use `onFilteredRowIdsChange` to aggregate the matching source records. Keep
 the callback stable and avoid state updates when the ID set is unchanged.
