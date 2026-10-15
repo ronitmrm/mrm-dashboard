@@ -13,6 +13,7 @@ import {
 import { Pool, type PoolClient } from "pg"
 import { performance } from "node:perf_hooks"
 
+import { createPlannerWorkerPool } from "./planner-worker-pool"
 import {
   createRedisAcceleration,
   type RedisAcceleration,
@@ -90,7 +91,7 @@ export async function buildCanonicalRuntimeReadModel(
 }
 
 export function createDurableRefreshWorker({
-  buildReadModel = buildCanonicalRuntimeReadModel,
+  buildReadModel,
   maxAttempts = 5,
   organizationId,
   postgresPool,
@@ -105,6 +106,14 @@ export function createDurableRefreshWorker({
   upstashRedisRestUrl,
   workerId,
 }: DurableRefreshWorkerOptions) {
+  const planner = buildReadModel ? undefined : createPlannerWorkerPool()
+  const build = buildReadModel ?? ((client: PoolClient, context: RefreshBuildContext) =>
+    buildCanonicalDashboardReadModel(client, {
+      ...context,
+      persistSegments: true,
+      materializePayload: false,
+      buildSnapshot: planner?.calculate,
+    }))
   const pool = postgresPool
     ? instrumentPostgresPool(postgresPool)
     : createBoundedPostgresPool({
@@ -124,6 +133,7 @@ export function createDurableRefreshWorker({
 
   return {
     async close() {
+      await planner?.close()
       if (!postgresPool) await pool.end()
       await acceleration.close()
     },
@@ -335,7 +345,7 @@ export function createDurableRefreshWorker({
             const startedAt = Date.now()
 
             try {
-              const built = await buildReadModel(client, {
+              const built = await build(client, {
                 attempt,
                 jobId: job.id,
                 organizationId: job.organization_id,
