@@ -446,9 +446,31 @@ export function OrderAcceptanceWorkspace({
               </SearchableSelect>
             </label>
           </FormGrid>
+          {input.mode === "deadline" ? (
+            <label className="grid max-w-sm gap-1 text-sm">
+              Tentative RM available from (optional)
+              <Input
+                type="date"
+                disabled={locked}
+                max={input.deadline}
+                value={input.tentativeRmDate ?? ""}
+                onChange={(event) =>
+                  change({ ...input, tentativeRmDate: event.target.value })
+                }
+                aria-describedby="tentative-rm-help"
+              />
+              <span
+                id="tentative-rm-help"
+                className="text-xs text-muted-foreground"
+              >
+                Applies to all products in this proposed order. Leave blank to
+                assume RM is ready at the machining start date.
+              </span>
+            </label>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             {input.mode === "deadline"
-              ? `Machining can run from ${formatIstDate(input.startDate)} to ${formatIstDate(input.deadline)}. The whole period is available for machining.`
+              ? `Proposed products can start from ${formatIstDate(input.tentativeRmDate && input.tentativeRmDate > input.startDate ? input.tentativeRmDate : input.startDate)} and must finish by ${formatIstDate(input.deadline)}. Existing jobs retain their planning dates.`
               : "Enter RM-ready dates to estimate when machining will finish. The review end date sets the period for the machine-capacity summary."}{" "}
             Closed Fridays and holidays follow the Universal Planning Calendar.
           </p>
@@ -488,7 +510,7 @@ export function OrderAcceptanceWorkspace({
         <CardContent className="grid min-w-0 gap-4">
           <p className="text-sm text-muted-foreground">
             {input.mode === "deadline"
-              ? "Upload your product list. This check assumes RM is ready when needed; selected lines show the required RM date."
+              ? "Upload your product list. The tentative RM availability date applies to all proposed products; selected lines show when RM is needed."
               : "Upload your product list and enter expected RM-ready dates, directly or using the RM workbook."}
           </p>
           <details open={!plan}>

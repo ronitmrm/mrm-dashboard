@@ -9,6 +9,7 @@ export type ProposalInput = {
   reference: string
   revisionOf: string
   startDate: string
+  tentativeRmDate?: string
   deadline: string
   hoursPerDay: number
   efficiency: number
@@ -87,6 +88,15 @@ export function validateProposal(input: ProposalInput) {
     !(input.efficiency > 0 && input.efficiency <= 100)
   )
     throw new Error("Enter valid daily hours and available time percentage.")
+  if (
+    input.mode === "deadline" &&
+    input.tentativeRmDate &&
+    (!validDate(input.tentativeRmDate) ||
+      input.tentativeRmDate > input.deadline)
+  )
+    throw new Error(
+      "Use a valid tentative RM date on or before the machining deadline."
+    )
   if (
     !Number.isFinite(input.setupHours) ||
     input.setupHours < 0 ||
@@ -280,7 +290,10 @@ export function calculateProposal(
       let target = clone(committed)
       const results = new Map<string, LineResult>()
       for (const line of candidate) {
-        const rm = input.mode === "deadline" ? input.startDate : line.rmDate
+        const rm =
+          input.mode === "deadline"
+            ? input.tentativeRmDate || input.startDate
+            : line.rmDate
         const result =
           !blockers.length && !line.issue && rm
             ? schedule(line, target, rm)

@@ -178,6 +178,10 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
         {
           "Machining start": input.startDate,
           "Machining deadline": input.deadline,
+          "Tentative RM available from":
+            input.mode === "deadline"
+              ? input.tentativeRmDate || input.startDate
+              : "Per-line RM dates",
           "Daily hours": input.hoursPerDay,
           "Time factor %": input.efficiency,
           "Setup hours per operation": input.setupHours,

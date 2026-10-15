@@ -25,6 +25,9 @@ function inputFrom(value: unknown): ProposalInput {
     reference: string(body.reference),
     revisionOf: string(body.revisionOf),
     startDate: string(body.startDate),
+    ...(string(body.tentativeRmDate)
+      ? { tentativeRmDate: string(body.tentativeRmDate) }
+      : {}),
     deadline: string(body.deadline),
     mode: body.mode === "deadline" ? "deadline" : "dates",
     hoursPerDay: Number(body.hoursPerDay),

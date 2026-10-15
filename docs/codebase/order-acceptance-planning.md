@@ -11,6 +11,11 @@ one compatible machine, with sequential routing. Four deterministic line orders
 are compared in deadline mode by completed line count then utilised hours. This
 is a heuristic, not a proof of globally optimal selection. Splitting a batch
 across machines is not assumed. Input-order scheduling is used in RM-date mode.
+Deadline mode accepts an optional common `tentativeRmDate` for proposed lines.
+Their earliest start is the later of that date and `startDate`; blank retains
+the existing start-date assumption. Existing workload is reserved first without
+applying this proposed-order date. The date is saved with the proposal and
+included in the exported assumptions; changing it requires recalculation.
 
 The adapter in `order-acceptance-context.ts` reads the canonical floor snapshot:
 route/cycle masters, active machines, pending work, machine plan dates and holidays.
