@@ -40,6 +40,42 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("delays proposed work until common RM availability while retaining existing work", () => {
+    const lines = [line("new", 8)]
+    const settings = { ...input, deadline: "2026-09-15", lines }
+    const workload = { ...context, existing: [line("old", 8)] }
+    const plan = calculateProposal(
+      { ...settings, tentativeRmDate: "2026-09-15" },
+      workload,
+      lines
+    )
+    expect(plan.lines[0]).toMatchObject({
+      selected: true,
+      rmRequiredBy: "2026-09-15",
+      completion: "2026-09-15",
+    })
+    expect(plan.families[0]?.committed).toBe(8)
+    expect(
+      calculateProposal(
+        { ...settings, tentativeRmDate: "2026-09-15" },
+        context,
+        [line("new", 16)]
+      ).lines[0]?.selected
+    ).toBe(false)
+    expect(
+      calculateProposal(settings, context, [line("new", 16)]).lines[0]?.selected
+    ).toBe(true)
+  })
+  test("rejects a tentative RM date after the machining deadline", () => {
+    const lines = [line("new", 8)]
+    expect(() =>
+      calculateProposal(
+        { ...input, lines, tentativeRmDate: "2026-09-15" },
+        context,
+        lines
+      )
+    ).toThrow("tentative RM date")
+  })
   test("keeps old work beyond the deadline while selecting new work on other machines", () => {
     const hx = {
       ...line("old-hx", 16),

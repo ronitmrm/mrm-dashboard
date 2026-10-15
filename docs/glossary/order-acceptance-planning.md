@@ -14,8 +14,10 @@ orders, job cards, reservations, priorities or production commitments.
    only. The full start-to-deadline period is available for machining; no separate
    finishing, inspection or packing allowance is added.
 4. Optionally set a machining deadline and select complete proposed lines. Ignore
-   tentative RM dates in this capacity-only selection, including existing waiting
-   work, but protect existing commitments first. Compare candidate mixes by
+   individual RM dates in this capacity-only selection. An optional common
+   tentative RM availability date sets the earliest start for all proposed lines;
+   when blank, assume readiness at the machining start. Existing waiting work
+   retains its capacity-only readiness assumption. Protect existing commitments first. Compare candidate mixes by
    completed line count, then machine-family utilisation. Report the search
    method honestly; a heuristic is not a proven global optimum.
    Existing work may finish after the proposed order's deadline. Reserve that
