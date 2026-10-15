@@ -15,6 +15,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -158,7 +159,7 @@ function ScheduleFields({
       </Field>
       <Field>
         <FieldLabel htmlFor="schedule-interview-time">Interview Time (IST)</FieldLabel>
-        <Input
+        <TimeInput
           id="schedule-interview-time"
           inputMode="numeric"
           name="interview_time"
@@ -166,7 +167,6 @@ function ScheduleFields({
           placeholder="HH:mm"
           required
           title="Use 24-hour IST time as HH:mm"
-          type="text"
         />
       </Field>
       <Button

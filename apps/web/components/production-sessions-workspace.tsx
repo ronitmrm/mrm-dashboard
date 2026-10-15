@@ -16,6 +16,7 @@ import { Dialog, DialogFooter } from "@workspace/ui/components/dialog"
 import { Field as FormField, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { SectionCard, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
@@ -893,7 +894,7 @@ function CrateWeightField({ value, onChange }: { value: string; onChange: (value
 }
 function IstDateTimeField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const parts = istDateTimeInputParts(value)
-  return <fieldset className="grid gap-1.5 text-sm font-medium"><legend>{label}</legend><div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2"><Input aria-label={`${label} date`} type="date" value={parts.date} onChange={(event) => onChange(`${event.target.value}T${parts.time}`)} /><Input aria-label={`${label} in 24-hour format`} inputMode="numeric" maxLength={5} pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:mm" title="Use 24-hour IST time as HH:mm" type="text" value={parts.time} onChange={(event) => onChange(`${parts.date}T${event.target.value}`)} /></div></fieldset>
+  return <fieldset className="grid gap-1.5 text-sm font-medium"><legend>{label}</legend><div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2"><Input aria-label={`${label} date`} type="date" value={parts.date} onChange={(event) => onChange(`${event.target.value}T${parts.time}`)} /><TimeInput aria-label={`${label} in 24-hour format`} value={parts.time} onChange={(event) => onChange(`${parts.date}T${event.target.value}`)} /></div></fieldset>
 }
 function MasterSelect({ value, options, onChange, placeholder }: { value: string; options: Array<{ code: string; label: string }>; onChange: (value: string) => void; placeholder: string }) { return <NativeSelect className="w-full" wrapLabels value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">{options.length ? placeholder : "No active master values configured"}</NativeSelectOption>{options.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}</NativeSelect> }
 
