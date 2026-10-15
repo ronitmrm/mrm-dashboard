@@ -32,6 +32,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -190,17 +191,11 @@ function TextField({
   required?: boolean
   type?: React.HTMLInputTypeAttribute
 }) {
+  const inputProps = { defaultValue, id: name, name, readOnly, required }
   return (
     <Field>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <Input
-        defaultValue={defaultValue}
-        id={name}
-        name={name}
-        readOnly={readOnly}
-        required={required}
-        type={type}
-      />
+      {type === "time" ? <TimeInput {...inputProps} /> : <Input {...inputProps} type={type} />}
     </Field>
   )
 }

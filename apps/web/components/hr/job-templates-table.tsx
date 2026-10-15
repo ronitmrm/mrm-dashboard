@@ -21,6 +21,7 @@ import {
   FieldLabel,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -205,24 +206,22 @@ export function JobTemplateEditor({
           <FieldLabel htmlFor="edit-template-shift-start">
             Shift Start Time
           </FieldLabel>
-          <Input
+          <TimeInput
             defaultValue={template.shiftStartTime ?? ""}
             id="edit-template-shift-start"
             name="shift_start_time"
             required
-            type="time"
           />
         </Field>
         <Field>
           <FieldLabel htmlFor="edit-template-shift-end">
             Shift End Time
           </FieldLabel>
-          <Input
+          <TimeInput
             defaultValue={template.shiftEndTime ?? ""}
             id="edit-template-shift-end"
             name="shift_end_time"
             required
-            type="time"
           />
         </Field>
         <Field className="sm:col-span-2">

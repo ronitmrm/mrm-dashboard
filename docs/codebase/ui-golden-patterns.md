@@ -87,6 +87,11 @@ the cards. Shared cards use `min-w-0` so wide tables cannot expand their grid or
 flex layout, and `overflow-clip` so they do not create a competing scroll
 container. `OperationalTable` continues to own scrolling for its rows.
 
+Use shared `TimeInput` for standalone 24-hour hour/minute fields. It inserts
+the colon after two hour digits, supports typing/pasting `1934` as `19:34`,
+and keeps native required and 00:00–23:59 validation. Native combined date/time
+controls already supply their separator.
+
 ## Operational tables
 
 `OperationalTable` owns the shared density, sticky header, scrolling boundary, Excel-style column filters, faceted options, natural sorting, clear-all control, filtered bulk selection, selected-row treatment, and empty/loading/error presentation.

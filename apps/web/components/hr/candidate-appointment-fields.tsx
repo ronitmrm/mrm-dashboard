@@ -2,6 +2,7 @@
 
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -194,24 +195,22 @@ export function CandidateAppointmentFields({
                 <FieldLabel htmlFor={`${fieldId}-duty-start`}>
                   Duty Start Time
                 </FieldLabel>
-                <Input
+                <TimeInput
                   id={`${fieldId}-duty-start`}
                   name="offer_duty_start_time"
                   defaultValue={detail("dutyStartTime")}
                   required
-                  type="time"
                 />
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${fieldId}-duty-end`}>
                   Duty End Time
                 </FieldLabel>
-                <Input
+                <TimeInput
                   id={`${fieldId}-duty-end`}
                   name="offer_duty_end_time"
                   defaultValue={detail("dutyEndTime")}
                   required
-                  type="time"
                 />
               </Field>
             </div>
