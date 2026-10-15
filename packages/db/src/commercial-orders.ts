@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
+import { nextInternalProductUid } from "./product-uid"
 
 import type { PoolClient } from "pg"
 
@@ -550,23 +551,6 @@ async function getPurchaseOrderLine(
   return result.rows[0]
 }
 
-async function nextInternalUid(client: PoolClient, organizationId: string) {
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-    `catalog.internal-uid:${organizationId}`,
-  ])
-  const result = await client.query<{ next_value: string }>(
-    `
-      SELECT (
-        COALESCE(max(substring(uid FROM 2)::bigint), 0) + 1
-      )::text AS next_value
-      FROM catalog.items
-      WHERE organization_id = $1 AND uid ~ '^M[0-9]+$'
-    `,
-    [organizationId]
-  )
-  return `M${result.rows[0]!.next_value}`
-}
-
 async function convertQuotedItem(
   client: PoolClient,
   input: {
@@ -607,7 +591,7 @@ async function convertQuotedItem(
     return item.uid
   }
 
-  const permanentUid = await nextInternalUid(client, input.organizationId)
+  const permanentUid = await nextInternalProductUid(client, input.organizationId)
   await client.query(
     `
       UPDATE catalog.items

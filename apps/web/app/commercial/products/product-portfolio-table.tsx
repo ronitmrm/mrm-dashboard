@@ -265,7 +265,7 @@ export function ProductPortfolioTable({
                   ) : (
                     <TableCell>
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/commercial/products/${product.uid}`}>
+                        <Link href={`/commercial/products/${encodeURIComponent(product.uid)}`}>
                           View Dossier
                         </Link>
                       </Button>

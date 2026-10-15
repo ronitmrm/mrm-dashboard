@@ -148,12 +148,14 @@ export function ProductCostingForm({
   product,
   rootItemId,
   taskId,
+  portfolioUid,
 }: {
   bomParts: BomPart[]
   machineTypes: Array<{ id: string; name: string }>
   product: CostingProduct
   rootItemId: string
   taskId: string
+  portfolioUid?: string
 }) {
   const [pricingMethod, setPricingMethod] = useState(product.pricingMethod)
   const [directPricePerKg, setDirectPricePerKg] = useState(
@@ -201,12 +203,15 @@ export function ProductCostingForm({
     (part) => part.lifecycleStatus !== "P" && part.productCostInr <= 0
   )
   const productHref = (itemId: string) =>
-    `/commercial/product-costing/${encodeURIComponent(taskId)}?item=${encodeURIComponent(itemId)}`
+    portfolioUid
+      ? `/commercial/products/${encodeURIComponent(itemId === rootItemId ? portfolioUid : bomParts.find(part => part.itemId === itemId)?.uid ?? portfolioUid)}`
+      : `/commercial/product-costing/${encodeURIComponent(taskId)}?item=${encodeURIComponent(itemId)}`
 
   return (
     <form action={updateProductCostingAction} className="grid gap-6">
       <input name="item_id" type="hidden" value={product.id} />
       <input name="task_id" type="hidden" value={taskId} />
+      {portfolioUid ? <input name="portfolio_uid" type="hidden" value={portfolioUid} /> : null}
 
       <div className="grid gap-4 rounded-2xl border p-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
@@ -552,7 +557,7 @@ export function ProductCostingForm({
               value="complete"
               variant="secondary"
             >
-              Save Complete & Send To Customer Parameter Costing
+              {portfolioUid ? "Complete Product Costing" : "Save Complete & Send To Customer Parameter Costing"}
             </Button>
           ) : null}
           {isRoot && firstOpenChild ? (
