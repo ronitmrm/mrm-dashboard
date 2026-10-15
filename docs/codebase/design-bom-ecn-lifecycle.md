@@ -13,6 +13,23 @@ Repository commands are authoritative; UI state is advisory.
   Parameter Costing -> close ECN.
 - Files: authenticated viewer -> inline preview -> explicit original download.
 
+## Direct Portfolio entry
+
+Direct Portfolio registration uses `/commercial/products/new` and
+`portfolio-entry.ts`, protected by the existing Design-save capability. It
+creates canonical internal Products and BOM links atomically, with an audit
+event, and reuses the internal UID allocator shared with order conversion.
+Duplicate UIDs are rejected. Registration creates no enquiry, customer, quote,
+Design task, drawing release or approval evidence.
+
+Direct entries expose `/commercial/products/[uid]/costing` to Product Costing
+readers; writes still require Product Costing update permission. The shared
+costing form submits the selected Portfolio UID, and the repository verifies
+its source, identity and organization. This mode saves product parameters and
+`portfolioCostingStatus` without advancing Design/Customer Costing. Normal
+enquiry costing continues to advance its existing Design task. Design-only
+Portfolio views do not expose cost values.
+
 ## Quote customer drawings
 
 `DesignTaskEditor` owns a separate Customer Drawings tab. The existing design

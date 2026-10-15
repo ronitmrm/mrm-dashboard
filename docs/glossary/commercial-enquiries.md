@@ -140,11 +140,23 @@ Portfolio classifications are backfilled into those masters without creating
 duplicates. Each Product UID appears once as
 its own Product, regardless of how many Package BOMs use it; Package membership
 never repeats a List Product under each parent. Membership includes every permanent internal
-Product UID (the ordered portfolio across all Customers), plus active Sent
+Product UID (ordered Products across all Customers and directly registered Products), plus active Sent
 quoted Products that have not received an order for the current Design task's
 Customer. The page uses column filters rather than a separate search box. Design
 users access it through the `pricing.products.read` capability and do not use
 or receive access to the Pricing Register.
+
+**Direct Portfolio Entry**: Registers an existing or new internal Product without
+an Enquiry, Customer, quotation or order. The operator can enter an unused
+internal UID or let the normal internal M-number allocator generate one. An
+existing catalog UID is never overwritten. Product identity, classification,
+material, production/process requirements, weight and canonical BOM belong to
+the Product. Packages/Assemblies reference Products already in the Portfolio;
+their weight and Product Base roll up from those components. Direct registration
+does not invent a Design approval or drawing release. Product-level costing can
+be saved/completed independently and does not advance Customer Costing, create a
+Customer price, or rewrite sent quotations. Design creation and Product Costing
+permissions continue to govern their respective operations.
 _Avoid_: Sending Design users to Pricing, exposing prices and formula inputs,
 showing another Customer's un-ordered quoted Products, displaying Rod Size as
 Product Size, package-context component duplicates.

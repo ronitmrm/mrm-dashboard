@@ -243,6 +243,11 @@ export {
 } from "./product-portfolio"
 export { createProductRepository } from "./products"
 export {
+  createPortfolioEntryRepository,
+  PortfolioEntryError,
+  type PortfolioEntryInput,
+} from "./portfolio-entry"
+export {
   createPrintedDrawingHoldingsRepository,
   PrintedDrawingHoldingError,
   type PrintedDrawingHolding,

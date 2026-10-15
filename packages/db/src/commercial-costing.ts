@@ -2389,6 +2389,7 @@ export function createCommercialCostingRepository(
       extrusionCost?: number | null
       forgingCost?: number
       itemId: string
+      portfolioUid?: string
       machineTypeId?: string | null
       machiningCost?: number
       marking?: number
@@ -2404,6 +2405,13 @@ export function createCommercialCostingRepository(
     }) {
       return transaction(pool, async (client) => {
         const product = await getProduct(client, input.itemId, true)
+        if (input.portfolioUid && (product.uid !== input.portfolioUid || product.source_payload?.portfolioEntry !== true)) {
+          throw new Error("Direct product costing is only available for the selected Portfolio entry.")
+        }
+        if (input.portfolioUid) {
+          const organization = await client.query<{ id: string }>("SELECT id FROM core.organizations WHERE code = 'MRMPL'")
+          if (organization.rows[0]?.id !== product.organization_id) throw new Error("Portfolio product was not found.")
+        }
         const materialRate =
           product.material_grade_id && product.rod_type_id
             ? await client.query<{
@@ -2659,7 +2667,11 @@ export function createCommercialCostingRepository(
           input.action === "complete" && !hasOpenPackageChildren
             ? "Product Costing Complete"
             : "Product Costing"
-        await client.query(
+        if (product.source_payload?.portfolioEntry === true) await client.query(
+          `UPDATE catalog.items SET source_payload = source_payload || jsonb_build_object('portfolioCostingStatus', $1::text) WHERE id = $2`,
+          [nextStageStatus === "Product Costing Complete" ? "Complete" : "In Progress", product.id]
+        )
+        if (!input.portfolioUid) await client.query(
           `
             UPDATE sales.design_tasks
             SET next_stage_status = $1, updated_by_user_id = $2,
