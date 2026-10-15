@@ -4,7 +4,7 @@ import { readToolingAllocations, readToolingOccupancy } from "./tooling-availabi
 import { dashboardSegmentBuilderVersion, floorSourceFingerprint, persistFloorSegments, readPublishedFloorSegments } from "./dashboard-floor-segments"
 import type { PoolClient } from "pg"
 
-import { buildLegacyDashboardSnapshot, type LegacyDashboardInput } from "./legacy-dashboard-analysis"
+import { buildLegacyDashboardSnapshotWithPlanning, type LegacyDashboardInput } from "./legacy-dashboard-analysis"
 import {
   activeCorrectionTargetKeys,
   dataEntryCorrectionTargetsWithWorkflowCascade,
@@ -30,6 +30,7 @@ type DashboardBuildContext = {
   forceRefresh?: boolean
   builderVersion?: string
   persistSegments?: boolean
+  buildSnapshot?: (input: LegacyDashboardInput, options: Parameters<typeof buildLegacyDashboardSnapshotWithPlanning>[1]) => Promise<ReturnType<typeof buildLegacyDashboardSnapshotWithPlanning>>
   materializePayload?: boolean
 }
 
@@ -1003,10 +1004,39 @@ async function buildDashboardReadModel(
       .map(floor => previousSegments.get(floor.code)!.segment_id),
   ])).rows
   const retainedByFloor = new Map(retainedPayloads.map(row => [row.production_floor_code, row.payload]))
+  const planningBaselines = context.forceRefresh ? [] : (await client.query<{
+    production_floor_code: ProductionFloorCode
+    source_watermark: JsonRecord
+    machine_plan_rows: JsonRecord[] | null
+  }>(`SELECT production_floor_code, source_watermark,
+      payload #> '{productionControl,machinePlanDetailRows}' AS machine_plan_rows
+    FROM derived.dashboard_floor_segments
+    WHERE organization_id = $1 AND id = ANY($2::uuid[])`, [
+    context.organizationId, productionFloors.filter(floor => changedFloors.has(floor.code))
+      .map(floor => previousSegments.get(floor.code)?.segment_id).filter(Boolean),
+  ])).rows
+  const planningBaselineByFloor = new Map(planningBaselines.flatMap(row => {
+    const fingerprint = row.source_watermark.planningFactsFingerprint
+    return typeof fingerprint === "string" && Array.isArray(row.machine_plan_rows)
+      ? [[row.production_floor_code, { factsFingerprint: fingerprint, machinePlanDetailRows: row.machine_plan_rows }] as const]
+      : []
+  }))
+  const planningFactsByFloor = new Map<ProductionFloorCode, string>()
 
-  function buildFloorPayload(floorCode: ProductionFloorCode) {
+  const calculationTime = Date.now()
+  async function buildFloorPayload(floorCode: ProductionFloorCode) {
     const { input, floorDataEntries, floorCorrections } = preparedFloors.get(floorCode)!
-    const snapshot = buildLegacyDashboardSnapshot(input)
+    const options = {
+      calculationTime,
+      forceFullCalculation: context.forceRefresh,
+      builderVersion: context.builderVersion ?? dashboardSegmentBuilderVersion,
+      publishedPlanningBaseline: planningBaselineByFloor.get(floorCode),
+    }
+    const built = context.buildSnapshot
+      ? await context.buildSnapshot(input, options)
+      : buildLegacyDashboardSnapshotWithPlanning(input, options)
+    const snapshot = built.snapshot
+    planningFactsByFloor.set(floorCode, built.planningFactsFingerprint)
     const qualityReferenceRows = (entryType: string) => floorDataEntries
       .filter(row => row.entryType === entryType)
       .map(row => ({ ...jsonRecord(row.payload), _id: row._id, entryType }))
@@ -1038,17 +1068,17 @@ async function buildDashboardReadModel(
   }
 
   const productionFloorSnapshots = Object.fromEntries(
-    productionFloors.map((floor) => {
+    await Promise.all(productionFloors.map(async (floor) => {
       const finish = startDashboardBuildMeasurement(context.organizationId, floor.code, changedFloors.has(floor.code) ? "built" : "reused")
       let outcome: "success" | "error" = "error"
       try {
-        const payload = changedFloors.has(floor.code) ? buildFloorPayload(floor.code) : retainedByFloor.get(floor.code) ?? {}
+        const payload = changedFloors.has(floor.code) ? await buildFloorPayload(floor.code) : retainedByFloor.get(floor.code) ?? {}
         outcome = "success"
         return [floor.code, payload]
       } finally {
         finish(outcome)
       }
-    })
+    }))
   )
   const pendingBaselines = new Map(
     finishBaselineRows
@@ -1119,6 +1149,7 @@ async function buildDashboardReadModel(
       sourceWatermark: {
         changedAt: preparedFloors.get(floor.code)!.floorUpdatedAt || null,
         sourceCoverage: source.sourceCoverageByFloor[floor.code],
+        planningFactsFingerprint: planningFactsByFloor.get(floor.code),
       },
     }))) : []
   const segmentIds = Object.fromEntries(productionFloors.map(floor => [
