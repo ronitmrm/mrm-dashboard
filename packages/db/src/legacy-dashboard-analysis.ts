@@ -1,4 +1,5 @@
 import { requiredToolingCodes } from "./tooling-availability";
+export { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
 import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningCalendarExceptions, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
@@ -197,6 +198,9 @@ const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "S
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const defaultProductiveHoursPerDay = 8;
 const cncProductiveHoursPerDay = 22.5;
+export function productionPlanningDailyHours(floor: string) {
+  return floor === "cnc" ? cncProductiveHoursPerDay : defaultProductiveHoursPerDay;
+}
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
@@ -416,10 +420,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     productionFloorCode: input.productionFloorCode ?? "conventional",
     includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
     currentProductionDate: planningProductionDate(input.productionFloorCode),
-    productiveHoursPerDay:
-      input.productionFloorCode === "cnc"
-        ? cncProductiveHoursPerDay
-        : defaultProductiveHoursPerDay,
+    productiveHoursPerDay: productionPlanningDailyHours(input.productionFloorCode ?? "conventional"),
     setupNameMasterRows,
     productionRows,
     sourceProductionEntries: input.productionEntries,
@@ -1649,6 +1650,7 @@ function buildProductionControl({
     setupNameMasterRows,
     cycleMasterRows: [...latestMasterRows(cycleRows).values()].map(cycleMasterTableRow),
     toolingMasterRows: [...latestMasterRows(toolingRows).values()].map(toolingMasterTableRow),
+    toolingAvailabilityRows: toolingAvailability,
     employeeMasterRows: employeeRows.map(employeeMasterTableRow),
     routeOptions: routeSelections,
     plannerActionLog,
@@ -3222,7 +3224,7 @@ function priorityApprovalMode(row: Record<string, unknown>) {
   return "idle_queue_only";
 }
 
-function workOrderPlanningSort(a: Record<string, unknown>, b: Record<string, unknown>) {
+export function workOrderPlanningSort(a: Record<string, unknown>, b: Record<string, unknown>) {
   return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))
     || compareDateValues(rowText(a, "deliveryDate"), rowText(b, "deliveryDate"))
     || compareDateValues(rowText(a, "rmInwardDate"), rowText(b, "rmInwardDate"))
@@ -3267,6 +3269,51 @@ function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<stri
   );
 }
 
+// Pure forecast adapter: no job cards, production facts or planner decisions are written.
+export function simulateProductionPlanning(input: {
+  workOrders: Record<string, unknown>[];
+  routes: Record<string, unknown>[];
+  cycles: Record<string, unknown>[];
+  tooling: Record<string, unknown>[];
+  toolingAvailability: Record<string, unknown>[];
+  machines: Record<string, unknown>[];
+  reservations: { machine: string; start: string; end: string }[];
+  reservedPlans: Record<string, unknown>[];
+  calendar: PlanningCalendar;
+  deadline: string;
+}) {
+  const constraints = input.reservations.map((row) => ({ machine: row.machine,
+    unavailableFrom: row.start, unavailableTo: row.end, action: "delay", status: "Unavailable", reason: "Protected existing commitment" }));
+  const simulatedJobs = new Set(input.workOrders.map(row => rowText(row, "jcNo")));
+  let readyNotBefore = "";
+  for (let pass = 0; pass <= input.reservedPlans.length; pass += 1) {
+    const plans = machinePlanDetails(input.workOrders, new Map(), new Map(),
+      groupRouteRows(input.routes), input.cycles, input.tooling, input.toolingAvailability,
+      input.machines, constraints, [], [], new Map(), input.calendar,
+      { reservedPlans: input.reservedPlans, deadlineDate: input.deadline, readyNotBefore })
+      .filter(row => simulatedJobs.has(rowText(row, "jcNo")));
+    // Fixed future commitments cannot be displaced to make room for a proposal's tooling.
+    let release = "";
+    for (const stock of input.toolingAvailability) {
+      const code = canonicalKey(stock.assetCode), capacity = safeNumber(stock.allocatedQuantity);
+      if (!capacity) continue;
+      const uses = [...input.reservedPlans.map(row => ({ row, fixed: true })), ...plans.map(row => ({ row, fixed: false }))]
+        .filter(({row}) => requiredToolingCodesFromPlan(row).some(value => canonicalKey(value) === code))
+        .map(use => ({ ...use, start: parseDate(use.row.plannedProductionStartDate), end: parseDate(use.row.plannedProductionEndDate) }))
+        .filter(use => use.start && use.end);
+      for (const date of [...new Set(uses.map(use => use.start))]) {
+        const active = uses.filter(use => use.start <= date && use.end >= date);
+        if (active.length > capacity && active.some(use => !use.fixed)) {
+          release = maxDateValue(release, ...active.filter(use => use.fixed).map(use => nextMachineAvailableDate(use.end)));
+        }
+      }
+    }
+    if (!release || release <= readyNotBefore) return plans;
+    readyNotBefore = release;
+  }
+  throw new Error("Production simulation could not settle protected tooling commitments.");
+}
+
 function machinePlanDetails(
   workOrderRows: Array<Record<string, unknown>>,
   rawBySetup: Map<string, PlanningProductionActual>,
@@ -3281,6 +3328,7 @@ function machinePlanDetails(
   shopFloorStatusRows: Record<string, unknown>[],
   previousMachineAssignments: Map<string, Set<string>>,
   planningCalendar: PlanningCalendar,
+  simulation?: { reservedPlans: Record<string, unknown>[]; deadlineDate: string; readyNotBefore?: string },
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = latestMasterRows(cycleRows);
@@ -3307,8 +3355,10 @@ function machinePlanDetails(
     const routes = routeChangeRemainingSetups.length
       ? allRoutes.filter((route) => remainingQtyBySetup.has(canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber))))
       : allRoutes;
-    const rmInwardDate = rowText(row, "rmInwardDate");
-    const dispatchDeadlineDate = dispatchTargetDate(rmInwardDate, planningCalendar);
+    const rmInwardDate = simulation?.readyNotBefore
+      ? maxDateValue(rowText(row, "rmInwardDate"), simulation.readyNotBefore)
+      : rowText(row, "rmInwardDate");
+    const dispatchDeadlineDate = simulation?.deadlineDate || dispatchTargetDate(rmInwardDate, planningCalendar);
     // Offs reduce forecast capacity, never material or setup-start readiness.
     let operationReadyDate = parseDate(rmInwardDate) || rmInwardDate;
     let operationReadyCanPullForward = true;
@@ -3537,7 +3587,7 @@ function machinePlanDetails(
           planningCalendar,
         });
         operationReadyCanPullForward = actualWipReady || (earlyDownstream && physicalWipQty > 0);
-        if (!actualWipReady && !earlyDownstream && !setupHasExecution) {
+        if (!actualWipReady && !earlyDownstream && !setupHasExecution && !simulation) {
           routePlanningBlocked = true;
           continue;
         }
@@ -3809,6 +3859,14 @@ function machinePlanDetails(
       operationReadyCanPullForward = recordedWipReady;
     }
   }
+  for (const original of simulation?.reservedPlans ?? []) {
+    const reserved = { ...original };
+    Object.defineProperty(reserved, "__planningMeta", { enumerable: false, value: {
+      simulationReservation: true, assignmentLocked: true,
+      readyDate: parseDate(rowText(reserved, "plannedProductionStartDate")),
+    } });
+    details.push(reserved);
+  }
   const finalizedDetails = finalizeMachineAndSetupSchedule(
     details,
     planningCalendar,
@@ -3819,6 +3877,7 @@ function machinePlanDetails(
   applyMachineActiveTaskReadiness(finalizedDetails);
   for (const row of finalizedDetails) {
     const meta = planningMeta(row);
+    if (meta.simulationReservation) continue;
     const finish = plannedProductionFinish(rowText(row, "plannedProductionStartDate"), meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar);
     const finalDate = parseDate(rowText(row, "plannedProductionEndDate"));
     row.plannedProductionEndWorkingHours = !finalDate || shopFloorRowIsComplete(row) ? null
@@ -3860,6 +3919,7 @@ function applyToolingTaskReadiness(rows: Array<Record<string, unknown>>, availab
   }
   const blockedSetups = new Set<string>();
   for (const row of [...rows].sort((a,b) => numericSort(rowText(a,"setupNo"), rowText(b,"setupNo")))) {
+    if (planningMeta(row).simulationReservation) continue;
     const codes = requiredToolingCodesFromPlan(row);
     const shortages = codes.filter(code => toolingCapacity(row, code) === 0);
     const unavailable = codes.filter(code => (busy.get(code) ?? 0) - (toolingHeld(row) ? 1 : 0) >= toolingCapacity(row, code));
@@ -4404,6 +4464,7 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
   }
 
   for (const rows of grouped.values()) {
+    if (rows.every(row => planningMeta(row).simulationReservation)) continue;
     const bySetup = new Map<string, Array<Record<string, unknown>>>();
     for (const row of rows) {
       const setup = setupStepKey(rowText(row, "setupNo"), rowText(row, "optionNumber"));
@@ -4600,6 +4661,22 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
     queueCandidates.delete(item);
     item.queue.splice(item.queue.indexOf(row), 1);
     waitingRows.delete(row);
+    if (planningMeta(row).simulationReservation) {
+      const release = nextMachineAvailableDate(rowText(row, "plannedProductionEndDate"));
+      item.nextDate = maxDateValue(item.nextDate, release);
+      item.previousKey = scheduleRowKey(row);
+      for (const code of requiredToolingCodesFromPlan(row)) {
+        const resourceSlots = slots.get(code);
+        if (resourceSlots?.length) {
+          resourceSlots[0] = maxDateValue(resourceSlots[0] ?? "", release);
+          resourceSlots.sort();
+          for (const dependent of toolingDependents.get(code) ?? []) {
+            if (waitingRows.has(dependent)) changedToolingRows.add(dependent);
+          }
+        }
+      }
+      continue;
+    }
     if (row.toolingPlanBlocked) continue;
     let machineNextDate = item.nextDate;
     {
@@ -5074,6 +5151,7 @@ function planningMeta(row: Record<string, unknown>) {
     minimumProductionEndDate?: string;
     canPullForward?: boolean;
     assignmentLocked?: boolean;
+    simulationReservation?: boolean;
     previousSetupNo?: string;
     continuityAfter?: string;
     continuityProtected?: boolean;

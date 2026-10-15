@@ -188,11 +188,6 @@ export function OrderAcceptanceWorkspace({
         : "Capacity review end date",
     ],
   ] as const
-  const machineFields = [
-    ["hoursPerDay", "Working hours per day"],
-    ["efficiency", "Usable machine time (%)"],
-    ["setupHours", "Setup/changeover hours per operation"],
-  ] as const
   const groups = groupWorkloadBlockers(
     plan?.blockers ?? [],
     context?.existing ?? []
@@ -476,30 +471,16 @@ export function OrderAcceptanceWorkspace({
           </p>
           <details>
             <summary className="cursor-pointer text-sm font-medium">
-              Machine time settings — {input.hoursPerDay} hours/day,{" "}
-              {input.efficiency}% usable
+              Production planning rules —{" "}
+              {context?.productiveHoursPerDay ?? input.hoursPerDay} productive
+              hours/day
             </summary>
-            <FormGrid className="mt-4">
-              {machineFields.map(([key, label]) => (
-                <label key={key} className="grid gap-1 text-sm">
-                  {label}
-                  <Input
-                    type="number"
-                    step="any"
-                    disabled={locked}
-                    value={input[key]}
-                    onChange={(event) =>
-                      change({ ...input, [key]: Number(event.target.value) })
-                    }
-                  />
-                </label>
-              ))}
-            </FormGrid>
             <p className="mt-3 text-sm text-muted-foreground">
-              Usable time allows for normal lost machine time. Each setup uses
-              one compatible machine. Setups may overlap once the production
-              planner&apos;s WIP buffer and supply checks allow it. Existing job
-              plans keep their machine dates.
+              Uses this unit&apos;s actual production planner, including
+              parallel machining, WIP buffers, tooling, holidays and machine
+              queues. Existing job assignments and dates stay protected.
+              Capacity hours count reserved production dates, including
+              partially used days.
             </p>
           </details>
         </div>
@@ -819,7 +800,7 @@ export function OrderAcceptanceWorkspace({
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
                 {input.mode === "deadline"
-                  ? "We compare four scheduling orders, then refine shared machine-family queues to fit more complete lines. Setup overlap follows the production planner's WIP rule. This is an estimate; it does not guarantee the best possible combination."
+                  ? "We simulate proposed products through the actual production planner, compare four orders and refine family queues. This is an estimate; it does not guarantee the best possible combination."
                   : "Products are planned in the uploaded order, after their expected RM-ready dates."}{" "}
                 RM needed by is the first machining date in this schedule.
                 Approval saves the reviewed proposal; it does not create a PO or

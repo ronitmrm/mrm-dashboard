@@ -40,7 +40,50 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
-  test("refines a family queue without sacrificing more numerous short jobs on another family", () => {
+  test("does not borrow tooling reserved for a fixed future commitment", () => {
+    const product = {
+      ...line("new", 16),
+      operations: [
+        { family: "JL", setup: "1", hours: 16, tooling: { fixture: "FX" } },
+      ],
+    }
+    const workload: PlanningContext = {
+      ...context,
+      machines: [...context.machines, { id: "JL2", family: "JL" }],
+      toolingAvailability: [
+        { assetCode: "FX", allocatedQuantity: 1, occupiedQuantity: 0 },
+      ],
+      reservations: [
+        { machine: "JL1", start: "2026-09-15", end: "2026-09-16" },
+      ],
+      reservedPlans: [
+        {
+          jcNo: "fixed",
+          partCode: "fixed",
+          optionNumber: "1",
+          setupNo: "1",
+          machine: "JL1",
+          plannedProductionStartDate: "2026-09-15",
+          plannedProductionEndDate: "2026-09-16",
+          requiredToolingCodes: ["FX"],
+          toolingAllocatedQuantities: { FX: 1 },
+          pendingGoodQty: 100,
+          shopFloorStage: "planned",
+          runningStatus: "Planned",
+        },
+      ],
+    }
+    const original = structuredClone(workload)
+    const plan = calculateProposal(
+      { ...input, deadline: "2026-09-15", lines: [product] },
+      workload,
+      [product]
+    )
+    expect(plan.lines[0]?.selected).toBe(false)
+    expect(plan.lines[0]?.reason).toContain("after deadline")
+    expect(workload).toEqual(original)
+  })
+  test("reserves full production dates on machines like the actual planner", () => {
     const lines = [2, 3, 5, 6]
       .map((hours, index) => line(`JL-${index}`, hours))
       .concat(
@@ -61,14 +104,12 @@ describe("Proposed Order capacity review", () => {
       },
       lines
     )
-    expect(plan.lines.filter((row) => row.selected)).toHaveLength(10)
+    expect(plan.lines.filter((row) => row.selected)).toHaveLength(3)
     expect(
-      plan.lines
-        .filter((row) => row.part.startsWith("JL-"))
-        .every((row) => row.selected)
-    ).toBe(true)
+      plan.families.reduce((sum, family) => sum + family.proposed, 0)
+    ).toBe(24)
   })
-  test("fits M221 using canonical forecast WIP overlap without splitting setups", () => {
+  test("fits M221 using actual automatic parallel machining and pooled WIP", () => {
     const product = {
       ...line("M221", 0),
       quantity: 38720,
@@ -97,8 +138,13 @@ describe("Proposed Order capacity review", () => {
     ])
     expect(plan.lines[0]?.selected).toBe(true)
     expect(
-      plan.families.find((f) => f.family === "SSLB")?.proposed
-    ).toBeCloseTo((38720 * 130) / 3600 + 4)
+      plan.lines[0]?.machinePlan?.filter((row) => row.setup === "2")
+    ).toHaveLength(2)
+    expect(
+      plan.lines[0]?.machinePlan
+        ?.filter((row) => row.setup === "2")
+        .reduce((sum, row) => sum + row.quantity, 0)
+    ).toBe(38720)
     expect(
       calculateProposal(
         settings,
@@ -221,7 +267,11 @@ describe("Proposed Order capacity review", () => {
     })
     const lines = [line("new", 5)]
     expect(
-      calculateProposal({ ...input, lines }, workload, lines).lines[0]?.selected
+      calculateProposal(
+        { ...input, deadline: "2026-09-15", lines },
+        workload,
+        lines
+      ).lines[0]?.selected
     ).toBe(true)
     expect(
       calculateProposal({ ...input, lines, mode: "dates" }, workload, lines)
@@ -331,7 +381,11 @@ describe("Proposed Order capacity review", () => {
       })
     )
     expect(context.machines).toEqual([{ id: "CNC-1", family: "JL" }])
-    const plan = calculateProposal({ ...input, lines }, context, lines)
+    const plan = calculateProposal(
+      { ...input, deadline: "2026-09-15", lines },
+      context,
+      lines
+    )
     expect(plan.blockers).toEqual([])
     expect(plan.lines.map((line) => line.selected)).toEqual([true, true])
   })
@@ -363,19 +417,19 @@ describe("Proposed Order capacity review", () => {
   test("protects existing work and selects more complete lines while ignoring tentative RM dates", () => {
     const lines = [line("large", 7), line("small-1", 3), line("small-2", 3)]
     const plan = calculateProposal(
-      { ...input, lines },
+      { ...input, deadline: "2026-09-16", lines },
       { ...context, existing: [line("existing", 2)] },
       lines
     )
     expect(
       plan.lines.filter((row) => row.selected).map((row) => row.id)
     ).toEqual(["small-1", "small-2"])
-    expect(plan.lines[1]?.completion).toBe("2026-09-14")
-    expect(plan.lines[1]?.rmRequiredBy).toBe("2026-09-14")
+    expect(plan.lines[1]?.completion).toBe("2026-09-15")
+    expect(plan.lines[1]?.rmRequiredBy).toBe("2026-09-15")
     expect(plan.families[0]).toMatchObject({
-      available: 8,
-      committed: 2,
-      proposed: 6,
+      available: 24,
+      committed: 8,
+      proposed: 16,
       utilisation: 1,
     })
   })
