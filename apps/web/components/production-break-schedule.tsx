@@ -94,8 +94,8 @@ export function ProductionBreakSchedule({
             <TableHeader><TableRow><TableHead>Start (IST)</TableHead><TableHead>End (IST)</TableHead>{canManage ? <TableHead /> : null}</TableRow></TableHeader>
             <TableBody>{breaks.length ? breaks.map((item, index) =>
               <TableRow key={index}>
-                <TableCell>{canManage ? <TimeInput aria-label={`Break ${index + 1} start`} value={item.startTime} onChange={(event) => setBreaks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, startTime: event.target.value } : row))} /> : item.startTime}</TableCell>
-                <TableCell>{canManage ? <TimeInput aria-label={`Break ${index + 1} end`} value={item.endTime} onChange={(event) => setBreaks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, endTime: event.target.value } : row))} /> : item.endTime}</TableCell>
+                <TableCell>{canManage ? <TimeInput aria-label={`Break ${index + 1} start`} value={item.startTime} onValueChange={(time) => setBreaks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, startTime: time } : row))} /> : item.startTime}</TableCell>
+                <TableCell>{canManage ? <TimeInput aria-label={`Break ${index + 1} end`} value={item.endTime} onValueChange={(time) => setBreaks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, endTime: time } : row))} /> : item.endTime}</TableCell>
                 {canManage ? <TableCell className="text-right"><Button aria-label={`Remove break ${index + 1}`} size="icon" variant="outline" onClick={() => setBreaks((current) => current.filter((_, rowIndex) => rowIndex !== index))}><Trash2 /></Button></TableCell> : null}
               </TableRow>
             ) : <TableRow><TableCell colSpan={canManage ? 3 : 2} className="py-8 text-center text-muted-foreground">No breaks configured.</TableCell></TableRow>}</TableBody>

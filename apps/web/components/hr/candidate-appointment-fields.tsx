@@ -198,7 +198,7 @@ export function CandidateAppointmentFields({
                 <TimeInput
                   id={`${fieldId}-duty-start`}
                   name="offer_duty_start_time"
-                  defaultValue={detail("dutyStartTime")}
+                  defaultValue={String(detail("dutyStartTime"))}
                   required
                 />
               </Field>
@@ -209,7 +209,7 @@ export function CandidateAppointmentFields({
                 <TimeInput
                   id={`${fieldId}-duty-end`}
                   name="offer_duty_end_time"
-                  defaultValue={detail("dutyEndTime")}
+                  defaultValue={String(detail("dutyEndTime"))}
                   required
                 />
               </Field>
