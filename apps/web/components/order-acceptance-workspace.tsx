@@ -496,8 +496,9 @@ export function OrderAcceptanceWorkspace({
               ))}
             </FormGrid>
             <p className="mt-3 text-sm text-muted-foreground">
-              Usable time allows for normal lost machine time. Each setup runs
-              as one complete batch on one compatible machine. Existing job
+              Usable time allows for normal lost machine time. Each setup uses
+              one compatible machine. Setups may overlap once the production
+              planner&apos;s WIP buffer and supply checks allow it. Existing job
               plans keep their machine dates.
             </p>
           </details>
@@ -818,7 +819,7 @@ export function OrderAcceptanceWorkspace({
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
                 {input.mode === "deadline"
-                  ? "We compare four scheduling orders and keep the one that fits the most complete lines. This is an estimate; it does not guarantee the best possible combination."
+                  ? "We compare four scheduling orders, then refine shared machine-family queues to fit more complete lines. Setup overlap follows the production planner's WIP rule. This is an estimate; it does not guarantee the best possible combination."
                   : "Products are planned in the uploaded order, after their expected RM-ready dates."}{" "}
                 RM needed by is the first machining date in this schedule.
                 Approval saves the reviewed proposal; it does not create a PO or
