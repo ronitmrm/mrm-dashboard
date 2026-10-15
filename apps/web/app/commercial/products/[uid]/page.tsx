@@ -1,11 +1,11 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import { createProductPortfolioRepository } from "@workspace/db"
+import { createProductPortfolioRepository, createPortfolioEntryRepository } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireCapability, listGrantedCapabilities } from "@/lib/auth/require-capability"
 
 import { ProductDesignSummary } from "../product-design-summary"
 
@@ -18,7 +18,10 @@ export default async function ProductDossierPage({
 }) {
   const { uid } = await params
   const path = `/commercial/products/${encodeURIComponent(uid)}`
-  await requireCapability("pricing.products.read", path)
+  const session = await requireCapability("pricing.products.read", path)
+  const canCost = (await listGrantedCapabilities(session.user.id, ["pricing.costing.read"])).includes("pricing.costing.read")
+  const entries = createPortfolioEntryRepository({ connectionString: readAuthEnvironment().connectionString })
+  const entry = await entries.getEntry("MRMPL", uid).finally(() => entries.close())
   const repository = createProductPortfolioRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -46,6 +49,8 @@ export default async function ProductDossierPage({
           <Link href="/commercial/products">Back to Portfolio</Link>
         </Button>
       </section>
+
+      {entry && canCost ? <div><Button asChild><Link href={`${path}/costing`}>Product-Level Costing</Link></Button></div> : null}
 
       <ProductDesignSummary dossier={dossier} />
     </div>

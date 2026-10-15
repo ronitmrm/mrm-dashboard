@@ -6,14 +6,40 @@ Planner Actions links to `/order-acceptance?floor=<code>`. The page and API requ
 the selected floor's Planner Actions read capability. Mutations additionally
 require `operations.floors.<code>.planner_actions.order_acceptance.write`.
 
-`apps/web/lib/order-acceptance.ts` schedules complete batches, each operation on
-one compatible machine, with sequential routing. Four deterministic line orders
-are compared in deadline mode by completed line count then utilised hours. This
-is a heuristic, not a proof of globally optimal selection. Splitting a batch
-across machines is not assumed. Input-order scheduling is used in RM-date mode.
+`apps/web/lib/order-acceptance.ts` runs proposed lines through the pure
+`simulateProductionPlanning` adapter in the canonical production planner. This
+calls `machinePlanDetails` and its normal assignment/finalization path: parallel
+machine counts and minimum run length, pooled WIP, tooling capacities, unavailable
+windows and machine continuity. Simulation permits forecast-only downstream
+assignments without bypassing actual execution's recorded-WIP gate.
+Published jobs and previously accepted simulation lines are fixed reservations;
+the adapter preserves their dates, tooling ownership and machine assignments.
+Future protected tooling conflicts defer hypothetical work rather than moving
+the commitment. No production facts or planner overrides are fabricated.
+Four deterministic line orders are compared in deadline mode by completed line
+count then utilised hours. For families with rejected lines, a longest-family-work
+first queue refinement is evaluated at the same positions in the winning order;
+only a better score is retained. This
+is a heuristic, not a proof of globally optimal selection. Input-order selection
+is used in RM-date mode. Both modes use actual unit productive hours and whole
+production-date machine reservations; partial days are not advertised as free
+queue capacity. API calculation normalizes saved daily hours, efficiency and
+extra setup allowances to the production planner's settings. Machine assignments
+and per-stream quantities/dates are exported in the Machine plan worksheet.
+Snapshot builder floor-planning-6 publishes toolingAvailabilityRows; snapshots
+missing required allocation data must refresh before calculating.
+Deadline mode accepts an optional common `tentativeRmDate` for proposed lines.
+Their earliest start is the later of that date and `startDate`; blank retains
+the existing start-date assumption. Existing workload is reserved first without
+applying this proposed-order date. The date is saved with the proposal and
+included in the exported assumptions; changing it requires recalculation.
 
 The adapter in `order-acceptance-context.ts` reads the canonical floor snapshot:
-route/cycle masters, active machines, pending work, machine plan dates and holidays.
+route/cycle/tooling masters, unit tooling allocations, active machines, pending
+work, machine plan dates and holidays. Waiting jobs use canonical priority/date
+ordering before proposed work. Floors with no tooling-master configuration retain
+the actual planner's optional-tooling behavior; configured floors require each
+setup's master. Never assume a missing master means Not Required.
 Route operation and machine-family keys are normalized to uppercase before
 scheduling; constraint activity uses the shared `isActivePlannerDecision` rule.
 Received existing work retains its canonical machine reservations, conservatively

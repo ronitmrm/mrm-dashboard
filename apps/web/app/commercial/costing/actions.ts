@@ -108,6 +108,7 @@ export async function updateProductCostingAction(formData: FormData) {
         ),
         forgingCost: numberValue(formData, "forging_cost", 0),
         itemId: requiredText(formData, "item_id"),
+        portfolioUid: optionalText(formData, "portfolio_uid"),
         machineTypeId: optionalText(formData, "machine_type_id") ?? null,
         machiningCost: optionalNumber(formData, "machining_cost"),
         marking: optionalNumber(formData, "marking"),
@@ -130,6 +131,8 @@ export async function updateProductCostingAction(formData: FormData) {
   if (taskId) revalidatePath(`${productCostingPath}/${taskId}`)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/pricing")
+  const portfolioUid = optionalText(formData, "portfolio_uid")
+  if (portfolioUid) revalidatePath(`/commercial/products/${encodeURIComponent(portfolioUid)}/costing`)
 }
 
 export async function requestProductCostingDesignClarificationAction(

@@ -25,6 +25,9 @@ function inputFrom(value: unknown): ProposalInput {
     reference: string(body.reference),
     revisionOf: string(body.revisionOf),
     startDate: string(body.startDate),
+    ...(string(body.tentativeRmDate)
+      ? { tentativeRmDate: string(body.tentativeRmDate) }
+      : {}),
     deadline: string(body.deadline),
     mode: body.mode === "deadline" ? "deadline" : "dates",
     hoursPerDay: Number(body.hoursPerDay),
@@ -122,6 +125,10 @@ async function handle(request: NextRequest) {
               snapshot,
               input.startDate
             )
+            input.hoursPerDay =
+              context.productiveHoursPerDay ?? input.hoursPerDay
+            input.efficiency = 100
+            input.setupHours = 0
             result = calculateProposal(input, context, input.lines.map(resolve))
             if (body.action === "approve") {
               const saved = id

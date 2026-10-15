@@ -5,6 +5,10 @@ import {
   machineMasterFamily,
 } from "@workspace/db/planning-rules"
 import {
+  productionPlanningDailyHours,
+  requiredToolingCodes,
+} from "@workspace/db/dashboard-analysis"
+import {
   validDate,
   type PlanningContext,
   type PlanningLine,
@@ -48,9 +52,16 @@ function date(value: unknown) {
 export function proposalContext(snapshot: unknown, planningStart?: string) {
   const root = record(snapshot)
   const source = record(root.productionControl)
-  const calendar = planningCalendarExceptions(rows(source.planningHolidayRows).map((row) => ({ ...row, date: date(row.dateValue ?? row.date ?? row.holidayDate) })), text(root.productionFloorCode) || "conventional")
+  const calendar = planningCalendarExceptions(
+    rows(source.planningHolidayRows).map((row) => ({
+      ...row,
+      date: date(row.dateValue ?? row.date ?? row.holidayDate),
+    })),
+    text(root.productionFloorCode) || "conventional"
+  )
   const routes = rows(source.routeMasterRows)
   const cycles = rows(source.cycleMasterRows)
+  const tooling = rows(source.toolingMasterRows)
   const families = [
     ...new Set(
       routes.map((row) => text(row.machineFamily).toUpperCase()).filter(Boolean)
@@ -88,10 +99,27 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
     existing: [],
     reservations: [],
     blockers: [],
+    productiveHoursPerDay: productionPlanningDailyHours(
+      text(root.productionFloorCode)
+    ),
+    machineRows: rows(source.machinePlanningRows),
+    toolingAvailability: rows(source.toolingAvailabilityRows),
+    reservedPlans: rows(source.machinePlanDetailRows).filter(
+      (row) =>
+        row.shopFloorStage !== "item_complete" &&
+        row.runningStatus !== "Complete"
+    ),
   }
   if (!machines.length)
     context.blockers.push(
       "No unambiguous active machine families are available for this unit."
+    )
+  if (
+    !Array.isArray(source.toolingAvailabilityRows) &&
+    tooling.some((row) => requiredToolingCodes(row).length > 0)
+  )
+    context.blockers.push(
+      "Refresh the production plan to load current tooling allocations before capacity review."
     )
   if (
     Object.values(record(root.sourceCoverage)).some(
@@ -133,10 +161,23 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
         issue = `Missing or ambiguous cycle time: setup ${text(route.setupNo)}`
       if (!machines.some((machine) => machine.family === family))
         issue = `No active machines: ${family}`
+      const tool = tooling.find(
+        (row) =>
+          same(row.partNo, line.part) &&
+          same(row.optionNumber, option) &&
+          same(row.setupNo, route.setupNo)
+      )
+      if (tooling.length && !tool)
+        issue = [issue, `Missing tooling master: setup ${text(route.setupNo)}`]
+          .filter(Boolean)
+          .join("; ")
       return {
         family,
         setup: text(route.setupNo),
         hours: Number.isFinite(seconds) ? (seconds * line.quantity) / 3600 : 0,
+        machineType: text(route.machineType),
+        cycle: matches[0],
+        tooling: tool,
       }
     })
     return { ...line, option, issue, operations }
@@ -220,6 +261,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
               )
             return {
               ...operation,
+              quantity: Math.max(0, quantity - good),
               hours:
                 (operation.hours * Math.max(0, quantity - good)) / quantity,
             }
@@ -233,7 +275,11 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
       line.issue =
         "Waiting-RM work has production or route changes; resolve its remaining-work plan first."
     }
-    context.existing.push(line)
+    context.existing.push({
+      ...line,
+      plannerPriorityScore: Number(work.plannerPriorityScore) || 0,
+      deliveryDate: text(work.deliveryDate),
+    })
   }
   for (const constraint of rows(source.machineConstraints)) {
     if (!isActivePlannerDecision(constraint.status)) continue

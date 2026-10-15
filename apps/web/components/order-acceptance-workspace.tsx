@@ -188,11 +188,6 @@ export function OrderAcceptanceWorkspace({
         : "Capacity review end date",
     ],
   ] as const
-  const machineFields = [
-    ["hoursPerDay", "Working hours per day"],
-    ["efficiency", "Usable machine time (%)"],
-    ["setupHours", "Setup/changeover hours per operation"],
-  ] as const
   const groups = groupWorkloadBlockers(
     plan?.blockers ?? [],
     context?.existing ?? []
@@ -446,37 +441,46 @@ export function OrderAcceptanceWorkspace({
               </SearchableSelect>
             </label>
           </FormGrid>
+          {input.mode === "deadline" ? (
+            <label className="grid max-w-sm gap-1 text-sm">
+              Tentative RM available from (optional)
+              <Input
+                type="date"
+                disabled={locked}
+                max={input.deadline}
+                value={input.tentativeRmDate ?? ""}
+                onChange={(event) =>
+                  change({ ...input, tentativeRmDate: event.target.value })
+                }
+                aria-describedby="tentative-rm-help"
+              />
+              <span
+                id="tentative-rm-help"
+                className="text-xs text-muted-foreground"
+              >
+                Applies to all products in this proposed order. Leave blank to
+                assume RM is ready at the machining start date.
+              </span>
+            </label>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             {input.mode === "deadline"
-              ? `Machining can run from ${formatIstDate(input.startDate)} to ${formatIstDate(input.deadline)}. The whole period is available for machining.`
+              ? `Proposed products can start from ${formatIstDate(input.tentativeRmDate && input.tentativeRmDate > input.startDate ? input.tentativeRmDate : input.startDate)} and must finish by ${formatIstDate(input.deadline)}. Existing jobs retain their planning dates.`
               : "Enter RM-ready dates to estimate when machining will finish. The review end date sets the period for the machine-capacity summary."}{" "}
             Closed Fridays and holidays follow the Universal Planning Calendar.
           </p>
           <details>
             <summary className="cursor-pointer text-sm font-medium">
-              Machine time settings — {input.hoursPerDay} hours/day,{" "}
-              {input.efficiency}% usable
+              Production planning rules —{" "}
+              {context?.productiveHoursPerDay ?? input.hoursPerDay} productive
+              hours/day
             </summary>
-            <FormGrid className="mt-4">
-              {machineFields.map(([key, label]) => (
-                <label key={key} className="grid gap-1 text-sm">
-                  {label}
-                  <Input
-                    type="number"
-                    step="any"
-                    disabled={locked}
-                    value={input[key]}
-                    onChange={(event) =>
-                      change({ ...input, [key]: Number(event.target.value) })
-                    }
-                  />
-                </label>
-              ))}
-            </FormGrid>
             <p className="mt-3 text-sm text-muted-foreground">
-              Usable time allows for normal lost machine time. Each setup runs
-              as one complete batch on one compatible machine. Existing job
-              plans keep their machine dates.
+              Uses this unit&apos;s actual production planner, including
+              parallel machining, WIP buffers, tooling, holidays and machine
+              queues. Existing job assignments and dates stay protected.
+              Capacity hours count reserved production dates, including
+              partially used days.
             </p>
           </details>
         </div>
@@ -488,7 +492,7 @@ export function OrderAcceptanceWorkspace({
         <CardContent className="grid min-w-0 gap-4">
           <p className="text-sm text-muted-foreground">
             {input.mode === "deadline"
-              ? "Upload your product list. This check assumes RM is ready when needed; selected lines show the required RM date."
+              ? "Upload your product list. The tentative RM availability date applies to all proposed products; selected lines show when RM is needed."
               : "Upload your product list and enter expected RM-ready dates, directly or using the RM workbook."}
           </p>
           <details open={!plan}>
@@ -796,7 +800,7 @@ export function OrderAcceptanceWorkspace({
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
                 {input.mode === "deadline"
-                  ? "We compare four scheduling orders and keep the one that fits the most complete lines. This is an estimate; it does not guarantee the best possible combination."
+                  ? "We simulate proposed products through the actual production planner, compare four orders and refine family queues. This is an estimate; it does not guarantee the best possible combination."
                   : "Products are planned in the uploaded order, after their expected RM-ready dates."}{" "}
                 RM needed by is the first machining date in this schedule.
                 Approval saves the reviewed proposal; it does not create a PO or

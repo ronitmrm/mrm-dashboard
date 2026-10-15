@@ -149,6 +149,21 @@ export async function importRmDates(
 export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
   download("proposed-order-plan.xlsx", [
     {
+      name: "Machine plan",
+      rows: plan.lines.flatMap((line) =>
+        (line.machinePlan ?? []).map((row) => ({
+          Proposal: input.reference,
+          Line: line.id,
+          Product: line.part,
+          Setup: row.setup,
+          Machine: row.machine,
+          "Quantity pcs": row.quantity,
+          "Production start": row.start,
+          "Production finish": row.end,
+        }))
+      ),
+    },
+    {
       name: "Line decisions",
       rows: plan.lines.map((line) => ({
         Proposal: input.reference,
@@ -178,6 +193,10 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
         {
           "Machining start": input.startDate,
           "Machining deadline": input.deadline,
+          "Tentative RM available from":
+            input.mode === "deadline"
+              ? input.tentativeRmDate || input.startDate
+              : "Per-line RM dates",
           "Daily hours": input.hoursPerDay,
           "Time factor %": input.efficiency,
           "Setup hours per operation": input.setupHours,

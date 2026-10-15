@@ -14,8 +14,10 @@ orders, job cards, reservations, priorities or production commitments.
    only. The full start-to-deadline period is available for machining; no separate
    finishing, inspection or packing allowance is added.
 4. Optionally set a machining deadline and select complete proposed lines. Ignore
-   tentative RM dates in this capacity-only selection, including existing waiting
-   work, but protect existing commitments first. Compare candidate mixes by
+   individual RM dates in this capacity-only selection. An optional common
+   tentative RM availability date sets the earliest start for all proposed lines;
+   when blank, assume readiness at the machining start. Existing waiting work
+   retains its capacity-only readiness assumption. Protect existing commitments first. Compare candidate mixes by
    completed line count, then machine-family utilisation. Report the search
    method honestly; a heuristic is not a proven global optimum.
    Existing work may finish after the proposed order's deadline. Reserve that
@@ -34,6 +36,19 @@ orders, job cards, reservations, priorities or production commitments.
 
 Plans are estimates, not shop-floor instructions. Missing master data or unknown
 existing workload prevents approval rather than silently treating it as zero.
+Proposed orders run through the production planner in memory, including automatic
+parallel machining, tooling capacity, machine continuity, queue settlement,
+unavailable windows and WIP supply. Existing commitments retain their published
+assignments and dates. Automatic parallel splits retain the normal minimum
+15 production days per machine; planner-only overrides are not invented for a
+proposal. Productive daily hours come from the selected unit's production planner.
+Proposed setup forecasts use the production planner's WIP readiness rule:
+accumulate two downstream production days of supply, or three when upstream
+production is slower, capped at the line quantity. Downstream production may
+overlap on a separate compatible machine only when projected supply supports
+the full run without starvation. Eligible operations may use parallel machines,
+with their supply pooled by the production planner. This
+forecast does not bypass recorded-WIP gates in actual shop-floor execution.
 Changed inputs or refreshed workload require recalculation before approval.
 Machine-family labels match without regard to capitalization. Closed planner
 constraints, including those marked Available, do not reserve machine capacity.
