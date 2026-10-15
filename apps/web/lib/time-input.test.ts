@@ -1,7 +1,7 @@
 import { expect, test } from "vitest"
 import { formatTimeInput } from "@workspace/ui/lib/time-input"
 
-test("inserts the time separator after hours while typing or pasting", () => {
+test("normalizes pasted time digits while preserving the hour-minute separator", () => {
   expect(["1", "19", "193", "1934"].map(formatTimeInput)).toEqual([
     "1",
     "19:",

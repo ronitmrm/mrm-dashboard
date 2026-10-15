@@ -894,7 +894,7 @@ function CrateWeightField({ value, onChange }: { value: string; onChange: (value
 }
 function IstDateTimeField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const parts = istDateTimeInputParts(value)
-  return <fieldset className="grid gap-1.5 text-sm font-medium"><legend>{label}</legend><div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2"><Input aria-label={`${label} date`} type="date" value={parts.date} onChange={(event) => onChange(`${event.target.value}T${parts.time}`)} /><TimeInput aria-label={`${label} in 24-hour format`} value={parts.time} onChange={(event) => onChange(`${parts.date}T${event.target.value}`)} /></div></fieldset>
+  return <fieldset className="grid gap-1.5 text-sm font-medium"><legend>{label}</legend><div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2"><Input aria-label={`${label} date`} type="date" value={parts.date} onChange={(event) => onChange(`${event.target.value}T${parts.time}`)} /><TimeInput aria-label={`${label} in 24-hour format`} value={parts.time} onValueChange={(time) => onChange(`${parts.date}T${time}`)} /></div></fieldset>
 }
 function MasterSelect({ value, options, onChange, placeholder }: { value: string; options: Array<{ code: string; label: string }>; onChange: (value: string) => void; placeholder: string }) { return <NativeSelect className="w-full" wrapLabels value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">{options.length ? placeholder : "No active master values configured"}</NativeSelectOption>{options.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}</NativeSelect> }
 
