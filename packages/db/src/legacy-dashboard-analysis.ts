@@ -95,6 +95,7 @@ type WipProductionStream = {
   quantity: number;
   dailyQty: number;
   recorded?: boolean;
+  startWorkingHours?: number;
 };
 
 type PlanningProductionActual = {
@@ -5996,7 +5997,7 @@ function cycleRevisionEffectiveDate(
   return effectiveAt ? addDays(parseDate(effectiveAt) || effectiveAt, 0, planningCalendar) : "";
 }
 
-function plannedWipBufferReadyDate({
+export function plannedWipBufferReadyDate({
   productionStreams,
   orderPcs,
   previousCycle,
@@ -6024,6 +6025,7 @@ function plannedWipBufferReadyDate({
       endDate: parseDate(stream.endDate) || stream.endDate,
       quantity: Math.max(stream.quantity, 0),
       dailyQty: Math.max(stream.dailyQty, 0),
+      startWorkingHours: Math.max(stream.startWorkingHours ?? 0, 0),
     }))
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
   const actualStreams = uniqueProductionActuals(actuals)
@@ -6177,7 +6179,8 @@ function pooledWipSupplyThroughDate(streams: WipProductionStream[], orderPcs: nu
           count = days;
         }
       }
-      return Math.min(stream.quantity, (stream.recorded ? Math.max(1, count) : count) * stream.dailyQty);
+      const elapsedDays = stream.recorded ? Math.max(1, count) : Math.max(0, count - (stream.startWorkingHours ?? 0) / planningCalendar.productiveHoursPerDay);
+      return Math.min(stream.quantity, elapsedDays * stream.dailyQty);
     };
   });
   // Candidate runs revisit the same supply dates. Bound retention even for

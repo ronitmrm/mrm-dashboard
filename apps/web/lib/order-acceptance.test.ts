@@ -40,6 +40,73 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("refines a family queue without sacrificing more numerous short jobs on another family", () => {
+    const lines = [2, 3, 5, 6]
+      .map((hours, index) => line(`JL-${index}`, hours))
+      .concat(
+        [1, 1, 1, 1, 1, 1, 6].map((hours, index) => ({
+          ...line(`other-${index}`, hours),
+          operations: [{ family: "other", setup: "1", hours }],
+        }))
+      )
+    const plan = calculateProposal(
+      { ...input, lines },
+      {
+        ...context,
+        machines: [
+          ...context.machines,
+          { id: "JL2", family: "JL" },
+          { id: "other", family: "other" },
+        ],
+      },
+      lines
+    )
+    expect(plan.lines.filter((row) => row.selected)).toHaveLength(10)
+    expect(
+      plan.lines
+        .filter((row) => row.part.startsWith("JL-"))
+        .every((row) => row.selected)
+    ).toBe(true)
+  })
+  test("fits M221 using canonical forecast WIP overlap without splitting setups", () => {
+    const product = {
+      ...line("M221", 0),
+      quantity: 38720,
+      operations: [
+        { family: "C2", setup: "1", hours: (38720 * 8) / 3600 },
+        { family: "SSLB", setup: "2", hours: (38720 * 70) / 3600 },
+        { family: "SSLB", setup: "3", hours: (38720 * 60) / 3600 },
+      ],
+    }
+    const settings = {
+      ...input,
+      lines: [product],
+      startDate: "2026-10-15",
+      deadline: "2026-12-15",
+      hoursPerDay: 23,
+      efficiency: 85,
+      setupHours: 2,
+    }
+    const machines = [
+      { id: "C2", family: "C2" },
+      { id: "SSLB1", family: "SSLB" },
+      { id: "SSLB2", family: "SSLB" },
+    ]
+    const plan = calculateProposal(settings, { ...context, machines }, [
+      product,
+    ])
+    expect(plan.lines[0]?.selected).toBe(true)
+    expect(
+      plan.families.find((f) => f.family === "SSLB")?.proposed
+    ).toBeCloseTo((38720 * 130) / 3600 + 4)
+    expect(
+      calculateProposal(
+        settings,
+        { ...context, machines: machines.slice(0, 2) },
+        [product]
+      ).lines[0]?.selected
+    ).toBe(false)
+  })
   test("delays proposed work until common RM availability while retaining existing work", () => {
     const lines = [line("new", 8)]
     const settings = { ...input, deadline: "2026-09-15", lines }
@@ -171,22 +238,62 @@ describe("Proposed Order capacity review", () => {
     ).toContain("no canonical machine schedule")
   })
   test("uses the shared calendar to open a Friday for machining", () => {
-    const { context: calendar } = proposalContext({ productionControl: {
-      planningHolidayRows: [
-        { date: "16-Oct-26", dayType: "Working Friday" },
-        { date: "17-Oct-26", dayType: "Holiday" },
-      ],
-    } })
+    const { context: calendar } = proposalContext({
+      productionControl: {
+        planningHolidayRows: [
+          { date: "16-Oct-26", dayType: "Working Friday" },
+          { date: "17-Oct-26", dayType: "Holiday" },
+        ],
+      },
+    })
     const lines = [line("new", 8)]
-    const friday = { ...input, lines, startDate: "2026-10-16", deadline: "2026-10-16" }
-    expect(calculateProposal(friday, context, lines).lines[0]?.selected).toBe(false)
+    const friday = {
+      ...input,
+      lines,
+      startDate: "2026-10-16",
+      deadline: "2026-10-16",
+    }
+    expect(calculateProposal(friday, context, lines).lines[0]?.selected).toBe(
+      false
+    )
     expect(calendar.holidays).toEqual(["2026-10-17"])
-    expect(calculateProposal(friday, { ...context, holidays: calendar.holidays, workingDates: calendar.workingDates }, lines).lines[0]).toMatchObject({ selected: true, completion: "2026-10-16" })
-    const partial = proposalContext({ productionFloorCode: "cnc", productionControl: {
-      planningHolidayRows: [{ date: "16-Oct-26", dayType: "Working Friday" },
-        { date: "16-Oct-26", dayType: "Holiday", calendarScope: "cnc", shift: "A" }],
-    } }).context
-    expect(calculateProposal(friday, { ...context, holidays: partial.holidays, workingDates: partial.workingDates, capacityFractions: partial.capacityFractions }, lines).lines[0]?.selected).toBe(false)
+    expect(
+      calculateProposal(
+        friday,
+        {
+          ...context,
+          holidays: calendar.holidays,
+          workingDates: calendar.workingDates,
+        },
+        lines
+      ).lines[0]
+    ).toMatchObject({ selected: true, completion: "2026-10-16" })
+    const partial = proposalContext({
+      productionFloorCode: "cnc",
+      productionControl: {
+        planningHolidayRows: [
+          { date: "16-Oct-26", dayType: "Working Friday" },
+          {
+            date: "16-Oct-26",
+            dayType: "Holiday",
+            calendarScope: "cnc",
+            shift: "A",
+          },
+        ],
+      },
+    }).context
+    expect(
+      calculateProposal(
+        friday,
+        {
+          ...context,
+          holidays: partial.holidays,
+          workingDates: partial.workingDates,
+          capacityFractions: partial.capacityFractions,
+        },
+        lines
+      ).lines[0]?.selected
+    ).toBe(false)
   })
   test("uses the full period for machining even when an older draft has finishing days", () => {
     const lines = [line("new", 8)]

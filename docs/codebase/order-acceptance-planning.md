@@ -7,8 +7,13 @@ the selected floor's Planner Actions read capability. Mutations additionally
 require `operations.floors.<code>.planner_actions.order_acceptance.write`.
 
 `apps/web/lib/order-acceptance.ts` schedules complete batches, each operation on
-one compatible machine, with sequential routing. Four deterministic line orders
-are compared in deadline mode by completed line count then utilised hours. This
+one compatible machine, with forecast-WIP overlap between route setups. It reuses
+`plannedWipBufferReadyDate` from the canonical production planner, including its
+two/three-day buffer, next-working-day planned supply and starvation check.
+Four deterministic line orders are compared in deadline mode by completed line
+count then utilised hours. For families with rejected lines, a longest-family-work
+first queue refinement is evaluated at the same positions in the winning order;
+only a better score is retained. This
 is a heuristic, not a proof of globally optimal selection. Splitting a batch
 across machines is not assumed. Input-order scheduling is used in RM-date mode.
 Deadline mode accepts an optional common `tentativeRmDate` for proposed lines.
