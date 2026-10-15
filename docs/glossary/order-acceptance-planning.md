@@ -36,12 +36,18 @@ orders, job cards, reservations, priorities or production commitments.
 
 Plans are estimates, not shop-floor instructions. Missing master data or unknown
 existing workload prevents approval rather than silently treating it as zero.
+Proposed orders run through the production planner in memory, including automatic
+parallel machining, tooling capacity, machine continuity, queue settlement,
+unavailable windows and WIP supply. Existing commitments retain their published
+assignments and dates. Automatic parallel splits retain the normal minimum
+15 production days per machine; planner-only overrides are not invented for a
+proposal. Productive daily hours come from the selected unit's production planner.
 Proposed setup forecasts use the production planner's WIP readiness rule:
 accumulate two downstream production days of supply, or three when upstream
 production is slower, capped at the line quantity. Downstream production may
 overlap on a separate compatible machine only when projected supply supports
-the full run without starvation. Each operation still occupies one machine;
-overlapping route setups does not split an operation across machines. This
+the full run without starvation. Eligible operations may use parallel machines,
+with their supply pooled by the production planner. This
 forecast does not bypass recorded-WIP gates in actual shop-floor execution.
 Changed inputs or refreshed workload require recalculation before approval.
 Machine-family labels match without regard to capitalization. Closed planner

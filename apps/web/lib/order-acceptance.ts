@@ -1,4 +1,7 @@
-import { plannedWipBufferReadyDate } from "@workspace/db/dashboard-analysis"
+import {
+  simulateProductionPlanning,
+  workOrderPlanningSort,
+} from "@workspace/db/dashboard-analysis"
 
 export type ProposedLine = {
   id: string
@@ -22,10 +25,20 @@ export type ProposalInput = {
   lines: ProposedLine[]
   existingRmDates: Record<string, string>
 }
-export type Operation = { family: string; hours: number; setup: string }
+export type Operation = {
+  family: string
+  hours: number
+  setup: string
+  quantity?: number
+  machineType?: string
+  tooling?: Record<string, unknown>
+  cycle?: Record<string, unknown>
+}
 export type PlanningLine = ProposedLine & {
   operations: Operation[]
   issue: string
+  plannerPriorityScore?: number
+  deliveryDate?: string
 }
 export type Reservation = { machine: string; start: string; end: string }
 export type PlanningContext = {
@@ -38,6 +51,10 @@ export type PlanningContext = {
   existing: PlanningLine[]
   reservations: Reservation[]
   blockers: string[]
+  productiveHoursPerDay?: number
+  machineRows?: Record<string, unknown>[]
+  toolingAvailability?: Record<string, unknown>[]
+  reservedPlans?: Record<string, unknown>[]
 }
 export type LineResult = {
   id: string
@@ -47,6 +64,13 @@ export type LineResult = {
   completion: string
   rmRequiredBy: string
   reason: string
+  machinePlan?: {
+    setup: string
+    machine: string
+    quantity: number
+    start: string
+    end: string
+  }[]
 }
 export type ProposalPlan = {
   version: number
@@ -130,18 +154,26 @@ export function validateProposal(input: ProposalInput) {
       throw new Error("Existing RM dates must use YYYY-MM-DD.")
 }
 
-// One machine per operation; route setups can overlap using canonical forecast WIP.
+// All machine/route scheduling is delegated to the actual production planner.
 export function calculateProposal(
   input: ProposalInput,
   context: PlanningContext,
   lines: PlanningLine[]
 ): ProposalPlan {
   validateProposal(input)
-  const daily = (input.hoursPerDay * input.efficiency) / 100
+  const daily =
+    context.productiveHoursPerDay ??
+    (input.hoursPerDay * input.efficiency) / 100
+  const calendar = {
+    holidayDates: new Set(context.holidays),
+    workingDates: new Set(context.workingDates ?? []),
+    capacityFractions: context.capacityFractions,
+    productiveHoursPerDay: daily,
+    currentProductionDate: input.startDate,
+  }
+  const horizon = addDays(input.startDate, 730)
   const dates: string[] = []
-  // Old commitments can extend beyond the proposed order's deadline.
-  const end = addDays(input.startDate, 730)
-  for (let date = input.startDate; date <= end; date = addDays(date, 1)) {
+  for (let date = input.startDate; date <= horizon; date = addDays(date, 1)) {
     if (
       (context.workingDates?.includes(date) ||
         new Date(`${date}T00:00:00Z`).getUTCDay() !== context.weeklyHoliday) &&
@@ -149,155 +181,144 @@ export function calculateProposal(
     )
       dates.push(date)
   }
-  const slot = (date: string) => {
-    const index = dates.findIndex((day) => day >= date)
-    return index < 0 ? totalCapacity : offsets[index]!
+  const iso = (value: unknown) => {
+    const raw = String(value ?? "")
+    if (validDate(raw)) return raw
+    const parsed = Date.parse(`${raw} UTC`)
+    return Number.isFinite(parsed)
+      ? new Date(parsed).toISOString().slice(0, 10)
+      : ""
   }
-  const offsets = [0]
-  for (const date of dates)
-    offsets.push(
-      offsets[offsets.length - 1]! +
-        daily * (context.capacityFractions?.[date] ?? 1)
-    )
-  const totalCapacity = offsets[offsets.length - 1]!
-  const planningCalendar = {
-    holidayDates: new Set(context.holidays),
-    workingDates: new Set(context.workingDates ?? []),
-    productiveHoursPerDay: daily,
-    capacityFractions: context.capacityFractions,
+  const reservationsFor = (plans: Record<string, unknown>[]): Reservation[] =>
+    plans.flatMap((row) => {
+      const start = iso(row.plannedProductionStartDate),
+        end = iso(row.plannedProductionEndDate),
+        machine = String(row.machine ?? "")
+      return machine && start && end ? [{ machine, start, end }] : []
+    })
+  type Schedule = {
+    plans: Record<string, unknown>[]
+    reservations: Reservation[]
   }
-  const dateAt = (hour: number) => {
-    const index = offsets.findIndex(
-      (end, index) => index > 0 && end + 1e-9 >= hour
-    )
-    return index < 1 ? "" : (dates[index - 1] ?? "")
+  const initial: Schedule = {
+    plans: context.reservedPlans ?? [],
+    reservations: context.reservations,
   }
-  type Interval = { start: number; end: number }
-  type Calendar = Map<string, Interval[]>
-  const clone = (calendar: Calendar): Calendar =>
-    new Map(
-      [...calendar].map(([key, intervals]) => [
-        key,
-        intervals.map((interval) => ({ ...interval })),
-      ])
-    )
-  const calendar: Calendar = new Map(
-    context.machines.map((machine) => [machine.id, []])
-  )
-  for (const reservation of context.reservations) {
-    const target = calendar.get(reservation.machine)
-    if (target)
-      target.push({
-        start: slot(reservation.start),
-        end: slot(addDays(reservation.end, 1)),
-      })
-  }
-  for (const intervals of calendar.values())
-    intervals.sort((a, b) => a.start - b.start)
   function schedule(
     line: PlanningLine,
-    target: Calendar,
+    target: Schedule,
     rm: string,
-    proposed = true
+    proposed: boolean
   ) {
-    const fail = (reason: string) => ({
-      calendar: null,
-      completion: "",
-      rmRequiredBy: "",
-      reason,
-    })
-    let ready = slot(rm > input.startDate ? rm : input.startDate)
-    let first = -1
-    let lastFinish = 0
-    const trial = clone(target)
-    let previous:
-      | { operation: Operation; machine: string; start: number; end: number }
-      | undefined
-    for (const operation of line.operations) {
-      if (previous) {
-        const upstream = previous
-        const productionStart = upstream.start + input.setupHours
-        const startIndex =
-          offsets.findIndex(
-            (end, index) => index > 0 && end > productionStart + 1e-9
-          ) - 1
-        const wipDate = plannedWipBufferReadyDate({
-          productionStreams: [
-            {
-              machine: upstream.machine,
-              startDate: dates[startIndex] ?? "",
-              startWorkingHours: productionStart - (offsets[startIndex] ?? 0),
-              endDate: dateAt(upstream.end),
-              quantity: line.quantity,
-              dailyQty:
-                upstream.operation.hours > 0
-                  ? (line.quantity * daily) / upstream.operation.hours
-                  : 0,
-            },
-          ],
+    const id = `proposal:${line.id}`
+    const ready = rm > input.startDate ? rm : input.startDate
+    const routes = line.operations.map((op) => ({
+      partNo: line.part,
+      optionNumber: line.option || "1",
+      setupNo: op.setup,
+      machineFamily: op.family,
+      machineUsed: op.family,
+      machineType: op.machineType || "CNC",
+    }))
+    const cycles = line.operations.map((op, index) => ({
+      ...routes[index],
+      ...op.cycle,
+      cycleTime:
+        op.cycle?.cycleTime ??
+        (op.hours * 3600) / (op.quantity ?? line.quantity),
+    }))
+    const tooling = line.operations.map((op, index) => ({
+      ...routes[index],
+      ...op.tooling,
+    }))
+    const planned = simulateProductionPlanning({
+      workOrders: [
+        {
+          jcNo: id,
+          partCode: line.part,
+          optionNumber: line.option || "1",
           orderPcs: line.quantity,
-          previousCycle: {
-            cycleTime: (upstream.operation.hours * 3600) / line.quantity,
-          },
-          nextCycle: { cycleTime: (operation.hours * 3600) / line.quantity },
-          planningCalendar,
-        })
-        if (!wipDate)
-          return fail(
-            `Setup ${operation.setup} (${operation.family}): forecast WIP cannot support this run.`
-          )
-        ready = slot(wipDate)
-      }
-      const duration = operation.hours + input.setupHours
-      let best: { machine: string; start: number; end: number } | undefined
-      for (const machine of context.machines.filter(
-        (machine) => machine.family === operation.family
-      )) {
-        let start = ready
-        for (const interval of trial.get(machine.id) ?? []) {
-          if (start + duration <= interval.start + 1e-9) break
-          if (start < interval.end) start = interval.end
-        }
-        const end = start + duration
-        if (!best || end < best.end) best = { machine: machine.id, start, end }
-      }
-      const limit =
-        proposed && input.mode === "deadline"
-          ? slot(addDays(input.deadline, 1))
-          : totalCapacity
-      if (!best)
-        return fail(
-          `Setup ${operation.setup}: no compatible ${operation.family} machine.`
+          materialPlanningReady: true,
+          rmInwardDate: ready,
+          rmStatus: "Received",
+          routeChangeRemainingSetups: line.operations.map((op) => ({
+            setupNo: op.setup,
+            quantity: op.quantity ?? line.quantity,
+            plan: true,
+          })),
+        },
+      ],
+      routes,
+      cycles,
+      tooling,
+      toolingAvailability: context.toolingAvailability ?? [],
+      machines:
+        context.machineRows ??
+        context.machines.map((m) => ({
+          machineNo: m.id,
+          machineFamily: m.family,
+          machineType: "CNC",
+          status: "Active",
+        })),
+      reservations: target.reservations,
+      reservedPlans: target.plans,
+      calendar,
+      deadline:
+        proposed && input.mode === "deadline" ? input.deadline : horizon,
+    })
+    const reasons: string[] = []
+    for (const op of line.operations) {
+      const own = planned.filter((row) => String(row.setupNo) === op.setup)
+      const end =
+        own
+          .map((row) => iso(row.plannedProductionEndDate))
+          .sort()
+          .at(-1) ?? ""
+      if (
+        !own.length ||
+        !end ||
+        own.some((row) => !iso(row.plannedProductionEndDate))
+      )
+        reasons.push(
+          `Setup ${op.setup} (${op.family}): ${String(own.find((row) => row.toolingPlanBlocked)?.toolingPlanStatus ?? "production planner cannot assign a feasible machine/tooling plan")}`
         )
-      if (best.end > limit)
-        return fail(
-          `Setup ${operation.setup} (${operation.family}): needs ${duration.toFixed(1)} uninterrupted hours after WIP and machine availability; earliest finish ${dateAt(best.end) || "beyond planning horizon"}${proposed && input.mode === "deadline" ? `, after deadline ${input.deadline}` : ""}.`
+      else if (
+        end > (proposed && input.mode === "deadline" ? input.deadline : horizon)
+      )
+        reasons.push(
+          `Setup ${op.setup} (${op.family}): finishes ${end}, after ${proposed && input.mode === "deadline" ? "deadline " + input.deadline : "planning horizon"}.`
         )
-      if (first < 0) first = best.start
-      const intervals = trial.get(best.machine)!
-      intervals.push({ start: best.start, end: best.end })
-      intervals.sort((a, b) => a.start - b.start)
-      previous = { operation, ...best }
-      lastFinish = Math.max(lastFinish, best.end)
     }
-    const productionEnd = dateAt(lastFinish)
-    if (!productionEnd) return fail("Does not fit planning horizon")
-    const completion = productionEnd
-    if (proposed && input.mode === "deadline" && completion > input.deadline)
-      return fail("Does not fit planning horizon")
+    const completion =
+      planned
+        .map((row) => iso(row.plannedProductionEndDate))
+        .sort()
+        .at(-1) ?? ""
+    const rmRequiredBy =
+      planned
+        .filter((row) => String(row.setupNo) === line.operations[0]?.setup)
+        .map((row) => iso(row.plannedProductionStartDate))
+        .filter(Boolean)
+        .sort()[0] ?? ""
     return {
-      calendar: trial,
-      reason: "",
+      reason: reasons.join(" "),
       completion,
-      rmRequiredBy:
-        dates[
-          offsets.findIndex((end, index) => index > 0 && end > first + 1e-9) - 1
-        ] ?? "",
+      rmRequiredBy,
+      plans: planned,
+      target: {
+        plans: [...target.plans, ...planned],
+        reservations: [...target.reservations, ...reservationsFor(planned)],
+      },
     }
   }
   const blockers = [...context.blockers]
-  let committed = calendar
-  for (const line of context.existing) {
+  let committed = initial
+  for (const line of [...context.existing].sort((a, b) =>
+    workOrderPlanningSort(
+      { ...a, jcNo: a.id, rmInwardDate: a.rmDate },
+      { ...b, jcNo: b.id, rmInwardDate: b.rmDate }
+    )
+  )) {
     const rm =
       input.mode === "deadline"
         ? input.startDate
@@ -308,38 +329,42 @@ export function calculateProposal(
     }
     if (!line.operations.length) continue
     const result = schedule(line, committed, rm, false)
-    if (!result.calendar)
-      blockers.push(
-        `${line.id}: existing work does not fit the planning horizon.`
-      )
-    else committed = result.calendar
+    if (result.reason) blockers.push(`${line.id}: ${result.reason}`)
+    else committed = result.target
   }
-  const load = (target: Calendar, machine: string) => {
-    const boundary = Math.min(totalCapacity, slot(addDays(input.deadline, 1)))
-    let total = 0,
-      through = 0
-    for (const interval of target.get(machine) ?? []) {
-      const start = Math.max(through, interval.start)
-      const end = Math.min(boundary, interval.end)
-      total += Math.max(0, end - start)
-      through = Math.max(through, interval.end)
-    }
-    return total
-  }
-  const hours = (line: PlanningLine) =>
-    line.operations.reduce(
-      (sum, operation) => sum + operation.hours + input.setupHours,
+  const availablePerMachine = dates
+    .filter((date) => date <= input.deadline)
+    .reduce(
+      (sum, date) => sum + daily * (context.capacityFractions?.[date] ?? 1),
       0
     )
-  const familyMachines = (family: string) =>
-    context.machines.filter((machine) => machine.family === family).length
+  // Count occupied production dates just as the actual planner reserves machines.
+  const load = (target: Schedule, machine: string) =>
+    dates
+      .filter(
+        (date) =>
+          date <= input.deadline &&
+          target.reservations.some(
+            (row) =>
+              row.machine === machine && row.start <= date && row.end >= date
+          )
+      )
+      .reduce(
+        (sum, date) => sum + daily * (context.capacityFractions?.[date] ?? 1),
+        0
+      )
+  const hours = (line: PlanningLine) =>
+    line.operations.reduce((sum, op) => sum + op.hours, 0)
   const dominant = (line: PlanningLine) =>
     Math.max(
       0,
       ...line.operations.map(
-        (operation) =>
-          (operation.hours + input.setupHours) /
-          Math.max(1, familyMachines(operation.family))
+        (op) =>
+          op.hours /
+          Math.max(
+            1,
+            context.machines.filter((m) => m.family === op.family).length
+          )
       )
     )
   const candidates =
@@ -352,7 +377,7 @@ export function calculateProposal(
           lines,
         ]
   const trial = (candidate: PlanningLine[]) => {
-    let target = clone(committed)
+    let target = committed
     const results = new Map<string, LineResult>()
     for (const line of candidate) {
       const rm =
@@ -361,44 +386,53 @@ export function calculateProposal(
           : line.rmDate
       const result =
         !blockers.length && !line.issue && rm
-          ? schedule(line, target, rm)
+          ? schedule(line, target, rm, true)
           : null
-      if (result?.calendar) target = result.calendar
+      const selected = !!result && !result.reason
+      if (selected) target = result.target
       results.set(line.id, {
         id: line.id,
         part: line.part,
         quantity: line.quantity,
-        selected: Boolean(result?.calendar),
-        completion: result?.completion ?? "",
-        rmRequiredBy: result?.rmRequiredBy ?? "",
+        selected,
+        machinePlan: selected
+          ? result.plans.map((row) => ({
+              setup: String(row.setupNo),
+              machine: String(row.machine),
+              quantity: Number(row.orderPcs),
+              start: iso(row.plannedProductionStartDate),
+              end: iso(row.plannedProductionEndDate),
+            }))
+          : [],
+        completion: selected ? result.completion : "",
+        rmRequiredBy: selected ? result.rmRequiredBy : "",
         reason:
           line.issue ||
           (blockers.length
             ? "Resolve existing workload blockers"
             : !rm
               ? "Awaiting RM date"
-              : result?.calendar
-                ? input.mode === "deadline"
+              : result?.reason ||
+                (input.mode === "deadline"
                   ? "Capacity feasible; conditional on RM"
-                  : "Tentative; subject to RM"
-                : result?.reason || "Does not fit planning horizon"),
+                  : "Tentative; subject to RM")),
       })
     }
-    const selected = [...results.values()].filter(
-      (line) => line.selected
-    ).length
-    const utilisation = context.machines.reduce(
-      (sum, machine) => sum + load(target, machine.id),
-      0
-    )
-    return { candidate, target, results, selected, utilisation }
+    return {
+      candidate,
+      target,
+      results,
+      selected: [...results.values()].filter((row) => row.selected).length,
+      utilisation: context.machines.reduce(
+        (sum, m) => sum + load(target, m.id),
+        0
+      ),
+    }
   }
   const compare = (a: ReturnType<typeof trial>, b: ReturnType<typeof trial>) =>
     b.selected - a.selected || b.utilisation - a.utilisation
   let best = candidates.map(trial).sort(compare)[0]!
-  if (input.mode === "deadline" && !blockers.length) {
-    // Reorder a shared-family queue without disturbing unrelated line positions.
-    // Long operations first can avoid stranding a large job behind short ones.
+  if (input.mode === "deadline" && !blockers.length)
     for (const family of [
       ...new Set(
         lines.flatMap((line) => line.operations.map((op) => op.family))
@@ -407,7 +441,7 @@ export function calculateProposal(
       const familyHours = (line: PlanningLine) =>
         line.operations
           .filter((op) => op.family === family)
-          .reduce((total, op) => total + op.hours + input.setupHours, 0)
+          .reduce((sum, op) => sum + op.hours, 0)
       if (
         !lines.some(
           (line) =>
@@ -419,40 +453,32 @@ export function calculateProposal(
         .filter((line) => familyHours(line) > 0)
         .sort((a, b) => familyHours(b) - familyHours(a))
       let index = 0
-      const reordered = best.candidate.map((line) =>
-        familyHours(line) > 0 ? queue[index++]! : line
+      const repaired = trial(
+        best.candidate.map((line) =>
+          familyHours(line) > 0 ? queue[index++]! : line
+        )
       )
-      const repaired = trial(reordered)
       if (compare(best, repaired) > 0) best = repaired
     }
-  }
-  const availablePerMachine = Math.min(
-    totalCapacity,
-    slot(addDays(input.deadline, 1))
-  )
   return {
     version: context.version,
     blockers,
     method:
-      input.mode === "deadline"
-        ? "Four deterministic WIP-aware schedules with family-queue refinement; maximum line count then utilised hours. Global optimum not proven."
-        : "Input line order; canonical forecast WIP between setups on compatible machines.",
+      "Actual production planner simulation: parallel machining, pooled WIP, tooling, machine continuity and protected commitments. Four proposal orders plus family-queue refinement; global optimum not proven.",
     lines: lines.map((line) => best.results.get(line.id)!),
-    families: [...new Set(context.machines.map((machine) => machine.family))]
+    families: [...new Set(context.machines.map((m) => m.family))]
       .sort()
       .map((family) => {
-        const machines = context.machines.filter(
-          (machine) => machine.family === family
-        )
+        const machines = context.machines.filter((m) => m.family === family)
+        const available = machines.length * availablePerMachine
         const existing = machines.reduce(
-          (sum, machine) => sum + load(committed, machine.id),
+          (sum, m) => sum + load(committed, m.id),
           0
         )
         const used = machines.reduce(
-          (sum, machine) => sum + load(best.target, machine.id),
+          (sum, m) => sum + load(best.target, m.id),
           0
         )
-        const available = machines.length * availablePerMachine
         return {
           family,
           machines: machines.length,

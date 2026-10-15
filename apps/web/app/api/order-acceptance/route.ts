@@ -125,6 +125,10 @@ async function handle(request: NextRequest) {
               snapshot,
               input.startDate
             )
+            input.hoursPerDay =
+              context.productiveHoursPerDay ?? input.hoursPerDay
+            input.efficiency = 100
+            input.setupHours = 0
             result = calculateProposal(input, context, input.lines.map(resolve))
             if (body.action === "approve") {
               const saved = id
