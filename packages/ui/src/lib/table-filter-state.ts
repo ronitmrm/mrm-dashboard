@@ -1,3 +1,5 @@
+import { tableFilterDate } from "@workspace/ui/lib/table-date-filter"
+
 export type TableFilterColumn = {
   allLabel?: string
   index: number
@@ -85,17 +87,25 @@ export function sortRowsByTableColumn<Row>(
 ) {
   if (sort === null) return rows
   const direction = sort.direction === "asc" ? 1 : -1
-  return rows
-    .map((row, originalIndex) => ({ originalIndex, row }))
+  const sortable = rows.map((row, originalIndex) => {
+    const value = normalizedTableFilterValue(
+      valuesForColumn(row, sort.columnIndex)[0]
+    )
+    return { originalIndex, row, value, date: tableFilterDate(value) }
+  })
+  const dateColumn = sortable.some((row) => row.date !== null)
+  return sortable
     .sort((left, right) => {
-      const leftValue = normalizedTableFilterValue(
-        valuesForColumn(left.row, sort.columnIndex)[0]
-      )
-      const rightValue = normalizedTableFilterValue(
-        valuesForColumn(right.row, sort.columnIndex)[0]
-      )
+      if (dateColumn) {
+        if (left.date && right.date)
+          return (
+            (left.date.time - right.date.time) * direction ||
+            left.originalIndex - right.originalIndex
+          )
+        if (left.date || right.date) return left.date ? -1 : 1
+      }
       return (
-        tableValueCollator.compare(leftValue, rightValue) * direction ||
+        tableValueCollator.compare(left.value, right.value) * direction ||
         left.originalIndex - right.originalIndex
       )
     })
