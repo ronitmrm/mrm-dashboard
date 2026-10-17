@@ -5134,6 +5134,109 @@ function independentSimulationFocusMachines(details: Array<Record<string, unknow
   }
   return dynamicRows ? focus : undefined;
 }
+function plainPrioritySetupList(raw: unknown) {
+  const primitive = (value: unknown) => value === null || ["undefined", "string", "number", "boolean"].includes(typeof value);
+  if (!Array.isArray(raw)) return primitive(raw);
+  if (Object.getPrototypeOf(raw) !== Array.prototype || Object.getOwnPropertySymbols(raw).length) return false;
+  const aliases = new Set([
+    "targetSetupNumber", "targetSetupNo", "TARGET SETUP NO", "targetSetup", "prioritySetupNo",
+    "jobCardNumber", "jcNo", "JC NO", "jobCard", "setupNumber", "setupNo", "SETUP NO", "setup",
+    "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO", "finishedQuantity", "finishedQty", "FINISHED QTY",
+  ].map(normalizeHeader));
+  return Object.entries(Object.getOwnPropertyDescriptors(raw)).every(([key, entry]) => {
+    if (!("value" in entry)) return false;
+    if (key === "length") return true;
+    if (!/^(0|[1-9]\d*)$/.test(key)) return false;
+    const item: unknown = entry.value;
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return true;
+    if (Object.getPrototypeOf(item) !== Object.prototype || Object.getOwnPropertySymbols(item).length) return false;
+    return Object.entries(Object.getOwnPropertyDescriptors(item)).every(([name, field]) =>
+      "value" in field && (!aliases.has(normalizeHeader(name)) || primitive(field.value)));
+  });
+}
+
+// Callers prove warm maps, finite setups and unique canonical queue owners.
+function scalarQueueOrder(
+  members: ReadonlyMap<Record<string, unknown>, unknown>,
+  groupByRow: ReadonlyMap<Record<string, unknown>, unknown>,
+  knownScoreCount?: number,
+) {
+  let byJob: Map<string, Array<Record<string, unknown>>> | undefined;
+  const targets = (jcNo: string) => {
+    if (!byJob) {
+      byJob = new Map();
+      for (const row of members.keys()) {
+        const key = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
+        const rows = byJob.get(key);
+        if (rows) rows.push(row);
+        else byJob.set(key, [row]);
+      }
+    }
+    return byJob.get(jcNo) ?? [];
+  };
+  for (const row of members.keys()) {
+    const raw = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
+    if (!Array.isArray(raw) || !raw.length) continue;
+    const protectedRow = activeSimulationResources!.protectedMutations.get(row);
+    const facts = protectedRow ? protectedRow.state.facts : currentPlanningFacts?.get(row);
+    let before = facts?.priorityQueueBeforeSetups;
+    if (before === undefined) {
+      if (!plainPrioritySetupList(raw)) return false;
+      before = priorityQueueBeforeSetups(row);
+    }
+    const setup = plannerSetupKey(rowText(row, "setupNo", "SETUP NO", "SETUP"));
+    for (const edge of before) {
+      if (plannerSetupKey(edge.targetSetupNo) !== setup) continue;
+      for (const target of targets(edge.jcNo))
+        if (groupByRow.get(target) !== groupByRow.get(row) && priorityQueueBeforeMatchesRow(edge, target)) return false;
+    }
+  }
+  const scoreCount = knownScoreCount ?? new Set([...members.keys()].map(row => safeNumber(rowValue(row, "plannerPriorityScore")))).size;
+  if (scoreCount <= 1) return true;
+  let allIdle = true;
+  for (const row of members.keys()) if (priorityQueueState(row) !== "idle") { allIdle = false; break; }
+  if (allIdle) return true;
+  for (const row of members.keys()) {
+    if (priorityApprovalMode(row) === "idle_queue_only") continue;
+    const protectedRow = activeSimulationResources!.protectedMutations.get(row);
+    const facts = protectedRow ? protectedRow.state.facts : currentPlanningFacts?.get(row);
+    let interruptions = facts?.priorityInterruptedSetups;
+    if (interruptions === undefined) {
+      const raw = row.interruptedSetups || row.priorityInterruptedSetups;
+      if (!Array.isArray(raw) || !plainPrioritySetupList(raw)) return false;
+      interruptions = priorityInterruptedSetups(row);
+    }
+    if (!interruptions.length) return false;
+    for (const interruption of interruptions)
+      for (const target of targets(interruption.jcNo))
+        if (groupByRow.get(target) !== groupByRow.get(row) &&
+          priorityInterruptionMatchesRow(interruption, target) && priorityQueueState(target) !== "idle") return false;
+  }
+  return true;
+}
+
+function earlyProtectedQueueGroups(groups: Array<Array<Record<string, unknown>>>) {
+  const original = { groups, scalarOrder: false };
+  if (!activeSimulationResources || !activePlanningKernel) return original;
+  const rows = groups.flat();
+  if (rows.some(row => !normalizedRowCache.has(row))) return original;
+  const groupByRow = new Map<Record<string, unknown>, number>();
+  const owners = new Map<string, number>();
+  for (const [index, group] of groups.entries()) for (const row of group) {
+    if (groupByRow.has(row) || !Number.isFinite(Number(rowText(row, "setupNo")))) return original;
+    const machine = canonicalKey(rowText(row, "machine", "machineNo"));
+    const owner = owners.get(machine);
+    if (owner !== undefined && owner !== index) return original;
+    owners.set(machine, index);
+    groupByRow.set(row, index);
+  }
+  if (!scalarQueueOrder(groupByRow, groupByRow)) return original;
+  return {
+    groups: groups.filter(group => !group.every(row => !requiredToolingCodesFromPlan(row).length) || protectedQueueSortKey(group) === undefined),
+    scalarOrder: true,
+  };
+}
+
 function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows?: Array<Record<string, unknown>>) {
   applyPriorityInterruptionQuantities(details);
   applyPlanOverrideInterruptionQuantities(details);
@@ -5155,6 +5258,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     queueComparisons.set(details, queueOrderCache);
   }
   const versions = new Map(details.map((row) => [row, planningRowVersion(row)]));
+  const early = earlyProtectedQueueGroups([...byMachine.values()]);
   const compareQueueRows = (a: Record<string, unknown>, b: Record<string, unknown>) => {
     let comparisons = queueOrderCache.get(a);
     const cached = comparisons?.get(b);
@@ -5181,7 +5285,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     });
     return order;
   };
-  const queues = [...byMachine.values()].map((rows, candidateIndex) => {
+  const queues = early.groups.map((rows, candidateIndex) => {
     // Queue membership/order and every row/meta value are unchanged on most
     // passes. Tooling dates have just been reset above. Reuse that exact sort,
     // including explicit queue placements, rather than sorting it again.
@@ -5233,6 +5337,8 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       candidateIndex,
       ordinal: candidateIndex,
       codes: [...new Set(queue.flatMap(requiredToolingCodesFromPlan))],
+      remainingCodedRows: activeSimulationResources
+        ? queue.reduce((count, row) => count + Number(requiredToolingCodesFromPlan(row).length > 0), 0) : 0,
     };
   });
   const knownHolders = new Map<string, number>();
@@ -5481,10 +5587,17 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       scores.set(guard.score, (scores.get(guard.score) ?? 0) + 1);
       unsafe += Number(guard.unsafe);
     }
-    return { guards, scores, unsafe };
+    const scalarOrder = (() => {
+      if (early.scalarOrder || (!unsafe && scores.size <= 1)) return true;
+      for (const [row, guard] of guards)
+        if (guard.unsafe && !Number.isFinite(Number(rowText(row, "setupNo")))) return false;
+      return scalarQueueOrder(guards, queueByRow, scores.size);
+    })();
+    return { guards, scores, unsafe, scalarOrder };
   };
   let suffixPrepared = false;
   let suffixTracking: ReturnType<typeof prepareSuffix>;
+  let scalarCertified = early.scalarOrder;
   let projectionAttempted = false;
   let projectionStarted = false;
   while (changedQueues.size || candidates.length) {
@@ -5496,6 +5609,21 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     for (const item of changedQueues) {
       if (heapActive) heapRemove(candidates[item.candidateIndex]);
       removeGuard(candidates[item.candidateIndex]);
+    }
+    if (scalarCertified && projectionAttempted) {
+      for (const item of changedQueues) {
+        if (item.remainingCodedRows !== 0 ||
+          !item.queue.every((row) => normalizedRowCache.has(row) && !requiredToolingCodesFromPlan(row).length) ||
+          protectedQueueSortKey(item.queue) === undefined) continue;
+        const index = item.candidateIndex;
+        for (const row of item.queue) waitingRows.delete(row);
+        candidates.splice(index, 1);
+        frontierStates.splice(index, 1);
+        for (let retained = index; retained < candidates.length; retained += 1)
+          candidates[retained]!.item.candidateIndex = retained;
+        changedQueues.delete(item);
+      }
+      if (!candidates.length) break;
     }
     const replacements: QueueCandidate[] = [];
     for (const row of changedToolingRows) {
@@ -5583,10 +5711,10 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         }
       }
     }
-    if (suffixTracking && !suffixTracking.unsafe && suffixTracking.scores.size <= 1) {
-      // Equal priorities and distinct machines disable every pair-specific
-      // override for the entire remaining pass. Admit whole protected queues
-      // once; their no-code pops only advance private machine date/key state.
+    if (suffixTracking && (suffixTracking.scalarOrder || (!suffixTracking.unsafe && suffixTracking.scores.size <= 1))) {
+      scalarCertified = true;
+      // The whole-suffix scalar certificate covers every future frontier.
+      // No-code protected pops only advance private machine date/key state.
       suffixTracking = undefined;
       let retained = 0;
       for (let index = 0; index < candidates.length; index += 1) {
@@ -5640,12 +5768,14 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       }
     }
     const { item, row, remainingState } = candidates[winner]!;
+    if (activeSimulationResources && requiredToolingCodesFromPlan(row).length) item.remainingCodedRows -= 1;
     item.queue.splice(item.queue.indexOf(row), 1);
     item.state = remainingState;
     waitingRows.delete(row);
     if (!suffixPrepared) {
       suffixPrepared = true;
       suffixTracking = prepareSuffix();
+      scalarCertified ||= suffixTracking?.scalarOrder === true;
     } else if (suffixTracking) {
       const guard = suffixTracking.guards.get(row)!;
       suffixTracking.guards.delete(row);
