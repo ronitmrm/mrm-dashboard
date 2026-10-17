@@ -5323,6 +5323,15 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       toolingDependents.set(code, dependents);
     }
   const changedToolingRows = new Set(waitingRows);
+  type HeapCohort = {
+    key: string;
+    size: number;
+    scores: Map<number, number>;
+    machines: Map<string, number>;
+    unsafe: number;
+    nonIdle: number;
+    nonDefaultMode: number;
+  };
   type QueueCandidate = {
     item: (typeof queues)[number];
     row: Record<string, unknown>;
@@ -5332,7 +5341,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     remainingState: number;
     sortState?: { id: number; comparisons: Map<number, number> };
     heapIndex?: number;
-    heapGuard?: { score: number; machine: string; unsafe: boolean; idle: boolean };
+    heapGuard?: { cohort: HeapCohort; score: number; machine: string; unsafe: boolean; idle: boolean; defaultMode: boolean };
   };
   const candidates: QueueCandidate[] = [];
   const frontierStates: number[] = [];
@@ -5373,26 +5382,34 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     state.comparisons.set(other.id, order);
     return order;
   };
-  // Pair-specific priorities can be non-transitive. A heap is valid only when
-  // these cohort guards reduce the existing comparator to scalar ordering.
+  // Different held/date prefixes are already scalar. Within each tied cohort,
+  // guard the pair-specific inner comparator before using the existing heap.
   const pendingGuards = new Set<QueueCandidate>();
-  const scores = new Map<number, number>();
-  const machines = new Map<string, number>();
-  let unsafeCandidates = 0;
-  let nonIdleCandidates = 0;
+  const cohorts = new Map<string, HeapCohort>();
+  let badCohorts = 0;
+  const cohortIsBad = (cohort: HeapCohort) => cohort.size > 1 &&
+    (cohort.unsafe > 0 || cohort.machines.size !== cohort.size ||
+      (cohort.scores.size > 1 && cohort.nonIdle > 0 && cohort.nonDefaultMode > 0));
   const removeGuard = (candidate: QueueCandidate | undefined) => {
     if (!candidate) return;
     pendingGuards.delete(candidate);
     const guard = candidate.heapGuard;
     if (!guard) return;
-    const scoreCount = scores.get(guard.score)! - 1;
-    if (scoreCount) scores.set(guard.score, scoreCount);
-    else scores.delete(guard.score);
-    const machineCount = machines.get(guard.machine)! - 1;
-    if (machineCount) machines.set(guard.machine, machineCount);
-    else machines.delete(guard.machine);
-    unsafeCandidates -= Number(guard.unsafe);
-    nonIdleCandidates -= Number(!guard.idle);
+    candidate.heapGuard = undefined;
+    const cohort = guard.cohort;
+    badCohorts -= Number(cohortIsBad(cohort));
+    const scoreCount = cohort.scores.get(guard.score)! - 1;
+    if (scoreCount) cohort.scores.set(guard.score, scoreCount);
+    else cohort.scores.delete(guard.score);
+    const machineCount = cohort.machines.get(guard.machine)! - 1;
+    if (machineCount) cohort.machines.set(guard.machine, machineCount);
+    else cohort.machines.delete(guard.machine);
+    cohort.unsafe -= Number(guard.unsafe);
+    cohort.nonIdle -= Number(!guard.idle);
+    cohort.nonDefaultMode -= Number(!guard.defaultMode);
+    cohort.size -= 1;
+    if (!cohort.size) cohorts.delete(cohort.key);
+    badCohorts += Number(cohortIsBad(cohort));
   };
   const heapEligible = () => {
     if (!activeSimulationResources || !activePlanningKernel) return false;
@@ -5401,24 +5418,36 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     for (const candidate of pendingGuards)
       if (!normalizedRowCache.has(candidate.row)) return false;
     for (const candidate of pendingGuards) {
+      const key = Number(candidateHeld(candidate)) + "," + candidateDate(candidate);
+      const cohort = cohorts.get(key) ?? {
+        key, size: 0, scores: new Map<number, number>(), machines: new Map<string, number>(),
+        unsafe: 0, nonIdle: 0, nonDefaultMode: 0,
+      };
       const row = candidate.row;
       const before = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
       const guard = {
+        cohort,
         score: safeNumber(rowValue(row, "plannerPriorityScore")),
         idle: priorityQueueState(row) === "idle",
+        defaultMode: priorityApprovalMode(row) === "idle_queue_only",
         machine: canonicalKey(rowText(row, "machine", "machineNo")),
         unsafe: (Array.isArray(before) && before.length > 0) || !Number.isFinite(Number(rowText(row, "setupNo"))),
       };
       candidate.heapGuard = guard;
-      scores.set(guard.score, (scores.get(guard.score) ?? 0) + 1);
-      machines.set(guard.machine, (machines.get(guard.machine) ?? 0) + 1);
-      unsafeCandidates += Number(guard.unsafe);
-      nonIdleCandidates += Number(!guard.idle);
+      badCohorts -= Number(cohortIsBad(cohort));
+      cohort.size += 1;
+      cohort.scores.set(guard.score, (cohort.scores.get(guard.score) ?? 0) + 1);
+      cohort.machines.set(guard.machine, (cohort.machines.get(guard.machine) ?? 0) + 1);
+      cohort.unsafe += Number(guard.unsafe);
+      cohort.nonIdle += Number(!guard.idle);
+      cohort.nonDefaultMode += Number(!guard.defaultMode);
+      badCohorts += Number(cohortIsBad(cohort));
+      cohorts.set(key, cohort);
     }
     pendingGuards.clear();
-    // All-idle cohorts allow every unequal-score preemption, so priority is
-    // also scalar there. Equal scores disable preemption for every lifecycle.
-    return !unsafeCandidates && (scores.size === 1 || !nonIdleCandidates) && machines.size === candidates.length;
+    // Singletons need no inner proof. Tied cohorts require equal scores, all
+    // idle rows, or default approval modes, plus empty lists/distinct machines.
+    return badCohorts === 0;
   };
   const heap: QueueCandidate[] = [];
   let heapActive = false;
@@ -5505,8 +5534,10 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     // Remove affected heads while their OLD row/tooling state still holds.
     // This leaves a valid heap of unchanged candidates before slot updates.
     for (const row of changedToolingRows) changedQueues.add(queueByRow.get(row)!);
-    if (heapActive)
-      for (const item of changedQueues) heapRemove(candidates[item.candidateIndex]);
+    for (const item of changedQueues) {
+      if (heapActive) heapRemove(candidates[item.candidateIndex]);
+      removeGuard(candidates[item.candidateIndex]);
+    }
     const replacements: QueueCandidate[] = [];
     for (const row of changedToolingRows) {
       // Slot changes affect queue readiness; lifecycle and priority facts remain
@@ -5543,7 +5574,6 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         state: transition.state,
         remainingState: transition.remainingState,
       };
-      removeGuard(candidates[item.candidateIndex]);
       pendingGuards.add(candidate);
       replacements.push(candidate);
       candidates[item.candidateIndex] = candidate;
