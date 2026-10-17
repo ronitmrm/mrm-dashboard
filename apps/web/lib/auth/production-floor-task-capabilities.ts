@@ -158,6 +158,8 @@ const directMutationTasks = {
   "mark-complete": "job_card_completion",
   "plan-override": "plan_override",
   "setup-reopen": "plan_override",
+  "setup-release": "plan_override",
+  "raw-material-short-accept": "plan_override",
   "production-session-efficiency-flag-close": "planner_workflow_resolution",
   "planner-priority": "planner_priority",
   "raw-material-rejection": "raw_material_rejection",

@@ -126,6 +126,11 @@ Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job 
 
 Choosing **Item Complete** closes the Production Session and marks that machine's
 active setup Item Complete in the same transaction, which releases the machine.
+Every setup requires full usable RM receipt or a Planner's explicit short-RM
+acceptance on its Job Card before Item Complete can be saved, including corrections
+and other setup-completion entry paths. See Job Cards → RM review and short receipt
+acceptance. Manual Stop records output without completing the setup; the Planner's
+Release machine action can then release only the selected assignment awaiting input.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.

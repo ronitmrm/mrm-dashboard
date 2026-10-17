@@ -268,6 +268,33 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 ## Material Yield
 
+### RM review and short receipt acceptance
+
+Planning Control shows one RM row per active Job Card with required kilograms,
+total received kilograms, rejected kilograms where applicable, and pending usable
+balance. Receipts update the same row; full usable receipt removes it automatically.
+An unknown requirement is shown as missing Blank Piece Weight, never as complete.
+The Job Card's RM tab shows its material specification, totals and receipt ledger.
+
+Item Complete on any setup requires full usable RM receipt or an explicit Planner
+**Accept short RM** decision with a reason. Acceptance retains the person, time and
+reviewed material balance; it changes neither receipts nor original order quantity.
+It remains visible as accepted while RM is short. A higher required quantity or a
+reduced usable balance requires review again. Releasing a machine is not acceptance.
+
+### Release a setup awaiting material
+
+After closing its Production Session with actual output, the Planner may select
+**Release machine — awaiting material** for one setup/machine assignment. The
+setup returns to Planned, inactive, preserving all production and the outstanding
+quantity. Only that assignment releases its machine; other running setups continue.
+Setup 1 waits for additional usable RM; later setups wait for additional recorded
+good output from their preceding route operation. A material receipt alone does
+not release a downstream WIP wait. When the required input increases, remaining
+work returns to normal planning and readiness checks. No future receipt date is
+invented. Original setup targets remain unchanged; actual output reduces remaining
+work. A running downstream setup may retain its machine while waiting for WIP.
+
 Required RM (kg) is ordered pieces × Product Master Blank Piece Weight (grams)
 ÷ 1,000. For example, 10,000 pieces × 15 grams requires 150 kg. The Work Order
 template's ordered kilograms represent approximate finished-goods weight, not

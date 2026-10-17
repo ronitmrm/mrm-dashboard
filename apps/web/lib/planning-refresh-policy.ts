@@ -7,6 +7,8 @@ const autoRefreshActionPaths = new Set([
   "machine-constraint-review",
   "plan-override",
   "setup-reopen",
+  "setup-release",
+  "raw-material-short-accept",
   "quality-parameter-set",
   "raw-material-rejection",
   "work-order-cancellation",
