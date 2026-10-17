@@ -3981,7 +3981,13 @@ function initializeMachinePlanDetails(
 }
 
 function machinePlanDetails(...args: Parameters<typeof initializeMachinePlanDetails>) {
-  const [workOrders, , , routeGroups, , , toolingAvailability, machineRows, , , , previousAssignments, planningCalendar] = args;
+  const [workOrders, , , routeGroups, , , toolingAvailability, machineRows, , , , previousAssignments, planningCalendar, simulation] = args;
+  if (simulation) {
+    // Forecasts have no publication baseline and continually add protected plans.
+    // Use the same solve without fingerprinting or caching the complete state.
+    const prepared = initializeMachinePlanDetails(...args);
+    return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows, prepared.machineUnavailableWindows, toolingAvailability, false);
+  }
   // Automatic output is deliberately absent from the identity of source facts.
   // It still participates in every actual solve, including manual recovery.
   const sourceArgs: Parameters<typeof initializeMachinePlanDetails> = [...args];
@@ -4048,8 +4054,9 @@ function finalizeMachinePlanDetails(
   machineRows: Array<Record<string, unknown>>,
   machineUnavailableWindows: MachineUnavailableWindow[],
   toolingAvailability: Array<Record<string, unknown>>,
+  reuseFinalizedPlan = true,
 ) {
-  const finalizedDetails = finalizeMachineAndSetupSchedule(
+  const finalizedDetails = (reuseFinalizedPlan ? finalizeMachineAndSetupSchedule : calculateFinalizedMachineAndSetupSchedule)(
     details,
     planningCalendar,
     machineRows,
