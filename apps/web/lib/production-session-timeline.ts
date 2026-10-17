@@ -1,3 +1,5 @@
+import { formatIstDateTime } from "./date-time"
+
 export const productionSessionEndReasons = [
   { label: "Shift Ends", value: "shift_end" },
   { label: "Shift Change", value: "shift_change" },
@@ -15,5 +17,9 @@ export function sessionTimelineDetail(row: Record<string, unknown>) {
       ?? reason.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
     return `End reason: ${label}`
   }
-  return value("reasonName") || value("eventDetails") || "-"
+  const detail = value("reasonName") || value("eventDetails") || "-"
+  if (value("eventType") === "downtime") {
+    return `${detail} · ${value("endedAt") ? `End: ${formatIstDateTime(value("endedAt"))} IST` : "Ongoing"}`
+  }
+  return detail
 }

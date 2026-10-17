@@ -2563,7 +2563,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [input.sessionId, endedAt.toISOString()]
         )
         if (laterDowntime.rows[0]) {
-          throw new Error("Session end cannot be before its downtime entries.")
+          throw new ShopFloorConflictError("Session end cannot be before its downtime entries. Review the session timeline.")
         }
         const rejection = await client.query<{
           quantity: string

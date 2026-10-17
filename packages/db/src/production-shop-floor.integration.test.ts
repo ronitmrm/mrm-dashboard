@@ -9,7 +9,7 @@ import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
-import { createProductionShopFloorRepository } from "./production-shop-floor"
+import { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
 import { createQualityRepository } from "./quality"
 import { createRejectionRepository } from "./rejections"
 
@@ -747,6 +747,10 @@ describe("production and shop-floor workflows", () => {
       sessionId: first.id,
       startedAt: "2026-08-15T07:00:00+05:30",
     })
+    await expect(repository.closeProductionSession({
+      endCount: 10_850, endedAt: "2026-08-15T07:00:00+05:30",
+      endReason: "shift_end", organizationId, sessionId: first.id,
+    })).rejects.toBeInstanceOf(ShopFloorConflictError)
     await repository.recordProductionSessionRejection({
       enteredRole: "quality",
       organizationId,
