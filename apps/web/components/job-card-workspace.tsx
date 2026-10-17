@@ -1,6 +1,6 @@
 "use client"
 
-import { MetricSummary } from "@/components/ui/golden-patterns"
+import { MetricSummary, RecordDetails } from "@/components/ui/golden-patterns"
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
@@ -36,11 +36,12 @@ type Workspace = {
   setups?: Row[]
   setupTimings?: Row[]
 }
-type TabKey = "overview" | "masters" | "setup" | "setup-production" | "production" | "rejection" | "downtime" | "delivery" | "log"
+type TabKey = "rm" | "overview" | "masters" | "setup" | "setup-production" | "production" | "rejection" | "downtime" | "delivery" | "log"
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "masters", label: "Masters" },
+  { key: "rm", label: "RM" },
   { key: "setup", label: "Setup" },
   { key: "setup-production", label: "Setup Production" },
   { key: "production", label: "Production" },
@@ -375,6 +376,22 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
    ]}
  /><div className="grid gap-4 xl:grid-cols-2"><SectionCard><CardHeader><CardTitle>By Reason</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeByReason)} /></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>By Setup</CardTitle></CardHeader><CardContent><PatternBars emptyText="No downtime recorded." rows={list(analytics.downtimeBySetup)} /></CardContent></SectionCard></div><SectionCard><CardHeader><CardTitle>Downtime Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No downtime entries recorded." rows={downtimeEvents} /></CardContent></SectionCard></section> : null}
 
+
+      {activeTab === "rm" ? <section className="grid gap-4">
+        <SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM uses ordered pieces and Product Master Blank Piece Weight.</CardDescription></CardHeader>
+          <CardContent><RecordDetails items={[
+            { label: "Material / Grade", value: display(jobCard.materialGrade) },
+            { label: "Rod Type / Size", value: [display(jobCard.rodType), display(jobCard.rodSize)].join(" / ") },
+            { label: "Required RM", value: material.requiredKg == null ? "Blank piece weight required" : quantity(material.requiredKg, 3) + " kg" },
+            { label: "Received RM", value: quantity(material.receivedKg, 3) + " kg" },
+            { label: "Rejected RM", value: quantity(material.rejectedKg, 3) + " kg" },
+            { label: "Pending RM", value: material.pendingKg == null ? "Blank piece weight required" : quantity(material.pendingKg, 3) + " kg" },
+            { label: "RM Status", value: material.shortAccepted ? "Short RM accepted by planner" : material.pendingKg == null ? "Requirement unavailable" : number(material.pendingKg) > 0.000001 ? "Balance awaited" : "Fully received" },
+          ]} /></CardContent>
+        </SectionCard>
+        <SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
+      </section> : null}
+
  {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary
    scope="Current Job Card · Delivery Rating"
    items={[
@@ -403,7 +420,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
        tone: "information",
      },
    ]}
- /><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Closed Fridays and holidays follow the Universal Planning Calendar.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard><SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Delivery timing starts when cumulative receipts reach required RM kilograms.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard></section> : null}
+ /><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Closed Fridays and holidays follow the Universal Planning Calendar.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard></section> : null}
 
  {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} /></CardContent></SectionCard> : null}
     </> : null}

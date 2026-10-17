@@ -1,5 +1,6 @@
 import { assertToolingAvailable } from "./tooling-availability"
 import { randomUUID } from "node:crypto"
+import { materialWaitPending, readJobCardMaterialBalances } from "./production-material"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
 import type { PoolClient } from "pg"
@@ -1056,6 +1057,43 @@ async function lockProductionSessionMachine(
   )
 }
 
+async function assertMaterialCompletion(client: PoolClient, organizationId: string, workOrderId: string) {
+  await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE", [workOrderId, organizationId])
+  const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
+  if (!material || material.requiredKg === null) {
+    throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before marking Item Complete.")
+  }
+  if (Number(material.pendingKg) > 0.000001 && !material.shortAccepted) {
+    throw new ShopFloorConflictError(`RM is pending for ${material.jobCardNumber}. Receive the balance or ask the planner to Accept short RM before marking any setup Item Complete.`)
+  }
+}
+
+async function upstreamGoodForSetup(client: Pick<PoolClient, "query">, workOrderId: string, setupId: string) {
+  const result = await client.query<{ id: string; good: string }>(`SELECT previous.id,
+      COALESCE((SELECT sum(quantity_good) FROM manufacturing.production_entries
+        WHERE work_order_id = $1 AND operation_setup_id = previous.id AND reversed_at IS NULL), 0)::text AS good
+    FROM manufacturing.operation_setups current_setup
+    JOIN manufacturing.operation_setups previous ON previous.route_option_id = current_setup.route_option_id
+      AND previous.sequence < current_setup.sequence AND previous.active
+    WHERE current_setup.id = $2 ORDER BY previous.sequence DESC LIMIT 1`, [workOrderId, setupId])
+  return result.rows[0]
+}
+
+async function assertSetupMaterialWait(client: PoolClient, organizationId: string, workOrderId: string, setupId: string, machineId: string) {
+  const waits = await client.query<{ source_payload: Record<string, unknown> }>(`SELECT source_payload
+    FROM manufacturing.shop_floor_setup_state WHERE work_order_id = $1 AND operation_setup_id = $2
+      AND stage = 'planned' AND source_payload ? 'awaitingMaterial'
+      AND NOT EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state running
+        WHERE running.work_order_id = $1 AND running.operation_setup_id = $2
+          AND running.machine_id = $3 AND running.active)`, [workOrderId, setupId, machineId])
+  if (!waits.rows.length) return
+  const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
+  const upstream = await upstreamGoodForSetup(client, workOrderId, setupId)
+  if (waits.rows.some(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0)))) {
+    throw new ShopFloorConflictError("This setup was released awaiting material. Record more RM or upstream good output before starting it again.")
+  }
+}
+
 async function completeProductionSessionSetup(
   client: PoolClient,
   input: {
@@ -1067,6 +1105,8 @@ async function completeProductionSessionSetup(
     sourcePayload: Record<string, unknown>
   }
 ) {
+  const session = await client.query<{ work_order_id: string }>("SELECT work_order_id FROM manufacturing.production_sessions WHERE id = $1 AND organization_id = $2", [input.sessionId, input.organizationId])
+  if (!session.rows[0]) throw new Error("Production session was not found.")
   const result = await client.query<{
     id: string
     machine_id: string
@@ -1095,10 +1135,11 @@ async function completeProductionSessionSetup(
     [input.sessionId, input.organizationId]
   )
   const state = result.rows[0]
-  if (!state) return
-  if (input.correctionReason && state.superseded) {
+  if (input.correctionReason && state?.superseded) {
     throw new Error("This setup has later activity. Complete its latest production session instead.")
   }
+  await assertMaterialCompletion(client, input.organizationId, session.rows[0].work_order_id)
+  if (!state) return
   const completionPayload = {
     ...input.sourcePayload, ...state.context,
     stage: "item_complete", completedAt: input.endedAt.toISOString(),
@@ -1439,6 +1480,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             "The machinist must finish setup and start the machine before a production session can begin."
           )
         }
+        await assertSetupMaterialWait(client, input.organizationId, workOrder.work_order_id, setupId, machineId)
         await assertEarlyDownstreamWip(client, {
           workOrderId: workOrder.work_order_id,
           operationSetupId: setupId,
@@ -3897,6 +3939,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         receiptsResult.rows,
         calculateRequiredRawMaterialKg(Number(jobCard.orderedQuantity ?? 0), blankPieceWeightGrams)
       )
+      const [materialBalance] = await readJobCardMaterialBalances(pool, input.organizationId, undefined, String(jobCard.id))
       const setupTimings = setupTimingsResult.rows.map((row) => ({
         ...row,
         ...buildSetupTiming({
@@ -4075,6 +4118,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         material: {
           ...material,
           ...materialYield,
+          rejectedKg: materialBalance?.rejectedKg ?? 0,
+          usableKg: materialBalance?.usableKg ?? material.receivedKg,
+          pendingKg: materialBalance?.pendingKg ?? null,
+          shortAccepted: materialBalance?.shortAccepted ?? false,
+          acceptance: materialBalance?.acceptance ?? null,
         },
         sessionCount: sessionsResult.rows.length,
         setupTimings,
@@ -4845,6 +4893,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
+        if (stage === "item_complete") await assertMaterialCompletion(client, input.organizationId, workOrder.work_order_id)
+        if (stageIsActive(stage)) await assertSetupMaterialWait(client, input.organizationId, workOrder.work_order_id, setupId, machineId)
         if (stage === "operator_started") {
           await assertEarlyDownstreamWip(client, {
             workOrderId: workOrder.work_order_id,
@@ -5183,6 +5233,118 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
+      const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
+      return { rows: rows.filter(row => row.requiredKg === null || Number(row.pendingKg) > 0.000001) }
+    },
+
+    async acceptShortRawMaterial(input: {
+      organizationId: string; actorUserId?: string | null; productionFloorCode: string
+      jobCardNumber: string; expectedRowVersion: number; reason: string
+    }) {
+      const reason = requiredText(input.reason, "Acceptance reason")
+      return transaction(pool, async client => {
+        const order = await workOrderContext(client, input.organizationId, input.jobCardNumber, input.productionFloorCode)
+        const [material] = await readJobCardMaterialBalances(client, input.organizationId, input.productionFloorCode, order.work_order_id)
+        if (!material || material.rowVersion !== input.expectedRowVersion) throw new ShopFloorConflictError("Job Card changed. Refresh and review the current RM balance.")
+        if (material.requiredKg === null) throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before accepting short RM.")
+        if (!(Number(material.pendingKg) > 0.000001)) throw new ShopFloorConflictError("Full RM is already received. Refresh the RM balance.")
+        const acceptance = { requiredKg: material.requiredKg, usableKg: material.usableKg,
+          acceptedAt: new Date().toISOString(), acceptedBy: input.actorUserId ?? null, reason }
+        await client.query(`UPDATE manufacturing.work_orders
+          SET source_payload = COALESCE(source_payload, '{}'::jsonb) || jsonb_build_object('rmShortAcceptance', $1::jsonb),
+            updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
+        [JSON.stringify(acceptance), input.actorUserId ?? null, order.work_order_id])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+          target_id, actor_user_id, reason, before_state, after_state, source_system, source_table, source_id)
+          VALUES ($1, 'production.rm_short.accepted', 'manufacturing', 'work_orders', $2, $3, $4, $5, $6,
+            'mrm-dashboard', 'rm_short_acceptance', $7)`,
+        [input.organizationId, order.work_order_id, input.actorUserId ?? null, reason, material, acceptance, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { ok: true, jobCardNumber: input.jobCardNumber }
+      })
+    },
+
+    async readReleasableSetups(input: { organizationId: string; productionFloorCode: string }) {
+      const result = await pool.query<{
+        id: string; rowVersion: string; jobCardNumber: string; partCode: string
+        optionNumber: string; setupNumber: number; machineNumber: string; openSessionId: string | null
+      }>(`SELECT state.id, state.row_version::text AS "rowVersion", work_order.job_card_number AS "jobCardNumber",
+          item.uid AS "partCode", route.route_code AS "optionNumber", setup.setup_number AS "setupNumber",
+          machine.machine_number AS "machineNumber", session.id AS "openSessionId"
+        FROM manufacturing.shop_floor_setup_state state
+        JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+        JOIN catalog.items item ON item.id = work_order.item_id
+        JOIN manufacturing.route_options route ON route.id = state.route_option_id
+        JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+        JOIN catalog.machines machine ON machine.id = state.machine_id
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        LEFT JOIN manufacturing.production_sessions session ON session.work_order_id = state.work_order_id
+          AND session.operation_setup_id = state.operation_setup_id AND session.machine_id = state.machine_id
+          AND session.status = 'open' AND session.reversed_at IS NULL
+        WHERE state.organization_id = $1 AND floor.code = $2 AND state.active
+          AND state.stage <> 'item_complete' AND work_order.status <> 'Cancelled'
+        ORDER BY work_order.job_card_number, setup.sequence, machine.machine_number`, [input.organizationId, input.productionFloorCode])
+      return { rows: result.rows }
+    },
+
+    async releaseSetupAwaitingMaterial(input: {
+      organizationId: string; actorUserId?: string | null; productionFloorCode: string
+      setupStateId: string; expectedRowVersion: number; reason: string
+    }) {
+      const reason = requiredText(input.reason, "Release reason")
+      return transaction(pool, async client => {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(state.machine_id::text))
+          FROM manufacturing.shop_floor_setup_state state WHERE state.id = $1 AND state.organization_id = $2`, [input.setupStateId, input.organizationId])
+        const result = await client.query<{
+          id: string; machine_id: string; work_order_id: string; operation_setup_id: string
+          route_option_id: string; stage: string; active: boolean; row_version: string
+          source_payload: Record<string, unknown>; snapshot: Record<string, unknown>; context: Record<string, unknown>
+        }>(`SELECT state.*, to_jsonb(state) AS snapshot,
+            jsonb_build_object('jcNo', work_order.job_card_number, 'partCode', item.uid,
+              'optionNumber', route.route_code, 'setupNo', setup.setup_number::text, 'machine', machine.machine_number,
+              'productionFloorCode', floor.code) AS context
+          FROM manufacturing.shop_floor_setup_state state
+          JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+          JOIN catalog.items item ON item.id = work_order.item_id
+          JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+          JOIN manufacturing.route_options route ON route.id = state.route_option_id
+          JOIN catalog.machines machine ON machine.id = state.machine_id
+          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+          WHERE state.id = $1 AND state.organization_id = $2 AND floor.code = $3 FOR UPDATE OF state`,
+        [input.setupStateId, input.organizationId, input.productionFloorCode])
+        const state = result.rows[0]
+        if (!state || !state.active || state.stage === "item_complete" || Number(state.row_version) !== input.expectedRowVersion) {
+          throw new ShopFloorConflictError("Setup changed. Refresh and select its current machine assignment.")
+        }
+        const order = await workOrderContext(client, input.organizationId, String(state.context.jcNo), input.productionFloorCode)
+        if (order.route_option_id !== state.route_option_id) throw new ShopFloorConflictError("The selected setup belongs to an earlier route. Refresh the assignments.")
+        const session = await client.query(`SELECT id FROM manufacturing.production_sessions
+          WHERE work_order_id = $1 AND operation_setup_id = $2 AND machine_id = $3
+            AND status = 'open' AND reversed_at IS NULL`, [state.work_order_id, state.operation_setup_id, state.machine_id])
+        if (session.rows.length) throw new ShopFloorConflictError("Close the Production Session with Manual Stop and record its output before releasing this machine.")
+        const upstream = await upstreamGoodForSetup(client, state.work_order_id, state.operation_setup_id)
+        const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
+        const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
+          actionType: "Release machine", releasedAt: new Date().toISOString(), reason,
+          awaitingMaterial: { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
+        await client.query(`UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false,
+          completed_at = NULL, source_payload = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
+        [payload, input.actorUserId ?? null, state.id])
+        await client.query(`INSERT INTO manufacturing.shop_floor_stage_events
+          (organization_id, setup_state_id, from_stage, to_stage, machine_id, actor_user_id, reason, source_system, source_table, source_id, source_payload)
+          VALUES ($1, $2, $3, 'planned', $4, $5, $6, 'mrm-dashboard', 'shop_floor_status', $7, $8)`,
+        [input.organizationId, state.id, state.stage, state.machine_id, input.actorUserId ?? null, reason, randomUUID(), payload])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+          target_id, actor_user_id, reason, before_state, after_state, source_system, source_table, source_id)
+          VALUES ($1, 'production.setup.released_awaiting_material', 'manufacturing', 'shop_floor_setup_state',
+            $2, $3, $4, $5, $6, 'mrm-dashboard', 'setup_release', $7)`,
+        [input.organizationId, state.id, input.actorUserId ?? null, reason, state.snapshot, payload, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: state.id, stage: "planned" as const }
+      })
+    },
+
     async readCompletedSetups(input: {
       organizationId: string
       productionFloorCode: string
@@ -5394,6 +5556,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!workOrder.route_option_id) {
           throw new Error("Select a route before completing a setup.")
         }
+        await assertMaterialCompletion(client, input.organizationId, workOrder.work_order_id)
         let setupId = await operationSetupForCode(
           client,
           workOrder.route_option_id,

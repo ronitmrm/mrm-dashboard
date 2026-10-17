@@ -32,6 +32,7 @@ import {
 import { operationalEntryCapability } from "../../../lib/auth/operational-entry-capabilities"
 import { masterRecordCapability } from "../../../lib/auth/master-record-access"
 import { hasProductionFloorTaskCapability, productionFloorTaskCapabilities } from "../../../lib/auth/production-floor-task-capabilities"
+import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
@@ -927,6 +928,15 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "raw-material-review" || path === "setup-release") {
+      const floor = requiredProductionFloor(search.get("floor"))
+      return json(await withProductionRepository(request,
+        path === "setup-release" ? productionFloorTaskCapabilities[floor].plan_override : productionFloorPageCapabilities[floor].planningControlTab,
+        async ({ organizationId, repository }) => path === "setup-release"
+          ? repository.readReleasableSetups({ organizationId, productionFloorCode: floor })
+          : repository.readRawMaterialReviews({ organizationId, productionFloorCode: floor })))
+    }
+
     if (path === "setup-reopen") {
       const floor = requiredProductionFloor(search.get("floor"))
       return json(await withProductionRepository(request,
@@ -1351,6 +1361,21 @@ async function post(request: NextRequest, context: RouteContext) {
           rowsUpdated: 1,
         })
       )
+    }
+
+    if (path === "raw-material-short-accept" || path === "setup-release") {
+      const result = await withProductionRepository(request, "planning.override.write",
+        async ({ actorUserId, organizationId, repository }) => path === "setup-release"
+          ? repository.releaseSetupAwaitingMaterial({ actorUserId, organizationId,
+            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+            setupStateId: requiredDashboardText(body.setupStateId, "Setup"),
+            expectedRowVersion: numeric(body.expectedRowVersion), reason: text(body.reason) })
+          : repository.acceptShortRawMaterial({ actorUserId, organizationId,
+            productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+            jobCardNumber: requiredDashboardText(body.jobCardNumber, "Job Card"),
+            expectedRowVersion: numeric(body.expectedRowVersion), reason: text(body.reason) }))
+      return json(await withPlanningRefresh(request, path, body, { ...result, rowsUpdated: 1,
+        message: path === "setup-release" ? "Machine released. Remaining work waits for more RM or WIP." : "Short RM accepted. Item Complete is allowed for this Job Card." }))
     }
 
     if (path === "production-session-efficiency-flag-close") {
@@ -2666,6 +2691,9 @@ const knownDashboardApiPaths = new Set([
   "mark-complete",
   "plan-override",
   "setup-reopen",
+  "setup-release",
+  "raw-material-review",
+  "raw-material-short-accept",
   "production-session-efficiency-flag-close",
   "planner-priority",
   "raw-material-rejection",

@@ -19,6 +19,12 @@ describe("production floor task capabilities", () => {
   })
 
   it("resolves direct dashboard actions to the exact floor task", () => {
+    expect(productionFloorTaskForMutation("setup-release", { productionFloorCode: "cnc" })).toMatchObject({
+      capability: "operations.floors.cnc.planner_actions.plan_override.write", legacyCapability: "planning.override.write",
+    })
+    expect(productionFloorTaskForMutation("raw-material-short-accept", { productionFloorCode: "cnc" })).toMatchObject({
+      capability: "operations.floors.cnc.planner_actions.plan_override.write", legacyCapability: "planning.override.write",
+    })
     expect(productionFloorTaskForMutation("production-session-efficiency-flag-close", {
       productionFloorCode: "cnc",
     })).toMatchObject({
