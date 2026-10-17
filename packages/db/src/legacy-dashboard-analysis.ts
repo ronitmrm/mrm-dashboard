@@ -4162,14 +4162,11 @@ function finalizeMachinePlanDetails(
   reuseFinalizedPlan = true,
   simulationJobs?: ReadonlySet<string>,
 ) {
-  const finalizedDetails = (reuseFinalizedPlan ? finalizeMachineAndSetupSchedule : calculateFinalizedMachineAndSetupSchedule)(
-    details,
-    planningCalendar,
-    machineRows,
-    machineUnavailableWindows,
-  );
+  const finalizedDetails = reuseFinalizedPlan
+    ? finalizeMachineAndSetupSchedule(details, planningCalendar, machineRows, machineUnavailableWindows)
+    : calculateFinalizedMachineAndSetupSchedule(details, planningCalendar, machineRows, machineUnavailableWindows, simulationJobs);
   applyToolingTaskReadiness(finalizedDetails, toolingAvailability);
-  applyMachineActiveTaskReadiness(finalizedDetails);
+  applyMachineActiveTaskReadiness(finalizedDetails, simulationJobs);
   for (const row of finalizedDetails) {
     const meta = planningMeta(row);
     if (meta.simulationReservation) continue;
@@ -4253,7 +4250,7 @@ function shopFloorTaskReadiness(previousOperationReady: boolean, plannedStartDat
 
 const machineActiveTaskBlockerPrefix = "Machine has active setup";
 
-function applyMachineActiveTaskReadiness(rows: Array<Record<string, unknown>>) {
+function applyMachineActiveTaskReadiness(rows: Array<Record<string, unknown>>, simulationJobs?: ReadonlySet<string>) {
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of rows) {
     const machine = rowText(row, "machine");
@@ -4264,6 +4261,16 @@ function applyMachineActiveTaskReadiness(rows: Array<Record<string, unknown>>) {
   }
 
   for (const machineRows of byMachine.values()) {
+    // Only unreturned protected groups can omit this final blocker decoration.
+    // Keep cold/nested fallback lookups on their original execution path.
+    if (simulationJobs?.size && machineRows.every(row =>
+      planningMeta(row).simulationReservation && normalizedRowCache.has(row) &&
+      !simulationJobs.has(rowText(row, "jcNo")) && ![
+        row.queueBeforeSetups || row.priorityQueueBeforeSetups,
+        row.interruptedSetups || row.priorityInterruptedSetups,
+        row.planOverrideInterruptedSetups || row.interruptedSetups,
+        row.machineUnavailableQueueBeforeSetups,
+      ].some(raw => Array.isArray(raw) && raw.length))) continue;
     let activeRow: Record<string, unknown> | undefined;
     const sortedRows = [...machineRows].sort(machineQueueSort);
     for (const row of sortedRows) {
@@ -4337,9 +4344,11 @@ function calculateFinalizedMachineAndSetupSchedule(
   planningCalendar: PlanningCalendar,
   machineRows: Array<Record<string, unknown>>,
   machineUnavailableWindows: MachineUnavailableWindow[],
+  simulationJobs?: ReadonlySet<string>,
 ) {
   const previousKernel = activePlanningKernel;
   activePlanningKernel = createIncrementalPlanningKernel();
+  activePlanningKernel.simulationJobs = simulationJobs;
   try {
     return calculateIncrementalFinalizedMachineAndSetupSchedule(
       details,
@@ -4527,7 +4536,7 @@ function settleMachineAndSetupSchedule(
   const maximumGapBalancePasses = Math.max(50, details.length);
   for (let iteration = 0; iteration < maximumGapBalancePasses; iteration += 1) {
     refreshSetupDependencyReadyDates(details, planningCalendar);
-    rescheduleMachineQueues(details, planningCalendar);
+    rescheduleMachineQueues(details, planningCalendar, machineRows);
     if (revertInvalidFamilyIdleGapMoves(details, machineUnavailableWindows)) {
       previousSignature = "";
       continue;
@@ -4543,10 +4552,10 @@ function settleMachineAndSetupSchedule(
     previousSignature = signature;
   }
   refreshSetupDependencyReadyDates(details, planningCalendar);
-  rescheduleMachineQueues(details, planningCalendar);
+  rescheduleMachineQueues(details, planningCalendar, machineRows);
   revertInvalidFamilyIdleGapMoves(details, machineUnavailableWindows);
   refreshSetupDependencyReadyDates(details, planningCalendar);
-  rescheduleMachineQueues(details, planningCalendar);
+  rescheduleMachineQueues(details, planningCalendar, machineRows);
   return details;
 }
 
@@ -5132,7 +5141,41 @@ function protectedQueueSortKey(rows: Array<Record<string, unknown>>) {
   return JSON.stringify(states);
 }
 
-function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar) {
+function independentSimulationFocusMachines(details: Array<Record<string, unknown>>, machineRows: Array<Record<string, unknown>> | undefined) {
+  // Only filtered simulation callers may leave private reservation tooling dates unfinished.
+  const jobs = activePlanningKernel?.simulationJobs;
+  if (!activeSimulationResources || !jobs?.size || !machineRows) return undefined;
+  // No guard lookup may capture a detail row's first fallback map.
+  if (!details.every((row) => normalizedRowCache.has(row))) return undefined;
+  const jobKeys = new Set([...jobs].map(canonicalKey));
+  const seen = new Set<Record<string, unknown>>();
+  const focus = new Set<string>();
+  let dynamicRows = 0;
+  for (const row of details) {
+    if (seen.has(row)) return undefined;
+    seen.add(row);
+    const meta = planningMeta(row);
+    const job = canonicalKey(rowText(row, "jcNo"));
+    if (meta.simulationReservation && jobKeys.has(job)) return undefined;
+    const gapMove = rowText(row, "machineAssignment") === "Family idle gap balance";
+    if (meta.simulationReservation && meta.assignmentLocked && !gapMove) continue;
+    const family = rowText(row, "routeMachine");
+    const assigned = canonicalKey(rowText(row, "machine"));
+    if (!family || !assigned || (!meta.simulationReservation && !jobs.has(rowText(row, "jcNo")))) return undefined;
+    const compatible = activePhysicalMachineRows(family, rowText(row, "machineType"), machineRows);
+    const keys = new Set(compatible.map((machine) => canonicalKey(machine.machine)));
+    // Initial actual/locked/delay/interruption exceptions must resolve inside
+    // this complete physical footprint; otherwise retain the canonical pass.
+    if (!keys.has(assigned)) return undefined;
+    const actual = canonicalKey(meta.productionActual?.machine ?? "");
+    const previous = gapMove ? canonicalKey(rowText(row, "familyIdleGapFromMachine")) : "";
+    if ((actual && !keys.has(actual)) || (gapMove && (!previous || !keys.has(previous)))) return undefined;
+    for (const key of keys) focus.add(key);
+    if (!meta.simulationReservation) dynamicRows += 1;
+  }
+  return dynamicRows ? focus : undefined;
+}
+function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows?: Array<Record<string, unknown>>) {
   applyPriorityInterruptionQuantities(details);
   applyPlanOverrideInterruptionQuantities(details);
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
@@ -5454,7 +5497,11 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   };
   let suffixPrepared = false;
   let suffixTracking: ReturnType<typeof prepareSuffix>;
+  let projectionAttempted = false;
+  let projectionStarted = false;
   while (changedQueues.size || candidates.length) {
+    const afterFirstPop = projectionStarted;
+    projectionStarted = true;
     // Remove affected heads while their OLD row/tooling state still holds.
     // This leaves a valid heap of unchanged candidates before slot updates.
     for (const row of changedToolingRows) changedQueues.add(queueByRow.get(row)!);
@@ -5503,6 +5550,50 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
     }
     changedQueues.clear();
+    if (!projectionAttempted && afterFirstPop) {
+      projectionAttempted = true;
+      const focus = independentSimulationFocusMachines(details, machineRows);
+      if (focus) {
+        const queueMachines = new Map<(typeof queues)[number], string>();
+        let independent = true;
+        for (const [row, item] of queueByRow) {
+          const machine = canonicalKey(rowText(row, "machine"));
+          queueMachines.set(item, machine);
+          if (!focus.has(machine) && (!activeSimulationResources!.protectedMutations.has(row) || !planningMeta(row).simulationReservation))
+            independent = false;
+        }
+        // Use all ORIGINAL queued users, including the first consumed row.
+        for (const item of queues) if (focus.has(queueMachines.get(item)!))
+          for (const code of item.codes)
+            for (const user of toolingDependents.get(code) ?? [])
+              if (queueByRow.get(user) !== item) independent = false;
+        if (independent) {
+          let retained = 0;
+          for (let index = 0; index < candidates.length; index += 1) {
+            const candidate = candidates[index]!;
+            if (!focus.has(queueMachines.get(candidate.item)!)) {
+              removeGuard(candidate);
+              for (const row of candidate.item.queue) waitingRows.delete(row);
+            } else {
+              candidates[retained] = candidate;
+              frontierStates[retained] = frontierStates[index]!;
+              candidate.item.candidateIndex = retained++;
+            }
+          }
+          if (retained !== candidates.length) {
+            // Local independence supersedes the narrower whole-cohort suffix
+            // certificate. Keep the retained sequence and rebuild its heap.
+            suffixTracking = undefined;
+            for (const candidate of heap) candidate.heapIndex = undefined;
+            heap.length = 0;
+            heapActive = false;
+            candidates.length = retained;
+            frontierStates.length = retained;
+            if (!retained) break;
+          }
+        }
+      }
+    }
     if (suffixTracking && !suffixTracking.unsafe && suffixTracking.scores.size <= 1) {
       // Equal priorities and distinct machines disable every pair-specific
       // override for the entire remaining pass. Admit whole protected queues
@@ -8521,10 +8612,10 @@ function rescheduleMachineQueues(...args: Parameters<typeof calculateRescheduleM
   return withPlanningFacts(() => {
     const kernel = activePlanningKernel;
     if (!activeSimulationResources || !kernel) return calculateRescheduleMachineQueues(...args);
-    const [details, calendar] = args;
-    // Keep every protected row and the original frontier. Replay only a whole
-    // canonical pass with exactly the same rows, full state and fallback maps.
-    const key = JSON.stringify([kernel.identity(calendar), currentPlanningProductionDate(calendar), details.map(row => [
+    const [details, calendar, machineRows] = args;
+    // Replay the same rows, complete state and fallback maps within the same
+    // master-machine and filtered-simulation context.
+    const key = JSON.stringify([kernel.identity(calendar), kernel.identity(machineRows), kernel.identity(kernel.simulationJobs), currentPlanningProductionDate(calendar), details.map(row => [
       kernel.identity(row), planningRowVersion(row), kernel.identity(normalizedRowCache.get(row)),
       Object.hasOwn(row, "toolingNextAvailableDate"), row.toolingNextAvailableDate,
     ])]);
@@ -8742,6 +8833,7 @@ function createPlanningQueueCache() {
 function createIncrementalPlanningKernel() {
   const identities = new WeakMap<object, number>();
   return {
+    simulationJobs: undefined as ReadonlySet<string> | undefined,
     rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
     facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
     normalizedMatches: new WeakMap<Map<string, unknown>, WeakMap<Map<string, unknown>, boolean>>(),
