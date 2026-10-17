@@ -38,6 +38,7 @@ const database = managedResourceName(
 )
 const upstashDatabase =
   process.env.MRM_UPSTASH_DATABASE ?? "mrmpl-staging-acceleration"
+const redisDisabled = process.env.MRM_LOCAL_REDIS_DISABLED === "1"
 
 function capture(command, args) {
   const executable =
@@ -129,7 +130,7 @@ const migrationDatabaseUrl = seedAdmin
   ? process.env.MIGRATION_DATABASE_URL?.trim() ||
     neonConnectionString("mrmpl_staging_migration", false)
   : undefined
-const upstash = upstashCredentials()
+const upstash = redisDisabled ? undefined : upstashCredentials()
 const managedEnvironment = {
   ...process.env,
   BETTER_AUTH_SECRET:
@@ -140,8 +141,9 @@ const managedEnvironment = {
   NEXT_PUBLIC_APP_URL:
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
   ...(production ? { PORT: "3001" } : {}),
-  UPSTASH_REDIS_REST_TOKEN: upstash.token,
-  UPSTASH_REDIS_REST_URL: upstash.url,
+  REDIS_URL: redisDisabled ? undefined : process.env.REDIS_URL,
+  UPSTASH_REDIS_REST_TOKEN: upstash?.token,
+  UPSTASH_REDIS_REST_URL: upstash?.url,
   WEB_DATABASE_POOL_MAX: process.env.WEB_DATABASE_POOL_MAX ?? "2",
   WEB_DATABASE_URL: webDatabaseUrl,
   WORKER_DATABASE_POOL_MAX: process.env.WORKER_DATABASE_POOL_MAX ?? "2",
@@ -158,7 +160,7 @@ console.log(
   `Managed ${production ? "production" : "development"} target resolved (credentials omitted):`
 )
 console.log(`  Neon: ${branch} / ${database}`)
-console.log(`  Upstash: ${upstashDatabase}`)
+console.log(`  Upstash: ${redisDisabled ? "disabled locally" : upstashDatabase}`)
 if (!workerOnly && !seedAdmin) console.log("  App: http://localhost:3001")
 console.log(
   `  Production module: ${productionModuleEnabled ? "enabled" : "disabled"}`

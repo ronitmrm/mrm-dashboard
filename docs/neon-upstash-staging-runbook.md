@@ -81,6 +81,13 @@ export MRM_NEON_DATABASE='neondb'
 export MRM_UPSTASH_DATABASE='mrmpl-staging-acceleration'
 ```
 
+For development against a separate Neon branch without a dedicated Redis
+database, set `MRM_NEON_BRANCH` to that branch and
+`MRM_LOCAL_REDIS_DISABLED=1` in `apps/web/.env.local`. The managed launcher skips
+Upstash credential lookup and Redis commands. PostgreSQL still owns auth,
+sessions, refresh jobs, and dashboard reads; Redis rate limits and invalidation
+fan-out are skipped locally. Hosted runtime still requires Upstash credentials.
+
 ## Required smoke flow
 
 1. Confirm `pnpm dev:managed:check` succeeds with credentials omitted.

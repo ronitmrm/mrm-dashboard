@@ -33,6 +33,7 @@ export type RedisAcceleration = {
 
 export type RedisAccelerationOptions = {
   onCommand?: () => void
+  redisDisabled?: boolean
   redisUrl?: string
   upstashRedisRestToken?: string
   upstashRedisRestUrl?: string
@@ -206,6 +207,12 @@ export function readRedisAccelerationEnvironment(
   environment: Environment = process.env,
   hosted = environment.MRM_MANAGED_RUNTIME === "1" || environment.VERCEL === "1"
 ): RedisAccelerationOptions & { hosted: boolean } {
+  if (
+    environment.MRM_LOCAL_MANAGED_RUNTIME === "1" &&
+    environment.MRM_LOCAL_REDIS_DISABLED === "1"
+  ) {
+    return { hosted, redisDisabled: true }
+  }
   if (hosted) {
     const upstashRedisRestToken = environment.UPSTASH_REDIS_REST_TOKEN
     const upstashRedisRestUrl = environment.UPSTASH_REDIS_REST_URL
@@ -226,10 +233,20 @@ export function readRedisAccelerationEnvironment(
 
 export function createRedisAcceleration({
   onCommand = recordRedisCommand,
+  redisDisabled = false,
   redisUrl,
   upstashRedisRestToken,
   upstashRedisRestUrl,
 }: RedisAccelerationOptions): RedisAcceleration {
+  if (redisDisabled) {
+    return {
+      async close() {},
+      async consumeRateLimit() {
+        return { allowed: true, count: 0, retryAfterSeconds: 0 }
+      },
+      async publishInvalidation() {},
+    }
+  }
   const safeOnCommand = () => {
     try {
       onCommand()

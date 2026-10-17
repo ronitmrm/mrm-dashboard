@@ -74,6 +74,45 @@ describe("Redis acceleration environment", () => {
     })
   })
 
+  it("skips Redis entirely when disabled for managed local development", async () => {
+    const options = readRedisAccelerationEnvironment({
+      MRM_LOCAL_MANAGED_RUNTIME: "1",
+      MRM_LOCAL_REDIS_DISABLED: "1",
+      MRM_MANAGED_RUNTIME: "1",
+    })
+    expect(options).toEqual({ hosted: true, redisDisabled: true })
+    const acceleration = createRedisAcceleration(options)
+    await acceleration.publishInvalidation({
+      aggregateId: null,
+      aggregateType: "dashboard",
+      idempotencyKey: "local-event",
+      organizationId: "local-org",
+      payload: {},
+      topic: "dashboard.updated",
+    })
+    await expect(
+      consumeOptionalRateLimit({
+        ...options,
+        key: "local-limit",
+        limit: 1,
+        windowSeconds: 60,
+      })
+    ).resolves.toMatchObject({ allowed: true, source: "disabled" })
+    await acceleration.close()
+    expect(nodeRedis.eval).not.toHaveBeenCalled()
+    expect(nodeRedis.publish).not.toHaveBeenCalled()
+    expect(managedRuntimeTelemetrySnapshot().redis.commands).toBe(0)
+  })
+
+  it("does not allow the local Redis switch to bypass hosted credentials", () => {
+    expect(() =>
+      readRedisAccelerationEnvironment({
+        MRM_LOCAL_REDIS_DISABLED: "1",
+        MRM_MANAGED_RUNTIME: "1",
+      })
+    ).toThrow(/UPSTASH_REDIS_REST_URL/)
+  })
+
   it("requires a complete HTTPS Upstash REST identity in hosted mode", () => {
     expect(
       readRedisAccelerationEnvironment({

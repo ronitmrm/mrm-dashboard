@@ -177,6 +177,7 @@ export function readAuthEnvironment(
     baseURL: baseURL.origin,
     connectionString: postgres.connectionString,
     hosted: postgres.hosted,
+    redisDisabled: redis.redisDisabled,
     redisUrl: redis.redisUrl,
     secret,
     upstashRedisRestToken: redis.upstashRedisRestToken,
