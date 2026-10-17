@@ -3399,6 +3399,8 @@ function createSimulationResources() {
     windowsByMachine: new WeakMap<MachineUnavailableWindow[], Map<string, MachineUnavailableWindow[]>>(),
     protectedRows: new WeakMap<Record<string, unknown>, PreparedProtectedPlanningRow>(),
     protectedMutations: new WeakMap<Record<string, unknown>, ProtectedPlanningMutations>(),
+    protectedQueueSorts: new PlanningStateMap<string, ProtectedQueueSort>(),
+    protectedSortMaps: new WeakMap<Map<string, unknown>, number>(),
     protectedTransitions: new PlanningStateMap<number, Map<string, Map<unknown, ProtectedPlanningState>>>(),
     coldProtectedVersions: new PlanningStateMap<string, number>(),
     protectedLeases: new Set<Record<string, unknown>>(),
@@ -5097,6 +5099,39 @@ function planningScheduleSignature(details: Array<Record<string, unknown>>) {
   ].join("|")).join("\n");
 }
 
+type ProtectedQueueSort = {
+  order: number[];
+  captures: Array<{ index: number; normalized: Map<string, unknown> }>;
+};
+
+function protectedQueueSortKey(rows: Array<Record<string, unknown>>) {
+  const resources = activeSimulationResources;
+  if (!resources) return undefined;
+  const states: Array<[number, number]> = [];
+  for (const row of rows) {
+    const protectedRow = resources.protectedMutations.get(row);
+    const normalized = normalizedRowCache.get(row);
+    if (!protectedRow || !planningMeta(row).simulationReservation || normalized !== protectedRow.state.normalized)
+      return undefined;
+    // These are the only nested rowValue traversals in the canonical sort and
+    // reviewed queue placement. All other inputs are tracked top-level facts.
+    for (const raw of [
+      row.queueBeforeSetups || row.priorityQueueBeforeSetups,
+      row.interruptedSetups || row.priorityInterruptedSetups,
+      row.planOverrideInterruptedSetups || row.interruptedSetups,
+      row.machineUnavailableQueueBeforeSetups,
+    ]) if (Array.isArray(raw) && raw.length) return undefined;
+    let normalizedId = 0;
+    if (normalized) {
+      let id = resources.protectedSortMaps.get(normalized);
+      if (id === undefined) resources.protectedSortMaps.set(normalized, (id = ++nextPlanningState));
+      normalizedId = id;
+    }
+    states.push([protectedRow.state.version, normalizedId]);
+  }
+  return JSON.stringify(states);
+}
+
 function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar) {
   applyPriorityInterruptionQuantities(details);
   applyPlanOverrideInterruptionQuantities(details);
@@ -5149,17 +5184,42 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     // passes. Tooling dates have just been reset above. Reuse that exact sort,
     // including explicit queue placements, rather than sorting it again.
     const inputKey = rows.map((row) => versions.get(row)).join(",");
-    // The first fallback lookup captures row values. Let the original sort
-    // perform that initialization before reusing an order on these rows.
+    // Ordinary order reuse requires warm maps. The protected-only seam below
+    // replays actual first-sort captures instead of initializing them eagerly.
     const cacheable = rows.every((row) => normalizedRowCache.has(row));
     let order = cacheable ? activePlanningKernel?.queueOrders.get(inputKey) : undefined;
+    const replayKey = cacheable ? undefined : protectedQueueSortKey(rows);
+    const replay = replayKey === undefined ? undefined : activeSimulationResources?.protectedQueueSorts.get(replayKey);
     let queue: typeof rows;
     if (order) queue = order.map((index) => rows[index]!);
-    else {
+    else if (replay) {
+      for (const capture of replay.captures) {
+        const row = rows[capture.index]!;
+        const protectedRow = activeSimulationResources!.protectedMutations.get(row)!;
+        const normalized = transitionProtectedPlanningRow(protectedRow, "fallback", undefined, () => capture.normalized).normalized!;
+        normalizedRowCache.set(row, normalized);
+        const state = activePlanningKernel?.rows.get(row);
+        if (state) state.dirty = true;
+      }
+      queue = replay.order.map(index => rows[index]!);
+    } else {
+      const before = replayKey === undefined ? undefined : rows.map(row => normalizedRowCache.get(row));
       queue = applyMachineUnavailableQueuePlacementOrder([...rows].sort(compareQueueRows));
       order = queue.map((row) => rows.indexOf(row));
       if (cacheable) activePlanningKernel?.queueOrders.set(inputKey, order);
+      if (replayKey !== undefined) activeSimulationResources!.protectedQueueSorts.set(replayKey, {
+        order,
+        captures: rows.flatMap((row, index) => {
+          const normalized = normalizedRowCache.get(row);
+          return !before![index] && normalized && rows.indexOf(row) === index ? [{ index, normalized }] : [];
+        }),
+      });
     }
+    // First-capture effects are now complete for this proven protected queue.
+    // Keep any still-cold rows lease-specific; all other queue paths retain
+    // their original pre-sort versions and comparator-cache keys.
+    if (replayKey !== undefined)
+      for (const row of rows) if (normalizedRowCache.has(row)) versions.set(row, planningRowVersion(row));
     const key = queue.map((row) => versions.get(row)).join(",");
     const state = activePlanningKernel?.queueStates.get(key) ?? ++nextPlanningState;
     activePlanningKernel?.queueStates.set(key, state);
