@@ -1,4 +1,5 @@
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import { requiredToolingCodes } from "./tooling-availability"
 
 type ProposalRow = {
   id: string
@@ -17,6 +18,42 @@ export function createOrderAcceptanceRepository(
   const { pool, close } = repositoryPool(options)
   return {
     close,
+    async forecastToolingOccupancy(organization: string, floor: string) {
+      const result = await pool.query<{
+        codes: string[] | null
+        latest_requirement: Record<string, unknown> | null
+      }>(
+        `SELECT array_agg(DISTINCT upper(trim(tool.tool_code)))
+            FILTER (WHERE tool.tool_code IS NOT NULL) AS codes,
+          latest.source_payload AS latest_requirement
+         FROM manufacturing.shop_floor_setup_state state
+         JOIN catalog.machines machine ON machine.id=state.machine_id
+         JOIN manufacturing.production_floors floor ON floor.id=machine.production_floor_id
+         JOIN manufacturing.operation_tooling tool
+           ON tool.operation_setup_id=state.operation_setup_id AND tool.active
+         LEFT JOIN LATERAL (
+           SELECT source_payload FROM manufacturing.operation_tooling
+           WHERE operation_setup_id=state.operation_setup_id AND active
+           ORDER BY updated_at DESC, id DESC LIMIT 1
+         ) latest ON true
+         WHERE state.organization_id=$1 AND floor.code=$2 AND state.active
+           AND state.stage IN ('presetting','setting','quality_approval','operator_started')
+         GROUP BY state.id, latest.source_payload`,
+        [organization, floor]
+      )
+      const occupancy = new Map<string, number>()
+      for (const row of result.rows) {
+        const requirement = row.latest_requirement ?? {}
+        const complete = ["fixture", "tooling", "foamTool", "FIXTURE", "TOOLING", "FOAM TOOL"]
+          .some(field => field in requirement)
+        const current = new Set(requiredToolingCodes(requirement))
+        for (const code of row.codes ?? []) {
+          if (complete && !current.has(code)) continue
+          occupancy.set(code, (occupancy.get(code) ?? 0) + 1)
+        }
+      }
+      return [...occupancy].map(([assetCode, occupiedQuantity]) => ({ assetCode, occupiedQuantity }))
+    },
     async list(organization: string, floor: string) {
       return (
         await pool.query<ProposalRow>(

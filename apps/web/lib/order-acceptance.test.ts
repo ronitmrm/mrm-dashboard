@@ -1,4 +1,6 @@
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
+import { Pool } from "pg"
+import { createOrderAcceptanceRepository } from "@workspace/db"
 import { proposalContext } from "./order-acceptance-context"
 import {
   calculateProposal,
@@ -40,6 +42,42 @@ const context: PlanningContext = {
 }
 
 describe("Proposed Order capacity review", () => {
+  test("ignores obsolete tooling only in forecasts and preserves published commitments", async () => {
+    const pool = new Pool()
+    const query = vi.spyOn(pool, "query").mockImplementation(async () => ({
+      command: "SELECT", rowCount: 2, oid: 0, fields: [], rows: [
+        { codes: ["NC014", "NC015"], latest_requirement: { fixture: "NC014" } },
+        { codes: ["UNKNOWN"], latest_requirement: null },
+      ],
+    }))
+    const route = { partNo: "NEW", optionNumber: "1", setupNo: "1", machineFamily: "JL" }
+    const snapshot = { productionControl: {
+      routeMasterRows: [route], cycleMasterRows: [{ ...route, totalTime: 3600 }],
+      toolingMasterRows: [{ ...route, fixture: "NC015" }],
+      machinePlanningRows: ["JL1", "JL2"].map(machine => ({ machine, machineFamily: "JL", status: "Active" })),
+      toolingAvailabilityRows: [{ assetCode: "NC015", allocatedQuantity: 1, occupiedQuantity: 1 }],
+      machinePlanDetailRows: [{
+        jcNo: "RUNNING", partCode: "OLD", optionNumber: "1", setupNo: "1", machine: "JL1",
+        plannedProductionStartDate: "2026-09-14", plannedProductionEndDate: "2026-09-16",
+        requiredToolingCodes: ["NC014"], toolingAllocatedQuantities: { NC014: 1 },
+        pendingGoodQty: 100, shopFloorStage: "operator_started", runningStatus: "Running",
+      }],
+    } }
+    const original = structuredClone(snapshot)
+    const proposed = { id: "new", part: "NEW", option: "1", quantity: 1, rmDate: "" }
+    try {
+      const occupancy = await createOrderAcceptanceRepository({ pool }).forecastToolingOccupancy("org", "cnc")
+      expect(occupancy).toEqual([
+        { assetCode: "NC014", occupiedQuantity: 1 }, { assetCode: "UNKNOWN", occupiedQuantity: 1 },
+      ])
+      const { context: forecast, resolve } = proposalContext(snapshot, input.startDate, occupancy)
+      const plan = calculateProposal({ ...input, lines: [proposed] }, forecast, [resolve(proposed)])
+      expect(plan.lines[0]).toMatchObject({ selected: true, machinePlan: [expect.objectContaining({ machine: "JL2" })] })
+      expect(snapshot).toEqual(original)
+      expect(proposalContext(snapshot).context.toolingAvailability?.[0]?.occupiedQuantity).toBe(1)
+      expect(query.mock.calls.every(([sql]) => typeof sql === "string" && sql.trimStart().startsWith("SELECT"))).toBe(true)
+    } finally { await pool.end() }
+  })
   test("does not borrow tooling reserved for a fixed future commitment", () => {
     const product = {
       ...line("new", 16),

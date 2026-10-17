@@ -36,6 +36,11 @@ orders, job cards, reservations, priorities or production commitments.
 
 Plans are estimates, not shop-floor instructions. Missing master data or unknown
 existing workload prevents approval rather than silently treating it as zero.
+For forecasting only, tooling occupancy uses each active setup's latest complete
+Tooling Master requirement. Superseded code links do not consume forecast capacity.
+Requirements without a complete saved definition retain their recorded occupancy.
+This read-only interpretation does not change Tooling Master, actual start checks,
+published production plans, machine assignments or production activity.
 Proposed orders run through the production planner in memory, including automatic
 parallel machining, tooling capacity, machine continuity, queue settlement,
 unavailable windows and WIP supply. Existing commitments retain their published

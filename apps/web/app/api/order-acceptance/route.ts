@@ -81,7 +81,8 @@ async function handle(request: NextRequest) {
                 proposal: await repository.get(organizationId, floor, id),
               })
             const snapshot = await dashboard.latest(organizationId, {}, floor)
-            const { context } = proposalContext(snapshot)
+            const { context } = proposalContext(snapshot, undefined,
+              await repository.forecastToolingOccupancy(organizationId, floor))
             return NextResponse.json({
               proposals: await repository.list(organizationId, floor),
               context,
@@ -123,7 +124,8 @@ async function handle(request: NextRequest) {
             if (!snapshot) throw new Error("Refresh the production plan first.")
             const { context, resolve } = proposalContext(
               snapshot,
-              input.startDate
+              input.startDate,
+              await repository.forecastToolingOccupancy(organizationId, floor)
             )
             input.hoursPerDay =
               context.productiveHoursPerDay ?? input.hoursPerDay
