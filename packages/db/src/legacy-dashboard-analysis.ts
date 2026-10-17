@@ -3366,11 +3366,12 @@ function createSimulationResources() {
     windows: new WeakMap<ActionRow[], MachineUnavailableWindow[]>(),
     windowFacts: new WeakMap<ActionRow, MachineUnavailableWindow[]>(),
     windowsByMachine: new WeakMap<MachineUnavailableWindow[], Map<string, MachineUnavailableWindow[]>>(),
-    protectedRows: new WeakMap<Record<string, unknown>, {
-      row: Record<string, unknown>; normalized: Map<string, unknown> | undefined;
-    }>(),
-    protectedSources: new WeakMap<Record<string, unknown>, Record<string, unknown>>(),
-    protectedStates: new WeakMap<Record<string, unknown>, PlanningRowState[]>(),
+    protectedRows: new WeakMap<Record<string, unknown>, PreparedProtectedPlanningRow>(),
+    protectedMutations: new WeakMap<Record<string, unknown>, ProtectedPlanningMutations>(),
+    protectedTransitions: new PlanningStateMap<number, Map<string, Map<unknown, ProtectedPlanningState>>>(),
+    coldProtectedVersions: new PlanningStateMap<string, number>(),
+    protectedLeases: new Set<Record<string, unknown>>(),
+    solve: 0,
     toolingUses: new WeakMap<Record<string, unknown>, { codes: Set<string>; start: string; end: string; fixed: boolean }>(),
     protectedTooling: new WeakMap<Record<string, unknown>[], Map<string, Array<{ start: string; end: string; fixed: boolean }>>>(),
     queues: createPlanningQueueCache(),
@@ -3415,6 +3416,11 @@ export function simulateProductionPlanning(input: ProductionPlanningSimulationIn
     activeSimulationResources?.protectedTooling.set(input.reservedPlans, protectedTooling);
   }
   for (let pass = 0; pass <= input.reservedPlans.length; pass += 1) {
+    if (activeSimulationResources) {
+      releaseProtectedPlanningRows(activeSimulationResources.protectedLeases);
+      activeSimulationResources.solve += 1;
+      activeSimulationResources.coldProtectedVersions.clear();
+    }
     const plans = machinePlanDetails(input.workOrders, new Map(), new Map(),
       groupRouteRows(input.routes), input.cycles, input.tooling, input.toolingAvailability,
       input.machines, constraints, [], [], new Map(), input.calendar,
@@ -4018,14 +4024,8 @@ function initializeMachinePlanDetails(
     }
   }
   for (const original of simulation?.reservedPlans ?? []) {
-    const prepared = activeSimulationResources?.protectedRows.get(original);
-    if (prepared) {
-      const reserved = Object.defineProperty({ ...prepared.row }, "__planningMeta", {
-        enumerable: false, value: { ...planningMeta(prepared.row) },
-      });
-      if (prepared.normalized) normalizedRowCache.set(reserved, prepared.normalized);
-      activeSimulationResources!.protectedSources.set(reserved, original);
-      details.push(reserved);
+    if (activeSimulationResources) {
+      details.push(prepareProtectedPlanningRow(original));
       continue;
     }
     const reserved = { ...original };
@@ -4033,13 +4033,6 @@ function initializeMachinePlanDetails(
       simulationReservation: true, assignmentLocked: true,
       readyDate: parseDate(rowText(reserved, "plannedProductionStartDate")),
     } });
-    if (activeSimulationResources) {
-      const template = Object.defineProperty({ ...reserved }, "__planningMeta", {
-        enumerable: false, value: { ...planningMeta(reserved) },
-      });
-      activeSimulationResources.protectedRows.set(original, { row: template, normalized: normalizedRowCache.get(reserved) });
-      activeSimulationResources.protectedSources.set(reserved, original);
-    }
     details.push(reserved);
   }
   return { details, machineUnavailableWindows };
@@ -4051,7 +4044,8 @@ function machinePlanDetails(...args: Parameters<typeof initializeMachinePlanDeta
     // Forecasts have no publication baseline and continually add protected plans.
     // Use the same solve without fingerprinting or caching the complete state.
     const prepared = initializeMachinePlanDetails(...args);
-    return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows, prepared.machineUnavailableWindows, toolingAvailability, false);
+    return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows, prepared.machineUnavailableWindows, toolingAvailability, false,
+      new Set(workOrders.map(row => rowText(row, "jcNo"))));
   }
   // Automatic output is deliberately absent from the identity of source facts.
   // It still participates in every actual solve, including manual recovery.
@@ -4120,6 +4114,7 @@ function finalizeMachinePlanDetails(
   machineUnavailableWindows: MachineUnavailableWindow[],
   toolingAvailability: Array<Record<string, unknown>>,
   reuseFinalizedPlan = true,
+  simulationJobs?: ReadonlySet<string>,
 ) {
   const finalizedDetails = (reuseFinalizedPlan ? finalizeMachineAndSetupSchedule : calculateFinalizedMachineAndSetupSchedule)(
     details,
@@ -4137,7 +4132,9 @@ function finalizeMachinePlanDetails(
     row.plannedProductionEndWorkingHours = !finalDate || shopFloorRowIsComplete(row) ? null
       : finish.date === finalDate ? finish.workingHours : planningCalendar.productiveHoursPerDay;
   }
-  return applyPlannedDateTaskReadiness(finalizedDetails, planningCalendar).sort((a, b) =>
+  // Presentation clones have no consumer for protected jobs. Their machine,
+  // tooling and readiness effects above still participate in the full solve.
+  return applyPlannedDateTaskReadiness(finalizedDetails, planningCalendar, simulationJobs).sort((a, b) =>
     compareNumericText(rowText(a, "machine"), rowText(b, "machine")) ||
     compareNumericText(rowText(a, "partCode"), rowText(b, "partCode")) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
@@ -4228,7 +4225,7 @@ function applyMachineActiveTaskReadiness(rows: Array<Record<string, unknown>>) {
       if (activeRow && scheduleRowKey(row) !== scheduleRowKey(activeRow) && !shopFloorRowIsComplete(row)) {
         blockers.push(machineActiveTaskBlocker(activeRow));
       }
-      row.shopFloorTaskBlocker = uniqueTextValues(blockers).join("; ");
+      setPlanningRowField(row, "shopFloorTaskBlocker", uniqueTextValues(blockers).join("; "));
       if (!activeRow && shopFloorRowBlocksMachine(row)) activeRow = row;
     }
   }
@@ -4255,8 +4252,11 @@ function machineActiveTaskBlocker(activeRow: Record<string, unknown>) {
 function taskBlockersWithoutMachineActive(value: string) {
   return uniqueTextValues([value]).filter((blocker) => !blocker.toLowerCase().startsWith(machineActiveTaskBlockerPrefix.toLowerCase()));
 }
-function applyPlannedDateTaskReadiness(rows: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar): Array<Record<string, unknown>> {
+function applyPlannedDateTaskReadiness(rows: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, simulationJobs?: ReadonlySet<string>): Array<Record<string, unknown>> {
   return rows.map((row) => {
+    // Keep the full original sort sequence, including nonnumeric setup labels.
+    // Unreturned protected rows need no presentation copy.
+    if (simulationJobs && !simulationJobs.has(rowText(row, "jcNo"))) return row;
     const plannedDate = parseDate(rowText(row, "plannedStartDate", "setupPlannedDate", "plannedDate"));
     const dateReady = setupPlannedDateIsDue(plannedDate, planningCalendar);
     const blockers = taskBlockersWithoutPlannedDate(rowText(row, "shopFloorTaskBlocker"));
@@ -4358,7 +4358,10 @@ function calculateIncrementalFinalizedMachineAndSetupSchedule(
           parseDate(rowText(a.previous, "plannedProductionEndDate")),
         ),
     );
+    let discardedTrial: Array<Record<string, unknown>> | undefined;
     for (const { previous, previousIndex } of predecessors) {
+      if (discardedTrial) releaseProtectedPlanningRows(discardedTrial);
+      discardedTrial = undefined;
       const previousEnd = parseDate(rowText(previous, "plannedProductionEndDate"));
       const currentEnd = parseDate(rowText(row, "plannedProductionEndDate"));
       if (!previousEnd || !currentEnd) continue;
@@ -4374,6 +4377,7 @@ function calculateIncrementalFinalizedMachineAndSetupSchedule(
       )
         continue;
       const trial = scheduled.map(forkPlanningRow);
+      discardedTrial = trial;
       const proposed = trial[index]!;
       const anchor = trial[previousIndex]!;
       setPlanningRowField(proposed, "machine", previous.machine);
@@ -4448,9 +4452,12 @@ function calculateIncrementalFinalizedMachineAndSetupSchedule(
         );
       });
       if (delaysProtectedWork) continue;
+      releaseProtectedPlanningRows(scheduled);
       scheduled = trial;
+      discardedTrial = undefined;
       break;
     }
+    if (discardedTrial) releaseProtectedPlanningRows(discardedTrial);
   }
   return scheduled;
 }
@@ -7512,14 +7519,18 @@ function routeKey(partNo: unknown, setup: unknown) {
 
 const normalizedRowCache = new WeakMap<Record<string, unknown>, Map<string, unknown>>();
 
-function rowValue(row: Record<string, unknown>, ...names: string[]) {
+function rowValue(row: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
     const value = row[name];
     if (value !== undefined && value !== null && value !== "") return value;
   }
   let normalized = normalizedRowCache.get(row);
   if (!normalized) {
-    normalized = new Map(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+    const protectedRow = activeSimulationResources?.protectedMutations.get(row);
+    const calculate = () => new Map(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+    normalized = protectedRow
+      ? transitionProtectedPlanningRow(protectedRow, "fallback", undefined, calculate).normalized!
+      : calculate();
     normalizedRowCache.set(row, normalized);
     const state = activePlanningKernel?.rows.get(row);
     if (state) state.dirty = true;
@@ -8099,6 +8110,17 @@ function withPlanningFacts<Result>(calculate: () => Result): Result {
   }
 }
 function planningRowFact<Key extends keyof PlanningRowFacts>(row: Record<string, unknown>, key: Key, calculate: () => PlanningRowFacts[Key]): PlanningRowFacts[Key] {
+  const protectedRow = activeSimulationResources?.protectedMutations.get(row);
+  if (protectedRow) {
+    const cached = protectedRow.state.facts?.[key];
+    if (cached !== undefined) return cached;
+    const value = calculate();
+    // A fact may perform the first fallback lookup. Store it against the
+    // resulting complete state, not the state from before that lookup.
+    const facts = protectedRow.state.facts ??= {};
+    facts[key] = value;
+    return value;
+  }
   if (!currentPlanningFacts) return calculate();
   let facts = currentPlanningFacts.get(row);
   if (!facts) {
@@ -8225,6 +8247,119 @@ type PlanningRowState = {
   rowKeys: string[]; metaKeys: string[]; version: number; normalized?: Map<string, unknown>;
 };
 const interruptionIdentityFields = ["jcNo", "JC NO.", "JC NO", "setupNo", "SETUP NO", "SETUP", "machine", "machineNo", "MACHINE NO", "M/C NO"] as const;
+type ProtectedPlanningState = {
+  version: number;
+  normalized: Map<string, unknown> | undefined;
+  facts?: Partial<PlanningRowFacts>;
+};
+type ProtectedPlanningMutations = {
+  state: ProtectedPlanningState;
+  version: number;
+  lease: number;
+  changedFields?: Set<string>;
+  changedMeta?: Set<keyof ReturnType<typeof planningMeta>>;
+  prepared?: PreparedProtectedPlanningRow;
+};
+type PreparedProtectedPlanningRow = {
+  row: Record<string, unknown>;
+  meta: ReturnType<typeof planningMeta>;
+  initial: ProtectedPlanningState;
+  forkInitial: ProtectedPlanningState;
+  available: Array<Record<string, unknown>>;
+  solve: number;
+};
+
+function prepareProtectedPlanningRow(original: Record<string, unknown>) {
+  const resources = activeSimulationResources!;
+  let prepared = resources.protectedRows.get(original);
+  if (!prepared) {
+    const row = { ...original };
+    const meta = { simulationReservation: true, assignmentLocked: true,
+      readyDate: parseDate(rowText(row, "plannedProductionStartDate")) };
+    const initial = { version: ++nextPlanningState, normalized: normalizedRowCache.get(row) };
+    prepared = { row, meta, initial, forkInitial: { version: ++nextPlanningState, normalized: undefined }, available: [], solve: -1 };
+    resources.protectedRows.set(original, prepared);
+  }
+  if (prepared.solve === resources.solve) {
+    // Repeated references in an input still represent separate physical rows.
+    const duplicate = Object.defineProperty({ ...prepared.row }, "__planningMeta", {
+      enumerable: false, value: { ...prepared.meta },
+    });
+    if (prepared.initial.normalized) normalizedRowCache.set(duplicate, prepared.initial.normalized);
+    const version = ++nextPlanningState;
+    resources.protectedMutations.set(duplicate, { state: { ...prepared.initial, version }, version, lease: ++nextPlanningState });
+    return duplicate;
+  }
+  prepared.solve = resources.solve;
+  return acquireProtectedPlanningRow(prepared, prepared.initial);
+}
+
+function acquireProtectedPlanningRow(prepared: PreparedProtectedPlanningRow, initial: ProtectedPlanningState) {
+  const resources = activeSimulationResources!;
+  let working = prepared.available.pop();
+  if (!working) {
+    working = Object.defineProperty({ ...prepared.row }, "__planningMeta", {
+      enumerable: false, value: { ...prepared.meta },
+    });
+    resources.protectedMutations.set(working, { state: initial, version: initial.version, lease: 0,
+      changedFields: new Set(), changedMeta: new Set(), prepared });
+  }
+  const mutations = resources.protectedMutations.get(working)!;
+  for (const field of mutations.changedFields!) {
+    if (Object.hasOwn(prepared.row, field)) working[field] = prepared.row[field];
+    else delete working[field];
+  }
+  const meta = planningMeta(working);
+  for (const field of mutations.changedMeta!) {
+    if (Object.hasOwn(prepared.meta, field)) Object.assign(meta, { [field]: prepared.meta[field] });
+    else delete meta[field];
+  }
+  mutations.changedFields!.clear();
+  mutations.changedMeta!.clear();
+  mutations.state = initial;
+  mutations.version = initial.version;
+  mutations.lease = ++nextPlanningState;
+  if (initial.normalized) normalizedRowCache.set(working, initial.normalized);
+  else normalizedRowCache.delete(working);
+  resources.protectedLeases.add(working);
+  return working;
+}
+
+function releaseProtectedPlanningRows(rows: Iterable<Record<string, unknown>>) {
+  const resources = activeSimulationResources;
+  if (!resources) return;
+  for (const row of rows) {
+    const prepared = resources.protectedMutations.get(row)?.prepared;
+    if (prepared && resources.protectedLeases.delete(row)) prepared.available.push(row);
+  }
+}
+
+const negativeZeroPlanningValue = Symbol("negative zero");
+function transitionProtectedPlanningRow(
+  row: ProtectedPlanningMutations,
+  field: string,
+  value: unknown,
+  normalize?: () => Map<string, unknown>,
+): ProtectedPlanningState {
+  const transitions = activeSimulationResources!.protectedTransitions;
+  let fields = transitions.get(row.state.version);
+  if (!fields) transitions.set(row.state.version, (fields = new Map()));
+  let values = fields.get(field);
+  if (!values) fields.set(field, (values = new Map()));
+  const key = Object.is(value, -0) ? negativeZeroPlanningValue : value;
+  let next = values.get(key);
+  if (!next) {
+    next = { version: ++nextPlanningState, normalized: normalize ? normalize() : row.state.normalized };
+    // Eviction only loses reuse. IDs are never recycled.
+    if (values.size >= 128) values.clear();
+    values.set(key, next);
+  }
+  row.state = next;
+  // Queue versions, as in the canonical kernel, ignore slot-only changes.
+  // The complete token still includes them for exact fallback-map capture.
+  if (field !== "row:toolingNextAvailableDate") row.version = next.version;
+  return next;
+}
 type OverridePreparation = {
   raw: unknown;
   rows: Array<{
@@ -8297,19 +8432,36 @@ class PlanningStateMap<Key, Value> extends Map<Key, Value> {
 }
 let activePlanningKernel: ReturnType<typeof createIncrementalPlanningKernel> | undefined;
 function forkPlanningRow(plan: Record<string, unknown>) {
+  const resources = activeSimulationResources;
+  const protectedRow = resources?.protectedMutations.get(plan);
+  if (protectedRow?.prepared) {
+    const fork = acquireProtectedPlanningRow(protectedRow.prepared, protectedRow.prepared.forkInitial);
+    for (const field of protectedRow.changedFields!) setPlanningRowField(fork, field, plan[field]);
+    for (const field of protectedRow.changedMeta!) setPlanningMetaField(fork, field, planningMeta(plan)[field]);
+    return fork;
+  }
   const fork = Object.defineProperty({ ...plan }, "__planningMeta", {
     enumerable: false,
     value: { ...planningMeta(plan) },
   });
   const states = activePlanningKernel?.rows.get(plan);
   if (states) activePlanningKernel!.rows.set(fork, { ...states, dirty: true });
-  const original = activeSimulationResources?.protectedSources.get(plan);
-  if (original) activeSimulationResources!.protectedSources.set(fork, original);
+  if (protectedRow) {
+    // A fork starts with the same enumerable row/meta values, but, as before,
+    // without the parent's captured legacy fallback map.
+    const version = ++nextPlanningState;
+    activeSimulationResources!.protectedMutations.set(fork, { state: { version, normalized: undefined }, version, lease: ++nextPlanningState });
+  }
   return fork;
 }
 function setPlanningRowField(row: Record<string, unknown>, field: string, value: unknown) {
   if (!Object.hasOwn(row, field) || !Object.is(row[field], value)) {
     row[field] = value;
+    const protectedRow = activeSimulationResources?.protectedMutations.get(row);
+    if (protectedRow) {
+      protectedRow.changedFields?.add(field);
+      transitionProtectedPlanningRow(protectedRow, `row:${field}`, value);
+    }
     if (field === "toolingNextAvailableDate") {
       const facts = activePlanningKernel?.facts.get(row);
       if (facts) delete facts.queueReadyDate;
@@ -8339,6 +8491,11 @@ function setPlanningMetaField<Key extends keyof ReturnType<typeof planningMeta>>
     return;
   if (!Object.hasOwn(meta, field) || !Object.is(meta[field], value)) {
     meta[field] = value;
+    const protectedRow = activeSimulationResources?.protectedMutations.get(row);
+    if (protectedRow) {
+      protectedRow.changedMeta?.add(field);
+      transitionProtectedPlanningRow(protectedRow, `meta:${field}`, value);
+    }
     activePlanningKernel?.facts.delete(row);
     const state = activePlanningKernel?.rows.get(row);
     if (state) state.dirty = true;
@@ -8350,18 +8507,20 @@ const planningRowVersions = new WeakMap<Record<string, unknown>, {
   rowKeys: string[]; metaKeys: string[]; version: number;
 }>();
 function planningRowVersion(row: Record<string, unknown>) {
+  const protectedRow = activeSimulationResources?.protectedMutations.get(row);
+  if (protectedRow) {
+    if (protectedRow.state.normalized) return protectedRow.version;
+    // Before the first legacy fallback, do not share queue decisions with a
+    // prior solve that might have initialized that map inside a comparator.
+    const cold = activeSimulationResources!.coldProtectedVersions;
+    const key = `${protectedRow.lease},${protectedRow.version}`;
+    let version = cold.get(key);
+    if (version === undefined) cold.set(key, (version = ++nextPlanningState));
+    return version;
+  }
   if (activePlanningKernel) {
     let record = activePlanningKernel.rows.get(row);
-    if (!record) {
-      const original = activeSimulationResources?.protectedSources.get(row);
-      // A skipped comparator must not defer the first legacy fallback lookup
-      // on a fresh clone. Only carry versions whose fallback map already exists.
-      const states = original
-        ? (activeSimulationResources!.protectedStates.get(original) ?? []).filter(state => state.normalized !== undefined)
-        : [];
-      activePlanningKernel.rows.set(row, (record = { states, dirty: true }));
-      if (original) activeSimulationResources!.protectedStates.set(original, states);
-    }
+    if (!record) activePlanningKernel.rows.set(row, (record = { states: [], dirty: true }));
     if (!record.dirty && record.current !== undefined) return record.current;
     const meta = planningMeta(row),
       rowKeys = Object.keys(row),
