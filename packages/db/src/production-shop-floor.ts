@@ -2023,7 +2023,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const targets = sessions.rows.filter((session) => !unavailable.has(session.id))
         const expected = new Set(input.expectedSessionIds)
         if (!targets.length || targets.length !== expected.size || targets.some((session) => !expected.has(session.id))) {
-          throw new Error("Running sessions changed or none are available. Refresh the bulk breakdown preview before saving.")
+          throw new ShopFloorConflictError("Running sessions changed or none are available. Refresh the bulk breakdown preview before saving.")
         }
         if (targets.some((session) => startedAt < session.started_at)) {
           throw new Error("Breakdown start must be on or after every affected session's start.")
@@ -4249,7 +4249,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.session_reference AS "sessionReference",
             session.daily_sequence AS "dailySequence",
             session.status,
-            session.production_date AS "productionDate",
+            session.production_date::text AS "productionDate",
             session.shift,
             session.measurement_method AS "measurementMethod",
             session.status = 'closed'
