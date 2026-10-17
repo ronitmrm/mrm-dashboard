@@ -75,6 +75,21 @@ test("job register returns the template selected for each job", async () => {
   expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
 })
 
+test("job post documents read saved requirements within the organization", async () => {
+  const job = { jobNumber: "POST-1", description: "Saved job description" }
+  const query = vi.fn().mockResolvedValue({ rows: [job] })
+  const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
+  await expect(repository.getJobPostDocument("org-1", "job-1")).resolves.toEqual(job)
+  const [sql, parameters] = query.mock.calls[0]!
+  expect(parameters).toEqual(["org-1", "job-1"])
+  expect(sql).toContain("WHERE job.organization_id = $1 AND job.id = $2")
+  expect(sql).toContain("job.minimum_salary::text")
+  expect(sql).toContain("job.description")
+  expect(sql).not.toContain("template.role_responsibilities")
+  query.mockResolvedValue({ rows: [] })
+  await expect(repository.getJobPostDocument("org-2", "job-1")).resolves.toBeNull()
+})
+
 test("job description templates require a permitted shift and both times", async () => {
   const query = vi.fn(async (statement: string, parameters?: readonly unknown[]) => {
     void parameters

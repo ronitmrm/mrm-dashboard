@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
+import { ArrowLeft, BriefcaseBusiness, Download, UserPlus } from "lucide-react"
 
 import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
@@ -162,6 +162,16 @@ export default async function JobWorkspacePage({
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
+            <Button asChild size="sm" variant="outline">
+              <AttachmentViewerLink
+                fileName={`${job.jobNumber}-job-post.pdf`}
+                href={`/hr/jobs/${job.id}/download`}
+                mediaType="application/pdf"
+              >
+                <Download data-icon="inline-start" />
+                Download Job Post
+              </AttachmentViewerLink>
+            </Button>
             {canWrite && job.status === "Open" ? (
               <Button asChild className="shrink-0" size="sm">
                 <Link
