@@ -57,14 +57,11 @@ type DurableRefreshWorkerOptions = {
   postgresPoolMax?: number
   postgresUrl: string
   redisAcceleration?: RedisAcceleration
-  redisUrl?: string
   retryDelayMs?: number
   telemetryRuntime?: TelemetryRuntime
   telemetrySink?: TelemetrySink
-  upstashRedisRestToken?: string
-  upstashRedisRestUrl?: string
   workerId: string
-}
+} & RedisAccelerationOptions
 
 type OutboxRow = {
   aggregate_id: string | null
@@ -98,6 +95,7 @@ export function createDurableRefreshWorker({
   postgresPoolMax = 2,
   postgresUrl,
   redisAcceleration,
+  redisDisabled,
   redisUrl,
   retryDelayMs = 1_000,
   telemetryRuntime,
@@ -126,6 +124,7 @@ export function createDurableRefreshWorker({
     redisAcceleration ??
     createRedisAcceleration({
       onCommand: recordRedisCommand,
+      redisDisabled,
       redisUrl,
       upstashRedisRestToken,
       upstashRedisRestUrl,
@@ -719,6 +718,7 @@ export async function consumeOptionalRateLimit({
   key,
   limit,
   redisAcceleration,
+  redisDisabled,
   redisUrl,
   upstashRedisRestToken,
   upstashRedisRestUrl,
@@ -729,6 +729,14 @@ export async function consumeOptionalRateLimit({
   redisAcceleration?: RedisAcceleration
   windowSeconds: number
 } & RedisAccelerationOptions) {
+  if (redisDisabled) {
+    return {
+      allowed: true,
+      count: null,
+      retryAfterSeconds: 0,
+      source: "disabled" as const,
+    }
+  }
   const acceleration =
     redisAcceleration ??
     createRedisAcceleration({

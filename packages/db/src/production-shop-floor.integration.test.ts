@@ -9,7 +9,7 @@ import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
-import { createProductionShopFloorRepository } from "./production-shop-floor"
+import { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
 import { createQualityRepository } from "./quality"
 import { createRejectionRepository } from "./rejections"
 
@@ -182,6 +182,13 @@ afterAll(async () => {
   await quality.close()
   await pool.end()
 })
+
+async function acceptShortRmFixture(jobCardNumber: string, productionFloorCode = "conventional") {
+  const material = (await repository.readRawMaterialReviews({ organizationId, productionFloorCode })).rows
+    .find(row => row.jobCardNumber === jobCardNumber);
+  if (material && !material.shortAccepted) await repository.acceptShortRawMaterial({ organizationId, productionFloorCode,
+    jobCardNumber, expectedRowVersion: material.rowVersion, reason: "Test fixture: planner accepted the short RM." });
+}
 
 describe("production and shop-floor workflows", () => {
   test("bulk breakdown updates every reviewed running session together and rejects a stale preview", async () => {
@@ -663,6 +670,7 @@ describe("production and shop-floor workflows", () => {
   })
 
   test("keeps CNC count continuity across shift sessions and stores linked events", async () => {
+    await acceptShortRmFixture(cncJobCard, "cnc")
     const template = await quality.upsertSetupChecklistTemplate({
       code: `CNC-${suffix}`, name: "CNC Setting", organizationId, productionFloorCode: "cnc",
       payload: { section: "Pre setting" }, revision: 1,
@@ -739,6 +747,10 @@ describe("production and shop-floor workflows", () => {
       sessionId: first.id,
       startedAt: "2026-08-15T07:00:00+05:30",
     })
+    await expect(repository.closeProductionSession({
+      endCount: 10_850, endedAt: "2026-08-15T07:00:00+05:30",
+      endReason: "shift_end", organizationId, sessionId: first.id,
+    })).rejects.toBeInstanceOf(ShopFloorConflictError)
     await repository.recordProductionSessionRejection({
       enteredRole: "quality",
       organizationId,
@@ -1295,6 +1307,7 @@ describe("production and shop-floor workflows", () => {
     await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
       workOrderNumber: jobCardNumber })
     await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+    await acceptShortRmFixture(jobCardNumber)
     const states = await pool.query<{ id: string; setup_number: number }>(
       `INSERT INTO manufacturing.shop_floor_setup_state (organization_id, work_order_id,
          route_option_id, operation_setup_id, machine_id, stage, active, completed_at,
@@ -1340,6 +1353,7 @@ describe("production and shop-floor workflows", () => {
     const machineNumber = `FLOOR-MC-${suffix}-START-CORRECT`
     await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
       sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+    await acceptShortRmFixture(jobCardNumber)
     await planning.upsertMachine({ machineNumber, organizationId })
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
       payload: { doneBy: "Machinist", partCode: itemUid }, stage: "operator_started" })
@@ -1478,6 +1492,7 @@ describe("production and shop-floor workflows", () => {
       itemUid, jobCardNumber: lockedJobCard, orderedQuantity: 100,
       organizationId, workOrderNumber: lockedJobCard,
     })
+    await acceptShortRmFixture(lockedJobCard)
     await planning.selectRoute({ jobCardNumber: lockedJobCard, organizationId, routeCode: "1" })
     for (const machineNumber of [sourceMachine, targetMachine]) {
       await planning.upsertMachine({ machineNumber, organizationId })
@@ -2063,3 +2078,56 @@ describe("production and shop-floor workflows", () => {
     }
   })
 })
+
+
+test("material review blocks completion, releases only selected setups, and clears on full receipt", async () => {
+  const jobCardNumber = 'RM-WAIT-' + suffix;
+  const routeCode = 'RM-WAIT-' + suffix;
+  const machines = [1, 2, 3].map(n => 'RM-WAIT-' + suffix + '-' + n);
+  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber });
+  await planning.upsertRouteOption({ itemUid, organizationId, routeCode,
+    setups: [1, 2, 3].map(n => ({ operationCode: 'WAIT-' + n, sequence: n, setupNumber: n })) });
+  await planning.selectRoute({ jobCardNumber, organizationId, routeCode });
+  const receipt = (sourceId: string, quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
+    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
+    receivedOn: '2026-10-12', sourceId });
+  await receipt('rm-wait-first-' + suffix, 25.11);
+  const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: 'conventional' }))
+    .rows.filter(row => row.jobCardNumber === jobCardNumber);
+  expect(await review()).toMatchObject([{ requiredKg: 50.22, receivedKg: 25.11, pendingKg: 25.11, shortAccepted: false }]);
+  for (const [index, machineNumber] of machines.entries()) {
+    await planning.upsertMachine({ machineNumber, organizationId });
+    await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: String(index + 1),
+      organizationId, stage: 'operator_started', payload: { jcNo: jobCardNumber, partCode: itemUid, optionNumber: routeCode,
+        setupNo: String(index + 1), machine: machineNumber } });
+    if (index < 2) await repository.recordProductionEntry({ jobCardNumber, machineNumber, operationSetupCode: String(index + 1),
+      organizationId, productionDate: '2026-10-17', quantityGood: 5000, quantityRejected: 0,
+      payload: { partCode: itemUid, jcNo: jobCardNumber }, sourceId: 'wait-output-' + suffix + '-' + index });
+  }
+  const complete = (index: number) => repository.recordSetupCompletion({ organizationId, jobCardNumber,
+    machineNumber: machines[index], operationSetupCode: String(index + 1), completedBy: 'Planner' });
+  await expect(complete(2)).rejects.toThrow('RM is pending');
+  const setups = (await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
+    .rows.filter(row => row.jobCardNumber === jobCardNumber);
+  for (const setupNumber of [1, 2]) {
+    const setup = setups.find(row => row.setupNumber === setupNumber)!;
+    await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: 'conventional',
+      setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion), reason: 'Input exhausted; more material expected.' });
+  }
+  expect((await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
+    .rows.filter(row => row.jobCardNumber === jobCardNumber)).toMatchObject([{ setupNumber: 3 }]);
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
+    operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).rejects.toThrow('released awaiting material');
+  const [short] = await review();
+  await repository.acceptShortRawMaterial({ organizationId, productionFloorCode: 'conventional', jobCardNumber,
+    expectedRowVersion: short!.rowVersion, reason: 'Customer accepts the available material.' });
+  expect(await review()).toMatchObject([{ shortAccepted: true, pendingKg: 25.11 }]);
+  await complete(2);
+  await receipt('rm-wait-second-' + suffix, 25.11);
+  expect(await review()).toEqual([]);
+  const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber });
+  expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receivedKg: 50.22, pendingKg: 0 });
+  expect(workspace.rawMaterialReceipts).toHaveLength(2);
+  expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
+});

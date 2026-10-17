@@ -674,3 +674,41 @@ describe("legacy dashboard route selections", () => {
     })
   })
 })
+
+
+test("material waits release upstream machines while running downstream retains its full target", () => {
+  const createdAt = '2026-10-20T10:00:00Z';
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt });
+  const input = {
+    workbookName: 'PostgreSQL', productionFloorCode: 'cnc' as const,
+    productionEntries: [1, 2, 3].map(n => ({ jobCard: 'WAIT-JC', partCode: 'M378', optionNumber: '1',
+      setupNo: String(n), machine: 'WAIT-' + n, machineType: 'CNC', operatorId: 'OP',
+      prodDate: '2026-10-20', outputQty: n === 3 ? 1000 : 5000, actualQty: n === 3 ? 1000 : 5000,
+      rejectQty: 0, targetQty: 5000 })),
+    dataEntries: [
+      entry('work_order', { jcNo: 'WAIT-JC', partCode: 'M378', optionNumber: '1', orderPcs: 10000,
+        rmInwardDate: '2026-10-12', rmInwardKg: 25.11 }),
+      ...[1, 2, 3].flatMap(n => [
+        entry('route', { partNo: 'M378', optionNumber: '1', setupNo: String(n), machineType: 'CNC', machineFamily: 'WAIT-F' + n }),
+        entry('cycle', { partNo: 'M378', optionNumber: '1', setupNo: String(n), cycleTime: 60 }),
+        entry('tooling', { partNo: 'M378', optionNumber: '1', setupNo: String(n) }),
+        entry('machine_master', { machineNo: 'WAIT-' + n, machineType: 'CNC', machineFamily: 'WAIT-F' + n, status: 'Active' }),
+      ]),
+    ],
+    currentShopFloorStatusRows: [1, 2, 3].map(n => ({ jcNo: 'WAIT-JC', partCode: 'M378', optionNumber: '1',
+      setupNo: String(n), machine: 'WAIT-' + n, stage: n === 3 ? 'operator_started' : 'planned', hasRecordedStart: true,
+      ...(n < 3 ? { awaitingMaterial: { kind: n === 1 ? 'rm' : 'wip', availableAtRelease: n === 1 ? 25.11 : 5000 } } : {}) })),
+  };
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows;
+  expect(rows.filter(row => row.setupNo === '1' || row.setupNo === '2')).toEqual([]);
+  expect(rows.find(row => row.setupNo === '3')).toMatchObject({ machine: 'WAIT-3', orderPcs: 10000, rawActualQty: 1000 });
+  const moreRm = { ...input, dataEntries: input.dataEntries.map(row => row.entryType === 'work_order'
+    ? { ...row, payload: { ...row.payload, rmInwardKg: 50.22 } } : row) };
+  const resumed = buildLegacyDashboardSnapshot(moreRm).productionControl.machinePlanDetailRows;
+  expect(resumed.filter(row => row.setupNo === '1').reduce((total, row) => total + Number(row.orderPcs), 0)).toBe(10000);
+  expect(resumed.some(row => row.setupNo === '2')).toBe(false);
+  expect(resumed.find(row => row.setupNo === '3')).toMatchObject({ machine: 'WAIT-3', orderPcs: 10000 });
+  const moreWip = { ...moreRm, productionEntries: moreRm.productionEntries.map(row => row.setupNo === '1'
+    ? { ...row, actualQty: 6000, outputQty: 6000 } : row) };
+  expect(buildLegacyDashboardSnapshot(moreWip).productionControl.machinePlanDetailRows.some(row => row.setupNo === '2')).toBe(true);
+});

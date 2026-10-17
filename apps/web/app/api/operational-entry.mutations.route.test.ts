@@ -397,6 +397,12 @@ describe("production entry mutation API authorization", () => {
       expect.objectContaining({ actorUserId: "entry-writer", enteredRole: "authorized_staff", endCount: 65 })
     )
 
+    const message = "Session end cannot be before its downtime entries. Review the session timeline."
+    dependencies.closeProductionSession.mockRejectedValueOnce(new ShopFloorConflictError(message))
+    const conflict = await post("data-entry", body)
+    expect(conflict.status).toBe(409)
+    expect(await conflict.json()).toMatchObject({ error: message })
+
     dependencies.signedInPerformer.mockResolvedValue(null)
     dependencies.closeProductionSession.mockClear()
     expect((await post("data-entry", body)).status).toBe(403)

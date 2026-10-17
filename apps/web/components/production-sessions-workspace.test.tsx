@@ -20,10 +20,14 @@ test("offers accident reporting on an open session", () => {
   expect(renderToStaticMarkup(<ProductionSessionDetailActions session={{ status: "closed", measurementMethod: "weight" }} onAction={() => {}} />)).not.toContain("Correct start count")
 })
 
-test("shows the selected close reason in the session timeline", () => {
+test("shows the close reason and downtime end time in the session timeline", () => {
   expect(sessionTimelineDetail({
     eventType: "session_closed",
     reasonCode: "item_complete",
     reasonName: "Production session closed",
   })).toBe("End reason: Item Complete")
+  expect(sessionTimelineDetail({
+    eventType: "downtime", reasonName: "No Electricity",
+    startedAt: "2026-10-15T12:39:00Z", endedAt: "2026-10-15T17:00:00Z",
+  })).toBe("No Electricity · End: 15 Oct 2026, 22:30 IST")
 })

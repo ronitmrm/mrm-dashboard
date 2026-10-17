@@ -103,6 +103,8 @@ import {
   useShellPageActions,
 } from "@/components/ui/page-actions"
 import { PlanningControlReview } from "@/components/planning-control-review"
+import { RawMaterialReview } from "@/components/raw-material-review"
+import { ReleaseSetupPlannerForm } from "@/components/release-setup-planner-form"
 import { plannerWorkflowResolutionPayload } from "@/lib/planner-workflow-resolution"
 import { DataDownloadButton } from "@/components/data-download-button"
 import {
@@ -4060,6 +4062,11 @@ function PlannerDecisionConsole({
       onActionChange={setActiveAction}
       onViewChange={setActiveView}
       panels={{
+        setupRelease: (
+          <ReleaseSetupPlannerForm floor={productionFloorFromLocation()} onSave={(setup, reason) =>
+            submitAction("setup-release", { setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion),
+              productionFloorCode: productionFloorFromLocation(), reason }, { throwOnError: true })} />
+        ),
         setupReopen: (
           <ReopenSetupPlannerForm floor={productionFloorFromLocation()} onSave={(setup, reason) =>
             submitAction("setup-reopen", { setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion),
@@ -16363,6 +16370,9 @@ function PlanningControlPanel({
 
   return (
     <section className="grid gap-4">
+      <RawMaterialReview floor={productionFloorCode} onAccept={(row, reason) =>
+        submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,
+          expectedRowVersion: row.rowVersion, productionFloorCode, reason }, { throwOnError: true })} />
       <PlanningControlReview
         key={productionFloorCode}
         floor={productionFloorCode}

@@ -29,6 +29,8 @@ describe("dashboard route policy", () => {
   })
 
   it("resolves minimum capabilities before mutation bodies are read", () => {
+    expect(dashboardMutationCapabilities("setup-release")).toEqual(["planning.override.write"])
+    expect(dashboardMutationCapabilities("raw-material-short-accept")).toEqual(["planning.override.write"])
     expect(dashboardMutationCapabilities("reverse-entry")).toEqual([
       "operations.corrections.write",
     ])

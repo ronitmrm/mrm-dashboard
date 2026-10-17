@@ -7,6 +7,8 @@ describe("planning refresh policy", () => {
   it("queues recalculation for operational planning changes", () => {
     expect(shouldQueuePlanningRefresh("planner-priority")).toBe(true);
     expect(shouldQueuePlanningRefresh("raw-material-rejection")).toBe(true);
+    expect(shouldQueuePlanningRefresh("setup-release")).toBe(true);
+    expect(shouldQueuePlanningRefresh("raw-material-short-accept")).toBe(true);
     expect(shouldQueuePlanningRefresh("work-order-cancellation")).toBe(true);
     expect(shouldQueuePlanningRefresh("mark-complete")).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "software_raw" })).toBe(true);

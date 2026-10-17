@@ -167,7 +167,7 @@ export function ProductionSessionsWorkspace({
   const [action, setAction] = useState<Action | null>(null)
   const [target, setTarget] = useState<Row | null>(null)
   const [detail, setDetail] = useState<Row | null>(null)
-  const [detailEvents, setDetailEvents] = useState<Row[]>([])
+  const [detailEvents, setDetailEvents] = useState<{ rows: Row[]; loading: boolean; error: string }>({ rows: [], loading: false, error: "" })
   const [saving, setSaving] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [message, setMessage] = useState("")
@@ -216,6 +216,20 @@ export function ProductionSessionsWorkspace({
     }
   }, [floor])
 
+  const loadDetailEvents = useCallback(async (sessionId: string) => {
+    setDetailEvents({ rows: [], loading: true, error: "" })
+    try {
+      const body = await api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(sessionId)}&limit=500`)
+      if (text(detailRef.current?.id) === sessionId) {
+        setDetailEvents({ rows: rows(body.rows), loading: false, error: "" })
+      }
+    } catch (reason) {
+      if (text(detailRef.current?.id) === sessionId) {
+        setDetailEvents({ rows: [], loading: false, error: reason instanceof Error ? reason.message : "Session events could not be loaded." })
+      }
+    }
+  }, [floor])
+
   const reconcileSessions = useCallback((body: Row) => {
     const loadedSessions = rows(body.rows)
     const loadedEvents = rows(body.events)
@@ -234,25 +248,20 @@ export function ProductionSessionsWorkspace({
     }
     const currentDetail = requested ?? detailRef.current
     if (currentDetail) {
-      const detailId = text(currentDetail.id)
-      setDetailEvents(loadedEvents.filter(row => text(row.sessionId) === detailId))
-      void api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(detailId)}&limit=500`)
-        .then(detailBody => {
-          if (text(detailRef.current?.id) === detailId) setDetailEvents(rows(detailBody.rows))
-        }).catch(reason => setError(reason instanceof Error ? reason.message : "Session events could not be loaded."))
+      void loadDetailEvents(text(currentDetail.id))
     }
     const revision = text(body.employeeRevision)
     if (employeeRevisionRef.current !== revision) {
       employeeRevisionRef.current = revision
       void loadEmployees()
     }
-  }, [floor, initialSessionId, loadEmployees])
+  }, [initialSessionId, loadDetailEvents, loadEmployees])
   const clearSessions = useCallback(() => {
     setSessions([])
     setEventRows([])
     setDetail(null)
     detailRef.current = null
-    setDetailEvents([])
+    setDetailEvents({ rows: [], loading: false, error: "" })
   }, [])
   const sessionDelivery = useConditionalRecords(
     `/api/production-sessions?floor=${encodeURIComponent(floor)}&limit=500&conditional=1&includeEvents=1`,
@@ -304,16 +313,10 @@ export function ProductionSessionsWorkspace({
     setMessage("")
   }
 
-  async function openDetail(row: Row) {
+  function openDetail(row: Row) {
     detailRef.current = row
     setDetail(row)
-    setDetailEvents([])
-    try {
-      const body = await api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(text(row.id))}&limit=500`)
-      if (text(detailRef.current?.id) === text(row.id)) setDetailEvents(rows(body.rows))
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Session events could not be loaded.")
-    }
+    void loadDetailEvents(text(row.id))
   }
 
   async function save(entryType: string, payload: Row) {
@@ -571,10 +574,12 @@ function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows:
 }
 
 function EventLog({ rows }: { rows: Row[] }) {
-  return <ScrollableTable headers={["Time", "Session", "Machine", "Event", "Entered by", "Details", "Qty / Min"]}>{rows.map((row, index) => <TableRow key={`${text(row.eventId)}-${index}`}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(row.eventTime)}</TableCell><TableCell className="font-mono text-xs">{text(row.sessionReference)}</TableCell><TableCell>{text(row.machineNumber)}</TableCell><TableCell><Badge variant="outline">{titleCase(row.eventType)}</Badge></TableCell><TableCell>{titleCase(row.enteredRole)}<div className="text-xs text-muted-foreground">{text(row.enteredByName) || "-"}</div></TableCell><TableCell>{text(row.reasonName) || "-"}</TableCell><TableCell className="text-right tabular-nums">{number(row.quantity) || number(row.durationMinutes) || "-"}</TableCell></TableRow>)}</ScrollableTable>
+  return <ScrollableTable headers={["Time", "Session", "Machine", "Event", "Entered by", "Details", "Qty / Min"]}>{rows.map((row, index) => <TableRow key={`${text(row.eventId)}-${index}`}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(row.eventTime)}</TableCell><TableCell className="font-mono text-xs">{text(row.sessionReference)}</TableCell><TableCell>{text(row.machineNumber)}</TableCell><TableCell><Badge variant="outline">{titleCase(row.eventType)}</Badge></TableCell><TableCell>{titleCase(row.enteredRole)}<div className="text-xs text-muted-foreground">{text(row.enteredByName) || "-"}</div></TableCell><TableCell>{sessionTimelineDetail(row)}</TableCell><TableCell className="text-right tabular-nums">{number(row.quantity) || number(row.durationMinutes) || "-"}</TableCell></TableRow>)}</ScrollableTable>
 }
 
-function SessionTimeline({ rows }: { rows: Row[] }) {
+function SessionTimeline({ rows, loading, error }: { rows: Row[]; loading: boolean; error: string }) {
+  if (loading) return <StandardState variant="loading" title="Loading session timeline…" description="Retrieving saved production and downtime events." />
+  if (error) return <StandardState variant="error" title="Session timeline could not be loaded" description={error} />
   if (!rows.length) {
     return <div className="grid min-h-32 place-items-center rounded-md border text-muted-foreground">No session events yet.</div>
   }
@@ -898,7 +903,7 @@ function IstDateTimeField({ label, value, onChange }: { label: string; value: st
 }
 function MasterSelect({ value, options, onChange, placeholder }: { value: string; options: Array<{ code: string; label: string }>; onChange: (value: string) => void; placeholder: string }) { return <NativeSelect className="w-full" wrapLabels value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">{options.length ? placeholder : "No active master values configured"}</NativeSelectOption>{options.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}</NativeSelect> }
 
-function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { session: Row | null; events: Row[]; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void; onAction: (action: Action, row: Row) => void }) {
+function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { session: Row | null; events: { rows: Row[]; loading: boolean; error: string }; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void; onAction: (action: Action, row: Row) => void }) {
   if (!session) return null
   const status = sessionOperationalStatus(session, floor, now)
   const pending = outputPending(session)
@@ -952,5 +957,5 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     onOpenChange(false)
     onAction(action, session)
   }
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><ProductionSessionDetailActions session={session} onAction={chooseAction} /><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div>{accidents.length ? <div className="grid max-h-52 shrink-0 gap-2 overflow-y-auto"><h3 className="font-medium">Accident reports</h3>{accidents.map(({ downtime, report }) => <div key={text(downtime.id)} className="grid gap-1 rounded-md border p-3 text-sm"><div className="font-medium">{formatDateTime(downtime.startedAt)} · {text(downtime.reasonName)}</div><div>{text(report.description)}</div>{text(report.remarks) ? <div className="whitespace-pre-wrap"><span className="text-muted-foreground">Remarks: </span>{text(report.remarks)}</div> : null}<div><span className="text-muted-foreground">Lost Unit IDs: </span>{rows(report.lostUnits).map((unit) => `${text(unit.assetCode)} · ${text(unit.assetName)}`).join(", ") || "None"}</div><div><span className="text-muted-foreground">Consumables already used: </span>{rows(report.consumables).map((item) => `${text(item.typeCode)} · ${number(item.quantity)} ${text(item.unit)}`).join(", ") || "None"}</div></div>)}</div> : null}<div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><ProductionSessionDetailActions session={session} onAction={chooseAction} /><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 lg:grid-cols-4">{summary.map(([label,value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium tabular-nums">{value}</div></div>)}</div>{accidents.length ? <div className="grid max-h-52 shrink-0 gap-2 overflow-y-auto"><h3 className="font-medium">Accident reports</h3>{accidents.map(({ downtime, report }) => <div key={text(downtime.id)} className="grid gap-1 rounded-md border p-3 text-sm"><div className="font-medium">{formatDateTime(downtime.startedAt)} · {text(downtime.reasonName)}</div><div>{text(report.description)}</div>{text(report.remarks) ? <div className="whitespace-pre-wrap"><span className="text-muted-foreground">Remarks: </span>{text(report.remarks)}</div> : null}<div><span className="text-muted-foreground">Lost Unit IDs: </span>{rows(report.lostUnits).map((unit) => `${text(unit.assetCode)} · ${text(unit.assetName)}`).join(", ") || "None"}</div><div><span className="text-muted-foreground">Consumables already used: </span>{rows(report.consumables).map((item) => `${text(item.typeCode)} · ${number(item.quantity)} ${text(item.unit)}`).join(", ") || "None"}</div></div>)}</div> : null}<div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline {...events} /></div></div></SheetContent></Sheet>
 }

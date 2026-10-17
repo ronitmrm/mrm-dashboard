@@ -33,6 +33,7 @@ export type PlannerDecisionAction =
   | "raw-material-rejection"
   | "route-change"
   | "setup-reopen"
+  | "setup-release"
 
 export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
 
@@ -48,6 +49,7 @@ type PlannerDecisionPanels = {
   rawMaterialRejection: ReactNode
   routeChange: ReactNode
   setupReopen: ReactNode
+  setupRelease: ReactNode
 }
 
 type PlannerDecisionWorkspaceProps = {
@@ -62,6 +64,13 @@ type PlannerDecisionWorkspaceProps = {
 }
 
 const actionChoices = [
+  {
+    key: "setup-release",
+    title: "Release machine",
+    description: "Release a selected setup's machine while awaiting RM or WIP.",
+    detail: "Preserve production and return remaining work to planning when more input arrives.",
+    icon: PackageX,
+  },
   {
     key: "setup-reopen",
     title: "Reopen Setup",
@@ -147,6 +156,7 @@ export function PlannerDecisionWorkspace({
         "raw-material-rejection": panels.rawMaterialRejection,
         "route-change": panels.routeChange,
         "setup-reopen": panels.setupReopen,
+        "setup-release": panels.setupRelease,
       }[activeAction]
     : null
 
