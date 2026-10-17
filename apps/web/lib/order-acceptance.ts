@@ -398,7 +398,7 @@ export function calculateProposal(
     if (cached?.rm === rm) return cached.result
     const result = schedule(line, target, rm, true)
     // Bound retained branches even for the largest proposals/refinement search.
-    if (scheduleResultCount >= 1024) {
+    if (scheduleResultCount >= 4096) {
       scheduleResults = new WeakMap()
       scheduleResultCount = 0
     }
