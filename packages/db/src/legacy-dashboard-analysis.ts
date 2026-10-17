@@ -11,6 +11,12 @@ import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, t
 import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningCalendarExceptions, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 import type { ProductionFloorCode } from "./production-floors";
 
+let numericCollation: Intl.Collator | undefined;
+function compareNumericText(a: string, b: string) {
+  // Keep first-use setup inside the cold calculation boundary.
+  return (numericCollation ??= new Intl.Collator(undefined, { numeric: true })).compare(a, b);
+}
+
 type DataEntry = {
   _id?: unknown;
   entryType: string;
@@ -1922,7 +1928,7 @@ function buildProductionDashboardRows({
   }).sort((left, right) =>
     Number(left.status === "Dispatched") - Number(right.status === "Dispatched") ||
     compareDateValues(left.currentProbableDispatchDate, right.currentProbableDispatchDate) ||
-    left.jcNo.localeCompare(right.jcNo, undefined, { numeric: true }),
+    compareNumericText(left.jcNo, right.jcNo),
   );
 }
 
@@ -3309,7 +3315,7 @@ export function workOrderPlanningSort(a: Record<string, unknown>, b: Record<stri
   return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))
     || compareDateValues(rowText(a, "deliveryDate"), rowText(b, "deliveryDate"))
     || compareDateValues(rowText(a, "rmInwardDate"), rowText(b, "rmInwardDate"))
-    || rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true });
+    || compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo"));
 }
 
 function compareDateValues(a: unknown, b: unknown) {
@@ -4168,8 +4174,8 @@ function finalizeMachinePlanDetails(
       : finish.date === finalDate ? finish.workingHours : planningCalendar.productiveHoursPerDay;
   }
   return applyPlannedDateTaskReadiness(finalizedDetails, planningCalendar).sort((a, b) =>
-    rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
-    rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
+    compareNumericText(rowText(a, "machine"), rowText(b, "machine")) ||
+    compareNumericText(rowText(a, "partCode"), rowText(b, "partCode")) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
 }
@@ -4551,7 +4557,7 @@ function calculateBalanceMachineFamilyIdleGaps(
   const machineOrderKey = JSON.stringify([...byMachine.keys()]);
   let machineOrder = activePlanningKernel?.gapMachineOrders.get(machineOrderKey);
   if (!machineOrder) {
-    machineOrder = [...byMachine.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    machineOrder = [...byMachine.keys()].sort(compareNumericText);
     activePlanningKernel?.gapMachineOrders.set(machineOrderKey, machineOrder);
   }
   const sortedMachines = machineOrder.map((machine) => [machine, byMachine.get(machine)!] as const);
@@ -4641,7 +4647,7 @@ function calculateBalanceMachineFamilyIdleGaps(
       safeNumber(b.row.plannerPriorityScore) - safeNumber(a.row.plannerPriorityScore) ||
       a.start.localeCompare(b.start) ||
       queueReadyDate(a.row).localeCompare(queueReadyDate(b.row)) ||
-      rowText(a.row, "jcNo").localeCompare(rowText(b.row, "jcNo"), undefined, { numeric: true }),
+      compareNumericText(rowText(a.row, "jcNo"), rowText(b.row, "jcNo")),
   )[0];
   if (earliestTailMove) {
     const { row, machine, start, end } = earliestTailMove;
@@ -4681,7 +4687,7 @@ function calculateMachineFamilyGapProposal(
     .sort(
       (a, b) =>
         machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
-        rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }),
+        compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo")),
     );
   const first = sorted[0];
   if (first) {
@@ -4772,7 +4778,7 @@ function calculateMachineFamilyGapProposal(
       (a, b) =>
         safeNumber(b.plannerPriorityScore) - safeNumber(a.plannerPriorityScore) ||
         queueReadyDate(a).localeCompare(queueReadyDate(b)) ||
-        rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }),
+        compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo")),
     )[0];
   if (tailCandidate) {
     return {
@@ -4819,7 +4825,7 @@ function familyIdleGapCandidate(
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
       queueReadyDate(a).localeCompare(queueReadyDate(b)) ||
       parseDate(rowText(a, "setupPlannedDate", "plannedDate")).localeCompare(parseDate(rowText(b, "setupPlannedDate", "plannedDate"))) ||
-      rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }),
+      compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo")),
     )[0];
 }
 
@@ -4837,7 +4843,7 @@ function leadingFamilyIdleGapCandidate(
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
       queueReadyDate(a).localeCompare(queueReadyDate(b)) ||
       parseDate(rowText(a, "setupPlannedDate", "plannedDate")).localeCompare(parseDate(rowText(b, "setupPlannedDate", "plannedDate"))) ||
-      rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }),
+      compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo")),
     )[0];
 }
 
@@ -5424,16 +5430,6 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
             ),
           );
         }
-        // Forecast dates can supply a missing actual-start fallback. Keep the
-        // remaining facts, whose inputs this date update does not change.
-        const facts = currentPlanningFacts?.get(row);
-        if (facts) {
-          delete facts.queueReadyDate;
-          delete facts.lockedProductionStartDate;
-          delete facts.priorityQueueState;
-          delete facts.isAutomaticUnstartedPlan;
-          delete facts.isMovablePlannedRow;
-        }
         setPlanningRowField(row, "plannedDate", dateLabel(plannedStartDate));
         setPlanningRowField(row, "setupPlannedDate", dateLabel(plannedStartDate));
         setPlanningRowField(row, "plannedStartDate", dateLabel(plannedStartDate));
@@ -5519,7 +5515,7 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
   return familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
-    rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
+    compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo")) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
 }
 
@@ -5595,12 +5591,12 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
     let changed = prepared.rows.length !== details.length;
     details.forEach((row, index) => {
       const previous = prepared.rows[index];
-      // Full versions cover every identity alias. Captured fallback maps can
-      // initialize independently; never reuse across that boundary or a fork.
-      const version = planningRowVersion(row);
-      if (previous?.row === row && previous.version === version && previous.normalized === normalizedRowCache.get(row)) return;
+      // Matching reads only these identity aliases and the captured fallback
+      // map. Scheduling dates, quantities and metadata cannot change a match.
+      if (previous?.row === row && previous.normalized === normalizedRowCache.get(row)
+        && interruptionIdentityFields.every((field, fieldIndex) => Object.is(row[field], previous.identity[fieldIndex]))) return;
       const match = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
-      prepared.rows[index] = { row, version: planningRowVersion(row), normalized: normalizedRowCache.get(row), match };
+      prepared.rows[index] = { row, identity: interruptionIdentityFields.map(field => row[field]), normalized: normalizedRowCache.get(row), match };
       changed = true;
     });
     if (changed) {
@@ -6221,7 +6217,7 @@ function activeMachineUnavailableWindows(machineConstraints: ActionRow[], planni
         resources.windowFacts.set(row, prepared);
       }
       return prepared;
-    }).sort((left, right) => left.fromDate.localeCompare(right.fromDate) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
+    }).sort((left, right) => left.fromDate.localeCompare(right.fromDate) || compareNumericText(left.machine, right.machine));
     resources.windows.set(machineConstraints, windows);
     return windows;
   }
@@ -6254,7 +6250,7 @@ function calculateActiveMachineUnavailableWindows(machineConstraints: ActionRow[
       };
     })
     .filter((window) => window.machine && window.fromDate && window.toDate)
-    .sort((left, right) => left.fromDate.localeCompare(right.fromDate) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
+    .sort((left, right) => left.fromDate.localeCompare(right.fromDate) || compareNumericText(left.machine, right.machine));
   return windows;
 }
 
@@ -6723,9 +6719,9 @@ function assignedPhysicalMachines({
     }
     return [...combined.values()];
   };
-  const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const previousMachineList = [...(previousMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort(compareNumericText);
+  const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort(compareNumericText);
+  const previousMachineList = [...(previousMachines ?? new Set<string>())].filter(Boolean).sort(compareNumericText);
   const delayMachineList = previousMachineList.filter((machine) => machineHasDelayUnavailableWindow(machine, machineUnavailableWindows));
   if (productionActualMachineList.length) return withAdditionalMachines(productionActualMachineList);
   if (overrideMachine) {
@@ -7188,7 +7184,7 @@ function candidatePhysicalMachines(
       (machinePlannedQty.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedQty.get(canonicalKey(b.machine)) ?? 0) ||
       (machineNextSetupDate.get(canonicalKey(a.machine)) ?? "").localeCompare(machineNextSetupDate.get(canonicalKey(b.machine)) ?? "") ||
       (machineLoad.get(canonicalKey(a.machine)) ?? 0) - (machineLoad.get(canonicalKey(b.machine)) ?? 0) ||
-      a.machine.localeCompare(b.machine, undefined, { numeric: true }),
+      compareNumericText(a.machine, b.machine),
     );
 }
 
@@ -7374,7 +7370,7 @@ function calculateActivePhysicalMachineRows(
     .filter((row) => isMachineActive(row.status))
     .filter((row) => machineFamilyMatches(routeMachine, row.machineFamily))
     .filter((row) => !typeKey || !canonicalKey(row.machineType) || canonicalKey(row.machineType) === typeKey)
-    .sort((a, b) => a.machine.localeCompare(b.machine, undefined, { numeric: true }));
+    .sort((a, b) => compareNumericText(a.machine, b.machine));
 }
 
 function isMachineActive(status: string) {
@@ -7958,7 +7954,7 @@ function numericSort(a: string, b: string) {
   const left = Number(a);
   const right = Number(b);
   if (Number.isFinite(left) && Number.isFinite(right)) return left - right;
-  return a.localeCompare(b, undefined, { numeric: true });
+  return compareNumericText(a, b);
 }
 
 function maxDate(values: string[]) {
@@ -8252,9 +8248,8 @@ function canonicalKey(value: Parameters<typeof calculateCanonicalKey>[0]): strin
   return typeof value === "string" ? canonicalKeyStrings(value, () => calculateCanonicalKey(value)) : calculateCanonicalKey(value);
 }
 
-const cleanTextStrings = createBoundedMemo<string, string>();
 function cleanText(value: Parameters<typeof calculateCleanText>[0]): string {
-  return typeof value === "string" ? cleanTextStrings(value, () => calculateCleanText(value)) : calculateCleanText(value);
+  return calculateCleanText(value);
 }
 
 const dateLabelStrings = createBoundedMemo<string, string>();
@@ -8265,15 +8260,18 @@ function dateLabel(value: Parameters<typeof calculateDateLabel>[0]): string {
 type QueueComparison = { aToolingDate: unknown; bToolingDate: unknown; aVersion: number; bVersion: number; order: number };
 const scheduledRowFields = ["plannedDate", "setupPlannedDate", "plannedStartDate", "plannedCompletionDate",
   "plannedProductionStartDate", "plannedProductionEndDate", "planVsActual", "machineUnavailableReason", "plannerActionRequired"];
+const scheduleDateFields = new Set(scheduledRowFields.slice(0, 6));
+const scheduleDateFacts = ["queueReadyDate", "lockedProductionStartDate", "priorityQueueState", "isAutomaticUnstartedPlan", "isMovablePlannedRow"] as const;
 type PlanningRowState = {
   row: Record<string, unknown>; meta: ReturnType<typeof planningMeta>;
   rowKeys: string[]; metaKeys: string[]; version: number; normalized?: Map<string, unknown>;
 };
+const interruptionIdentityFields = ["jcNo", "JC NO.", "JC NO", "setupNo", "SETUP NO", "SETUP", "machine", "machineNo", "MACHINE NO", "M/C NO"] as const;
 type OverridePreparation = {
   raw: unknown;
   rows: Array<{
     row: Record<string, unknown>;
-    version: number;
+    identity: unknown[];
     normalized: Map<string, unknown> | undefined;
     match: ReturnType<typeof calculatePlanOverrideInterruptedSetups>[number] | undefined;
   }>;
@@ -8295,6 +8293,7 @@ function createIncrementalPlanningKernel() {
   return {
     rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
     facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
+    normalizedMatches: new WeakMap<Map<string, unknown>, WeakMap<Map<string, unknown>, boolean>>(),
     overridePreparation: new WeakMap<Array<Record<string, unknown>>, Map<Record<string, unknown>, OverridePreparation>>(),
     // Queue keys contain the complete row/meta/fallback versions plus the
     // changing queue frontier and tooling slots. Keep only these exact caches
@@ -8356,6 +8355,11 @@ function setPlanningRowField(row: Record<string, unknown>, field: string, value:
     if (field === "toolingNextAvailableDate") {
       const facts = activePlanningKernel?.facts.get(row);
       if (facts) delete facts.queueReadyDate;
+    } else if (scheduleDateFields.has(field)) {
+      // Forecast dates may supply a missing actual-start/readiness fallback;
+      // identities, decisions, tooling-held and lifecycle completion stay valid.
+      const facts = activePlanningKernel?.facts.get(row);
+      if (facts) for (const key of scheduleDateFacts) delete facts[key];
     } else activePlanningKernel?.facts.delete(row);
     const state = activePlanningKernel?.rows.get(row);
     if (state && field !== "toolingNextAvailableDate") state.dirty = true;
@@ -8409,17 +8413,12 @@ function planningRowVersion(row: Record<string, unknown>) {
       (state) =>
         rowKeys.length === state.rowKeys.length &&
         metaKeys.length === state.metaKeys.length &&
-        rowKeys.every((key) => Object.is(row[key], state.row[key])) &&
         metaKeys.every((key) => Object.is(meta[key as keyof typeof meta], state.meta[key as keyof typeof meta])) &&
-        (normalized === state.normalized ||
-          Boolean(
-            normalized &&
-            state.normalized &&
-            normalized.size === state.normalized.size &&
-            [...normalized].every(
-              ([key, value]) => state.normalized!.has(key) && Object.is(value, state.normalized!.get(key)),
-            ),
-          )),
+        // Reject changed schedule fields before traversing the much wider
+        // immutable payload. The complete row comparison still proves reuse.
+        scheduledRowFields.every((key) => Object.is(row[key], state.row[key])) &&
+        rowKeys.every((key) => Object.is(row[key], state.row[key])) &&
+        matchingNormalizedRows(normalized, state.normalized),
     );
     record.dirty = false;
     if (matching) return (record.current = matching.version);
@@ -8443,6 +8442,29 @@ function planningRowVersion(row: Record<string, unknown>) {
   const version = (previous?.version ?? 0) + 1;
   planningRowVersions.set(row, { row: { ...row }, meta: { ...meta }, rowKeys, metaKeys, version });
   return version;
+}
+
+function matchingNormalizedRows(left: Map<string, unknown> | undefined, right: Map<string, unknown> | undefined) {
+  if (left === right) return true;
+  if (!left || !right || left.size !== right.size) return false;
+  // Fallback maps capture values once and never mutate. Compare each pair
+  // once per solve, preserving every alias, absent value and object identity.
+  const comparisons = activePlanningKernel?.normalizedMatches;
+  let matches = comparisons?.get(left);
+  const previous = matches?.get(right);
+  if (previous !== undefined) return previous;
+  let equal = true;
+  for (const [key, value] of left) {
+    if (!right.has(key) || !Object.is(value, right.get(key))) {
+      equal = false;
+      break;
+    }
+  }
+  if (comparisons) {
+    if (!matches) comparisons.set(left, (matches = new WeakMap()));
+    matches.set(right, equal);
+  }
+  return equal;
 }
 
 type CachedPlanningRow = {
