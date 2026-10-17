@@ -374,6 +374,39 @@ export function calculateProposal(
           [...lines].sort((a, b) => hours(b) - hours(a)),
           lines,
         ]
+  // Accepted schedules are append-only. The simulator copies protected rows
+  // and replaces their metadata; nested tooling data is only read. Reusing a
+  // transition therefore preserves branch isolation, including after failures.
+  // Context, calendar and deadline are fixed for this synchronous calculation;
+  // line identity and RM date capture the remaining simulation inputs.
+  let scheduleResults = new WeakMap<
+    Schedule,
+    Map<PlanningLine, { rm: string; result: ReturnType<typeof schedule> }>
+  >()
+  let scheduleResultCount = 0
+  const scheduleProposed = (
+    line: PlanningLine,
+    target: Schedule,
+    rm: string
+  ) => {
+    if (input.mode !== "deadline") return schedule(line, target, rm, true)
+    const cached = scheduleResults.get(target)?.get(line)
+    if (cached?.rm === rm) return cached.result
+    const result = schedule(line, target, rm, true)
+    // Bound retained branches even for the largest proposals/refinement search.
+    if (scheduleResultCount >= 1024) {
+      scheduleResults = new WeakMap()
+      scheduleResultCount = 0
+    }
+    let results = scheduleResults.get(target)
+    if (!results) {
+      results = new Map()
+      scheduleResults.set(target, results)
+    }
+    results.set(line, { rm, result })
+    scheduleResultCount += 1
+    return result
+  }
   const trial = (candidate: PlanningLine[]) => {
     let target = committed
     const results = new Map<string, LineResult>()
@@ -384,7 +417,7 @@ export function calculateProposal(
           : line.rmDate
       const result =
         !blockers.length && !line.issue && rm
-          ? schedule(line, target, rm, true)
+          ? scheduleProposed(line, target, rm)
           : null
       const selected = !!result && !result.reason
       if (selected) target = result.target
