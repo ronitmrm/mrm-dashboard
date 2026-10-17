@@ -5169,6 +5169,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       previousKey: "",
       state,
       candidateIndex,
+      ordinal: candidateIndex,
       codes: [...new Set(queue.flatMap(requiredToolingCodesFromPlan))],
     };
   });
@@ -5227,6 +5228,8 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     state: number;
     remainingState: number;
     sortState?: { id: number; comparisons: Map<number, number> };
+    heapIndex?: number;
+    heapGuard?: { score: number; machine: string; unsafe: boolean; idle: boolean };
   };
   const candidates: QueueCandidate[] = [];
   const frontierStates: number[] = [];
@@ -5254,7 +5257,119 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     activePlanningKernel?.candidateSortStates.set(key, state);
     return (candidate.sortState = state);
   };
+  const compareCandidates = (a: QueueCandidate, b: QueueCandidate) => {
+    const state = candidateSortState(a),
+      other = candidateSortState(b);
+    const cached = state.comparisons.get(other.id);
+    if (cached !== undefined) return cached;
+    const order =
+      Number(candidateHeld(b)) - Number(candidateHeld(a)) ||
+      candidateDate(a).localeCompare(candidateDate(b)) ||
+      compareQueueRows(a.row, b.row);
+    if (state.comparisons.size >= 128) state.comparisons.clear();
+    state.comparisons.set(other.id, order);
+    return order;
+  };
+  // Pair-specific priorities can be non-transitive. A heap is valid only when
+  // these cohort guards reduce the existing comparator to scalar ordering.
+  const pendingGuards = new Set<QueueCandidate>();
+  const scores = new Map<number, number>();
+  const machines = new Map<string, number>();
+  let unsafeCandidates = 0;
+  let nonIdleCandidates = 0;
+  const removeGuard = (candidate: QueueCandidate | undefined) => {
+    if (!candidate) return;
+    pendingGuards.delete(candidate);
+    const guard = candidate.heapGuard;
+    if (!guard) return;
+    const scoreCount = scores.get(guard.score)! - 1;
+    if (scoreCount) scores.set(guard.score, scoreCount);
+    else scores.delete(guard.score);
+    const machineCount = machines.get(guard.machine)! - 1;
+    if (machineCount) machines.set(guard.machine, machineCount);
+    else machines.delete(guard.machine);
+    unsafeCandidates -= Number(guard.unsafe);
+    nonIdleCandidates -= Number(!guard.idle);
+  };
+  const heapEligible = () => {
+    if (!activeSimulationResources || !activePlanningKernel) return false;
+    // Previously guarded waiting candidates retain their captured maps. Check
+    // ALL new candidates before any guard lookup can capture row aliases.
+    for (const candidate of pendingGuards)
+      if (!normalizedRowCache.has(candidate.row)) return false;
+    for (const candidate of pendingGuards) {
+      const row = candidate.row;
+      const before = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
+      const guard = {
+        score: safeNumber(rowValue(row, "plannerPriorityScore")),
+        idle: priorityQueueState(row) === "idle",
+        machine: canonicalKey(rowText(row, "machine", "machineNo")),
+        unsafe: (Array.isArray(before) && before.length > 0) || !Number.isFinite(Number(rowText(row, "setupNo"))),
+      };
+      candidate.heapGuard = guard;
+      scores.set(guard.score, (scores.get(guard.score) ?? 0) + 1);
+      machines.set(guard.machine, (machines.get(guard.machine) ?? 0) + 1);
+      unsafeCandidates += Number(guard.unsafe);
+      nonIdleCandidates += Number(!guard.idle);
+    }
+    pendingGuards.clear();
+    // All-idle cohorts allow every unequal-score preemption, so priority is
+    // also scalar there. Equal scores disable preemption for every lifecycle.
+    return !unsafeCandidates && (scores.size === 1 || !nonIdleCandidates) && machines.size === candidates.length;
+  };
+  const heap: QueueCandidate[] = [];
+  let heapActive = false;
+  const compareHeap = (a: QueueCandidate, b: QueueCandidate) =>
+    compareCandidates(a, b) || a.item.ordinal - b.item.ordinal;
+  const heapSwap = (left: number, right: number) => {
+    const a = heap[left]!, b = heap[right]!;
+    heap[left] = b;
+    heap[right] = a;
+    b.heapIndex = left;
+    a.heapIndex = right;
+  };
+  const siftUp = (start: number) => {
+    let index = start;
+    while (index > 0) {
+      const parent = (index - 1) >>> 1;
+      if (compareHeap(heap[index]!, heap[parent]!) >= 0) break;
+      heapSwap(index, parent);
+      index = parent;
+    }
+    return index;
+  };
+  const siftDown = (start: number) => {
+    let index = start;
+    while (index * 2 + 1 < heap.length) {
+      let child = index * 2 + 1;
+      if (child + 1 < heap.length && compareHeap(heap[child + 1]!, heap[child]!) < 0) child += 1;
+      if (compareHeap(heap[index]!, heap[child]!) <= 0) break;
+      heapSwap(index, child);
+      index = child;
+    }
+  };
+  const heapRemove = (candidate: QueueCandidate | undefined) => {
+    const index = candidate?.heapIndex;
+    if (index === undefined) return;
+    candidate!.heapIndex = undefined;
+    const last = heap.pop()!;
+    if (index === heap.length) return;
+    heap[index] = last;
+    last.heapIndex = index;
+    siftDown(siftUp(index));
+  };
+  const heapInsert = (candidate: QueueCandidate) => {
+    candidate.heapIndex = heap.length;
+    heap.push(candidate);
+    siftUp(candidate.heapIndex);
+  };
   while (changedQueues.size || candidates.length) {
+    // Remove affected heads while their OLD row/tooling state still holds.
+    // This leaves a valid heap of unchanged candidates before slot updates.
+    for (const row of changedToolingRows) changedQueues.add(queueByRow.get(row)!);
+    if (heapActive)
+      for (const item of changedQueues) heapRemove(candidates[item.candidateIndex]);
+    const replacements: QueueCandidate[] = [];
     for (const row of changedToolingRows) {
       // Slot changes affect queue readiness; lifecycle and priority facts remain
       // fixed throughout this rescheduling pass.
@@ -5290,30 +5405,39 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         state: transition.state,
         remainingState: transition.remainingState,
       };
+      removeGuard(candidates[item.candidateIndex]);
+      pendingGuards.add(candidate);
+      replacements.push(candidate);
       candidates[item.candidateIndex] = candidate;
       frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
     }
     changedQueues.clear();
-    // Preserve the original candidate sequence and stable sort. An unchanged
-    // frontier replays its exact winner, including pair-specific priority rules.
-    const frontier = frontierStates.join(",");
-    let winner = activePlanningKernel?.frontiers.get(frontier);
-    if (winner === undefined) {
-      const ordered = [...candidates].sort((a, b) => {
-        const state = candidateSortState(a),
-          other = candidateSortState(b);
-        const cached = state.comparisons.get(other.id);
-        if (cached !== undefined) return cached;
-        const order =
-          Number(candidateHeld(b)) - Number(candidateHeld(a)) ||
-          candidateDate(a).localeCompare(candidateDate(b)) ||
-          compareQueueRows(a.row, b.row);
-        if (state.comparisons.size >= 128) state.comparisons.clear();
-        state.comparisons.set(other.id, order);
-        return order;
-      });
-      winner = candidates.indexOf(ordered[0]!);
-      activePlanningKernel?.frontiers.set(frontier, winner);
+    let winner: number;
+    if (heapEligible()) {
+      if (!heapActive) {
+        // Enter a proven-safe interval; retain original queue ordinals for ties.
+        for (const candidate of candidates) heapInsert(candidate);
+        heapActive = true;
+      } else for (const candidate of replacements) heapInsert(candidate);
+      winner = heap[0]!.item.candidateIndex;
+      // A consumed row is about to mutate, so remove it before scheduling.
+      heapRemove(heap[0]);
+    } else {
+      if (heapActive) {
+        for (const candidate of heap) candidate.heapIndex = undefined;
+        heap.length = 0;
+        heapActive = false;
+      }
+      // Unsafe cohorts retain the original sequence, stable native sort and
+      // exact frontier replay, including non-transitive pair-specific rules.
+      const frontier = frontierStates.join(",");
+      const cachedWinner = activePlanningKernel?.frontiers.get(frontier);
+      if (cachedWinner !== undefined) winner = cachedWinner;
+      else {
+        const ordered = [...candidates].sort(compareCandidates);
+        winner = candidates.indexOf(ordered[0]!);
+        activePlanningKernel?.frontiers.set(frontier, winner);
+      }
     }
     const { item, row, remainingState } = candidates[winner]!;
     item.queue.splice(item.queue.indexOf(row), 1);
@@ -5321,6 +5445,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     waitingRows.delete(row);
     if (item.queue.length) changedQueues.add(item);
     else {
+      removeGuard(candidates[winner]);
       candidates.splice(winner, 1);
       frontierStates.splice(winner, 1);
       for (let index = winner; index < candidates.length; index += 1)
