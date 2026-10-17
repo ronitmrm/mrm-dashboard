@@ -3363,6 +3363,7 @@ function createSimulationResources() {
     machines: new Map<string, ReturnType<typeof calculateActivePhysicalMachineRows>>(),
     constraints: new WeakMap<ProductionPlanningSimulationInput["reservations"], ActionRow[]>(),
     reservationConstraints: new WeakMap<ProductionPlanningSimulationInput["reservations"][number], ActionRow>(),
+    generatedConstraints: new PlanningStateMap<string, ActionRow>(),
     windows: new WeakMap<ActionRow[], MachineUnavailableWindow[]>(),
     windowFacts: new WeakMap<ActionRow, MachineUnavailableWindow[]>(),
     windowsByMachine: new WeakMap<MachineUnavailableWindow[], Map<string, MachineUnavailableWindow[]>>(),
@@ -3386,8 +3387,15 @@ export function simulateProductionPlanning(input: ProductionPlanningSimulationIn
     constraints = input.reservations.map((row) => {
       let constraint = activeSimulationResources?.reservationConstraints.get(row);
       if (!constraint) {
-        constraint = { machine: row.machine, unavailableFrom: row.start, unavailableTo: row.end,
-          action: "delay", status: "Unavailable", reason: "Protected existing commitment" };
+        // Only these internally generated rows have this fixed shape. Reuse
+        // identical raw facts across trials without changing the generic parser.
+        const key = JSON.stringify([row.machine, row.start, row.end, currentPlanningProductionDate(input.calendar)]);
+        constraint = activeSimulationResources?.generatedConstraints.get(key);
+        if (!constraint) {
+          constraint = { machine: row.machine, unavailableFrom: row.start, unavailableTo: row.end,
+            action: "delay", status: "Unavailable", reason: "Protected existing commitment" };
+          activeSimulationResources?.generatedConstraints.set(key, constraint);
+        }
         activeSimulationResources?.reservationConstraints.set(row, constraint);
       }
       return constraint;
@@ -6771,7 +6779,7 @@ function assignedMachineOrderPcs(orderPcs: number, machineCount: number) {
 }
 
 function plannedProductionDays(startDate: string, endDate: string, planningCalendar: PlanningCalendar = defaultPlanningCalendar) {
-  return planningComputation(planningCalendar).workdayCounts(JSON.stringify([startDate, endDate]),
+  return planningComputation(planningCalendar).workdayCounts(startDate, endDate,
     () => calculateProductionDays(startDate, endDate, planningCalendar));
 }
 
