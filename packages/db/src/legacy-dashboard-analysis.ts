@@ -5967,6 +5967,25 @@ function shopFloorSupersedesStop(row: Record<string, unknown>, decisionAt: unkno
 
 function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, unknown>>) {
   const stopOverrides = details.filter((row) => planOverrideInterruptedSetups(row).length > 0);
+  let jobIndex: OverrideJobIndex | undefined;
+  if (stopOverrides.length && activeSimulationResources && activePlanningKernel) {
+    jobIndex = activePlanningKernel.overrideJobIndexes.get(details);
+    if (!jobIndex || jobIndex.generation !== activePlanningKernel.jcNoGeneration) {
+      const rowsByCanonicalJob: NonNullable<OverrideJobIndex["rowsByCanonicalJob"]> = new Map();
+      const eligible = details.every((row, index) => {
+        const descriptor = Object.getOwnPropertyDescriptor(row, "jcNo");
+        if (Object.getPrototypeOf(row) !== Object.prototype || !descriptor || !("value" in descriptor)
+          || typeof descriptor.value !== "string" || descriptor.value === "") return false;
+        const job = canonicalKey(descriptor.value);
+        const entries = rowsByCanonicalJob.get(job) ?? [];
+        entries.push({ row, index });
+        rowsByCanonicalJob.set(job, entries);
+        return true;
+      });
+      jobIndex = { generation: activePlanningKernel.jcNoGeneration, rowsByCanonicalJob: eligible ? rowsByCanonicalJob : undefined };
+      activePlanningKernel.overrideJobIndexes.set(details, jobIndex);
+    }
+  }
   let preparation = activePlanningKernel?.overridePreparation.get(details);
   if (!preparation && activePlanningKernel) {
     preparation = new Map();
@@ -5980,8 +5999,21 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       prepared = { raw, rows: [], matches: [] };
       preparation?.set(overrideRow, prepared);
     }
-    let changed = prepared.rows.length !== details.length;
-    details.forEach((row, index) => {
+    if (prepared.jobIndex !== jobIndex) {
+      const entries = new Map<number, { row: Record<string, unknown>; index: number }>();
+      for (const interruption of setupInterruptions) {
+        for (const entry of jobIndex?.rowsByCanonicalJob?.get(interruption.jcNo) ?? []) entries.set(entry.index, entry);
+      }
+      prepared.jobIndex = jobIndex;
+      prepared.candidates = jobIndex?.rowsByCanonicalJob
+        ? [...entries.values()].sort((a, b) => a.index - b.index).map(entry => entry.row)
+        : undefined;
+      prepared.rows = [];
+      prepared.matches = [];
+    }
+    const candidates = prepared.candidates ?? details;
+    let changed = prepared.rows.length !== candidates.length;
+    candidates.forEach((row, index) => {
       const previous = prepared.rows[index];
       // Matching reads only these identity aliases and the captured fallback
       // map. Scheduling dates, quantities and metadata cannot change a match.
@@ -5992,7 +6024,7 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       changed = true;
     });
     if (changed) {
-      prepared.rows.length = details.length;
+      prepared.rows.length = candidates.length;
       prepared.matches = prepared.rows.filter((entry) => entry.match !== undefined);
     }
     // The raw interruption list and its items are input facts, never mutated
@@ -8840,8 +8872,14 @@ type QueuePassChange = {
   value: ReturnType<typeof planningMeta>[keyof ReturnType<typeof planningMeta>];
 });
 let activeQueuePassChanges: QueuePassChange[] | undefined;
+type OverrideJobIndex = {
+  generation: number;
+  rowsByCanonicalJob: Map<string, Array<{ row: Record<string, unknown>; index: number }>> | undefined;
+};
 type OverridePreparation = {
   raw: unknown;
+  jobIndex?: OverrideJobIndex;
+  candidates?: Array<Record<string, unknown>>;
   rows: Array<{
     row: Record<string, unknown>;
     identity: unknown[];
@@ -8864,6 +8902,8 @@ function createPlanningQueueCache() {
 function createIncrementalPlanningKernel() {
   const identities = new WeakMap<object, number>();
   return {
+    jcNoGeneration: 0,
+    overrideJobIndexes: new WeakMap<Array<Record<string, unknown>>, OverrideJobIndex>(),
     simulationJobs: undefined as ReadonlySet<string> | undefined,
     rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
     facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
@@ -8942,6 +8982,7 @@ function forkPlanningRow(plan: Record<string, unknown>) {
 function setPlanningRowField(row: Record<string, unknown>, field: string, value: unknown) {
   if (!Object.hasOwn(row, field) || !Object.is(row[field], value)) {
     activeQueuePassChanges?.push({ row, field, value, meta: false });
+    if (activePlanningKernel && field === "jcNo") activePlanningKernel.jcNoGeneration += 1;
     row[field] = value;
     const protectedRow = activeSimulationResources?.protectedMutations.get(row);
     if (protectedRow) {
