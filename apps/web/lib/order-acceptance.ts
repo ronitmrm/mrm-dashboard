@@ -411,10 +411,15 @@ export function calculateProposal(
     scheduleResultCount += 1
     return result
   }
-  const trial = (candidate: PlanningLine[]) => {
+  const trial = (candidate: PlanningLine[], minimumSelected: number) => {
     let target = committed
     const results = new Map<string, LineResult>()
-    for (const line of candidate) {
+    let selectedCount = 0
+    for (const [index, line] of candidate.entries()) {
+      // Each remaining line can add at most one selected ID. Ties must finish
+      // because utilisation still decides between equal selected counts.
+      if (selectedCount + candidate.length - index < minimumSelected)
+        return null
       const rm =
         input.mode === "deadline"
           ? input.tentativeRmDate || input.startDate
@@ -425,6 +430,9 @@ export function calculateProposal(
           : null
       const selected = !!result && !result.reason
       if (selected) target = result.target
+      // Results are keyed by ID; an overwrite can remove a selected line.
+      if (results.get(line.id)?.selected) selectedCount -= 1
+      if (selected) selectedCount += 1
       results.set(line.id, {
         id: line.id,
         part: line.part,
@@ -457,16 +465,25 @@ export function calculateProposal(
       candidate,
       target,
       results,
-      selected: [...results.values()].filter((row) => row.selected).length,
+      selected: selectedCount,
       utilisation: context.machines.reduce(
         (sum, m) => sum + load(target, m.id),
         0
       ),
     }
   }
-  const compare = (a: ReturnType<typeof trial>, b: ReturnType<typeof trial>) =>
+  type CompletedTrial = NonNullable<ReturnType<typeof trial>>
+  const compare = (a: CompletedTrial, b: CompletedTrial) =>
     b.selected - a.selected || b.utilisation - a.utilisation
-  let best = candidates.map(trial).sort(compare)[0]!
+  const completed: CompletedTrial[] = []
+  let minimumSelected = 0
+  for (const candidate of candidates) {
+    const result = trial(candidate, minimumSelected)
+    if (!result) continue
+    completed.push(result)
+    minimumSelected = Math.max(minimumSelected, result.selected)
+  }
+  let best = completed.sort(compare)[0]!
   if (input.mode === "deadline" && !blockers.length)
     for (const family of [
       ...new Set(
@@ -491,9 +508,10 @@ export function calculateProposal(
       const repaired = trial(
         best.candidate.map((line) =>
           familyHours(line) > 0 ? queue[index++]! : line
-        )
+        ),
+        best.selected
       )
-      if (compare(best, repaired) > 0) best = repaired
+      if (repaired && compare(best, repaired) > 0) best = repaired
     }
   return {
     version: context.version,
