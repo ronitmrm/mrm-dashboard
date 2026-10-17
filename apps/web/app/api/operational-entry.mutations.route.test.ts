@@ -433,6 +433,11 @@ describe("production entry mutation API authorization", () => {
     expect(dependencies.startBulkProductionSessionDowntime).toHaveBeenCalledWith(
       expect.objectContaining({ enteredRole: "authorized_staff", actorUserId: "entry-writer" })
     )
+    const message = "Running sessions changed or none are available. Refresh the bulk breakdown preview before saving."
+    dependencies.startBulkProductionSessionDowntime.mockRejectedValueOnce(new ShopFloorConflictError(message))
+    const stalePreview = await post("data-entry", authorizedStaff)
+    expect(stalePreview.status).toBe(409)
+    expect(await stalePreview.json()).toEqual({ error: message })
   })
 
   it("passes the edited cycle record identity and queues recalculation", async () => {

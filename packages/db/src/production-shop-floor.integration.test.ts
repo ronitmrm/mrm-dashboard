@@ -215,8 +215,10 @@ describe("production and shop-floor workflows", () => {
         expectedSessionIds: sessionIds, enteredRole: "shop_floor", reasonCode: "POWER",
         reasonName: "Power failure", startedAt: "2026-09-22T09:45:00+05:30" }
       await expect(repository.startBulkProductionSessionDowntime({ ...input, expectedSessionIds: sessionIds.slice(0, 1) }))
-        .rejects.toThrow("Refresh the bulk breakdown preview")
+        .rejects.toMatchObject({ status: 409, message: expect.stringContaining("Refresh the bulk breakdown preview") })
       const before = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
+      expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).map((row) => row.productionDate))
+        .toEqual(["2026-09-22", "2026-09-22"])
       expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).every((row) => !row.hasOpenDowntime)).toBe(true)
       await expect(repository.startBulkProductionSessionDowntime(input)).resolves.toMatchObject({ rowsUpdated: 2 })
       const after = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
