@@ -837,7 +837,13 @@ async function savePlanningMasterEntry(
     }))
     let results
     try {
-      results = await repository.upsertToolingBatch(inputs)
+      if (rejectDuplicates) {
+        results = await repository.upsertToolingBatch(inputs)
+      } else {
+        results = []
+        for (const input of inputs)
+          results.push(await repository.upsertTooling(input))
+      }
     } catch (error) {
       if (
         error instanceof Error &&

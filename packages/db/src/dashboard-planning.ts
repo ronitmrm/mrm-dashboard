@@ -857,7 +857,7 @@ async function upsertToolingClient(
   await businessKeyLock(
     client,
     "manufacturing.tooling",
-    operationSetupId
+    `${operationSetupId}:${toolCode}`
   )
   const existing = await client.query<{ id: string }>(
     `
@@ -910,36 +910,8 @@ async function upsertToolingClient(
           sourcePayload,
         ]
       )
-  return { id: result.rows[0]!.id, operationSetupId }
-}
-
-async function upsertToolingRequirements(client: PoolClient, inputs: ToolingMasterInput[]) {
-  const results: { id: string }[] = []
-  const setups = new Map<string, {
-    actorUserId: string | null
-    ids: string[]
-  }>()
-  for (const input of inputs) {
-    const { id, operationSetupId } = await upsertToolingClient(client, input)
-    const current = setups.get(operationSetupId) ?? {
-      actorUserId: input.actorUserId ?? null, ids: [],
-    }
-    current.ids.push(id)
-    setups.set(operationSetupId, current)
-    results.push({ id })
-  }
-  for (const [operationSetupId, current] of setups) {
-    await client.query(
-      `UPDATE manufacturing.operation_tooling
-       SET active = false, updated_by_user_id = $3, updated_at = now(), row_version = row_version + 1
-       WHERE operation_setup_id = $1 AND active AND NOT (id = ANY($2::uuid[]))`,
-      [operationSetupId, current.ids, current.actorUserId]
-    )
-  }
-  for (const organizationId of new Set(inputs.map(input => input.organizationId))) {
-    await queueDashboardRefresh(client, organizationId)
-  }
-  return results
+  await queueDashboardRefresh(client, input.organizationId)
+  return result.rows[0]!
 }
 
 export function createDashboardPlanningRepository(options: RepositoryPoolOptions) {
@@ -1685,11 +1657,15 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     },
 
     async upsertTooling(input: ToolingMasterInput) {
-      return transaction(pool, async client => (await upsertToolingRequirements(client, [input]))[0]!)
+      return transaction(pool, client => upsertToolingClient(client, input))
     },
 
     async upsertToolingBatch(inputs: ToolingMasterInput[]) {
-      return transaction(pool, client => upsertToolingRequirements(client, inputs))
+      return transaction(pool, async client => {
+        const results = []
+        for (const input of inputs) results.push(await upsertToolingClient(client, input))
+        return results
+      })
     },
 
     async upsertPlanningCalendarException(input: {

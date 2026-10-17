@@ -525,12 +525,6 @@ as fixture, tooling, or foam tooling. Quantity is not part of this master. It
 does not assign, reserve, issue, or move a physical Store unit, and it does not
 change Store stock or its holder.
 
-Saving Tooling Master replaces the complete Fixture, Tooling and Foam Tool
-requirement for that Route Master Line in one transaction. Removed codes and
-superseded Not Required entries become inactive; retained codes remain active.
-Inactive requirements remain as history but do not participate in master views,
-planning or live tooling occupancy. Concurrent saves for one setup are serialized.
-
 A Route Master Line may explicitly require no special tooling. Fixture,
 Tooling and Foam Tool can all be Not Required; saving still records the
 completed tooling master for planning readiness. This record has no Asset Code
