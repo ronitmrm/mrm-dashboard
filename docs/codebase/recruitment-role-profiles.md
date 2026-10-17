@@ -16,7 +16,12 @@ Migration 0222 converts the structured questions to text and folds nonblank
 profile fields into the description. The original `role_profile`,
 `interview_questions` and `original_role_description` columns remain archived
 source data from migration 0215; current application code does not edit them.
-Existing Job Post snapshots and employee assignments remain unchanged.
+The conversion retained existing Job Post snapshots and employee assignments.
+Explicitly applying subsequent template edits uses `syncJobsWithTemplate` to
+refresh active jobs linked to that template, with before/after audit. Template-only
+edits and closed-job requirements are preserved. Approved Post template assignment
+continues to link unassigned jobs and fill missing details without overwriting
+their existing requirements.
 
 Job Posts and the Job Workspace open `/hr/jobs/[id]/download` through the shared
 attachment viewer. The route requires `hr.jobs.read`; `getJobPostDocument` reads

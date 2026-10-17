@@ -23,7 +23,8 @@ Job Posts and the Job Workspace offer a Job Post PDF for consultants. It contain
 the saved opening's title, references, status, dates, number of openings, salary
 range, shift timings, gender requirement, education, experience and full job
 description. Missing details are shown as Not specified. Requirements come from
-the Job Post itself, preserving its saved values when a reusable template changes.
+the Job Post itself. Template-only edits preserve its saved values; explicitly
+applying template changes refreshes active jobs linked to that template.
 The PDF requires the existing job-read permission and opens in the attachment
 viewer for preview and download. It contains no candidate or interview records.
 
@@ -60,10 +61,13 @@ choose whether to apply its requirements to Approved Posts, regardless of
 whether they are occupied or vacant. This updates posts already linked to the
 template and unlinked posts in its combined role. Posts linked to another
 template keep their own profile. The approved-post link and requirement fields
-update in the same transaction as the template. Existing Job Posts linked to those Approved
-Posts receive the template link when they have none; blank job requirements and
-shift fields are filled from the template. Existing job values and jobs linked
-to a different template remain historical. Employee assignments are unchanged.
+update in the same transaction as the template. Applying changes also refreshes
+salary, gender, education, experience, description and shift details on active
+Job Posts linked to that template, including previously unassigned jobs on the
+matching Approved Posts. Closed jobs retain their saved requirements. Legacy
+unassigned jobs receive the template link and missing details without replacing
+their closed-job values. Jobs linked to another template and employee assignments
+are unchanged. Job requirement updates retain before/after audit.
 
 ## Approved Post Deletion
 

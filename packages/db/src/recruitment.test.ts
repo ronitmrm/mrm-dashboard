@@ -186,7 +186,7 @@ test("assigning a template to an Approved Post links its unassigned job", async 
   })
 
   const jobUpdate = query.mock.calls.find(([statement]) =>
-    statement.includes("UPDATE recruitment.job_posts job")
+    statement.includes("SELECT job.*")
   )
   expect(jobUpdate?.[0]).toContain("job.requirement_template_id IS NULL")
   expect(jobUpdate?.[0]).toContain("post.requirement_template_id = $2")
