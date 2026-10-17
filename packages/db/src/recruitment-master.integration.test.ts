@@ -204,6 +204,9 @@ test("editing a template updates linked Approved Posts across departments", asyn
   const template = await repository.upsertTemplate({
     ...input,
     experienceRequirement: "One year",
+    minimumSalary: "20000",
+    maximumSalary: "30000",
+    roleResponsibilities: "Original job description",
   })
   await pool.query(
     `INSERT INTO recruitment.posts
@@ -220,10 +223,12 @@ test("editing a template updates linked Approved Posts across departments", asyn
   )
   await pool.query(
     `INSERT INTO recruitment.job_posts
-       (organization_id, post_id, job_number, vacancy_code, title,
+       (organization_id, post_id, requirement_template_id, job_number, vacancy_code, title,
+        minimum_salary, maximum_salary, description,
         status, closed_on, source_system, source_table, source_id)
-     SELECT post.organization_id, post.id, post.post_code, post.vacancy_code,
-       'Operator / Cnc',
+     SELECT post.organization_id, post.id, post.requirement_template_id,
+       post.post_code, post.vacancy_code, 'Operator / Cnc',
+       20000, 30000, 'Original job description',
        CASE WHEN post.post_code = 'CNC-OP-1' THEN 'Closed' ELSE 'Open' END,
        CASE WHEN post.post_code = 'CNC-OP-1' THEN CURRENT_DATE ELSE NULL END,
        'test', 'jobs', post.post_code || $2
@@ -255,6 +260,9 @@ test("editing a template updates linked Approved Posts across departments", asyn
     ...input,
     templateId: template.id,
     experienceRequirement: "Three years",
+    minimumSalary: "15000",
+    maximumSalary: "30000",
+    roleResponsibilities: "Updated job description",
     applyToApprovedPosts: true,
   })
   const posts = await pool.query<{
@@ -278,9 +286,9 @@ test("editing a template updates linked Approved Posts across departments", asyn
   const jobs = await pool.query<{
     job_number: string
     requirement_template_id: string
-    shift_type: string
-    start_time: string
-    end_time: string
+    shift_type: string | null
+    start_time: string | null
+    end_time: string | null
   }>(
     `SELECT job_number, requirement_template_id, shift_type,
        start_time::text, end_time::text
@@ -290,8 +298,17 @@ test("editing a template updates linked Approved Posts across departments", asyn
   expect(jobs.rows).toEqual(["CNC-OP-1", "CNC-OP-2"].map((jobNumber) => ({
     job_number: jobNumber,
     requirement_template_id: template.id,
-    shift_type: "Day",
-    start_time: "09:00:00",
-    end_time: "18:00:00",
+    shift_type: jobNumber === "CNC-OP-1" ? null : "Day",
+    start_time: jobNumber === "CNC-OP-1" ? null : "09:00:00",
+    end_time: jobNumber === "CNC-OP-1" ? null : "18:00:00",
   })))
+  const jobIds = await pool.query<{ id: string; job_number: string }>(
+    `SELECT id, job_number FROM recruitment.job_posts
+     WHERE organization_id = $1 ORDER BY job_number`,
+    [organizationId]
+  )
+  const closedJob = await repository.getJobPostDocument(organizationId, jobIds.rows[0]!.id)
+  const activeJob = await repository.getJobPostDocument(organizationId, jobIds.rows[1]!.id)
+  expect(activeJob).toMatchObject({ minimumSalary: "15000.00", maximumSalary: "30000.00", description: "Updated job description" })
+  expect(closedJob).toMatchObject({ minimumSalary: "20000.00", maximumSalary: "30000.00", description: "Original job description" })
 })

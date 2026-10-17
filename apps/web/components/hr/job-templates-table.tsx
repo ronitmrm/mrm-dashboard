@@ -247,7 +247,7 @@ export function JobTemplateEditor({
         {canWrite ? (
           <Field className="sm:col-span-2">
             <FieldLabel htmlFor="edit-template-apply-to-posts">
-              Apply Requirement Changes To Approved Posts?
+              Apply Requirement Changes To Linked Records?
             </FieldLabel>
             <NativeSelect
               defaultValue=""
@@ -260,13 +260,15 @@ export function JobTemplateEditor({
               </NativeSelectOption>
               <NativeSelectOption value="no">Template Only</NativeSelectOption>
               <NativeSelectOption value="yes">
-                Also Update Matching Approved Posts
+                Also Update Matching Approved Posts And Active Jobs
               </NativeSelectOption>
             </NativeSelect>
             <FieldDescription>
               Updates occupied and vacant posts already linked to this template.
               Combined jobs also include unlinked member posts. Employee
-              assignments and existing Job Posts stay as they are.
+              assignments and closed Job Posts stay as they are. Active jobs
+              linked to this template receive the updated requirements, including
+              salary and shift timings.
             </FieldDescription>
           </Field>
         ) : null}

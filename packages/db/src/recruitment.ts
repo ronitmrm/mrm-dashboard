@@ -488,46 +488,45 @@ async function audit(client: PoolClient, input: AuditInput) {
   await auditMany(client, [input])
 }
 
-async function linkUnassignedJobsToTemplate(
+async function syncJobsWithTemplate(
   client: PoolClient,
   input: MutationContext,
-  templateId: string
+  templateId: string,
+  refreshActiveJobs = false
 ) {
   const before = await client.query<Record<string, unknown> & { id: string }>(
     `SELECT job.*
      FROM recruitment.job_posts job
-     JOIN recruitment.posts post ON post.id = job.post_id
-     WHERE job.organization_id = $1 AND post.organization_id = $1
-       AND post.requirement_template_id = $2
-       AND job.requirement_template_id IS NULL
+     LEFT JOIN recruitment.posts post
+       ON post.id = job.post_id AND post.organization_id = job.organization_id
+     WHERE job.organization_id = $1
+       AND ((job.requirement_template_id IS NULL AND post.requirement_template_id = $2)
+         OR ($3::boolean AND job.requirement_template_id = $2 AND job.status <> 'Closed'))
      FOR UPDATE OF job`,
-    [input.organizationId, templateId]
+    [input.organizationId, templateId, refreshActiveJobs]
   )
   if (!before.rows.length) return 0
 
+  const refresh = "$3::boolean AND job.status <> 'Closed'"
   const updated = await client.query<Record<string, unknown> & { id: string }>(
     `UPDATE recruitment.job_posts job SET
        requirement_template_id = template.id,
-       minimum_salary = COALESCE(job.minimum_salary, template.minimum_salary),
-       maximum_salary = COALESCE(job.maximum_salary, template.maximum_salary),
-       gender = COALESCE(NULLIF(BTRIM(job.gender), ''), template.gender),
-       education = COALESCE(NULLIF(BTRIM(job.education), ''), template.education),
-       experience_requirement = COALESCE(NULLIF(BTRIM(job.experience_requirement), ''), template.experience_requirement),
-       description = COALESCE(NULLIF(BTRIM(job.description), ''), template.role_responsibilities),
-       shift_type = COALESCE(job.shift_type, template.shift_type),
-       start_time = COALESCE(job.start_time, template.shift_start_time),
-       end_time = COALESCE(job.end_time, template.shift_end_time),
-       updated_by_user_id = $3,
+       minimum_salary = CASE WHEN ${refresh} THEN template.minimum_salary ELSE COALESCE(job.minimum_salary, template.minimum_salary) END,
+       maximum_salary = CASE WHEN ${refresh} THEN template.maximum_salary ELSE COALESCE(job.maximum_salary, template.maximum_salary) END,
+       gender = CASE WHEN ${refresh} THEN template.gender ELSE COALESCE(NULLIF(BTRIM(job.gender), ''), template.gender) END,
+       education = CASE WHEN ${refresh} THEN template.education ELSE COALESCE(NULLIF(BTRIM(job.education), ''), template.education) END,
+       experience_requirement = CASE WHEN ${refresh} THEN template.experience_requirement ELSE COALESCE(NULLIF(BTRIM(job.experience_requirement), ''), template.experience_requirement) END,
+       description = CASE WHEN ${refresh} THEN template.role_responsibilities ELSE COALESCE(NULLIF(BTRIM(job.description), ''), template.role_responsibilities) END,
+       shift_type = CASE WHEN ${refresh} THEN template.shift_type ELSE COALESCE(job.shift_type, template.shift_type) END,
+       start_time = CASE WHEN ${refresh} THEN template.shift_start_time ELSE COALESCE(job.start_time, template.shift_start_time) END,
+       end_time = CASE WHEN ${refresh} THEN template.shift_end_time ELSE COALESCE(job.end_time, template.shift_end_time) END,
+       updated_by_user_id = $4,
        updated_at = now(), row_version = job.row_version + 1
-     FROM recruitment.posts post
-     JOIN recruitment.requirement_templates template
-       ON template.id = post.requirement_template_id
-     WHERE job.post_id = post.id
-       AND job.organization_id = $1 AND post.organization_id = $1
-       AND post.requirement_template_id = $2
-       AND job.requirement_template_id IS NULL
+     FROM recruitment.requirement_templates template
+     WHERE template.id = $2 AND template.organization_id = $1
+       AND job.organization_id = $1 AND job.id = ANY($5::uuid[])
      RETURNING job.*`,
-    [input.organizationId, templateId, input.actorUserId ?? null]
+    [input.organizationId, templateId, refreshActiveJobs, input.actorUserId ?? null, before.rows.map((job) => job.id)]
   )
   if (updated.rows.length !== before.rows.length) {
     throw new Error("Not every linked Job Post received its template.")
@@ -537,8 +536,12 @@ async function linkUnassignedJobsToTemplate(
     ...input,
     afterState: afterById.get(job.id),
     beforeState: job,
-    eventType: "recruitment.job.template_assigned",
-    reason: "Assigned from linked Approved Post",
+    eventType: job.requirement_template_id === null
+      ? "recruitment.job.template_assigned"
+      : "recruitment.job.requirements_updated",
+    reason: refreshActiveJobs
+      ? "Applied job description template changes"
+      : "Assigned from linked Approved Post",
     targetId: job.id,
     targetTable: "job_posts",
   })))
@@ -2653,8 +2656,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             [result.rows[0].id, input.organizationId, input.actorUserId ?? null]
           )
           updatedPostCount = updatedPosts.rowCount ?? 0
-          linkedJobCount = await linkUnassignedJobsToTemplate(
-            client, input, result.rows[0].id
+          linkedJobCount = await syncJobsWithTemplate(
+            client, input, result.rows[0].id, true
           )
         }
         await audit(client, {
@@ -2825,7 +2828,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           [templateId, input.actorUserId ?? null, postId, input.organizationId]
         )
         const linkedJobCount = templateId
-          ? await linkUnassignedJobsToTemplate(client, input, templateId)
+          ? await syncJobsWithTemplate(client, input, templateId)
           : 0
         await audit(client, {
           ...input,
