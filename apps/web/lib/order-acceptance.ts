@@ -1,5 +1,5 @@
 import {
-  simulateProductionPlanning,
+  createProductionPlanningSimulation,
   workOrderPlanningSort,
 } from "@workspace/db/dashboard-analysis"
 import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
@@ -172,6 +172,18 @@ export function calculateProposal(
     productiveHoursPerDay: daily,
     currentProductionDate: input.startDate,
   }
+  const simulate = createProductionPlanningSimulation({
+    calendar,
+    toolingAvailability: context.toolingAvailability ?? [],
+    machines:
+      context.machineRows ??
+      context.machines.map((m) => ({
+        machineNo: m.id,
+        machineFamily: m.family,
+        machineType: "CNC",
+        status: "Active",
+      })),
+  })
   const horizon = addDays(input.startDate, 730)
   const dates: string[] = []
   for (let date = input.startDate; date <= horizon; date = addDays(date, 1)) {
@@ -229,7 +241,7 @@ export function calculateProposal(
       ...routes[index],
       ...op.tooling,
     }))
-    const planned = simulateProductionPlanning({
+    const planned = simulate({
       workOrders: [
         {
           jcNo: id,
@@ -249,18 +261,8 @@ export function calculateProposal(
       routes,
       cycles,
       tooling,
-      toolingAvailability: context.toolingAvailability ?? [],
-      machines:
-        context.machineRows ??
-        context.machines.map((m) => ({
-          machineNo: m.id,
-          machineFamily: m.family,
-          machineType: "CNC",
-          status: "Active",
-        })),
       reservations: target.reservations,
       reservedPlans: target.plans,
-      calendar,
       deadline:
         proposed && input.mode === "deadline" ? input.deadline : horizon,
     })

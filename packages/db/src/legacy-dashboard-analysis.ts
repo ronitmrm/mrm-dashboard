@@ -3351,7 +3351,7 @@ function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<stri
 }
 
 // Pure forecast adapter: no job cards, production facts or planner decisions are written.
-export function simulateProductionPlanning(input: {
+type ProductionPlanningSimulationInput = {
   workOrders: Record<string, unknown>[];
   routes: Record<string, unknown>[];
   cycles: Record<string, unknown>[];
@@ -3362,11 +3362,82 @@ export function simulateProductionPlanning(input: {
   reservedPlans: Record<string, unknown>[];
   calendar: PlanningCalendar;
   deadline: string;
-}) {
-  const constraints = input.reservations.map((row) => ({ machine: row.machine,
-    unavailableFrom: row.start, unavailableTo: row.end, action: "delay", status: "Unavailable", reason: "Protected existing commitment" }));
+};
+
+// The caller keeps fixed facts and existing commitment snapshots immutable for
+// one synchronous forecast. New commitments use new rows/arrays. The session
+// owns preparation only, never solved plans, and is discarded after the request.
+export function createProductionPlanningSimulation(
+  fixed: Pick<ProductionPlanningSimulationInput, "machines" | "toolingAvailability" | "calendar">,
+) {
+  const resources = createSimulationResources();
+  return (input: Omit<ProductionPlanningSimulationInput, keyof typeof fixed>) => {
+    const previous = activeSimulationResources;
+    activeSimulationResources = resources;
+    try {
+      return simulateProductionPlanning({ ...input, ...fixed });
+    } finally {
+      activeSimulationResources = previous;
+    }
+  };
+}
+
+function createSimulationResources() {
+  return {
+    machines: new Map<string, ReturnType<typeof calculateActivePhysicalMachineRows>>(),
+    constraints: new WeakMap<ProductionPlanningSimulationInput["reservations"], ActionRow[]>(),
+    reservationConstraints: new WeakMap<ProductionPlanningSimulationInput["reservations"][number], ActionRow>(),
+    windows: new WeakMap<ActionRow[], MachineUnavailableWindow[]>(),
+    windowFacts: new WeakMap<ActionRow, MachineUnavailableWindow[]>(),
+    windowsByMachine: new WeakMap<MachineUnavailableWindow[], Map<string, MachineUnavailableWindow[]>>(),
+    protectedRows: new WeakMap<Record<string, unknown>, {
+      row: Record<string, unknown>; normalized: Map<string, unknown> | undefined;
+    }>(),
+    protectedSources: new WeakMap<Record<string, unknown>, Record<string, unknown>>(),
+    protectedStates: new WeakMap<Record<string, unknown>, PlanningRowState[]>(),
+    toolingUses: new WeakMap<Record<string, unknown>, { codes: Set<string>; start: string; end: string; fixed: boolean }>(),
+    protectedTooling: new WeakMap<Record<string, unknown>[], Map<string, Array<{ start: string; end: string; fixed: boolean }>>>(),
+    queues: createPlanningQueueCache(),
+  };
+}
+
+let activeSimulationResources: ReturnType<typeof createSimulationResources> | undefined;
+
+export function simulateProductionPlanning(input: ProductionPlanningSimulationInput) {
+  let constraints = activeSimulationResources?.constraints.get(input.reservations);
+  if (!constraints) {
+    constraints = input.reservations.map((row) => {
+      let constraint = activeSimulationResources?.reservationConstraints.get(row);
+      if (!constraint) {
+        constraint = { machine: row.machine, unavailableFrom: row.start, unavailableTo: row.end,
+          action: "delay", status: "Unavailable", reason: "Protected existing commitment" };
+        activeSimulationResources?.reservationConstraints.set(row, constraint);
+      }
+      return constraint;
+    });
+    activeSimulationResources?.constraints.set(input.reservations, constraints);
+  }
   const simulatedJobs = new Set(input.workOrders.map(row => rowText(row, "jcNo")));
   let readyNotBefore = "";
+  let protectedTooling = activeSimulationResources?.protectedTooling.get(input.reservedPlans);
+  if (!protectedTooling) {
+    protectedTooling = new Map();
+    for (const row of input.reservedPlans) {
+      let use = activeSimulationResources?.toolingUses.get(row);
+      if (!use) {
+        use = { codes: new Set(requiredToolingCodesFromPlan(row).map(canonicalKey)),
+          start: parseDate(row.plannedProductionStartDate), end: parseDate(row.plannedProductionEndDate), fixed: true };
+        activeSimulationResources?.toolingUses.set(row, use);
+      }
+      if (!use.start || !use.end) continue;
+      for (const code of use.codes) {
+        const uses = protectedTooling.get(code) ?? [];
+        uses.push(use);
+        protectedTooling.set(code, uses);
+      }
+    }
+    activeSimulationResources?.protectedTooling.set(input.reservedPlans, protectedTooling);
+  }
   for (let pass = 0; pass <= input.reservedPlans.length; pass += 1) {
     const plans = machinePlanDetails(input.workOrders, new Map(), new Map(),
       groupRouteRows(input.routes), input.cycles, input.tooling, input.toolingAvailability,
@@ -3375,13 +3446,20 @@ export function simulateProductionPlanning(input: {
       .filter(row => simulatedJobs.has(rowText(row, "jcNo")));
     // Fixed future commitments cannot be displaced to make room for a proposal's tooling.
     let release = "";
+    const proposedTooling = new Map<string, Array<{ start: string; end: string; fixed: boolean }>>();
+    for (const row of plans) {
+      const use = { start: parseDate(row.plannedProductionStartDate), end: parseDate(row.plannedProductionEndDate), fixed: false };
+      if (!use.start || !use.end) continue;
+      for (const code of new Set(requiredToolingCodesFromPlan(row).map(canonicalKey))) {
+        const uses = proposedTooling.get(code) ?? [];
+        uses.push(use);
+        proposedTooling.set(code, uses);
+      }
+    }
     for (const stock of input.toolingAvailability) {
       const code = canonicalKey(stock.assetCode), capacity = safeNumber(stock.allocatedQuantity);
       if (!capacity) continue;
-      const uses = [...input.reservedPlans.map(row => ({ row, fixed: true })), ...plans.map(row => ({ row, fixed: false }))]
-        .filter(({row}) => requiredToolingCodesFromPlan(row).some(value => canonicalKey(value) === code))
-        .map(use => ({ ...use, start: parseDate(use.row.plannedProductionStartDate), end: parseDate(use.row.plannedProductionEndDate) }))
-        .filter(use => use.start && use.end);
+      const uses = [...protectedTooling.get(code) ?? [], ...proposedTooling.get(code) ?? []];
       for (const date of [...new Set(uses.map(use => use.start))]) {
         const active = uses.filter(use => use.start <= date && use.end >= date);
         if (active.length > capacity && active.some(use => !use.fixed)) {
@@ -3970,11 +4048,28 @@ function initializeMachinePlanDetails(
     }
   }
   for (const original of simulation?.reservedPlans ?? []) {
+    const prepared = activeSimulationResources?.protectedRows.get(original);
+    if (prepared) {
+      const reserved = Object.defineProperty({ ...prepared.row }, "__planningMeta", {
+        enumerable: false, value: { ...planningMeta(prepared.row) },
+      });
+      if (prepared.normalized) normalizedRowCache.set(reserved, prepared.normalized);
+      activeSimulationResources!.protectedSources.set(reserved, original);
+      details.push(reserved);
+      continue;
+    }
     const reserved = { ...original };
     Object.defineProperty(reserved, "__planningMeta", { enumerable: false, value: {
       simulationReservation: true, assignmentLocked: true,
       readyDate: parseDate(rowText(reserved, "plannedProductionStartDate")),
     } });
+    if (activeSimulationResources) {
+      const template = Object.defineProperty({ ...reserved }, "__planningMeta", {
+        enumerable: false, value: { ...planningMeta(reserved) },
+      });
+      activeSimulationResources.protectedRows.set(original, { row: template, normalized: normalizedRowCache.get(reserved) });
+      activeSimulationResources.protectedSources.set(reserved, original);
+    }
     details.push(reserved);
   }
   return { details, machineUnavailableWindows };
@@ -6115,8 +6210,27 @@ function planningHolidayViewRows(rows: Record<string, unknown>[]) {
 }
 
 function activeMachineUnavailableWindows(machineConstraints: ActionRow[], planningCalendar: PlanningCalendar): MachineUnavailableWindow[] {
+  const cached = activeSimulationResources?.windows.get(machineConstraints);
+  if (cached) return cached;
+  if (activeSimulationResources) {
+    const resources = activeSimulationResources;
+    const windows = machineConstraints.flatMap(row => {
+      let prepared = resources.windowFacts.get(row);
+      if (!prepared) {
+        prepared = calculateActiveMachineUnavailableWindows([row], planningCalendar);
+        resources.windowFacts.set(row, prepared);
+      }
+      return prepared;
+    }).sort((left, right) => left.fromDate.localeCompare(right.fromDate) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
+    resources.windows.set(machineConstraints, windows);
+    return windows;
+  }
+  return calculateActiveMachineUnavailableWindows(machineConstraints, planningCalendar);
+}
+
+function calculateActiveMachineUnavailableWindows(machineConstraints: ActionRow[], planningCalendar: PlanningCalendar): MachineUnavailableWindow[] {
   const today = currentPlanningProductionDate(planningCalendar);
-  return machineConstraints
+  const windows = machineConstraints
     .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")) || Boolean(rowText(row, "availableOn")))
     .map((row) => {
       const machine = canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO"));
@@ -6141,6 +6255,7 @@ function activeMachineUnavailableWindows(machineConstraints: ActionRow[], planni
     })
     .filter((window) => window.machine && window.fromDate && window.toDate)
     .sort((left, right) => left.fromDate.localeCompare(right.fromDate) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
+  return windows;
 }
 
 function machineUnavailableInterruptedSetups(row: Record<string, unknown>): MachineUnavailableInterruption[] {
@@ -6234,6 +6349,20 @@ function machineUnavailableInterruptionForSetup(
 
 function machineUnavailableWindowsFor(windows: MachineUnavailableWindow[], machine: string) {
   const machineKeyValue = canonicalKey(machine);
+  if (activeSimulationResources) {
+    let byMachine = activeSimulationResources.windowsByMachine.get(windows);
+    if (!byMachine) {
+      byMachine = new Map<string, MachineUnavailableWindow[]>();
+      for (const window of windows) {
+        if (window.fromDate > window.toDate) continue;
+        const matches = byMachine.get(window.machine) ?? [];
+        matches.push(window);
+        byMachine.set(window.machine, matches);
+      }
+      activeSimulationResources.windowsByMachine.set(windows, byMachine);
+    }
+    return byMachine.get(machineKeyValue) ?? [];
+  }
   return windows.filter((window) => window.machine === machineKeyValue && window.fromDate <= window.toDate);
 }
 
@@ -7217,6 +7346,22 @@ function activePhysicalMachineRows(
   machineType: string,
   machineRows: Array<Record<string, unknown>>,
 ) {
+  if (!activeSimulationResources) return calculateActivePhysicalMachineRows(routeMachine, machineType, machineRows);
+  const key = JSON.stringify([routeMachine, machineType]);
+  let machines = activeSimulationResources.machines.get(key);
+  if (!machines) {
+    machines = calculateActivePhysicalMachineRows(routeMachine, machineType, machineRows);
+    activeSimulationResources.machines.set(key, machines);
+  }
+  // Assignment ranks its returned candidates in place for the current load.
+  return [...machines];
+}
+
+function calculateActivePhysicalMachineRows(
+  routeMachine: string,
+  machineType: string,
+  machineRows: Array<Record<string, unknown>>,
+) {
   const typeKey = canonicalKey(machineType);
   return machineRows
     .map((row) => ({
@@ -8028,7 +8173,12 @@ function refreshSetupDependencyReadyDates(
         group.push(index);
         groups.set(key, group);
       });
-      kernel.dependencyGroups = [...groups.values()];
+      // The canonical dependency calculation skips wholly protected jobs.
+      // Omit those groups before versioning/snapshotting them on every pass;
+      // mixed jobs still receive the complete calculation in original order.
+      kernel.dependencyGroups = [...groups.values()].filter(indices =>
+        !activeSimulationResources || indices.some(index => !planningMeta(details[index]!).simulationReservation)
+      );
     }
     for (const [groupIndex, indices] of kernel.dependencyGroups.entries()) {
       const rows = indices.map((index) => details[index]!);
@@ -8130,18 +8280,26 @@ type OverridePreparation = {
   matches: OverridePreparation["rows"];
 };
 let nextPlanningState = 0;
-function createIncrementalPlanningKernel() {
-  const identities = new WeakMap<object, number>();
+function createPlanningQueueCache() {
   return {
-    rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
-    facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
-    overridePreparation: new WeakMap<Array<Record<string, unknown>>, Map<Record<string, unknown>, OverridePreparation>>(),
     queueStates: new PlanningStateMap<string, number>(),
     queueOrders: new PlanningStateMap<string, number[]>(),
     remainingQueues: new PlanningStateMap<string, number>(),
     queueTransitions: new PlanningStateMap<string, { rowIndex: number; state: number; remainingState: number }>(),
     candidateSortStates: new PlanningStateMap<string, { id: number; comparisons: Map<number, number> }>(),
     frontiers: new PlanningStateMap<string, number>(4096),
+  };
+}
+function createIncrementalPlanningKernel() {
+  const identities = new WeakMap<object, number>();
+  return {
+    rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
+    facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
+    overridePreparation: new WeakMap<Array<Record<string, unknown>>, Map<Record<string, unknown>, OverridePreparation>>(),
+    // Queue keys contain the complete row/meta/fallback versions plus the
+    // changing queue frontier and tooling slots. Keep only these exact caches
+    // across simulations; dependency membership and gap proposals stay local.
+    ...(activeSimulationResources?.queues ?? createPlanningQueueCache()),
     rowTransitions: new PlanningStateMap<
       string,
       { fields: Record<string, unknown>; nextDate: string; normalized?: Map<string, unknown> }
@@ -8188,6 +8346,8 @@ function forkPlanningRow(plan: Record<string, unknown>) {
   });
   const states = activePlanningKernel?.rows.get(plan);
   if (states) activePlanningKernel!.rows.set(fork, { ...states, dirty: true });
+  const original = activeSimulationResources?.protectedSources.get(plan);
+  if (original) activeSimulationResources!.protectedSources.set(fork, original);
   return fork;
 }
 function setPlanningRowField(row: Record<string, unknown>, field: string, value: unknown) {
@@ -8230,7 +8390,16 @@ const planningRowVersions = new WeakMap<Record<string, unknown>, {
 function planningRowVersion(row: Record<string, unknown>) {
   if (activePlanningKernel) {
     let record = activePlanningKernel.rows.get(row);
-    if (!record) activePlanningKernel.rows.set(row, (record = { states: [], dirty: true }));
+    if (!record) {
+      const original = activeSimulationResources?.protectedSources.get(row);
+      // A skipped comparator must not defer the first legacy fallback lookup
+      // on a fresh clone. Only carry versions whose fallback map already exists.
+      const states = original
+        ? (activeSimulationResources!.protectedStates.get(original) ?? []).filter(state => state.normalized !== undefined)
+        : [];
+      activePlanningKernel.rows.set(row, (record = { states, dirty: true }));
+      if (original) activeSimulationResources!.protectedStates.set(original, states);
+    }
     if (!record.dirty && record.current !== undefined) return record.current;
     const meta = planningMeta(row),
       rowKeys = Object.keys(row),
