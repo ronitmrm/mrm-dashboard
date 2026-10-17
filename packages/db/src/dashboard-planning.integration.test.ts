@@ -408,6 +408,65 @@ describe("dashboard planning writes", () => {
     ).resolves.toEqual({ id: expect.any(String) })
   })
 
+  test("replaces a setup's complete tooling requirements without keeping obsolete codes active", async () => {
+    const routeCode = `TOOLING-REPLACE-${suffix}`
+    const secondTool = `${toolingAssetCode}-SECOND`
+    const model = await pool.query<{ id: string }>(
+      "INSERT INTO store.make_models (organization_id, name) VALUES ($1, $2) RETURNING id",
+      [organizationId, secondTool]
+    )
+    await pool.query(
+      `INSERT INTO store.item_types (
+        organization_id, type_code, asset_type, asset_category, asset_subcategory,
+        asset_name, identification_name, tracking_mode, unit, asset_category_id,
+        asset_subcategory_id, asset_name_id, make_model_id
+      ) SELECT organization_id, $2, asset_type, asset_category, asset_subcategory,
+        asset_name, $2, tracking_mode, unit, asset_category_id,
+        asset_subcategory_id, asset_name_id, $4
+      FROM store.item_types WHERE organization_id=$1 AND type_code=$3`,
+      [organizationId, secondTool, toolingAssetCode, model.rows[0]!.id]
+    )
+    await repository.upsertRouteOption({
+      itemUid: toolingItemUid, organizationId, routeCode,
+      setups: [{ operationCode: "TOOL", sequence: 1, setupNumber: 1 }],
+    })
+    const input = { itemUid: toolingItemUid, organizationId, routeCode, setupNumber: 1 }
+    const requirements = [toolingAssetCode, secondTool].map(toolCode => ({ ...input, toolCode }))
+    const activeCodes = async () => (await pool.query<{ tool_code: string | null }>(
+      `SELECT tool.tool_code FROM manufacturing.operation_tooling tool
+       JOIN manufacturing.operation_setups setup ON setup.id=tool.operation_setup_id
+       JOIN manufacturing.route_options route ON route.id=setup.route_option_id
+       JOIN catalog.items item ON item.id=route.item_id
+       WHERE item.organization_id=$1 AND item.uid=$2 AND route.route_code=$3
+         AND tool.active ORDER BY tool.tool_code`,
+      [organizationId, toolingItemUid, routeCode]
+    )).rows.map(row => row.tool_code)
+
+    await repository.upsertToolingBatch(requirements)
+    expect(await activeCodes()).toEqual([toolingAssetCode, secondTool].sort())
+    await expect(repository.upsertToolingBatch([
+      requirements[1]!, { ...input, toolCode: `MISSING-${suffix}` },
+    ])).rejects.toThrow("Create the tooling Asset Code in Store first")
+    expect(await activeCodes()).toEqual([toolingAssetCode, secondTool].sort())
+
+    await repository.upsertToolingBatch([requirements[1]!])
+    expect(await activeCodes()).toEqual([secondTool])
+    await repository.upsertTooling({ ...input, toolCode: null })
+    expect(await activeCodes()).toEqual([null])
+    const inactiveProjection = await pool.query<{ count: string }>(
+      `SELECT count(*) FROM derived.dashboard_source_records source
+       JOIN manufacturing.operation_tooling tool
+         ON tool.organization_id=source.organization_id AND tool.source_id=source.source_id
+       JOIN manufacturing.operation_setups setup ON setup.id=tool.operation_setup_id
+       JOIN manufacturing.route_options route ON route.id=setup.route_option_id
+       WHERE source.source_table='operation_tooling' AND route.route_code=$1 AND NOT tool.active`,
+      [routeCode]
+    )
+    expect(inactiveProjection.rows[0]?.count).toBe("0")
+    await repository.upsertToolingBatch(requirements)
+    expect(await activeCodes()).toEqual([toolingAssetCode, secondTool].sort())
+  })
+
   test("creates a missing recognized production floor for a machine import", async () => {
     const machineNumber = `FLOOR-${suffix}`
     await pool.query(
