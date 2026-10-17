@@ -49,7 +49,11 @@ function date(value: unknown) {
   return validDate(result) ? result : ""
 }
 
-export function proposalContext(snapshot: unknown, planningStart?: string) {
+export function proposalContext(
+  snapshot: unknown,
+  planningStart?: string,
+  forecastOccupancy?: readonly { assetCode: string; occupiedQuantity: number }[]
+) {
   const root = record(snapshot)
   const source = record(root.productionControl)
   const calendar = planningCalendarExceptions(
@@ -62,6 +66,7 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
   const routes = rows(source.routeMasterRows)
   const cycles = rows(source.cycleMasterRows)
   const tooling = rows(source.toolingMasterRows)
+  const occupancy = new Map(forecastOccupancy?.map(row => [row.assetCode.toUpperCase(), row.occupiedQuantity]))
   const families = [
     ...new Set(
       routes.map((row) => text(row.machineFamily).toUpperCase()).filter(Boolean)
@@ -103,7 +108,9 @@ export function proposalContext(snapshot: unknown, planningStart?: string) {
       text(root.productionFloorCode)
     ),
     machineRows: rows(source.machinePlanningRows),
-    toolingAvailability: rows(source.toolingAvailabilityRows),
+    toolingAvailability: rows(source.toolingAvailabilityRows).map(row => forecastOccupancy
+      ? { ...row, occupiedQuantity: occupancy.get(text(row.assetCode).toUpperCase()) ?? 0 }
+      : row),
     reservedPlans: rows(source.machinePlanDetailRows).filter(
       (row) =>
         row.shopFloorStage !== "item_complete" &&
