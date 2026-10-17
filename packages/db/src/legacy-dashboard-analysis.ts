@@ -8625,6 +8625,11 @@ function transitionProtectedPlanningRow(
   let next = values.get(key);
   if (!next) {
     next = { version: ++nextPlanningState, normalized: normalize ? normalize() : row.state.normalized };
+    if (field === "row:toolingNextAvailableDate" && row.state.facts) {
+      // The captured fallback map and all other fact inputs stay unchanged.
+      next.facts = { ...row.state.facts };
+      delete next.facts.queueReadyDate;
+    }
     // Eviction only loses reuse. IDs are never recycled.
     if (values.size >= 128) values.clear();
     values.set(key, next);
