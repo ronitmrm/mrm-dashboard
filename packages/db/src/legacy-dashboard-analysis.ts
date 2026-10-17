@@ -8980,7 +8980,9 @@ function setPlanningMetaField<Key extends keyof ReturnType<typeof planningMeta>>
     const protectedRow = activeSimulationResources?.protectedMutations.get(row);
     if (protectedRow) {
       protectedRow.changedMeta?.add(field);
-      transitionProtectedPlanningRow(protectedRow, `meta:${field}`, value);
+      // Protected reservations bypass window-aware scheduling.
+      if (field !== "machineUnavailableWindows")
+        transitionProtectedPlanningRow(protectedRow, `meta:${field}`, value);
     }
     activePlanningKernel?.facts.delete(row);
     const state = activePlanningKernel?.rows.get(row);
