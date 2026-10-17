@@ -67,7 +67,8 @@ async function handle(request: NextRequest) {
         { error: "Select a production unit." },
         { status: 400 }
       )
-    return await withDashboardReadRepository(
+    let serverTiming: string | undefined
+    const response = await withDashboardReadRepository(
       request,
       async ({ organizationId, actorUserId, repository: dashboard }) => {
         const repository = createOrderAcceptanceRepository({
@@ -114,7 +115,9 @@ async function handle(request: NextRequest) {
           const input = inputFrom(body.input)
           const id = typeof body.id === "string" ? body.id : undefined
           let result = null
+          let persistenceStartedAt: number | undefined
           if (body.action !== "save") {
+            const contextStartedAt = performance.now()
             const status = await dashboard.status(organizationId)
             if (status.isRefreshing || status.lastError)
               throw new Error(
@@ -131,7 +134,13 @@ async function handle(request: NextRequest) {
               context.productiveHoursPerDay ?? input.hoursPerDay
             input.efficiency = 100
             input.setupHours = 0
-            result = calculateProposal(input, context, input.lines.map(resolve))
+            const resolvedLines = input.lines.map(resolve)
+            const forecastStartedAt = performance.now()
+            result = calculateProposal(input, context, resolvedLines)
+            persistenceStartedAt = performance.now()
+            serverTiming =
+              `context;dur=${(forecastStartedAt - contextStartedAt).toFixed(2)}, ` +
+              `forecast;dur=${(persistenceStartedAt - forecastStartedAt).toFixed(2)}`
             if (body.action === "approve") {
               const saved = id
                 ? await repository.get(organizationId, floor, id)
@@ -165,6 +174,8 @@ async function handle(request: NextRequest) {
             result,
             approve: body.action === "approve",
           })
+          if (serverTiming && persistenceStartedAt !== undefined)
+            serverTiming += `, persistence;dur=${(performance.now() - persistenceStartedAt).toFixed(2)}`
           return NextResponse.json({ proposal })
         } finally {
           await repository.close()
@@ -173,6 +184,9 @@ async function handle(request: NextRequest) {
       productionFloorPageCapability(floor, "productionControlTab"),
       floor
     )
+    if (serverTiming && response.ok)
+      response.headers.append("Server-Timing", serverTiming)
+    return response
   } catch (error) {
     const status = error instanceof DashboardReadError ? error.status : 400
     return NextResponse.json(
