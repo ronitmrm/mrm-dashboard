@@ -5423,6 +5423,37 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     heap.push(candidate);
     siftUp(candidate.heapIndex);
   };
+  // Certify ALL remaining rows, including non-heads. Waiting priorities and
+  // identities are fixed; only scalar tooling/readiness dates can change.
+  // Initialize after the first canonical pop, without capturing cold maps.
+  const prepareSuffix = () => {
+    if (!activeSimulationResources || !activePlanningKernel) return;
+    for (const item of queues)
+      for (const row of item.queue) if (!normalizedRowCache.has(row)) return;
+    const guards = new Map<Record<string, unknown>, { score: number; unsafe: boolean }>();
+    const scores = new Map<number, number>();
+    const owners = new Map<string, (typeof queues)[number]>();
+    let unsafe = 0;
+    for (const item of queues) for (const row of item.queue) {
+      // Duplicate row objects or canonical machine aliases need the full pass.
+      if (guards.has(row) || !waitingRows.has(row)) return;
+      const machine = canonicalKey(rowText(row, "machine", "machineNo"));
+      const owner = owners.get(machine);
+      if (owner && owner !== item) return;
+      owners.set(machine, item);
+      const before = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
+      const guard = {
+        score: safeNumber(rowValue(row, "plannerPriorityScore")),
+        unsafe: (Array.isArray(before) && before.length > 0) || !Number.isFinite(Number(rowText(row, "setupNo"))),
+      };
+      guards.set(row, guard);
+      scores.set(guard.score, (scores.get(guard.score) ?? 0) + 1);
+      unsafe += Number(guard.unsafe);
+    }
+    return { guards, scores, unsafe };
+  };
+  let suffixPrepared = false;
+  let suffixTracking: ReturnType<typeof prepareSuffix>;
   while (changedQueues.size || candidates.length) {
     // Remove affected heads while their OLD row/tooling state still holds.
     // This leaves a valid heap of unchanged candidates before slot updates.
@@ -5472,6 +5503,35 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
     }
     changedQueues.clear();
+    if (suffixTracking && !suffixTracking.unsafe && suffixTracking.scores.size <= 1) {
+      // Equal priorities and distinct machines disable every pair-specific
+      // override for the entire remaining pass. Admit whole protected queues
+      // once; their no-code pops only advance private machine date/key state.
+      suffixTracking = undefined;
+      let retained = 0;
+      for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index]!;
+        const queue = candidate.item.queue;
+        if (queue.every((row) => normalizedRowCache.has(row) && !requiredToolingCodesFromPlan(row).length) &&
+          protectedQueueSortKey(queue) !== undefined) {
+          removeGuard(candidate);
+          for (const row of queue) waitingRows.delete(row);
+        } else {
+          candidates[retained] = candidate;
+          frontierStates[retained] = frontierStates[index]!;
+          candidate.item.candidateIndex = retained++;
+        }
+      }
+      if (retained !== candidates.length) {
+        // Rebuild once from the retained stable sequence; discard old indices.
+        for (const candidate of heap) candidate.heapIndex = undefined;
+        heap.length = 0;
+        heapActive = false;
+        candidates.length = retained;
+        frontierStates.length = retained;
+        if (!retained) break;
+      }
+    }
     let winner: number;
     if (heapEligible()) {
       if (!heapActive) {
@@ -5503,6 +5563,17 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     item.queue.splice(item.queue.indexOf(row), 1);
     item.state = remainingState;
     waitingRows.delete(row);
+    if (!suffixPrepared) {
+      suffixPrepared = true;
+      suffixTracking = prepareSuffix();
+    } else if (suffixTracking) {
+      const guard = suffixTracking.guards.get(row)!;
+      suffixTracking.guards.delete(row);
+      const count = suffixTracking.scores.get(guard.score)! - 1;
+      if (count) suffixTracking.scores.set(guard.score, count);
+      else suffixTracking.scores.delete(guard.score);
+      suffixTracking.unsafe -= Number(guard.unsafe);
+    }
     if (item.queue.length) changedQueues.add(item);
     else {
       removeGuard(candidates[winner]);
