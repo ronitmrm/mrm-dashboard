@@ -8767,8 +8767,9 @@ function transitionProtectedPlanningRow(
   normalize?: () => Map<string, unknown>,
 ): ProtectedPlanningState {
   const transitions = activeSimulationResources!.protectedTransitions;
-  let fields = transitions.get(row.state.version);
-  if (!fields) transitions.set(row.state.version, (fields = new Map()));
+  const parent = field === "row:toolingNextAvailableDate" ? row.version : row.state.version;
+  let fields = transitions.get(parent);
+  if (!fields) transitions.set(parent, (fields = new Map()));
   let values = fields.get(field);
   if (!values) fields.set(field, (values = new Map()));
   const key = Object.is(value, -0) ? negativeZeroPlanningValue : value;
