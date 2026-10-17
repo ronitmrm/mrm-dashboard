@@ -8212,7 +8212,47 @@ function refreshSetupDependencyReadyDates(
 }
 
 function rescheduleMachineQueues(...args: Parameters<typeof calculateRescheduleMachineQueues>): ReturnType<typeof calculateRescheduleMachineQueues> {
-  return withPlanningFacts(() => calculateRescheduleMachineQueues(...args));
+  return withPlanningFacts(() => {
+    const kernel = activePlanningKernel;
+    if (!activeSimulationResources || !kernel) return calculateRescheduleMachineQueues(...args);
+    const [details, calendar] = args;
+    // Keep every protected row and the original frontier. Replay only a whole
+    // canonical pass with exactly the same rows, full state and fallback maps.
+    const key = JSON.stringify([kernel.identity(calendar), currentPlanningProductionDate(calendar), details.map(row => [
+      kernel.identity(row), planningRowVersion(row), kernel.identity(normalizedRowCache.get(row)),
+      Object.hasOwn(row, "toolingNextAvailableDate"), row.toolingNextAvailableDate,
+    ])]);
+    const cached = kernel.queuePasses.get(key);
+    if (cached) {
+      for (const change of cached.changes) {
+        if (change.meta) setPlanningMetaField(change.row, change.field, change.value);
+        else setPlanningRowField(change.row, change.field, change.value);
+      }
+      for (const { row, normalized } of cached.normalized) {
+        if (normalized) normalizedRowCache.set(row, normalized);
+        else normalizedRowCache.delete(row);
+        kernel.facts.delete(row);
+        const state = kernel.rows.get(row);
+        if (state) state.dirty = true;
+      }
+      return details;
+    }
+    const normalized = details.map(row => normalizedRowCache.get(row));
+    const previous = activeQueuePassChanges;
+    const changes: QueuePassChange[] = [];
+    activeQueuePassChanges = changes;
+    try {
+      const result = calculateRescheduleMachineQueues(...args);
+      kernel.queuePasses.set(key, {
+        changes,
+        normalized: details.flatMap((row, index) => normalized[index] === normalizedRowCache.get(row)
+          ? [] : [{ row, normalized: normalizedRowCache.get(row) }]),
+      });
+      return result;
+    } finally {
+      activeQueuePassChanges = previous;
+    }
+  });
 }
 
 function balanceMachineFamilyIdleGaps(...args: Parameters<typeof calculateBalanceMachineFamilyIdleGaps>): ReturnType<typeof calculateBalanceMachineFamilyIdleGaps> {
@@ -8360,6 +8400,13 @@ function transitionProtectedPlanningRow(
   if (field !== "row:toolingNextAvailableDate") row.version = next.version;
   return next;
 }
+type QueuePassChange = {
+  row: Record<string, unknown>;
+} & ({ meta: false; field: string; value: unknown } | {
+  meta: true; field: keyof ReturnType<typeof planningMeta>;
+  value: ReturnType<typeof planningMeta>[keyof ReturnType<typeof planningMeta>];
+});
+let activeQueuePassChanges: QueuePassChange[] | undefined;
 type OverridePreparation = {
   raw: unknown;
   rows: Array<{
@@ -8388,6 +8435,10 @@ function createIncrementalPlanningKernel() {
     facts: new WeakMap<Record<string, unknown>, Partial<PlanningRowFacts>>(),
     normalizedMatches: new WeakMap<Map<string, unknown>, WeakMap<Map<string, unknown>, boolean>>(),
     overridePreparation: new WeakMap<Array<Record<string, unknown>>, Map<Record<string, unknown>, OverridePreparation>>(),
+    queuePasses: new PlanningStateMap<string, {
+      changes: QueuePassChange[];
+      normalized: Array<{ row: Record<string, unknown>; normalized: Map<string, unknown> | undefined }>;
+    }>(16),
     // Queue keys contain the complete row/meta/fallback versions plus the
     // changing queue frontier and tooling slots. Keep only these exact caches
     // across simulations; dependency membership and gap proposals stay local.
@@ -8456,6 +8507,7 @@ function forkPlanningRow(plan: Record<string, unknown>) {
 }
 function setPlanningRowField(row: Record<string, unknown>, field: string, value: unknown) {
   if (!Object.hasOwn(row, field) || !Object.is(row[field], value)) {
+    activeQueuePassChanges?.push({ row, field, value, meta: false });
     row[field] = value;
     const protectedRow = activeSimulationResources?.protectedMutations.get(row);
     if (protectedRow) {
@@ -8490,6 +8542,7 @@ function setPlanningMetaField<Key extends keyof ReturnType<typeof planningMeta>>
   )
     return;
   if (!Object.hasOwn(meta, field) || !Object.is(meta[field], value)) {
+    activeQueuePassChanges?.push({ row, field, value, meta: true });
     meta[field] = value;
     const protectedRow = activeSimulationResources?.protectedMutations.get(row);
     if (protectedRow) {
