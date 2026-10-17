@@ -1,6 +1,8 @@
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import type { RetainedUploadRegistration } from "@/lib/pending-retained-upload-client"
 import Link from "next/link"
+import { Download } from "lucide-react"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import type { hrMasterControls } from "@/app/hr/master-access"
 
 import {
@@ -817,7 +819,7 @@ function JobsPanel({
                 <TableHead>Target</TableHead>
                 <TableHead>Applicants</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Workspace</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -851,9 +853,21 @@ function JobsPanel({
                       <StatusBadge value={row.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/hr/jobs/${row.id}`}>Open Job</Link>
-                      </Button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <AttachmentViewerLink
+                            fileName={`${row.jobNumber}-job-post.pdf`}
+                            href={`/hr/jobs/${row.id}/download`}
+                            mediaType="application/pdf"
+                          >
+                            <Download data-icon="inline-start" />
+                            Download Job Post
+                          </AttachmentViewerLink>
+                        </Button>
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/hr/jobs/${row.id}`}>Open Job</Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

@@ -163,6 +163,27 @@ export type RecruitmentJobRow = {
   vacancyCode: string
 }
 
+export type RecruitmentJobPostDocument = {
+  jobNumber: string
+  title: string
+  vacancyCode: string
+  postCode: string | null
+  templateCode: string | null
+  postDate: string
+  targetDate: string | null
+  status: string
+  employeeCount: number
+  minimumSalary: string | null
+  maximumSalary: string | null
+  shiftType: RecruitmentShiftType | null
+  shiftStartTime: string | null
+  shiftEndTime: string | null
+  gender: string | null
+  education: string | null
+  experience: string | null
+  description: string | null
+}
+
 export type RecruitmentPendingOfferRow = {
   applicationId: string
   candidateId: string
@@ -1819,6 +1840,30 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         title: row.title,
         vacancyCode: row.vacancy_code,
       }))
+    },
+
+    async getJobPostDocument(organizationId: string, jobId: string) {
+      const result = await pool.query<RecruitmentJobPostDocument>(
+        `SELECT job.job_number AS "jobNumber", job.title,
+          job.vacancy_code AS "vacancyCode", post.post_code AS "postCode",
+          template.template_code AS "templateCode",
+          job.post_date::text AS "postDate", job.target_date::text AS "targetDate",
+          job.status, job.employee_count AS "employeeCount",
+          job.minimum_salary::text AS "minimumSalary",
+          job.maximum_salary::text AS "maximumSalary",
+          job.shift_type AS "shiftType",
+          to_char(job.start_time, 'HH24:MI') AS "shiftStartTime",
+          to_char(job.end_time, 'HH24:MI') AS "shiftEndTime",
+          job.gender, job.education, job.experience_requirement AS experience,
+          job.description
+        FROM recruitment.job_posts job
+        LEFT JOIN recruitment.posts post ON post.id = job.post_id
+        LEFT JOIN recruitment.requirement_templates template
+          ON template.id = job.requirement_template_id
+        WHERE job.organization_id = $1 AND job.id = $2`,
+        [organizationId, jobId]
+      )
+      return result.rows[0] ?? null
     },
 
     async getJobWorkspace(

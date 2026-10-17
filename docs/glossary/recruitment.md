@@ -17,6 +17,16 @@ Template creates it without a template link. This does not change the Employee
 Master's template. Combined-role templates must belong to the selected combined
 role. Other job-entry paths retain their existing linked-template defaults.
 
+## Sharing a Job Post
+
+Job Posts and the Job Workspace offer a Job Post PDF for consultants. It contains
+the saved opening's title, references, status, dates, number of openings, salary
+range, shift timings, gender requirement, education, experience and full job
+description. Missing details are shown as Not specified. Requirements come from
+the Job Post itself, preserving its saved values when a reusable template changes.
+The PDF requires the existing job-read permission and opens in the attachment
+viewer for preview and download. It contains no candidate or interview records.
+
 ## Job Description Templates
 
 Each reusable Job Description Template has two separate free-text areas:

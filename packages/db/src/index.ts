@@ -171,6 +171,7 @@ export {
   type RecruitmentJobApplicationRow,
   type RecruitmentJobInterviewRow,
   type RecruitmentJobRow,
+  type RecruitmentJobPostDocument,
   type RecruitmentJobWorkspace,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
