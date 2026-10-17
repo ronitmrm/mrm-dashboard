@@ -1,6 +1,8 @@
 /** Memoized calculations never outlive their planning calendar/build. */
 export function createPlanningComputationCache() {
   const identities = new WeakMap<object, number>();
+  const workdayCounts = new Map<string, Map<string, number>>();
+  let workdayCountEntries = 0;
   let nextIdentity = 0;
   const identity = (value: object | undefined) => {
     if (!value) return 0;
@@ -14,7 +16,21 @@ export function createPlanningComputationCache() {
   return {
     identity,
     workdayOffsets: createBoundedMemo<string, string>(),
-    workdayCounts: createBoundedMemo<string, number>(),
+    workdayCounts(startDate: string, endDate: string, calculate: () => number) {
+      let ends = workdayCounts.get(startDate);
+      const cached = ends?.get(endDate);
+      if (cached !== undefined) return cached;
+      const days = calculate();
+      if (workdayCountEntries >= 16384) {
+        workdayCounts.clear();
+        workdayCountEntries = 0;
+        ends = undefined;
+      }
+      if (!ends) workdayCounts.set(startDate, (ends = new Map()));
+      ends.set(endDate, days);
+      workdayCountEntries += 1;
+      return days;
+    },
     productionFinishes: createBoundedMemo<string, { date: string; workingHours: number | null }>(),
     wipReadyDates: createBoundedMemo<string, string>(),
   };
