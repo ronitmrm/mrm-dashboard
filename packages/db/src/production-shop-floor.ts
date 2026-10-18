@@ -1,6 +1,7 @@
 import { assertToolingAvailable } from "./tooling-availability"
 import { randomUUID } from "node:crypto"
 import { materialWaitPending, readJobCardMaterialBalances } from "./production-material"
+import { readMaterialMovementWaits } from "./material-movement-waits"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
 import type { PoolClient } from "pg"
@@ -3451,7 +3452,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
-      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult] = await Promise.all([
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult, materialMovementWaits] = await Promise.all([
         pool.query<Record<string, unknown>>(
           `
             SELECT setup.id, setup.setup_number::text AS "setupNumber",
@@ -3908,6 +3909,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
            ORDER BY "checkedAt" DESC, id DESC`,
           [input.organizationId, jobCard.id, floorCode]
         ),
+        readMaterialMovementWaits(pool, input.organizationId, floorCode, jobCardNumber),
       ])
 
       const productionControl = objectRecord(snapshotResult.rows[0]?.payload)
@@ -4189,6 +4191,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         productionFloorCode: floorCode,
         qualityRecords: qualityRecordsResult.rows,
         rawMaterialReceipts: receiptsResult.rows,
+        materialMovementWaits,
         routes: routesResult.rows.map((route) => ({
           ...route,
           selected: route.id === selectedRoute?.id,
@@ -5235,8 +5238,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
-      const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
-      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient) }
+      const [rows, movementWaits] = await Promise.all([
+        readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode),
+        readMaterialMovementWaits(pool, input.organizationId, input.productionFloorCode),
+      ])
+      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient), movementWaits }
     },
 
     async acceptShortRawMaterial(input: {

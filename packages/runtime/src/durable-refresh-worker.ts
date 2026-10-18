@@ -3,6 +3,7 @@ import {
   connectionTargetSummary,
   createBoundedPostgresPool,
   instrumentPostgresPool,
+  syncMaterialMovementWaits,
 } from "@workspace/db"
 import {
   recordDashboardPublication,
@@ -557,6 +558,9 @@ export function createDurableRefreshWorker({
 
           try {
             const version = Number(event.payload.version)
+            if (event.topic === "dashboard.read_model.updated" && event.organization_id) {
+              await syncMaterialMovementWaits(pool, event.organization_id)
+            }
             try {
               if (redisAcceleration) recordRedisCommand()
               await acceleration.publishInvalidation({

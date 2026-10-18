@@ -94,6 +94,7 @@ const expectedCanonicalTables = [
   "manufacturing.job_card_finish_baselines",
   "manufacturing.machine_constraint_event_details",
   "manufacturing.machine_constraint_events",
+  "manufacturing.material_movement_waits",
   "manufacturing.operation_cycle_standards",
   "manufacturing.operation_setups",
   "manufacturing.operation_tooling",

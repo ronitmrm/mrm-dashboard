@@ -11,6 +11,7 @@ import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
 import { readJobCardMaterialBalances } from "./production-material"
+import { syncMaterialMovementWaits } from "./material-movement-waits"
 import { createQualityRepository } from "./quality"
 import { createRejectionRepository } from "./rejections"
 
@@ -2157,4 +2158,65 @@ test("RM shortage flag and completion blocker clear at 95% usable receipt", asyn
   expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receiptSufficient: true, shortAccepted: false })
   expect(workspace.analytics.material.receivedKg).toBeCloseTo(47.709, 6)
   expect(workspace.analytics.material.pendingKg).toBeCloseTo(2.511, 6)
+})
+
+test("records floor material wait only while ready and preserves working-time history at arrival", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  try {
+    vi.setSystemTime(new Date("2026-10-15T09:00:00+05:30"))
+    const jobCardNumber = `RM-MOVEMENT-${suffix}`
+    const machineNumber = `RM-MOVE-${suffix}`
+    await planning.upsertMachine({ organizationId, machineNumber })
+    await planning.upsertWorkOrder({ organizationId, itemUid, jobCardNumber, orderedQuantity: 10000,
+      workOrderNumber: jobCardNumber, sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber } })
+    await planning.selectRoute({ organizationId, jobCardNumber, routeCode: "1" })
+    await pool.query(`INSERT INTO manufacturing.production_break_schedules (organization_id, production_floor_id, breaks)
+      SELECT $1, id, '[{"startTime":"12:00","endTime":"12:15"}]'::jsonb
+      FROM manufacturing.production_floors WHERE organization_id = $1 AND code = 'conventional'
+      ON CONFLICT (organization_id, production_floor_id) DO UPDATE SET breaks = EXCLUDED.breaks`, [organizationId])
+    const publish = async () => {
+      await pool.query(`INSERT INTO derived.dashboard_read_models (organization_id, version, payload, source_watermark)
+        VALUES ($1, (SELECT COALESCE(max(version), 0) + 1 FROM derived.dashboard_read_model_heads WHERE organization_id = $1), $2, '{}')`,
+      [organizationId, { productionFloorSnapshots: { conventional: { productionControl: {
+        planningCalendar: { holidayDates: [], workingDates: [] }, machinePlanDetailRows: [{
+          jcNo: jobCardNumber, partCode: itemUid, machine: machineNumber, optionNumber: "1", setupNo: "1",
+          pendingGoodQty: 10000, shopFloorStage: "planned", shopFloorTaskReady: true,
+          plannedProductionStartDate: "15 Oct 2026",
+        }],
+      } } } }])
+      await syncMaterialMovementWaits(pool, organizationId)
+    }
+    const waits = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
+      .movementWaits.filter(row => row.jobCardNumber === jobCardNumber)
+    await publish()
+    expect(await waits()).toEqual([]) // A ready-looking plan cannot bypass absent RM.
+    await repository.upsertRawMaterialReceipt({ organizationId, quantityKg: 25.11, receiptNumber: rmPoNumber,
+      receivedOn: "2026-10-15", sourceId: randomUUID(), payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber } })
+    await publish()
+    const first = (await waits())[0]!
+    vi.setSystemTime(new Date("2026-10-15T10:00:00+05:30"))
+    await publish()
+    expect(await waits()).toMatchObject([{ id: first.id, readyAt: first.readyAt, workingMinutes: 60 }])
+    const busy = await pool.query<{ id: string }>(`INSERT INTO manufacturing.shop_floor_setup_state
+      (organization_id, work_order_id, route_option_id, operation_setup_id, machine_id, stage, active,
+        source_system, source_table, source_id, source_payload)
+      SELECT $1, wait.work_order_id, setup.route_option_id, setup.id, wait.machine_id, 'operator_started', true,
+        'test', 'material-wait', $2, '{}' FROM manufacturing.material_movement_waits wait
+      JOIN manufacturing.operation_setups setup ON setup.id = wait.operation_setup_id WHERE wait.id = $3 RETURNING id`,
+    [organizationId, randomUUID(), first.id])
+    await publish()
+    expect(await waits()).toEqual([])
+    vi.setSystemTime(new Date("2026-10-15T11:00:00+05:30"))
+    await pool.query("UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false WHERE id = $1", [busy.rows[0]!.id])
+    await publish()
+    vi.setSystemTime(new Date("2026-10-17T10:00:00+05:30"))
+    await repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber, operationSetupCode: "1",
+      stage: "raw_material_at_machine", payload: { completedAt: new Date().toISOString(), doneBy: "Floor Worker", remark: "Material delivered." } })
+    expect(await waits()).toEqual([])
+    const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber })
+    expect(workspace.materialMovementWaits).toMatchObject([
+      { outcome: "arrived", workingMinutes: 615, recordedBy: "Floor Worker", reason: "Material delivered." },
+      { id: first.id, outcome: "blocked", workingMinutes: 60 },
+    ])
+  } finally { vi.useRealTimers() }
 })

@@ -9,7 +9,10 @@ vi.mock("@/components/ui/golden-patterns", () => import("./ui/golden-patterns"))
 vi.mock("@/hooks/use-conditional-records", () => ({
   useConditionalRecords: (url: string) => ({
     loading: false, error: url.startsWith("/api/raw-material-review") ? feeds.materialError : null, refresh: vi.fn(),
-    data: { rows: url.startsWith("/api/raw-material-review") ? (feeds.materialError ? [] : [{
+    data: { movementWaits: url.startsWith("/api/raw-material-review") && !feeds.materialError ? [{
+      id: "wait-1", jobCardNumber: "P1201", partCode: "M101", optionNumber: "1", setupNumber: 2,
+      machineNumber: "CNC-12", readyAt: "2026-10-18T03:30:00Z", workingMinutes: 60,
+    }] : [], rows: url.startsWith("/api/raw-material-review") ? (feeds.materialError ? [] : [{
       id: "material-1", jobCardNumber: "P1200", partCode: "M100", rowVersion: 1,
       requiredKg: 100, receivedKg: 40, pendingKg: 60, rejectedKg: 0, usableKg: 40, shortAccepted: false,
     }]) : [{
@@ -38,6 +41,8 @@ test("combines RM, session and workflow flags with their actions in one filterab
   expect(markup).toContain("Required: 100 kg")
   expect(markup).toContain("Pending: 60 kg")
   expect(markup).toContain("Accept short RM")
+  expect(markup).toContain("Floor material wait")
+  expect(markup).toContain("Working wait: 1h 0m")
   expect(markup).toContain("/dashboard/job-cards/P1200?floor=cnc")
   expect(markup).toContain("Session flag")
   expect(markup).toContain("Workflow exception")
