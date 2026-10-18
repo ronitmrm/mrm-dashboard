@@ -114,6 +114,98 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("updates only Required RM on existing unit orders without queuing planning", async () => {
+    const jobCardNumber = `JC-REQUIRED-RM-${suffix}`
+    const otherUnitJobCard = `${jobCardNumber}-OTHER`
+    await pool.query(
+      `INSERT INTO manufacturing.work_orders (
+         organization_id, work_order_number, job_card_number, item_id,
+         ordered_quantity, completed_quantity, due_date, status,
+         source_system, source_table, source_id, source_payload
+       ) VALUES ($1, $2, $2, $3, 5000, 1000, '2026-11-01', 'Cancelled',
+         'test', 'work_order', $2, $4),
+         ($1, $5, $5, $3, 2000, 0, '2026-12-01', 'Open',
+         'test', 'work_order', $5, '{"productionFloorCode":"cnc","requiredRmKg":20}')`,
+      [organizationId, jobCardNumber, itemId, {
+        productionFloorCode: "conventional-02", requiredRmKg: 10,
+        selectedRouteCode: "ROUTE-A", rmShortAccepted: true, orderKg: 50,
+      }, otherUnitJobCard]
+    )
+    try {
+      const business = () => pool.query(`SELECT
+        to_jsonb(work_order) - ARRAY['source_payload', 'updated_at', 'updated_by_user_id', 'row_version'] AS order_fields,
+        source_payload - 'requiredRmKg' AS payload
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])
+      const planning = () => pool.query(`SELECT 'refresh' AS kind, to_jsonb(job) AS state
+        FROM derived.refresh_jobs job WHERE organization_id = $1
+        UNION ALL SELECT 'outbox', to_jsonb(event) FROM derived.outbox_events event
+        WHERE organization_id = $1 ORDER BY kind, state`, [organizationId])
+      const beforeBusiness = (await business()).rows
+      const beforePlanning = (await planning()).rows
+      const row = { jobCardNumber: jobCardNumber.toLowerCase(), requiredRmKg: 12.5 }
+      const input = {
+        organizationId, productionFloorCode: "conventional-02" as const,
+        rows: [row, row, { jobCardNumber: otherUnitJobCard, requiredRmKg: 99 },
+          { jobCardNumber: `${jobCardNumber}-MISSING`, requiredRmKg: 99 }],
+      }
+      expect(await repository.updateWorkOrderRequiredRm(input)).toEqual({ updated: 1, unchanged: 0, skipped: 2 })
+      const afterFirst = await pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])
+      expect(await repository.updateWorkOrderRequiredRm(input)).toEqual({ updated: 0, unchanged: 1, skipped: 2 })
+      expect((await pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])).rows).toEqual(afterFirst.rows)
+      expect((await business()).rows).toEqual(beforeBusiness)
+      expect((await planning()).rows).toEqual(beforePlanning)
+      const requiredRm = await pool.query(`SELECT job_card_number, source_payload->'requiredRmKg' AS kg
+        FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])
+        ORDER BY job_card_number`, [organizationId, [jobCardNumber, otherUnitJobCard]])
+      expect(requiredRm.rows).toEqual([
+        { job_card_number: jobCardNumber, kg: 12.5 },
+        { job_card_number: otherUnitJobCard, kg: 20 },
+      ])
+      const audit = await pool.query(`SELECT before_state->'source_payload'->'requiredRmKg' AS before,
+        after_state->'source_payload'->'requiredRmKg' AS after FROM audit.events
+        WHERE event_type = 'manufacturing.work_order.required_rm_updated' AND target_id = (
+          SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2)`,
+        [organizationId, jobCardNumber])
+      expect(audit.rows).toEqual([{ before: 10, after: 12.5 }])
+    } finally {
+      await pool.query(`WITH removed_audit AS (DELETE FROM audit.events WHERE target_id IN (
+        SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])))
+        DELETE FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])`,
+        [organizationId, [jobCardNumber, otherUnitJobCard]])
+    }
+  })
+
+  test("rejects conflicting Required RM rows atomically and reports unmatched Job Cards", async () => {
+    const jobCardNumber = `JC-REQUIRED-RM-CONFLICT-${suffix}`
+    await pool.query(`INSERT INTO manufacturing.work_orders (
+      organization_id, work_order_number, job_card_number, item_id, ordered_quantity,
+      source_system, source_table, source_id, source_payload)
+      VALUES ($1, $2, $2, $3, 100, 'test', 'work_order', $2,
+        '{"requiredRmKg":10,"productionFloorCode":"cnc"}')`, [organizationId, jobCardNumber, itemId])
+    try {
+      const snapshot = () => pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 AND job_card_number = $2`,
+        [organizationId, jobCardNumber])
+      const before = (await snapshot()).rows
+      const input = { organizationId, productionFloorCode: "cnc" as const }
+      await expect(repository.updateWorkOrderRequiredRm({ ...input, rows: [
+        { jobCardNumber, requiredRmKg: 20 },
+        { jobCardNumber: jobCardNumber.toLowerCase(), requiredRmKg: 30 },
+      ] })).rejects.toThrow(/Conflicting Required RM/)
+      await expect(repository.updateWorkOrderRequiredRm({ ...input, rows: [
+        { jobCardNumber: `${jobCardNumber}-MISSING`, requiredRmKg: 20 },
+      ] })).rejects.toThrow(/No saved Work Orders match/)
+      expect((await snapshot()).rows).toEqual(before)
+    } finally {
+      await pool.query(`WITH removed_audit AS (DELETE FROM audit.events WHERE target_id IN (
+        SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2))
+        DELETE FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2`,
+        [organizationId, jobCardNumber])
+    }
+  })
+
   test("cancels an RM-received work order and releases its active setup", async () => {
     const jobCardNumber = `JC-CANCEL-${suffix}`
     const machineNumber = `MC-CANCEL-${suffix}`

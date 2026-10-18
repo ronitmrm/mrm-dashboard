@@ -1185,6 +1185,91 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
+    async updateWorkOrderRequiredRm(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      rows: { jobCardNumber: string; requiredRmKg: number }[]
+    }) {
+      const requirements = new Map<string, { job_card: string; required_rm_kg: number }>()
+      for (const [index, row] of input.rows.entries()) {
+        const jobCardNumber = row.jobCardNumber.trim()
+        if (!jobCardNumber) {
+          throw new ShopFloorConflictError(`Row ${index + 2}: Job Card is required. No Required RM saved.`)
+        }
+        if (!Number.isFinite(row.requiredRmKg) || row.requiredRmKg <= 0) {
+          throw new ShopFloorConflictError(`Row ${index + 2}: Required RM (kg) must be a positive number. No Required RM saved.`)
+        }
+        const key = jobCardNumber.toLowerCase()
+        const previous = requirements.get(key)
+        if (previous && previous.required_rm_kg !== row.requiredRmKg) {
+          throw new ShopFloorConflictError(`Conflicting Required RM for Job Card "${jobCardNumber}". No Required RM saved.`)
+        }
+        requirements.set(key, { job_card: key, required_rm_kg: row.requiredRmKg })
+      }
+      if (!requirements.size) {
+        throw new ShopFloorConflictError("No Required RM entered. Fill Required RM (kg) in the downloaded Work Order CSV.")
+      }
+      return transaction(pool, async client => {
+        const matched = await client.query<{
+          id: string
+          required_rm_kg: number
+          current_required_rm_kg: unknown
+          before_state: Record<string, unknown>
+        }>(
+          `SELECT work_order.id, requested.required_rm_kg,
+             work_order.source_payload->'requiredRmKg' AS current_required_rm_kg,
+             to_jsonb(work_order) AS before_state
+           FROM jsonb_to_recordset($2::jsonb) AS requested(job_card text, required_rm_kg float8)
+           JOIN manufacturing.work_orders work_order
+             ON work_order.organization_id = $1
+             AND lower(work_order.job_card_number) = requested.job_card
+             AND derived.dashboard_production_floor_code(work_order.source_payload) = $3
+           ORDER BY work_order.id
+           FOR UPDATE OF work_order`,
+          [input.organizationId, JSON.stringify([...requirements.values()]), input.productionFloorCode]
+        )
+        if (!matched.rows.length) {
+          throw new ShopFloorConflictError("No saved Work Orders match these Job Cards in this Production Unit. Use the original Job Card numbers. No Required RM saved.")
+        }
+        const changes = matched.rows.filter(row =>
+          readRequiredRawMaterialKg(row.current_required_rm_kg) !== row.required_rm_kg
+        )
+        const counts = {
+          updated: changes.length,
+          unchanged: matched.rows.length - changes.length,
+          skipped: requirements.size - matched.rows.length,
+        }
+        if (!changes.length) return counts
+        const updated = await client.query<{ id: string; after_state: Record<string, unknown> }>(
+          `UPDATE manufacturing.work_orders work_order
+           SET source_payload = jsonb_set(COALESCE(work_order.source_payload, '{}'::jsonb),
+               '{requiredRmKg}', to_jsonb(change.required_rm_kg)),
+             updated_at = now(), updated_by_user_id = $3, row_version = work_order.row_version + 1
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, required_rm_kg numeric)
+           WHERE work_order.organization_id = $1 AND work_order.id = change.id
+           RETURNING work_order.id, to_jsonb(work_order) AS after_state`,
+          [input.organizationId, JSON.stringify(changes.map(row => ({
+            id: row.id, required_rm_kg: row.required_rm_kg,
+          }))), input.actorUserId ?? null]
+        )
+        const beforeById = new Map(changes.map(row => [row.id, row.before_state]))
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
+           ) SELECT $1, 'manufacturing.work_order.required_rm_updated', 'manufacturing',
+             'work_orders', change.id, $3, 'Required RM CSV update',
+             change.before_state, change.after_state, 'mrm-dashboard', 'work_order_required_rm', gen_random_uuid()::text
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, before_state jsonb, after_state jsonb)`,
+          [input.organizationId, JSON.stringify(updated.rows.map(row => ({
+            id: row.id, before_state: beforeById.get(row.id), after_state: row.after_state,
+          }))), input.actorUserId ?? null]
+        )
+        return counts
+      })
+    },
+
     async upsertRouteOption(input: {
       rejectDuplicates?: boolean
       recordId?: string

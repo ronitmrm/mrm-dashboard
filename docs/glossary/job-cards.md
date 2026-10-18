@@ -343,6 +343,20 @@ requires the Work Order value to be entered first. Ordered kilograms remain the
 approximate finished-goods weight. Blank Piece Weight still supplies the separate
 material-yield estimates below.
 
+For existing Work Orders, **Update Required RM CSV** reads Job Card and Required
+RM (kg) from the same downloaded CSV. It updates only the entered requirement
+on matching Job Cards in the selected Production Unit, including cancelled
+orders, without reopening them. Blank requirements are ignored; unmatched Job
+Cards are reported as skipped and never created. Invalid or conflicting values
+stop the batch without saving changes. Repeating an unchanged value does not
+create another change. Updates retain an audit record.
+
+This action preserves quantities, dates, routes, planner decisions, receipts and
+setup history. It does not queue planning recalculation or change the published
+machine plan. Material checks use the updated requirement; a later normal
+recalculation uses the current requirement. Normal **Upload CSV** remains the
+full Work Order import and can queue planning.
+
 Finished Good excludes final-setup rejections. Final Setup Total includes good
 and rejected output from that final setup; they match only when none is rejected.
 

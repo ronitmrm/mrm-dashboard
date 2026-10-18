@@ -52,6 +52,7 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "maintenance_checklist_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "maintenance_checklist_master" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "work_order" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-import", { entryType: "work_order", importMode: "update_required_rm" })).toBe(false);
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "rm_inward", importMode: "update_locations" })).toBe(false);
   });
 
@@ -60,6 +61,7 @@ describe("planning refresh policy", () => {
     expect(planningRefreshStatusMessage(true, "data-entry", { entryType: "maintenance_master" })).toBe("Master table refresh queued.");
     expect(planningRefreshStatusMessage(true, "data-import", { entryType: "maintenance_checklist_master" })).toBe("Master table refresh queued.");
     expect(planningRefreshStatusMessage(false)).toBe("Use Recalculate planning after master changes.");
+    expect(planningRefreshStatusMessage(false, "data-import", { entryType: "work_order", importMode: "update_required_rm" })).toBe("Planning recalculation not required.");
     expect(planningRefreshStatusMessage(false, "data-import", { entryType: "rm_inward", importMode: "update_locations" })).toBe("Planning recalculation not required.");
     expect(planningRefreshStatusMessage(false, "data-entry", {
       entryType: "shop_floor_status",

@@ -2207,13 +2207,20 @@ async function post(request: NextRequest, context: RouteContext) {
     }
 
     if (
+      path === "data-import" && body.importMode !== undefined &&
+      !(
+        (body.entryType === "rm_inward" && body.importMode === "update_locations") ||
+        (body.entryType === "work_order" && body.importMode === "update_required_rm")
+      )
+    ) {
+      throw new RouteError(400, "Unknown CSV import action for this entry type.")
+    }
+
+    if (
       path === "data-import" &&
       ["rm_inward", "software_raw"].includes(String(body.entryType || ""))
     ) {
       const entryType = String(body.entryType || "")
-      if (body.importMode !== undefined && body.importMode !== "update_locations") {
-        throw new RouteError(400, "Unknown CSV import action. Choose Receive RM CSV or Update locations CSV.")
-      }
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
       const scope = operationalEntryWriteScope(
@@ -2438,6 +2445,37 @@ async function post(request: NextRequest, context: RouteContext) {
             payload.productionFloorCode
           )
           if (capability) await authorizedDashboardSession(request, capability)
+        }
+        if (entryType === "work_order" && body.importMode === "update_required_rm") {
+          const rows = importedRows.flatMap((payload, index) => {
+            if (!text(payload.requiredRmKg)) return []
+            const requiredRmKg = Number(payload.requiredRmKg)
+            if (!Number.isFinite(requiredRmKg) || requiredRmKg <= 0) {
+              throw new RouteError(400, `CSV row ${index + 2}: Required RM (kg) must be a positive number. No values saved.`)
+            }
+            if (!text(payload.jcNo)) {
+              throw new RouteError(400, `CSV row ${index + 2}: Job Card is required. No values saved.`)
+            }
+            return [{ jobCardNumber: text(payload.jcNo), requiredRmKg }]
+          })
+          const scope = operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {})
+          const result = await withCsvImportTransaction(() => withPlanningRepository(
+            request,
+            scope.capability,
+            ({ actorUserId, organizationId, repository }) => repository.updateWorkOrderRequiredRm({
+              actorUserId,
+              organizationId,
+              productionFloorCode: scope.floor,
+              rows,
+            })
+          ))
+          return json({
+            ok: true,
+            rowsUpdated: result.updated,
+            rowsUnchanged: result.unchanged,
+            rowsSkipped: result.skipped,
+            message: `Required RM: ${result.updated} updated, ${result.unchanged} unchanged, ${result.skipped} skipped (no matching Job Card in this unit). Order quantities and planning unchanged.`,
+          })
         }
         const inserted = await withCsvImportTransaction(() => withPlanningRepository(
           request,
