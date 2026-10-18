@@ -5100,7 +5100,8 @@ function protectedQueueSortKey(rows: Array<Record<string, unknown>>) {
   return JSON.stringify(states);
 }
 
-function independentSimulationFocusMachines(details: Array<Record<string, unknown>>, machineRows: Array<Record<string, unknown>> | undefined) {
+function independentSimulationFocusMachines(details: Array<Record<string, unknown>>, machineRows: Array<Record<string, unknown>> | undefined,
+  contribute?: (row: Record<string, unknown>, keys: ReadonlySet<string>) => void) {
   // Only filtered simulation callers may leave private reservation tooling dates unfinished.
   const jobs = activePlanningKernel?.simulationJobs;
   if (!activeSimulationResources || !jobs?.size || !machineRows) return undefined;
@@ -5129,6 +5130,7 @@ function independentSimulationFocusMachines(details: Array<Record<string, unknow
     const actual = canonicalKey(meta.productionActual?.machine ?? "");
     const previous = gapMove ? canonicalKey(rowText(row, "familyIdleGapFromMachine")) : "";
     if ((actual && !keys.has(actual)) || (gapMove && (!previous || !keys.has(previous)))) return undefined;
+    contribute?.(row, keys);
     for (const key of keys) focus.add(key);
     if (!meta.simulationReservation) dynamicRows += 1;
   }
@@ -5160,6 +5162,11 @@ function plainPrioritySetupList(raw: unknown) {
 type ProtectedScalarProof = {
   details: Array<Record<string, unknown>>; length: number; current: Array<Record<string, unknown>>; generation: number;
   owners: Map<string, string>; jobs: Set<string>; references: Set<string>;
+  layout: {
+    groups: Map<string, Array<Record<string, unknown>>>; codes: Map<string, Set<string>>; users: Map<string, Set<string>>;
+    versions: Map<Record<string, unknown>, number>; focus?: Set<string>;
+    machineRows?: Array<Record<string, unknown>>; jobs?: ReadonlySet<string>;
+  };
 };
 function protectedScalarCurrent(proof: ProtectedScalarProof) {
   const { details, current, owners, jobs, references } = proof;
@@ -5181,19 +5188,28 @@ function protectedScalarCurrent(proof: ProtectedScalarProof) {
     return true;
   });
 }
-function compileProtectedScalarProof(details: Array<Record<string, unknown>>, members: number, interruptions: boolean) {
+function compileProtectedScalarProof(details: Array<Record<string, unknown>>, members: number, interruptions: boolean,
+  versions: Map<Record<string, unknown>, number>) {
   const resources = activeSimulationResources!, kernel = activePlanningKernel!;
   const split = details.findIndex(row => resources.protectedMutations.has(row));
   if (split <= 0 || members !== details.length) return;
   const proof: ProtectedScalarProof = { details, length: details.length, current: details.slice(0, split), generation: 0,
-    owners: new Map(), jobs: new Set(), references: new Set() };
+    owners: new Map(), jobs: new Set(), references: new Set(),
+    layout: { groups: new Map(), codes: new Map(), users: new Map(), versions } };
   for (let index = split; index < details.length; index++) {
     const row = details[index]!, protectedRow = resources.protectedMutations.get(row);
-    if (!protectedRow || protectedRow.state.normalized !== normalizedRowCache.get(row)) return;
+    if (!protectedRow || !planningMeta(row).simulationReservation || protectedRow.state.normalized !== normalizedRowCache.get(row)) return;
     const facts = protectedRow.state.facts, raw = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
     if (Array.isArray(raw) && raw.length && facts?.priorityQueueBeforeSetups === undefined) return;
     if (interruptions && facts?.priorityApprovalMode !== "idle_queue_only" && facts?.priorityInterruptedSetups === undefined) return;
-    proof.owners.set(canonicalKey(rowText(row, "machine", "machineNo")), rowText(row, "machine"));
+    const machine = rowText(row, "machine"), layout = proof.layout;
+    proof.owners.set(canonicalKey(rowText(row, "machine", "machineNo")), machine);
+    const rows = layout.groups.get(machine) ?? []; rows.push(row); layout.groups.set(machine, rows);
+    const codes = layout.codes.get(machine) ?? new Set<string>(); layout.codes.set(machine, codes);
+    for (const code of requiredToolingCodesFromPlan(row)) {
+      codes.add(code);
+      const users = layout.users.get(code) ?? new Set<string>(); users.add(machine); layout.users.set(code, users);
+    }
     proof.jobs.add(canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")));
     for (const edge of facts?.priorityQueueBeforeSetups ?? []) proof.references.add(edge.jcNo);
     for (const edge of facts?.priorityInterruptedSetups ?? []) proof.references.add(edge.jcNo);
@@ -5270,11 +5286,45 @@ function scalarQueueOrder(
   return true;
 }
 
+function protectedLayoutGroups(byMachine: Map<string, Array<Record<string, unknown>>>, proof: ProtectedScalarProof,
+  machineRows: Array<Record<string, unknown>> | undefined) {
+  const layout = proof.layout, currentFocus = independentSimulationFocusMachines(proof.current, machineRows);
+  const focus = currentFocus ? new Set([...currentFocus, ...layout.focus!]) : undefined;
+  let retained: Set<string> | undefined;
+  if (focus) {
+    retained = new Set();
+    for (const [owner, machine] of proof.owners) if (focus.has(owner)) retained.add(machine);
+    const currentGroups = new Set<string>(), codes = new Map<string, Set<string>>(), users = new Map<string, Set<string>>();
+    for (const row of proof.current) {
+      const machine = rowText(row, "machine"); currentGroups.add(machine);
+      if (focus.has(canonicalKey(rowText(row, "machine", "machineNo")))) retained.add(machine);
+      const groupCodes = codes.get(machine) ?? new Set<string>(); codes.set(machine, groupCodes);
+      for (const code of requiredToolingCodesFromPlan(row)) {
+        groupCodes.add(code);
+        const groupUsers = users.get(code) ?? new Set<string>(); groupUsers.add(machine); users.set(code, groupUsers);
+      }
+    }
+    for (const machine of retained)
+      for (const groupCodes of [layout.codes.get(machine), codes.get(machine)])
+        for (const code of groupCodes ?? [])
+          for (const groupUsers of [layout.users.get(code), users.get(code)])
+            for (const user of groupUsers ?? []) retained.add(user);
+    if ([...currentGroups].some(machine => !retained!.has(machine))) retained = undefined;
+  }
+  return {
+    groups: [...byMachine].filter(([machine, group]) => (!retained || retained.has(machine)) &&
+      (!group.every(row => !requiredToolingCodesFromPlan(row).length) || protectedQueueSortKey(group) === undefined)).map(([, group]) => group),
+    scalarOrder: true, focusProjected: retained !== undefined,
+  };
+}
+
 function earlyProtectedQueueGroups(
-  groups: Array<Array<Record<string, unknown>>>,
+  byMachine: Map<string, Array<Record<string, unknown>>>,
   details: Array<Record<string, unknown>>,
-  machineRows?: Array<Record<string, unknown>>,
+  machineRows: Array<Record<string, unknown>> | undefined,
+  versions: Map<Record<string, unknown>, number>,
 ) {
+  const groups = [...byMachine.values()];
   const original = { groups, scalarOrder: false, focusProjected: false };
   if (!activeSimulationResources || !activePlanningKernel) return original;
   const kernel = activePlanningKernel;
@@ -5282,6 +5332,8 @@ function earlyProtectedQueueGroups(
   const proof = kernel.protectedScalarProof;
   const lifted = proof && proof.length === details.length && proof.generation === kernel.protectedScalarGeneration
     && protectedScalarCurrent(proof);
+  if (lifted && proof.layout.focus && proof.layout.machineRows === machineRows && proof.layout.jobs === kernel.simulationJobs)
+    return protectedLayoutGroups(byMachine, proof, machineRows);
   const rows = groups.flat();
   if (!lifted && rows.some(row => !normalizedRowCache.has(row))) return original;
   const groupByRow = new Map<Record<string, unknown>, number>();
@@ -5296,9 +5348,15 @@ function earlyProtectedQueueGroups(
   }
   const evidence = { interruptions: false };
   if (!lifted && !scalarQueueOrder(groupByRow, groupByRow, undefined, evidence)) return original;
-  if (!lifted) kernel.protectedScalarProof = compileProtectedScalarProof(details, groupByRow.size, evidence.interruptions);
+  if (!lifted) kernel.protectedScalarProof = compileProtectedScalarProof(details, groupByRow.size, evidence.interruptions, versions);
   let retained: Set<number> | undefined;
-  const focus = independentSimulationFocusMachines(details, machineRows);
+  const compiled = kernel.protectedScalarProof, fixedFocus = compiled ? new Set<string>() : undefined;
+  const focus = independentSimulationFocusMachines(details, machineRows, fixedFocus ? (row, keys) => {
+    if (activeSimulationResources!.protectedMutations.has(row)) for (const key of keys) fixedFocus.add(key);
+  } : undefined);
+  if (focus && compiled && compiled.generation === kernel.protectedScalarGeneration) {
+    compiled.layout.focus = fixedFocus!; compiled.layout.machineRows = machineRows; compiled.layout.jobs = kernel.simulationJobs;
+  }
   if (focus) {
     // Build from ALL original groups, before the existing no-code omission.
     const users = new Map<string, Set<number>>();
@@ -5330,14 +5388,32 @@ function earlyProtectedQueueGroups(
 function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar, machineRows?: Array<Record<string, unknown>>) {
   applyPriorityInterruptionQuantities(details);
   applyPlanOverrideInterruptionQuantities(details);
+  const kernel = activePlanningKernel;
+  let prepared = kernel?.protectedScalarProof;
+  if (!prepared || prepared.details !== details || prepared.length !== details.length || prepared.generation !== kernel!.protectedScalarGeneration
+    || !prepared.layout.focus || prepared.layout.machineRows !== machineRows || prepared.layout.jobs !== kernel!.simulationJobs
+    || !protectedScalarCurrent(prepared)) prepared = undefined;
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of details) {
+  for (const [index, row] of details.entries()) {
     setPlanningRowField(row, "toolingNextAvailableDate", "");
+    if (prepared && index >= prepared.current.length) continue;
     const machine = rowText(row, "machine");
     if (!machine) continue;
     const rows = byMachine.get(machine) ?? [];
     rows.push(row);
     byMachine.set(machine, rows);
+  }
+
+  const layout = prepared && prepared.generation === kernel!.protectedScalarGeneration ? prepared.layout : undefined;
+  if (layout) for (const [machine, rows] of layout.groups) {
+    const current = byMachine.get(machine);
+    byMachine.set(machine, current ? [...current, ...rows] : rows);
+  } else if (prepared) {
+    byMachine.clear();
+    for (const row of details) {
+      const machine = rowText(row, "machine"); if (!machine) continue;
+      const rows = byMachine.get(machine) ?? []; rows.push(row); byMachine.set(machine, rows);
+    }
   }
 
   // A waiting row's scheduling fields stay fixed in this pass; only its
@@ -5347,8 +5423,9 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     queueOrderCache = new WeakMap();
     queueComparisons.set(details, queueOrderCache);
   }
-  const versions = new Map(details.map((row) => [row, planningRowVersion(row)]));
-  const early = earlyProtectedQueueGroups([...byMachine.values()], details, machineRows);
+  const versions = layout?.versions ?? new Map(details.map((row) => [row, planningRowVersion(row)]));
+  if (layout) for (const row of prepared!.current) versions.set(row, planningRowVersion(row));
+  const early = earlyProtectedQueueGroups(byMachine, details, machineRows, versions);
   const compareQueueRows = (a: Record<string, unknown>, b: Record<string, unknown>) => {
     let comparisons = queueOrderCache.get(a);
     const cached = comparisons?.get(b);
