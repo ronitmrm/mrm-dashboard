@@ -409,6 +409,115 @@ export function calculateProposal(
     scheduleResultCount += 1
     return result
   }
+  // Only source-owned immutable plain inputs; no native fallback lookup on guards.
+  const key = (value: string) => value.replace(/\s+/g, "").toLowerCase()
+  const ordinary = (value: unknown, depth = 0): boolean => {
+    if (value == null || typeof value === "string" || typeof value === "boolean") return true
+    if (typeof value === "number") return Number.isFinite(value)
+    if (typeof value !== "object" || depth > 20 || Object.getPrototypeOf(value) !== (Array.isArray(value) ? Array.prototype : Object.prototype)) return false
+    if (Array.isArray(value)) {
+      if (value.length > 16384) return false
+      for (let index = 0; index < value.length; index += 1)
+        if (!Object.hasOwn(value, index)) return false
+    }
+    const names = Reflect.ownKeys(value)
+    return names.length <= 16384 && names.every(name => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, name)
+      return typeof name === "string" && !["__proto__", "constructor", "prototype", "toString", "valueOf", "toJSON"].includes(name) && !!descriptor && "value" in descriptor && ordinary(descriptor.value, depth + 1)
+    })
+  }
+  const nativeMonths = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"]
+  const inDateEra = (value: string) => validDate(value) && value >= "2000-01-01" && value < "2050-01-01"
+  const nativeDate = (value: unknown) => {
+    if (typeof value !== "string") return ""
+    const date = iso(value)
+    return inDateEra(date) && (value === date || value === Number(date.slice(8, 10)) + "-" + nativeMonths[Number(date.slice(5, 7)) - 1] + "-" + date.slice(2, 4)) ? date : ""
+  }
+  type FailureSnapshot = { references: Set<string>; windows: Map<string, Reservation[]> }
+  const snapshots = new WeakMap<Schedule, FailureSnapshot | null>()
+  const snapshot = (target: Schedule) => {
+    if (snapshots.has(target)) return snapshots.get(target) ?? null
+    const windows = new Map<string, Reservation[]>(), references = new Set<string>()
+    let bound = input.deadline
+    const includeEnd = (end: string) => {
+      const next = addDays(end, 1)
+      if (!validDate(next) || next <= end) return false
+      if (next > bound) bound = next
+      return true
+    }
+    const validPlan = (row: Record<string, unknown>) => {
+      const start = nativeDate(row.plannedProductionStartDate), end = nativeDate(row.plannedProductionEndDate)
+      return Object.hasOwn(row, "plannedProductionStartDate") && Object.hasOwn(row, "plannedProductionEndDate") && !!start && !!end && start <= end && includeEnd(end)
+    }
+    // Covers the native 5,000-date finish loop plus calendar shifts. Its
+    // two-digit date labels must still round-trip within 2000–2049.
+    if (!Array.isArray(target.plans) || !Array.isArray(target.reservations) || !target.plans.every(row => row && typeof row === "object" && !Array.isArray(row) && validPlan(row))
+      || !target.reservations.every(row => row && typeof row === "object" && typeof row.machine === "string" && !!key(row.machine) && inDateEra(row.start) && inDateEra(row.end) && row.start <= row.end && includeEnd(row.end))
+      || !inDateEra(addDays(bound, 7000 + context.holidays.length))) {
+      snapshots.set(target, null)
+      return null
+    }
+    for (const row of target.reservations) windows.set(key(row.machine), [...windows.get(key(row.machine)) ?? [], row])
+    const collect = (value: unknown): void => {
+      if (typeof value === "string") { const token = key(value); if (token.startsWith("proposal:")) references.add(token) }
+      else if (value && typeof value === "object") Object.getOwnPropertyNames(value).forEach(name => collect(Object.getOwnPropertyDescriptor(value, name)?.value))
+    }
+    target.plans.forEach(collect)
+    const result = { references, windows }
+    snapshots.set(target, result)
+    return result
+  }
+  const covers = (facts: FailureSnapshot, machines: string[], ready: string) => machines.every(machine => {
+    const relevant = (facts.windows.get(machine) ?? []).filter(row => row.end >= ready && row.start <= input.deadline)
+    return relevant.length <= 20 && relevant.some(a => a.start <= ready && a.end >= ready && (a.end >= input.deadline || relevant.some(b => b.start <= addDays(a.end, 1) && b.end >= input.deadline)))
+  })
+  const prepared = new WeakMap<PlanningLine, string[]>()
+  const bindingsMatch = (facts: Record<string, unknown> | undefined, line: PlanningLine, op: Operation) => facts == null || (typeof facts === "object" && !Array.isArray(facts) && Object.entries(facts).every(([name, value]) => {
+    const header = name.replace(/[^a-z0-9]/gi, "").toLowerCase()
+    const expected = header === "partno" || header === "partcode" ? key(line.part) : header === "optionnumber" ? line.option || "1" : header === "setupno" || header === "setupcode" ? op.setup : undefined
+    return expected === undefined || (typeof value === "string" && (header === "partno" || header === "partcode" ? key(value) : value.trim()) === expected)
+  }))
+  if (input.mode === "deadline" && !blockers.length && inDateEra(input.startDate) && inDateEra(input.deadline) && ordinary([input, context, lines])
+    && (context.machineRows == null || (Array.isArray(context.machineRows) && context.machineRows.every(row => row && typeof row === "object" && !Array.isArray(row))))) {
+    const rows: Record<string, unknown>[] = context.machineRows ?? context.machines.map(m => ({ machineNo: m.id, machineFamily: m.family }))
+    const familyNames = ["machineFamily", "MACHINE FAMILY", "Machine Family"]
+    const masters = rows.map(row => ({
+      family: familyNames.some(name => row[name] != null && typeof row[name] !== "string") ? undefined : key(String(familyNames.map(name => row[name]).find(value => typeof value === "string" && value.trim()) ?? "")),
+      machine: ["machine", "machineNo", "MACHINE NO", "M/C NO", "MACHINE NO."].map(name => row[name]).find(value => value !== undefined && value !== null && value !== ""),
+    }))
+    const base = snapshot(committed), ready = input.tentativeRmDate || input.startDate
+    if (base && masters.every(master => master.family !== undefined)) for (const line of lines) {
+      if (!line || typeof line !== "object" || typeof line.id !== "string" || !line.id.trim() || typeof line.part !== "string" || !line.part.trim() || typeof line.option !== "string" || [line.id, line.part, line.option].some(value => value.includes("|")) || !Array.isArray(line.operations)) continue
+      const first = line.operations[0], quantity = first?.quantity ?? line.quantity
+      if (!first || line.issue || !Number.isSafeInteger(line.quantity) || line.quantity <= 0 || !Number.isSafeInteger(quantity) || quantity <= 0
+        || !line.operations.every(op => op && typeof op === "object" && typeof op.setup === "string" && /^[1-9]\d*$/.test(op.setup) && Number.isSafeInteger(Number(op.setup)) && typeof op.family === "string")
+        || !line.operations.every(op => bindingsMatch(op.cycle, line, op) && bindingsMatch(op.tooling, line, op))
+        || new Set(line.operations.map(op => op.setup)).size !== line.operations.length
+        || !first.family.trim() || line.operations.some(op => Number(op.setup) < Number(first.setup))) continue
+      if (["fixture", "FIXTURE", "tooling", "TOOLING", "foamTool", "FOAM TOOL"].some(name => {
+        const value = first.tooling?.[name]
+        return value != null && !["", "-", "NA", "N/A", "NONE", "NOT REQUIRED", "NO"].includes(String(value).trim().toUpperCase())
+      }) || Object.getOwnPropertyNames(first.cycle ?? {}).some(name => name.toUpperCase().replace(/\s+/g, " ").trim() === "CYCLEREVISIONEFFECTIVEAT" && String(first.cycle?.[name] ?? "").trim())) continue
+      const rawCycle = first.cycle?.cycleTime ?? (typeof first.hours === "number" ? first.hours * 3600 / quantity : NaN)
+      if (typeof rawCycle !== "string" && typeof rawCycle !== "number") continue
+      const cycle = Number(rawCycle)
+      const compatible = masters.filter(master => master.family === key(first.family))
+      if (!Number.isFinite(cycle) || cycle <= 0 || !compatible.length || compatible.some(master => typeof master.machine !== "string" || !key(master.machine))) continue
+      // Include inactive/type-incompatible family members: a safe physical superset.
+      const machines = [...new Set(compatible.flatMap(master => typeof master.machine === "string" ? [key(master.machine)] : []))]
+      if (machines.length !== 1 || line.operations.slice(1).some(op => masters.filter(master => master.family === key(op.family)).some(master =>
+        typeof master.machine !== "string" || !key(master.machine) || machines.includes(key(master.machine))))) continue
+      if (covers(base, machines, ready)) prepared.set(line, machines)
+    }
+  }
+  // An isolated first machine blocked through the deadline guarantees failure;
+  // final result entries still use the full planner for their exact reasons.
+  const certifiedFailure = (line: PlanningLine, target: Schedule, rm: string) => {
+    const machines = prepared.get(line), facts = machines ? snapshot(target) : null
+    const ready = rm > input.startDate ? rm : input.startDate
+    return !!facts && !!machines && inDateEra(ready) && ready <= input.deadline && !facts.references.has(key("proposal:" + line.id)) && covers(facts, machines, ready)
+  }
+  const deferredFailures = new WeakMap<LineResult, { line: PlanningLine; target: Schedule; rm: string }>()
   const trial = (candidate: PlanningLine[], minimumSelected: number) => {
     let target = committed
     const results = new Map<string, LineResult>()
@@ -422,8 +531,9 @@ export function calculateProposal(
         input.mode === "deadline"
           ? input.tentativeRmDate || input.startDate
           : line.rmDate
+      const deferredFailure = !blockers.length && !line.issue && !!rm && certifiedFailure(line, target, rm)
       const result =
-        !blockers.length && !line.issue && rm
+        !blockers.length && !line.issue && rm && !deferredFailure
           ? scheduleProposed(line, target, rm)
           : null
       const selected = !!result && !result.reason
@@ -447,7 +557,7 @@ export function calculateProposal(
           : [],
         completion: selected ? result.completion : "",
         rmRequiredBy: selected ? result.rmRequiredBy : "",
-        reason:
+        reason: deferredFailure ? "" :
           line.issue ||
           (blockers.length
             ? "Resolve existing workload blockers"
@@ -458,6 +568,7 @@ export function calculateProposal(
                   ? "Capacity feasible; conditional on RM"
                   : "Tentative; subject to RM")),
       })
+      if (deferredFailure) deferredFailures.set(results.get(line.id)!, { line, target, rm })
     }
     return {
       candidate,
@@ -511,6 +622,10 @@ export function calculateProposal(
       )
       if (repaired && compare(best, repaired) > 0) best = repaired
     }
+  for (const entry of best.results.values()) {
+    const deferred = deferredFailures.get(entry)
+    if (deferred) entry.reason = schedule(deferred.line, deferred.target, deferred.rm, true).reason
+  }
   return {
     version: context.version,
     blockers,
