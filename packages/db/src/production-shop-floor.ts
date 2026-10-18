@@ -5235,7 +5235,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
       const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
-      return { rows: rows.filter(row => row.requiredKg === null || Number(row.pendingKg) > 0.000001) }
+      return { rows: rows.filter(row => row.receivedKg > 0 && (row.pendingKg ?? 0) > 0.000001) }
     },
 
     async acceptShortRawMaterial(input: {

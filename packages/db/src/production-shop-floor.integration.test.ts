@@ -10,6 +10,7 @@ import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
+import { readJobCardMaterialBalances } from "./production-material"
 import { createQualityRepository } from "./quality"
 import { createRejectionRepository } from "./rejections"
 
@@ -184,8 +185,8 @@ afterAll(async () => {
 })
 
 async function acceptShortRmFixture(jobCardNumber: string, productionFloorCode = "conventional") {
-  const material = (await repository.readRawMaterialReviews({ organizationId, productionFloorCode })).rows
-    .find(row => row.jobCardNumber === jobCardNumber);
+  const material = (await readJobCardMaterialBalances(pool, organizationId, productionFloorCode))
+    .find(row => row.jobCardNumber === jobCardNumber && (row.pendingKg ?? 0) > 0.000001);
   if (material && !material.shortAccepted) await repository.acceptShortRawMaterial({ organizationId, productionFloorCode,
     jobCardNumber, expectedRowVersion: material.rowVersion, reason: "Test fixture: planner accepted the short RM." });
 }
@@ -2092,9 +2093,10 @@ test("material review blocks completion, releases only selected setups, and clea
   const receipt = (sourceId: string, quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
     payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
     receivedOn: '2026-10-12', sourceId });
-  await receipt('rm-wait-first-' + suffix, 25.11);
   const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
+  expect(await review()).toEqual([]);
+  await receipt('rm-wait-first-' + suffix, 25.11);
   expect(await review()).toMatchObject([{ requiredKg: 50.22, receivedKg: 25.11, pendingKg: 25.11, shortAccepted: false }]);
   for (const [index, machineNumber] of machines.entries()) {
     await planning.upsertMachine({ machineNumber, organizationId });

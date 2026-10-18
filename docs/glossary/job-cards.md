@@ -270,11 +270,13 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 ### RM review and short receipt acceptance
 
-Planning Control shows one RM row per active Job Card with required kilograms,
-total received kilograms, rejected kilograms where applicable, and pending usable
-balance. Receipts update the same row; full usable receipt removes it automatically.
-An unknown requirement is shown as missing Blank Piece Weight, never as complete.
-The Job Card's RM tab shows its material specification, totals and receipt ledger.
+Planning Control shows one RM shortage row per active Job Card only after some RM
+has been received and a known required quantity exceeds the usable received balance.
+No receipt means no RM shortage flag. The row shows required, received, rejected
+where applicable, and pending kilograms. Receipts update the same row; full usable
+receipt removes it automatically. The Job Card's RM tab shows its material
+specification, totals and receipt ledger. An unknown requirement is shown there as
+missing Blank Piece Weight, never as complete.
 
 Item Complete on any setup requires full usable RM receipt or an explicit Planner
 **Accept short RM** decision with a reason. Acceptance retains the person, time and
