@@ -133,6 +133,12 @@ describe("dashboard-state route", () => {
       "cnc"
     )
     expect(dashboardMocks.latest).not.toHaveBeenCalled()
+    dashboardMocks.readRequestGrantedCapabilitySet.mockResolvedValue(new Set(["entries.cnc.work_order.read"]))
+    const workOrderTemplate = await GET(new NextRequest("http://localhost/api/data-template?entryType=work_order&floor=cnc"), {
+      params: Promise.resolve({ path: ["data-template"] }),
+    })
+    expect(workOrderTemplate.status).toBe(200)
+    expect((await workOrderTemplate.text()).split(/\r?\n/)[0]).toContain("requiredRmKg")
   })
 
   it("passes floor and known-version bounds to the dashboard state reader", async () => {

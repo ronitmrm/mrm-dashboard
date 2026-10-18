@@ -112,6 +112,7 @@ beforeAll(async () => {
         jcNo: jobCardNumber,
         partCode: itemUid,
         rmPoNo: rmPoNumber,
+        requiredRmKg: 1,
       },
       workOrderNumber: `FLOOR-WO-${suffix}-${index + 1}`,
     })
@@ -133,6 +134,7 @@ beforeAll(async () => {
     sourcePayload: {
       productionFloorCode: "cnc",
       jcNo: cncJobCard,
+      requiredRmKg: 11,
       partCode: itemUid,
       rmPoNo: rmPoNumber,
     },
@@ -250,7 +252,7 @@ describe("production and shop-floor workflows", () => {
     })
 
     expect(workspace.jobCard.casting).toBe("5.58")
-    expect(workspace.analytics.material.requiredKg).toBeCloseTo(0.5022)
+    expect(workspace.analytics.material.requiredKg).toBe(1)
     const setupId = workspace.setups[0]!.id
     await pool.query(`INSERT INTO quality.first_piece_inspections (
       organization_id, work_order_id, operation_setup_id, inspected_at, status,
@@ -2086,8 +2088,9 @@ test("material review blocks completion, releases only selected setups, and clea
   const jobCardNumber = 'RM-WAIT-' + suffix;
   const routeCode = 'RM-WAIT-' + suffix;
   const machines = [1, 2, 3].map(n => 'RM-WAIT-' + suffix + '-' + n);
-  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
-    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber });
+  const workOrder = { itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber };
+  await planning.upsertWorkOrder(workOrder);
   await planning.upsertRouteOption({ itemUid, organizationId, routeCode,
     setups: [1, 2, 3].map(n => ({ operationCode: 'WAIT-' + n, sequence: n, setupNumber: n })) });
   await planning.selectRoute({ jobCardNumber, organizationId, routeCode });
@@ -2097,8 +2100,9 @@ test("material review blocks completion, releases only selected setups, and clea
   const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
   expect(await review()).toEqual([]);
-  await receipt('rm-wait-first-' + suffix, 25.11, 'Rack A3');
-  expect(await review()).toMatchObject([{ requiredKg: 50.22, receivedKg: 25.11, pendingKg: 25.11, shortAccepted: false }]);
+  await receipt('rm-wait-first-' + suffix, 50, 'Rack A3');
+  expect((await repository.readJobCardWorkspace({ organizationId, jobCardNumber })).analytics.material.requiredKg).toBeNull();
+  expect(await review()).toEqual([]);
   for (const [index, machineNumber] of machines.entries()) {
     await planning.upsertMachine({ machineNumber, organizationId });
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: String(index + 1),
@@ -2110,6 +2114,9 @@ test("material review blocks completion, releases only selected setups, and clea
   }
   const complete = (index: number) => repository.recordSetupCompletion({ organizationId, jobCardNumber,
     machineNumber: machines[index], operationSetupCode: String(index + 1), completedBy: 'Planner' });
+  await expect(complete(2)).rejects.toThrow('Enter Required RM (kg) in the Work Order');
+  await planning.upsertWorkOrder({ ...workOrder, sourcePayload: { ...workOrder.sourcePayload, requiredRmKg: 100 } });
+  expect(await review()).toMatchObject([{ requiredKg: 100, receivedKg: 50, pendingKg: 50, shortAccepted: false }]);
   await expect(complete(2)).rejects.toThrow('RM is pending');
   const setups = (await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
@@ -2125,12 +2132,12 @@ test("material review blocks completion, releases only selected setups, and clea
   const [short] = await review();
   await repository.acceptShortRawMaterial({ organizationId, productionFloorCode: 'conventional', jobCardNumber,
     expectedRowVersion: short!.rowVersion, reason: 'Customer accepts the available material.' });
-  expect(await review()).toMatchObject([{ shortAccepted: true, pendingKg: 25.11 }]);
+  expect(await review()).toMatchObject([{ shortAccepted: true, pendingKg: 50 }]);
   await complete(2);
-  await receipt('rm-wait-second-' + suffix, 25.11);
+  await receipt('rm-wait-second-' + suffix, 50);
   expect(await review()).toEqual([]);
   const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber });
-  expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receivedKg: 50.22, pendingKg: 0 });
+  expect(workspace.analytics.material).toMatchObject({ requiredKg: 100, receivedKg: 100, pendingKg: 0 });
   expect(workspace.rawMaterialReceipts).toHaveLength(2);
   expect(workspace.rawMaterialReceipts).toMatchObject([{ rmLocation: 'Rack A3' }, { rmLocation: null }]);
   expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
@@ -2139,7 +2146,7 @@ test("material review blocks completion, releases only selected setups, and clea
 test("RM shortage flag and completion blocker clear at 95% usable receipt", async () => {
   const jobCardNumber = `RM-ALLOWANCE-${suffix}`
   await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
-    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 50.22 }, workOrderNumber: jobCardNumber })
   await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
   const receipt = (quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
     payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,

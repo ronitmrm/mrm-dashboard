@@ -15,6 +15,7 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipts: vi.fn(),
   reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
+  upsertWorkOrder: vi.fn(),
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
   correctProductionSessionStart: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     close: dependencies.close,
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertCycleStandard: dependencies.upsertCycleStandard,
+    upsertWorkOrder: dependencies.upsertWorkOrder,
   }),
 }))
 
@@ -552,6 +554,33 @@ describe("production entry mutation API authorization", () => {
         sourceId: expect.stringMatching(/^csv:/),
       }),
     ])
+  })
+
+  it("saves entered Work Order required RM from the form and CSV", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "entries.cnc.work_order.save", "entries.cnc.work_order.import",
+    ])
+    dependencies.upsertWorkOrder.mockResolvedValue({ id: "work-order-1" })
+    const saved = await post("data-entry", {
+      entryType: "work_order", productionFloorCode: "cnc",
+      payload: { jcNo: "JC-1", partCode: "P-1", orderPcs: 1000, requiredRmKg: 125.5 },
+    })
+    expect(saved.status).toBe(200)
+    expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
+      sourcePayload: expect.objectContaining({ requiredRmKg: 125.5 }),
+    }))
+    const body = { entryType: "work_order", productionFloorCode: "cnc", fileName: "work_order.csv",
+      fileBase64: Buffer.from("jcNo,partCode,orderPcs,requiredRmKg\nJC-2,P-1,1000,130.25\n").toString("base64") }
+    expect((await post("data-import", body)).status).toBe(200)
+    expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
+      sourcePayload: expect.objectContaining({ requiredRmKg: 130.25 }),
+    }))
+    dependencies.upsertWorkOrder.mockClear()
+    const invalid = await post("data-import", { ...body,
+      fileBase64: Buffer.from("jcNo,partCode,orderPcs,requiredRmKg\nJC-3,P-1,1000,125\nJC-4,P-1,1000,-1\n").toString("base64") })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
   })
 
   it("rejects a different unit inside manual and imported payloads", async () => {

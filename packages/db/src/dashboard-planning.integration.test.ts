@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
+import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 
@@ -15,6 +16,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 const repository = createDashboardPlanningRepository({ connectionString })
 const jobCards = createProductionShopFloorRepository({ connectionString })
+const dashboard = createDashboardReadModelRepository({ connectionString })
 let organizationId: string
 let itemId: string
 const suffix = randomUUID().slice(0, 8)
@@ -105,6 +107,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await dashboard.close()
   await jobCards.close()
   await repository.close()
   await pool.end()
@@ -132,6 +135,7 @@ describe("dashboard planning writes", () => {
       sourcePayload: {
         jcNo: jobCardNumber,
         orderKg: 100,
+        requiredRmKg: 100,
         orderPcs: 10_000,
         partCode: itemUid,
         productionFloorCode: "cnc",
@@ -285,6 +289,7 @@ describe("dashboard planning writes", () => {
       sourcePayload: {
         jcNo: jobCardNumber,
         orderKg: 100,
+        requiredRmKg: 100,
         orderPcs: 10_000,
         partCode: itemUid,
         productionFloorCode: "cnc",
@@ -318,6 +323,9 @@ describe("dashboard planning writes", () => {
       rejectionScope: "partial",
       usableKgAfter: 50,
     })
+    expect(await dashboard.rawMaterialInwardTemplateRows(organizationId, "cnc")).toContainEqual(
+      expect.objectContaining({ jcNo: jobCardNumber })
+    )
 
     await expect(repository.recordRawMaterialRejection({
       jobCardNumber,

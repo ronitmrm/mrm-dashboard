@@ -302,7 +302,7 @@ applicable, and pending kilograms. Receipts update the same row; reaching the 95
 threshold removes it automatically. Required, received and pending kilograms retain
 their exact values. The Job Card's RM tab shows its material specification, totals,
 receipt ledger and whether a remaining balance is within the 5% allowance. An
-unknown requirement is shown there as missing Blank Piece Weight, never as complete.
+unknown requirement is shown there as not entered in the Work Order, never as complete.
 The receipt ledger shows received kilograms. **Pending RM** in the Job Card
 summary is the amount still due against the requirement after rejections. A
 receipt's saved remaining-stock quantity is not an outstanding receipt balance
@@ -328,12 +328,16 @@ work returns to normal planning and readiness checks. No future receipt date is
 invented. Original setup targets remain unchanged; actual output reduces remaining
 work. A running downstream setup may retain its machine while waiting for WIP.
 
-Required RM (kg) is ordered pieces × Product Master Blank Piece Weight (grams)
-÷ 1,000. For example, 10,000 pieces × 15 grams requires 150 kg. The Work Order
-template's ordered kilograms represent approximate finished-goods weight, not
-raw material required. The workspace compares cumulative RM receipts against
-the calculated requirement when identifying the complete-RM date. Missing blank
-piece weight leaves the requirement and complete-RM date unavailable.
+Required RM (kg) is entered on the Work Order form or in the CSV's `requiredRmKg`
+column. It is never calculated from ordered pieces, Blank Piece Weight or ordered
+finished-goods kilograms. The value must be positive when entered. Existing Work
+Orders remain blank until someone enters it; no calculated amount is copied in.
+The entered requirement supplies the RM summary, shortage flag, 5% completion
+allowance, planner short-RM acceptance, replacement balance and complete-RM date.
+Without it, the requirement and complete-RM date are unavailable and Item Complete
+requires the Work Order value to be entered first. Ordered kilograms remain the
+approximate finished-goods weight. Blank Piece Weight still supplies the separate
+material-yield estimates below.
 
 Finished Good excludes final-setup rejections. Final Setup Total includes good
 and rejected output from that final setup; they match only when none is rejected.
@@ -421,7 +425,8 @@ cumulatively from preserved production history and the normal WIP rules.
 
 The Product Master stores the default working days after full RM receipt. A Job
 Card can optionally override that default. Full RM receipt is the first receipt
-date when cumulative received kilograms reach ordered RM kilograms. Closed Fridays
+date when cumulative received kilograms reach the Work Order's entered Required
+RM (kg). It stays unavailable while that requirement is blank. Closed Fridays
 and holidays follow the Universal Planning Calendar; Working Fridays count normally.
 
 - A: on or before target.

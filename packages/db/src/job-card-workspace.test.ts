@@ -5,7 +5,7 @@ import {
   buildJobCardAnalytics,
   buildPlannerMovementRecord,
   buildMaterialYield,
-  calculateRequiredRawMaterialKg,
+  readRequiredRawMaterialKg,
   buildSetupTiming,
   normalizeDeliveryTargets,
 } from "./job-card-workspace"
@@ -170,9 +170,10 @@ describe("job card workspace", () => {
     })
   })
 
-  it("calculates required RM from ordered pieces and blank grams, not finished-goods weight", () => {
-    expect(calculateRequiredRawMaterialKg(10_000, 15)).toBe(150)
-    expect(calculateRequiredRawMaterialKg(10_000, 0)).toBeNull()
+  it("reads entered required RM and leaves a missing requirement unknown", () => {
+    expect(readRequiredRawMaterialKg("125.5")).toBe(125.5)
+    expect(readRequiredRawMaterialKg(undefined)).toBeNull()
+    expect(readRequiredRawMaterialKg(0)).toBeNull()
   })
 
   it("uses total received kilograms and blank piece weight to explain material shortfall", () => {

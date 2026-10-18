@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { materialWaitPending } from "./production-material";
+import { readRequiredRawMaterialKg } from "./job-card-workspace";
 import { serialize, deserialize } from "node:v8";
 import { brotliCompressSync, brotliDecompressSync, constants as compression } from "node:zlib";
 import { createBoundedMemo, createPlanningComputationCache } from "./planning-computation-cache";
@@ -1384,23 +1385,24 @@ function buildProductionControl({
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const orderKg = safeNumber(rowValue(row, "ORD. KG.", "orderKg"));
+    const requiredRmKg = readRequiredRawMaterialKg(rowValue(row, "requiredRmKg"));
     const rmReceived = isRmReceived(row, rmInward);
     const rmInwardKg = safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg"))
       || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg"));
     const rmRejectedKg = rawMaterialRejection?.rejectedKg ?? 0;
     const rmUsableKg = Math.max(rmInwardKg - rmRejectedKg, 0);
     const rmPlanningAction = rawMaterialRejection?.planningAction ?? "";
-    const rejectionBalanceRestored = Boolean(rawMaterialRejection && orderKg > 0 && rmUsableKg >= orderKg);
+    const rejectionBalanceRestored = Boolean(rawMaterialRejection && requiredRmKg !== null && rmUsableKg >= requiredRmKg);
     const originalRmInwardDate = rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate")
       || rowText(row, "RM I/W DATE", "rmInwardDate");
-    const rmInwardDate = rejectionBalanceRestored
-      ? rawMaterialBalanceDate(rmInward, orderKg + rmRejectedKg) || originalRmInwardDate
+    const rmInwardDate = rejectionBalanceRestored && requiredRmKg !== null
+      ? rawMaterialBalanceDate(rmInward, requiredRmKg + rmRejectedKg) || originalRmInwardDate
       : originalRmInwardDate;
     const materialPlanPcs = rawMaterialRejection
       ? rejectionBalanceRestored
         ? orderPcs
-        : rmPlanningAction === "continue_accepted_quantity" && orderKg > 0
-          ? Math.min(orderPcs, Math.floor(orderPcs * rmUsableKg / orderKg))
+        : rmPlanningAction === "continue_accepted_quantity" && requiredRmKg !== null
+          ? Math.min(orderPcs, Math.floor(orderPcs * rmUsableKg / requiredRmKg))
           : 0
       : orderPcs;
     const materialPlanningReady = rawMaterialRejection
@@ -1457,6 +1459,7 @@ function buildProductionControl({
       availableOptions,
       orderPcs: round(orderPcs),
       orderKg: round(orderKg),
+      requiredRmKg,
       deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
       missingSetupNo: setupStepKey(rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
       missingSetupName: rowText(firstMissingRoute, "SETUP NAME", "setupName"),
@@ -2295,6 +2298,7 @@ export function directDashboardControlRows(
       description: rowText(row, "DESCRIPTION", "description"),
       orderPcs: round(safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"))),
       orderKg: round(safeNumber(rowValue(row, "ORD. KG.", "orderKg"))),
+      requiredRmKg: readRequiredRawMaterialKg(rowValue(row, "requiredRmKg")),
       deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
       status: rowText(row, "status", "workOrderStatus") || "Open",
     })),

@@ -652,6 +652,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "poDate", label: "Po Date", type: "date" },
       { name: "orderPcs", label: "Order Pcs", type: "number", required: true },
       { name: "orderKg", label: "Order Kg", type: "number", step: "0.01" },
+      { name: "requiredRmKg", label: "Required RM (kg)", type: "number", min: "0.001", step: "0.001" },
     ],
   },
   {
@@ -4187,12 +4188,12 @@ function RawMaterialRejectionPlannerForm({
     selectedWorkOrder?.rmUsableKg === undefined
       ? receivedKg
       : Number(selectedWorkOrder.rmUsableKg) || 0
-  const orderKg = Number(selectedWorkOrder?.orderKg) || 0
+  const requiredRmKg = Number(selectedWorkOrder?.requiredRmKg) || 0
   const orderPcs = Number(selectedWorkOrder?.orderPcs) || 0
   const enteredRejectedKg = Number(rejectedKg) || 0
   const validQuantity = enteredRejectedKg > 0 && enteredRejectedKg <= usableKg
   const rejectionBalance = rawMaterialRejectionBalance({
-    orderKg,
+    requiredRmKg,
     orderPcs,
     rejectedKg: enteredRejectedKg,
     usableKgBefore: usableKg,

@@ -21,6 +21,7 @@ import {
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
 import { ShopFloorConflictError } from "./production-shop-floor"
 import { rawMaterialRejectionBalance } from "./rejection-domain"
+import { readRequiredRawMaterialKg } from "./job-card-workspace"
 import {
   normalizeProductionFloorCode,
   ProductionUnitAccessError,
@@ -1067,6 +1068,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
         if (input.orderedQuantity < 0) {
           throw new Error("Ordered quantity cannot be negative.")
+        }
+        const requiredRmKg = sourcePayloadRecord(input.sourcePayload).requiredRmKg
+        if (String(requiredRmKg ?? "").trim() && readRequiredRawMaterialKg(requiredRmKg) === null) {
+          throw new Error("Required RM (kg) must be a positive number.")
         }
         await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
         const planningItem = await ensureWorkOrderItemId(
@@ -2191,10 +2196,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             "Rejected kilograms cannot exceed the usable Raw Material balance."
           )
         }
-        const orderedKg = sourcePayloadNumber(
+        const requiredRmKg = sourcePayloadNumber(
           workOrder.source_payload,
-          "orderKg",
-          "ORD. KG."
+          "requiredRmKg"
         )
         const orderedPieces = sourcePayloadNumber(
           workOrder.source_payload,
@@ -2202,7 +2206,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           "ORD. PCS."
         )
         const rejectionBalance = rawMaterialRejectionBalance({
-          orderKg: orderedKg,
+          requiredRmKg,
           orderPcs: orderedPieces,
           rejectedKg,
           usableKgBefore,
@@ -2228,7 +2232,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const sourceId = randomUUID()
         const sourcePayload = {
           jcNo: jobCardNumber,
-          orderedKg,
+          requiredRmKg,
           partCode: workOrder.item_uid,
           planningAction,
           productionFloorCode,
@@ -2265,7 +2269,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
-        if (planningAction === "wait_for_replacement" && !(orderedKg > 0 && usableKgAfter >= orderedKg)) {
+        if (planningAction === "wait_for_replacement" && !(requiredRmKg > 0 && usableKgAfter >= requiredRmKg)) {
           const assignments = await client.query<{ machine_number: string; setup_number: number }>(
             `SELECT machine.machine_number, setup.setup_number
              FROM manufacturing.shop_floor_setup_state state
