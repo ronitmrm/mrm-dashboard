@@ -2187,14 +2187,16 @@ test("records floor material wait only while ready and preserves working-time hi
       } } } }])
       await syncMaterialMovementWaits(movementWorkerPool, organizationId)
     }
-    const waits = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
-      .movementWaits.filter(row => row.jobCardNumber === jobCardNumber)
+    const waits = async () => (await repository.readJobCardWorkspace({ organizationId, jobCardNumber }))
+      .materialMovementWaits.filter(row => row.outcome === null)
     await publish()
     expect(await waits()).toEqual([]) // A ready-looking plan cannot bypass absent RM.
     await repository.upsertRawMaterialReceipt({ organizationId, quantityKg: 25.11, receiptNumber: rmPoNumber,
       receivedOn: "2026-10-15", sourceId: randomUUID(), payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber } })
     await publish()
     const first = (await waits())[0]!
+    expect(await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
+      .not.toHaveProperty("movementWaits")
     vi.setSystemTime(new Date("2026-10-15T10:00:00+05:30"))
     await publish()
     expect(await waits()).toMatchObject([{ id: first.id, readyAt: first.readyAt, workingMinutes: 60 }])
