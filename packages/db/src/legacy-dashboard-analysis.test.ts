@@ -518,12 +518,18 @@ describe("legacy dashboard route selections", () => {
           jcNo: "JC-MULTI-RM",
           rmInwardDate: "2026-09-18",
           rmInwardKg: 40,
+          rmLocation: "Rack A3",
         }, "2026-09-18T09:00:00.000Z"),
         entry("rm_inward", {
           jcNo: "JC-MULTI-RM",
           rmInwardDate: "2026-09-20",
           rmInwardKg: 60,
+          rmLocation: "Rack B2",
         }, "2026-09-20T09:00:00.000Z"),
+        entry("route", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "RM-FAMILY" }, "2026-09-18T08:00:00.000Z"),
+        entry("cycle", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1", cycleTime: 60 }, "2026-09-18T08:00:00.000Z"),
+        entry("tooling", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1" }, "2026-09-18T08:00:00.000Z"),
+        entry("machine_master", { machineNo: "CNC-RM", machineType: "CNC", machineFamily: "RM-FAMILY", status: "Active" }, "2026-09-18T08:00:00.000Z"),
       ],
     })
 
@@ -532,8 +538,10 @@ describe("legacy dashboard route selections", () => {
         jcNo: "JC-MULTI-RM",
         rmInwardDate: "2026-09-18",
         rmInwardKg: 100,
+        rmLocation: "Rack A3 · Rack B2",
         rmStatus: "Received",
       }],
+      machinePlanDetailRows: [expect.objectContaining({ jcNo: "JC-MULTI-RM", rmLocation: "Rack A3 · Rack B2" })],
     })
   })
 

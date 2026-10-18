@@ -354,6 +354,11 @@ Each receipt may record an optional **RM Location**, entered in the RM Inward
 form or the CSV's `rmLocation` column. It describes where that receipt's material
 is stored and appears in RM Inward records and the Job Card RM receipt ledger.
 Locations belong to individual receipts; earlier receipts without one remain blank.
+Shop Floor Status and Shop Floor Tasks show the Job Card's saved RM locations
+beside a pending material-placement task. Multiple receipt locations are listed
+together; if none was entered, they show **Not recorded**. The location disappears
+from that task after **RM at machine** is recorded. This is receipt storage
+information, not a record of downstream WIP location or stock transfers.
 RM Inward CSV uploads require a valid `DD-MM-YYYY` date on every row. A file with
 an invalid date is rejected before any receipt is saved, with the failed row
 number and required format shown to the uploader. Saved RM Inward dates display

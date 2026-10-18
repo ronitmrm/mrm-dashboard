@@ -9400,6 +9400,11 @@ function ShopFloorItemSummary({
       <div className="text-xs text-muted-foreground">
         Rm: {displayValue(row.rmStatus)}
       </div>
+      {tone === "next" && nextShopFloorStage(row)?.id === "raw_material_at_machine" ? (
+        <div className="text-sm">
+          RM Location: {optionalText(row.rmLocation) ?? "Not recorded"}
+        </div>
+      ) : null}
     </div>
   )
 }
