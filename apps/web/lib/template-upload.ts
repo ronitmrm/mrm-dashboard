@@ -55,16 +55,20 @@ function decodeDataUrl(value: string) {
     .replace(/^\uFEFF/, "")
 }
 
-const rmInwardCsvFields = [
-  "jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation",
-]
+const csvFieldsByEntryType = new Map([
+  ["rm_inward", [
+    "jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation",
+  ]],
+  ["work_order", [
+    "jcNo", "partCode", "fgPoNo", "rmPoNo", "poDate", "orderPcs", "orderKg", "requiredRmKg",
+  ]],
+])
 
 function csvHeader(entryType: string, header: string) {
   const trimmed = header.trim()
   const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")
-  return entryType === "rm_inward"
-    ? rmInwardCsvFields.find((field) => field.toLowerCase() === normalized) ?? trimmed
-    : trimmed
+  return csvFieldsByEntryType.get(entryType)
+    ?.find((field) => field.toLowerCase() === normalized) ?? trimmed
 }
 
 function parseCsv(csvText: string, entryType: string): Array<Record<string, unknown>> {
