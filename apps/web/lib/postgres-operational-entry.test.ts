@@ -134,6 +134,7 @@ describe("PostgreSQL operational entry mapping", () => {
             section: "Pre setting",
             inputType: "checkbox",
             startValue: "Yes",
+            endValue: "No",
             startItemRemark: "Drawing available",
           },
           {
@@ -156,6 +157,10 @@ describe("PostgreSQL operational entry mapping", () => {
             completedBy: "MACH-2",
             phase: "end",
             results: [
+              {
+                itemKey: "1|Drawing checked",
+                value: false,
+              },
               {
                 itemKey: "2|Setting note",
                 notes: "Setting verified",
@@ -208,7 +213,7 @@ describe("PostgreSQL operational entry mapping", () => {
         items: [{ sequence: 1, checkPoint: "Drawing checked", startValue: "Yes" }],
       })
     ).toMatchObject({
-      phases: [{ input: { templateCode: "SC001" } }],
+      phases: [],
     })
   })
 

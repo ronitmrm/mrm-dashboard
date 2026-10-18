@@ -3902,7 +3902,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               setup.operation_code AS "operationCode",
               setup.operation_name AS "operationName",
               cycle.setup_time_minutes AS "targetSetupMinutes",
-              stage."settingStartedAt", stage."settingCompletedAt",
+              COALESCE(stage."settingStartedAt", checklist."settingStartedAt") AS "settingStartedAt",
+              stage."settingCompletedAt",
               stage."qualityApprovedAt", production."productionStartedAt"
             FROM manufacturing.operation_setups setup
             LEFT JOIN LATERAL (
@@ -3925,6 +3926,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 ON event.setup_state_id = state.id AND event.reversed_at IS NULL
               WHERE state.work_order_id = $2 AND state.operation_setup_id = setup.id
             ) stage ON true
+            LEFT JOIN LATERAL (
+              SELECT min(session.started_at) AS "settingStartedAt"
+              FROM quality.setup_checklist_sessions session
+              WHERE session.work_order_id = $2
+                AND session.operation_setup_id = setup.id
+                AND session.reversed_at IS NULL
+            ) checklist ON true
             LEFT JOIN LATERAL (
               SELECT min(session.started_at) AS "productionStartedAt"
               FROM manufacturing.production_sessions session
@@ -4991,10 +4999,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             machineId,
           })
         }
-        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
-          throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
+        if (stage === "presetting") {
+          throw new ShopFloorConflictError("Use Setting only. Refresh the task and complete Setting.")
         }
-        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "setting") {
+        if (stage === "setting") {
           const checklist = await client.query<{ id: string; template_id: string }>(
             `SELECT session.id, session.template_id
              FROM quality.setup_checklist_sessions session
@@ -5007,7 +5015,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
           await assertSettingChecklistComplete(client, checklist.rows[0].template_id, checklist.rows[0].id)
         }
-        if (["presetting", "setting", "quality_approval", "operator_started"].includes(stage)) {
+        if (["setting", "quality_approval", "operator_started"].includes(stage)) {
           await assertToolingAvailable(client, { organizationId: input.organizationId,
             setupId, workOrderId: workOrder.work_order_id, machineId,
             floorCode: normalizeProductionFloorCode(input.productionFloorCode) })

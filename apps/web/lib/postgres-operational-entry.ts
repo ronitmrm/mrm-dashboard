@@ -1,6 +1,5 @@
 import { qualityParameterCode } from "@workspace/db/quality-parameter-code"
 import { hasNonNumericQualityTolerance, normalizeQualityParameterInputType } from "./quality-parameter-set"
-import { setupChecklistItemAppliesToPhase } from "./shop-floor-workflow"
 import { istDateValue } from "./date-time"
 
 type Payload = Record<string, unknown>
@@ -131,12 +130,6 @@ function setupTemplateCode(payload: Payload) {
 
 function setupSessionPlan(payload: Payload) {
   const items = records(payload.items)
-  const requestedPhase = text(payload.phase)
-  const activePhase = requestedPhase === "start" || requestedPhase === "end"
-    ? requestedPhase
-    : items.some((item) => Object.hasOwn(item, "endValue"))
-      ? "end"
-      : "start"
   const common = {
     jobCardNumber: text(payload.jcNo || payload.jobCard),
     machineNumber: optionalText(payload.machine || payload.machineNo),
@@ -152,39 +145,12 @@ function setupSessionPlan(payload: Payload) {
       input: {
         ...common,
         completedBy: optionalText(
-          payload.startedBy || payload.completedBy
-        ),
-        completedAt: optionalText(payload.startedAt),
-        phase: "start" as const,
-        results: items
-          .filter(
-            (item) =>
-              setupChecklistItemAppliesToPhase(item.section, "start") &&
-              Object.hasOwn(item, "startValue")
-          )
-          .map((item) => ({
-            itemKey: itemKey(item),
-            itemPrompt: optionalText(item.checkPoint || item.prompt),
-            notes: optionalText(item.startItemRemark),
-            sequence: numberOrUndefined(item.sequence),
-            value: checklistValue(item, "startValue"),
-          })),
-      },
-    },
-    {
-      input: {
-        ...common,
-        completedBy: optionalText(
           payload.endedBy || payload.completedBy
         ),
         completedAt: optionalText(payload.endedAt || payload.completedAt),
         phase: "end" as const,
         results: items
-          .filter(
-            (item) =>
-              setupChecklistItemAppliesToPhase(item.section, "end") &&
-              Object.hasOwn(item, "endValue")
-          )
+          .filter((item) => Object.hasOwn(item, "endValue"))
           .map((item) => ({
             itemKey: itemKey(item),
             itemPrompt: optionalText(item.checkPoint || item.prompt),
@@ -194,8 +160,7 @@ function setupSessionPlan(payload: Payload) {
           })),
       },
     },
-  ].filter((phase) => phase.input.phase === activePhase && phase.input.results.length > 0 &&
-    (common.productionFloorCode !== "cnc" || phase.input.phase === "end"))
+  ].filter((phase) => text(payload.phase) !== "start" && phase.input.results.length > 0)
 
   return {
     capability: "quality.setup_checklist.write",

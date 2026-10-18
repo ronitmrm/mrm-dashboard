@@ -62,7 +62,7 @@ For points marked Required, either Yes or No satisfies a checkbox/Yes-No answer;
 an untouched/blank selection blocks completion. Optional points may stay blank.
 Numeric zero is a valid answer. Saving incomplete progress
 clears the checklist completion timestamp and leaves Setting Done locked.
-CNC Setting Done rechecks saved answers on the server, so a cached checklist
+Setting Done rechecks saved answers on the server in every production unit, so a cached checklist
 or an earlier Completed status cannot bypass this lock.
 
 An actual shop-floor setup remains visible and locked to its physical machine
@@ -73,15 +73,17 @@ state; its cycle time may be entered when that setup's real session starts.
 The saved setup stage is available to the next Shop Floor, Machinist, or Quality
 task immediately; a pending planning recalculation does not delay that handoff.
 
-CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
-Quality Approval → Machine Start. The six CNC checklist points are completed at
-Setting, without requiring an earlier checklist session. Historical Pre Setting
-evidence remains recorded; it does not complete Setting or block the next action.
-Other production units retain their existing Pre Setting workflow.
+All four production units use RM at Machine → Setting → Quality Approval →
+Machine Start, with no separate Pre Setting stage. Each unit's own checklist
+points are completed during Setting, without requiring an earlier checklist
+session. Required points previously labelled Pre Setting also require their own
+Setting answers. Historical Pre Setting evidence remains recorded; it does not
+complete Setting or block the next action. New Pre Setting events and checklist
+start-phase submissions are rejected in every unit.
 
 The task's permission in the selected Production Unit controls who may record
-Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine, Pre
-Setting, Setting, Quality Approval, Machine Start, first-piece inspection, and
+Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine,
+Setting, Quality Approval, Machine Start, first-piece inspection, and
 dispatch approval record the signed-in performer's active linked Employee ID and
 name when available, or their signed-in account name otherwise. A user cannot
 record these actions for another employee. Machine Start separately assigns an

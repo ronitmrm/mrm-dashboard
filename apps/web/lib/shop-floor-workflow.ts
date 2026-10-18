@@ -17,12 +17,13 @@ export function normalizeShopFloorStage(stage: unknown) {
   return stageAliases[text] ?? text;
 }
 
-export function nextShopFloorStageId(stage: unknown, productionFloorCode: string) {
-  const stages = ["raw_material_at_machine", "presetting", "setting", "quality_approval", "operator_started", "item_complete"]
-  const current = stages.indexOf(normalizeShopFloorStage(stage))
-  return stages.slice(current + 1).find((candidate) =>
-    candidate !== "item_complete" && !(productionFloorCode === "cnc" && candidate === "presetting")
+export function nextShopFloorStageId(stage: unknown) {
+  const stages = ["raw_material_at_machine", "setting", "quality_approval", "operator_started", "item_complete"]
+  const normalizedStage = normalizeShopFloorStage(stage)
+  const current = stages.indexOf(
+    normalizedStage === "presetting" ? "raw_material_at_machine" : normalizedStage
   )
+  return stages.slice(current + 1).find((candidate) => candidate !== "item_complete")
 }
 
 export function shopFloorNoPendingActionLabel(stage: unknown) {
@@ -88,24 +89,4 @@ export function productionSessionDetailHref(floor: string, sessionId: string) {
     floor,
     session: sessionId,
   }).toString()}`
-}
-
-export function setupChecklistItemAppliesToPhase(
-  section: unknown,
-  phase: "end" | "start"
-) {
-  const normalizedSection = String(section ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-
-  const includesPreSetting = normalizedSection.includes("pre setting")
-  const includesSetting = normalizedSection
-    .replace("pre setting", "")
-    .includes("setting")
-  if (includesPreSetting && includesSetting) return true
-  if (includesPreSetting) return phase === "start"
-  if (includesSetting) return phase === "end"
-  return true
 }

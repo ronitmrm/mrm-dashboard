@@ -257,7 +257,6 @@ import {
   normalizeShopFloorStage,
   openProductionSessionForShopFloorItem,
   productionSessionDetailHref,
-  setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProducedHistory,
@@ -807,7 +806,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     entryType: "setup_checklist_master",
     title: "Setup Checklist",
     description:
-      "Coded Machinist Checklists Used From Pre Setting Start Through Setting Completion.",
+      "Coded Machinist Checklists Used For Setting Completion.",
     fields: [
       {
         name: "checklistCode",
@@ -833,7 +832,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       {
         name: "section",
         label: "Section",
-        defaultValue: "Pre setting / setting",
+        defaultValue: "Setting",
       },
       { name: "effectiveFrom", label: "Effective From", type: "date" },
       { name: "remark", label: "Remark" },
@@ -2295,14 +2294,12 @@ function setupChecklistQueryFromLocation() {
   if (typeof window === "undefined")
     return {
       sessionId: "",
-      phase: "",
       selectedMachinist: "",
       row: {} as DashboardPayload,
     }
   const params = new URLSearchParams(window.location.search)
   return {
     sessionId: params.get("sessionId") ?? "",
-    phase: params.get("phase") ?? "",
     selectedMachinist: params.get("doneBy") ?? "",
     row: {
       jcNo: params.get("jcNo") ?? "",
@@ -2330,19 +2327,12 @@ function SetupChecklistShell({
     clientHydrationSnapshot,
     serverHydrationSnapshot
   )
-  const {
-    sessionId,
-    phase: requestedPhase,
-    row,
-  } = isClientHydrated
+  const { sessionId, row } = isClientHydrated
     ? setupChecklistQueryFromLocation()
     : {
         sessionId: "",
-        phase: "",
         row: {} as DashboardPayload,
       }
-  const settingOnly = productionFloorCode === "cnc"
-  const phase = settingOnly ? "end" : requestedPhase
   const checklistPage = usePostgresOperationalPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -2379,20 +2369,13 @@ function SetupChecklistShell({
   const savedChecklistItems = Array.isArray(currentChecklistSession?.items)
     ? (currentChecklistSession.items as DashboardPayload[])
     : setupChecklistItemsFromMaster(activeChecklistMasters)
-  const checklistItems = settingOnly
-    ? savedChecklistItems.map((item) => ({ ...item, section: "Setting" }))
-    : savedChecklistItems
-  const phaseChecklistItems = setupChecklistItemsForPhase(checklistItems, phase)
-  const canSave =
-    Boolean(
-      sessionId &&
-      effectiveDoneBy &&
-      (phase === "start" || phase === "end") &&
-      phaseChecklistItems.length
-    ) &&
-    (settingOnly || phase === "start" || Boolean(currentChecklistSession))
+  const checklistItems = savedChecklistItems.map((item) => ({
+    ...item,
+    section: "Setting",
+  }))
+  const canSave = Boolean(sessionId && effectiveDoneBy && checklistItems.length)
   const isComplete =
-    canSave && setupChecklistValuesComplete(phaseChecklistItems, values, phase)
+    canSave && setupChecklistValuesComplete(checklistItems, values)
 
   useEffect(() => {
     if (!isClientHydrated || !sessionId) return
@@ -2414,21 +2397,15 @@ function SetupChecklistShell({
       const nextItemRemarks: Record<string, string> = {}
       for (const item of asArray(currentChecklistSession.items)) {
         const itemKey = setupChecklistItemKey(item)
-        nextValues[itemKey] = setupChecklistExistingValue(item, phase)
-        nextItemRemarks[itemKey] = setupChecklistExistingItemRemark(item, phase)
+        nextValues[itemKey] = setupChecklistExistingValue(item)
+        nextItemRemarks[itemKey] = setupChecklistExistingItemRemark(item)
       }
       setValues(nextValues)
       setItemRemarks(nextItemRemarks)
-      setRemark(
-        str(
-          phase === "start"
-            ? currentChecklistSession.startRemark
-            : currentChecklistSession.endRemark
-        )
-      )
+      setRemark(str(currentChecklistSession.endRemark))
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [currentChecklistSession, phase])
+  }, [currentChecklistSession])
 
   function updateValue(item: DashboardPayload, value: string) {
     const itemKey = setupChecklistItemKey(item)
@@ -2445,9 +2422,8 @@ function SetupChecklistShell({
 
   async function saveProgress() {
     if (!row || !canSave || isSaving) return
-    const session = setupChecklistSessionForStage({
+    const session = setupChecklistSessionForSetting({
       row,
-      phase,
       values,
       itemRemarks,
       items: checklistItems,
@@ -2457,7 +2433,10 @@ function SetupChecklistShell({
       remark,
       completedAt: new Date().toISOString(),
     })
-    const payload = { ...setupChecklistSessionPayload(row, session), phase }
+    const payload = {
+      ...setupChecklistSessionPayload(row, session),
+      phase: "end",
+    }
     setIsSaving(true)
     setStatus(null)
     try {
@@ -2503,9 +2482,7 @@ function SetupChecklistShell({
               <SectionCard>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {phase === "end"
-                      ? "Setting Completion"
-                      : "Pre Setting Start"}
+                    Setting Completion
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-3">
@@ -2515,36 +2492,16 @@ function SetupChecklistShell({
                     <TileField label="Option" value={row.optionNumber} />
                     <TileField label="Setup No." value={row.setupNo} />
                     <TileField label="Machine" value={row.machine} />
-                    <TileField
-                      label="Phase"
-                      value={phase === "end" ? "Completion" : "Start"}
-                    />
+                    <TileField label="Phase" value="Completion" />
                   </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {!settingOnly && (
-                      <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-                        Pre Setting Done By
-                        <Input
-                          value={
-                            phase === "start"
-                              ? signedInMachinist
-                                ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
-                                : "Signed-in account required"
-                              : str(currentChecklistSession?.startedBy)
-                          }
-                          readOnly
-                        />
-                      </label>
-                    )}
+                  <div className="grid gap-3 md:grid-cols-2">
                     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
                       Setting Done By
                       <Input
                         value={
-                          phase === "end"
-                            ? signedInMachinist
-                              ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
-                              : "Signed-in account required"
-                            : str(currentChecklistSession?.endedBy)
+                          signedInMachinist
+                            ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
+                            : "Signed-in account required"
                         }
                         readOnly
                       />
@@ -2562,8 +2519,7 @@ function SetupChecklistShell({
               ) : (
                 <SetupChecklistForm
                   row={row}
-                  phase={phase}
-                  items={phaseChecklistItems}
+                  items={checklistItems}
                   session={currentChecklistSession}
                   values={values}
                   itemRemarks={itemRemarks}
@@ -7805,7 +7761,6 @@ function MachineDetailPanel({
 
 type ShopFloorStageId =
   | "raw_material_at_machine"
-  | "presetting"
   | "setting"
   | "quality_approval"
   | "operator_started"
@@ -7822,12 +7777,6 @@ const shopFloorStages: Array<{
     label: "Raw Material At The Machine",
     role: "Shop floor",
     button: "RM at machine",
-  },
-  {
-    id: "presetting",
-    label: "Pre Setting Started",
-    role: "Assistant machinist",
-    button: "Start pre setting",
   },
   {
     id: "setting",
@@ -9494,14 +9443,8 @@ function ShopFloorRowAction({
     () => activeSetupChecklistMasterRows(setupChecklistMasters),
     [setupChecklistMasters]
   )
-  const checklistPhase =
-    nextStage?.id === "presetting"
-      ? "start"
-      : nextStage?.id === "setting"
-        ? "end"
-        : ""
   const needsSetupChecklist = Boolean(
-    checklistPhase && onSaveSetupChecklistSession
+    nextStage?.id === "setting" && onSaveSetupChecklistSession
   )
   const needsWorkerSelection = nextStage?.id === "operator_started"
   const performer =
@@ -9519,23 +9462,17 @@ function ShopFloorRowAction({
     !needsSetupChecklist ||
     (Boolean(currentChecklistSession) &&
       setupChecklistValuesComplete(
-        setupChecklistItemsForPhase(
-          asArray(currentChecklistSession?.items),
-          checklistPhase
-        ),
-        {},
-        checklistPhase
+        asArray(currentChecklistSession?.items),
+        {}
       ))
   const checklistPageHref =
-    next && checklistPhase
-      ? setupChecklistPageHref(next, checklistPhase, effectiveDoneBy)
+    next && needsSetupChecklist
+      ? setupChecklistPageHref(next, effectiveDoneBy)
       : ""
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
     : setupChecklistReady
-      ? checklistPhase === "end"
-        ? "Completion saved"
-        : "Start saved"
+      ? "Completion saved"
       : currentChecklistSession
         ? "Saved progress"
         : "Checklist pending"
@@ -9677,12 +9614,7 @@ function ShopFloorRowAction({
   if (nextStage && next.shopFloorTaskReady === false) {
     return (
       <div className="grid gap-2">
-        <ShopFloorProgress
-          activeIndex={stageIndex}
-          productionFloorCode={
-            str(row?.productionFloorCode) || productionFloorFromLocation()
-          }
-        />
+        <ShopFloorProgress activeIndex={stageIndex} />
         <StatusBadge value="Task not ready" />
         <div className="text-sm text-muted-foreground">
           {displayValue(next.shopFloorTaskBlocker) ||
@@ -9694,12 +9626,7 @@ function ShopFloorRowAction({
 
   return (
     <div className="grid gap-2">
-      <ShopFloorProgress
-        activeIndex={stageIndex}
-        productionFloorCode={
-          str(row?.productionFloorCode) || productionFloorFromLocation()
-        }
-      />
+      <ShopFloorProgress activeIndex={stageIndex} />
       {nextStage ? (
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
@@ -9766,8 +9693,7 @@ function ShopFloorRowAction({
                 >
                   Open Checklist
                 </Button>
-                {checklistPhase === "start" &&
-                !activeChecklistMasters.length &&
+                {!activeChecklistMasters.length &&
                 openDataEntry ? (
                   <Button
                     type="button"
@@ -9825,7 +9751,6 @@ function ShopFloorRowAction({
 
 function SetupChecklistForm({
   row,
-  phase,
   items,
   session,
   values,
@@ -9835,7 +9760,6 @@ function SetupChecklistForm({
   onAddMaster,
 }: {
   row: DashboardPayload
-  phase: string
   items: DashboardPayload[]
   session?: DashboardPayload
   values: Record<string, string>
@@ -9852,9 +9776,7 @@ function SetupChecklistForm({
           Setup Checklist Missing
         </div>
         <div className="text-[var(--color-warning-text)]">
-          {phase === "start"
-            ? "Create An Active Pre Setting Checklist Before Continuing."
-            : "Create An Active Setting Checklist Before Continuing."}
+          Create An Active Setting Checklist Before Continuing.
         </div>
         {onAddMaster ? (
           <Button
@@ -9870,21 +9792,12 @@ function SetupChecklistForm({
       </div>
     )
   }
-  if (phase === "end" && !session && row.productionFloorCode !== "cnc") {
-    return (
-      <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
-        Pre Setting Checklist Session Is Missing. Start Pre Setting For This
-        Setup Before Saving Setting Done.
-      </div>
-    )
-  }
-
   return (
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
-            Setup Checklist {phase === "start" ? "start" : "completion"}
+            Setup Checklist completion
           </div>
           <div className="text-xs text-muted-foreground">
             {itemCode(row)} / Jc {jobCardNumber(row)} / Option{" "}
@@ -9912,11 +9825,11 @@ function SetupChecklistForm({
             {items.map((item, index) => {
               const itemKey = setupChecklistItemKey(item, index)
               const inputType = str(item.inputType || "checkbox").toLowerCase()
-              const existingValue = setupChecklistExistingValue(item, phase)
+              const existingValue = setupChecklistExistingValue(item)
               const value = values[itemKey] ?? existingValue
               const itemRemark =
                 itemRemarks[itemKey] ??
-                setupChecklistExistingItemRemark(item, phase)
+                setupChecklistExistingItemRemark(item)
               return (
                 <TableRow key={itemKey}>
                   <TableCell>
@@ -10192,35 +10105,25 @@ function FirstPieceReadingControl({
   )
 }
 
-function ShopFloorProgress({
-  activeIndex,
-  productionFloorCode,
-}: {
-  activeIndex: number
-  productionFloorCode: string
-}) {
+function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {shopFloorStages
-        .filter(
-          (stage) => productionFloorCode !== "cnc" || stage.id !== "presetting"
+      {shopFloorStages.map((stage, index) => {
+        const done = shopFloorStageIndex(stage.id) <= activeIndex
+        return (
+          <Badge
+            key={stage.id}
+            variant="outline"
+            className={
+              done
+                ? "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]"
+                : "text-muted-foreground"
+            }
+          >
+            {index + 1}
+          </Badge>
         )
-        .map((stage, index) => {
-          const done = shopFloorStageIndex(stage.id) <= activeIndex
-          return (
-            <Badge
-              key={stage.id}
-              variant="outline"
-              className={
-                done
-                  ? "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]"
-                  : "text-muted-foreground"
-              }
-            >
-              {index + 1}
-            </Badge>
-          )
-        })}
+      })}
     </div>
   )
 }
@@ -16289,33 +16192,7 @@ function SetupChecklistMasterForm({
                       </SearchableSelect>
                     </TableCell>
                     <TableCell>
-                      <SearchableSelect
-                        className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm"
-                        value={
-                          productionFloorFromLocation() === "cnc"
-                            ? "Setting"
-                            : draft.section
-                        }
-                        disabled={productionFloorFromLocation() === "cnc"}
-                        onChange={(event) =>
-                          updateDraft(
-                            draft.draftId,
-                            "section",
-                            event.target.value
-                          )
-                        }
-                      >
-                        {productionFloorFromLocation() !== "cnc" && (
-                          <option value="Pre setting">Pre Setting</option>
-                        )}
-                        <option value="Setting">Setting</option>
-                        {productionFloorFromLocation() !== "cnc" &&
-                        draft.section === "Pre setting / setting" ? (
-                          <option value="Pre setting / setting">
-                            Both Phases (Legacy)
-                          </option>
-                        ) : null}
-                      </SearchableSelect>
+                      Setting
                     </TableCell>
                     <TableCell>
                       <Input
@@ -18531,11 +18408,7 @@ function shopFloorRowStatus(
 }
 
 function shopFloorWorkflowLabel(row: DashboardPayload) {
-  const floor = str(row.productionFloorCode) || productionFloorFromLocation()
-  if (
-    floor === "cnc" &&
-    ["presetting", "tools_drawing"].includes(str(row.shopFloorStage))
-  ) {
+  if (normalizeShopFloorStage(row.shopFloorStage) === "presetting") {
     return "Setting pending"
   }
   return str(row.shopFloorStageLabel)
@@ -18696,17 +18569,13 @@ function roleTaskMatches(
   }
   if (role === "quality") return nextStage.id === "quality_approval"
   return (
-    nextStage.id === "presetting" ||
     nextStage.id === "setting" ||
     nextStage.id === "operator_started"
   )
 }
 
 function nextShopFloorStage(row: DashboardPayload) {
-  const nextId = nextShopFloorStageId(
-    row.shopFloorStage,
-    str(row.productionFloorCode) || productionFloorFromLocation()
-  )
+  const nextId = nextShopFloorStageId(row.shopFloorStage)
   return shopFloorStages.find((stage) => stage.id === nextId)
 }
 
@@ -18762,7 +18631,8 @@ function shopFloorStageIndex(stage: string) {
   const normalizedStage =
     {
       shop_floor_rm: "raw_material_at_machine",
-      tools_drawing: "presetting",
+      presetting: "raw_material_at_machine",
+      tools_drawing: "raw_material_at_machine",
       qc_approval: "quality_approval",
       worker_start: "operator_started",
     }[stage] ?? stage
@@ -19598,8 +19468,7 @@ function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section:
-      productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
+    section: "Setting",
     remark: "",
   }
 }
@@ -19617,7 +19486,7 @@ function setupChecklistDraftFromRow(
     checkPoint: str(row.checkPoint),
     inputType: str(row.inputType || "checkbox"),
     required: str(row.required || "Yes"),
-    section: str(row.section || "Pre setting / setting"),
+    section: "Setting",
     remark: str(row.remark),
   }
 }
@@ -19638,7 +19507,7 @@ function setupChecklistPayload(
     checkPoint: str(draft.checkPoint),
     inputType: str(draft.inputType || "checkbox"),
     required: str(draft.required || "Yes"),
-    section: str(draft.section || "Pre setting / setting"),
+    section: "Setting",
     effectiveFrom,
     status,
     remark: str(draft.remark),
@@ -20362,12 +20231,11 @@ function writeStoredSetupChecklistSession(session: DashboardPayload) {
 }
 function setupChecklistPageHref(
   row: DashboardPayload,
-  phase: string,
   doneBy = ""
 ) {
   const params = new URLSearchParams({
     sessionId: setupChecklistSessionId(row),
-    phase,
+    phase: "end",
     jcNo: jobCardNumber(row),
     partCode: itemCode(row),
     optionNumber: displayValue(row.optionNumber),
@@ -20432,16 +20300,10 @@ function mostCompleteSetupChecklistSession(
   localSession: DashboardPayload | undefined,
   stageId: string | undefined
 ) {
-  const phase =
-    stageId === "presetting" ? "start" : stageId === "setting" ? "end" : ""
-  if (!phase) return snapshotSession ?? localSession
+  if (stageId !== "setting") return snapshotSession ?? localSession
   if (
     localSession &&
-    setupChecklistValuesComplete(
-      setupChecklistItemsForPhase(asArray(localSession.items), phase),
-      {},
-      phase
-    )
+    setupChecklistValuesComplete(asArray(localSession.items), {})
   )
     return localSession
   return snapshotSession ?? localSession
@@ -20477,7 +20339,7 @@ function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
     checkPoint: displayValue(row.checkPoint),
     inputType: displayValue(row.inputType || "checkbox"),
     required: displayValue(row.required || "Yes"),
-    section: displayValue(row.section || "Pre setting / setting"),
+    section: "Setting",
     masterCreatedAt: displayValue(row.createdAt),
   }))
 }
@@ -20500,45 +20362,32 @@ function setupChecklistItemRequired(item: DashboardPayload) {
   )
 }
 
-function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
-  return displayValue(phase === "start" ? item.startValue : item.endValue) ===
-    "-"
+function setupChecklistExistingValue(item: DashboardPayload) {
+  return displayValue(item.endValue) === "-"
     ? ""
-    : displayValue(phase === "start" ? item.startValue : item.endValue)
+    : displayValue(item.endValue)
 }
 
-function setupChecklistExistingItemRemark(
-  item: DashboardPayload,
-  phase: string
-) {
-  return str(phase === "start" ? item.startItemRemark : item.endItemRemark)
-}
-
-function setupChecklistItemsForPhase(items: DashboardPayload[], phase: string) {
-  const normalizedPhase = phase === "end" ? "end" : "start"
-  return items.filter((item) =>
-    setupChecklistItemAppliesToPhase(item.section, normalizedPhase)
-  )
+function setupChecklistExistingItemRemark(item: DashboardPayload) {
+  return str(item.endItemRemark)
 }
 
 function setupChecklistValuesComplete(
   items: DashboardPayload[],
-  values: Record<string, string>,
-  phase: string
+  values: Record<string, string>
 ) {
   if (!items.length) return false
   return items.every((item, index) => {
     if (!setupChecklistItemRequired(item)) return true
     const value =
       values[setupChecklistItemKey(item, index)] ??
-      setupChecklistExistingValue(item, phase)
+      setupChecklistExistingValue(item)
     return Boolean(str(value))
   })
 }
 
-function setupChecklistSessionForStage({
+function setupChecklistSessionForSetting({
   row,
-  phase,
   values,
   itemRemarks,
   items,
@@ -20549,7 +20398,6 @@ function setupChecklistSessionForStage({
   completedAt,
 }: {
   row: DashboardPayload
-  phase: string
   values: Record<string, string>
   itemRemarks: Record<string, string>
   items: DashboardPayload[]
@@ -20566,28 +20414,13 @@ function setupChecklistSessionForStage({
       "1"
   )
   const sessionItems = items.map((item, index) => {
-    if (
-      !setupChecklistItemAppliesToPhase(
-        item.section,
-        phase === "end" ? "end" : "start"
-      )
-    )
-      return item
     const itemKey = setupChecklistItemKey(item, index)
-    const value = values[itemKey] ?? setupChecklistExistingValue(item, phase)
+    const value = values[itemKey] ?? setupChecklistExistingValue(item)
     const itemRemark =
-      itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item, phase)
-    return phase === "start"
-      ? { ...item, startValue: value, startItemRemark: itemRemark }
-      : { ...item, endValue: value, endItemRemark: itemRemark }
+      itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item)
+    return { ...item, endValue: value, endItemRemark: itemRemark }
   })
-  const complete =
-    phase === "end" &&
-    setupChecklistValuesComplete(
-      setupChecklistItemsForPhase(sessionItems, phase),
-      {},
-      phase
-    )
+  const complete = setupChecklistValuesComplete(sessionItems, {})
   return {
     ...(existingSession ?? {}),
     sessionId: setupChecklistSessionId(row),
@@ -20596,23 +20429,10 @@ function setupChecklistSessionForStage({
       masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom
     ),
     status: complete ? "Completed" : "In progress",
-    startedAt: phase === "start" ? completedAt : existingSession?.startedAt,
-    startedBy: phase === "start" ? doneBy : existingSession?.startedBy,
-    startRemark: phase === "start" ? remark : existingSession?.startRemark,
-    endedAt:
-      phase === "end"
-        ? complete
-          ? completedAt
-          : null
-        : existingSession?.endedAt,
-    completedAt:
-      phase === "end"
-        ? complete
-          ? completedAt
-          : null
-        : existingSession?.completedAt,
-    endedBy: phase === "end" ? doneBy : existingSession?.endedBy,
-    endRemark: phase === "end" ? remark : existingSession?.endRemark,
+    endedAt: complete ? completedAt : null,
+    completedAt: complete ? completedAt : null,
+    endedBy: doneBy,
+    endRemark: remark,
     items: sessionItems,
   }
 }
@@ -20625,8 +20445,7 @@ function setupChecklistMasterDefaults() {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section:
-      productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
+    section: "Setting",
     effectiveFrom: istDateValue(),
     status: "Active",
   }
