@@ -5,13 +5,20 @@ import { parseTemplateUpload, TemplateUploadError } from "./template-upload"
 
 describe("RM Inward date format", () => {
   it("recognises downloaded RM record headings before validating and normalising values", () => {
-    const csv = "Jc No.,Rm Inward Date,Rm Inward Kg,RM Location\r\nP1446,02-09-2026,48.6,001\r\n"
+    const csv = 'Jc No.,Rm Inward Date,Rm Inward Kg,RM Location\r\nP1446,02-09-2026,"1,015.90",001\r\n'
     expect(parseTemplateUpload(
       "rm_inward", "rm-inward-all-rows.csv", Buffer.from(csv).toString("base64"),
       new Set(["rm_inward"])
     ).rows).toEqual([
-      { jcNo: "P1446", rmInwardDate: "2026-09-02", rmInwardKg: 48.6, rmLocation: "001" },
+      { jcNo: "P1446", rmInwardDate: "2026-09-02", rmInwardKg: 1015.9, rmLocation: "001" },
     ])
+  })
+
+  it("reports an invalid received quantity before saving the file", () => {
+    const csv = 'rmInwardDate,rmInwardKg\n02-09-2026,12\n03-09-2026,"1,2,3"\n'
+    expect(() => parseTemplateUpload(
+      "rm_inward", "rm.csv", Buffer.from(csv).toString("base64"), new Set(["rm_inward"])
+    )).toThrow(/Row 3: RM Inward Kg "1,2,3" must be a positive number/)
   })
 
   it("rejects two headings for the same RM field", () => {

@@ -13,12 +13,12 @@ import { parseTemplateUpload } from "./template-upload"
 
 describe("planning master CSV imports", () => {
   it("recognises exported Work Order headings including Required RM (kg)", () => {
-    const csv = "Jc No.,Part Code,Fg Po No.,Rm Po No.,Po Date,Order Pcs,Order Kg,Required RM (kg)\nJC-1,P-1,FG-1,RM-1,2026-09-02,1000,120,130.25\n"
+    const csv = 'Jc No.,Part Code,Fg Po No.,Rm Po No.,Po Date,Order Pcs,Order Kg,Required RM (kg)\nJC-1,P-1,FG-1,RM-1,2026-09-02,"1,000","1,200","1,30,000.25"\n'
     expect(parseTemplateUpload(
       "work_order", "work-order-all-rows.csv", Buffer.from(csv).toString("base64"),
       new Set(["work_order"])
     ).rows).toEqual([
-      { jcNo: "JC-1", partCode: "P-1", fgPoNo: "FG-1", rmPoNo: "RM-1", poDate: "2026-09-02", orderPcs: 1000, orderKg: 120, requiredRmKg: 130.25 },
+      { jcNo: "JC-1", partCode: "P-1", fgPoNo: "FG-1", rmPoNo: "RM-1", poDate: "2026-09-02", orderPcs: 1000, orderKg: 1200, requiredRmKg: 130000.25 },
     ])
   })
 

@@ -34,7 +34,12 @@ export function parseTemplateUpload(
   if (entryType === "rm_inward") {
     const failures = rows.flatMap((row, index) => {
       const date = parseRmInwardUploadDate(row.rmInwardDate)
-      return date ? [] : [`Row ${index + 2}: RM Inward Date "${text(row.rmInwardDate) || "blank"}" must be DD-MM-YYYY (e.g. 21-09-2026).`]
+      const errors = date ? [] : [`Row ${index + 2}: RM Inward Date "${text(row.rmInwardDate) || "blank"}" must be DD-MM-YYYY (e.g. 21-09-2026).`]
+      const quantity = Number(row.rmInwardKg)
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        errors.push(`Row ${index + 2}: RM Inward Kg "${text(row.rmInwardKg) || "blank"}" must be a positive number.`)
+      }
+      return errors.length ? [errors.join(" ")] : []
     })
     if (failures.length) {
       throw new TemplateUploadError(
@@ -138,6 +143,7 @@ const machineMasterTextFields = new Set([
   "machinestabiliserno",
   "machinemcbno",
 ])
+const workOrderQuantityFields = new Set(["orderPcs", "orderKg", "requiredRmKg"])
 
 function normalizeImportedPayload(
   row: Record<string, unknown>,
@@ -150,16 +156,23 @@ function normalizeImportedPayload(
         machineMasterTextFields.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""))) ||
       (entryType === "rm_inward" && key === "rmLocation")
         ? text(value)
-        : normalizeImportedValue(value),
+        : normalizeImportedValue(
+            value,
+            (entryType === "rm_inward" && key === "rmInwardKg") ||
+              (entryType === "work_order" && workOrderQuantityFields.has(key))
+          ),
     ])
   )
 }
 
-function normalizeImportedValue(value: unknown) {
+function normalizeImportedValue(value: unknown, allowGrouping: boolean) {
   const cleaned = text(value)
   if (cleaned === "") return ""
-  const numericValue = Number(cleaned)
-  return Number.isFinite(numericValue) && /^-?\d+(\.\d+)?$/.test(cleaned)
+  const numericText = allowGrouping && /^-?(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(?:\.\d+)?$/.test(cleaned)
+    ? cleaned.replaceAll(",", "")
+    : cleaned
+  const numericValue = Number(numericText)
+  return Number.isFinite(numericValue) && /^-?\d+(\.\d+)?$/.test(numericText)
     ? numericValue
     : cleaned
 }
