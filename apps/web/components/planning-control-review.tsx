@@ -18,12 +18,11 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 import { Textarea } from "@workspace/ui/components/textarea"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import { useConditionalRecords } from "@/hooks/use-conditional-records"
-import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
+import { formatIstDate } from "@/lib/date-time"
 
 type Session = Record<string, unknown>
 type Workflow = Record<string, unknown>
 type Material = Awaited<ReturnType<ReturnType<typeof createProductionShopFloorRepository>["readRawMaterialReviews"]>>["rows"][number]
-type MaterialMovement = Awaited<ReturnType<ReturnType<typeof createProductionShopFloorRepository>["readRawMaterialReviews"]>>["movementWaits"][number]
 const workflowKey = (row: Workflow) =>
   [row.machine, row.jcNo, row.partCode, row.optionNumber, row.setupNo].join("|")
 const quantity = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 })
@@ -55,7 +54,6 @@ export function PlanningControlReview({ floor, workflowRows, onClose, onResolve,
     ? (delivery.data.rows as Session[]).filter(session => !closedIds.includes(String(session.id)))
     : []
   const materials = (materialDelivery.data?.rows ?? []) as Material[]
-  const movements = (materialDelivery.data?.movementWaits ?? []) as MaterialMovement[]
   const workflows = workflowRows.filter(row => !resolvedKeys.includes(workflowKey(row)))
   const loading = delivery.loading || materialDelivery.loading
   const loadError = [
@@ -123,13 +121,13 @@ export function PlanningControlReview({ floor, workflowRows, onClose, onResolve,
     <SectionCard>
       <CardHeader><CardTitle>Planning Review</CardTitle></CardHeader>
       <CardContent className="grid min-w-0 gap-3">
-        {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, floor material waits, session flags and workflow exceptions in this Production Unit." /> : null}
+        {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, session flags and workflow exceptions in this Production Unit." /> : null}
         {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError}
           action={<Button variant="outline" onClick={refresh}>Refresh flags</Button>} /> : null}
-        {!loading && !loadError && !materials.length && !movements.length && !sessions.length && !workflows.length ? (
-          <StandardState title="No open planning reviews" description="No RM shortages, floor material waits, session flags or workflow exceptions need review." />
+        {!loading && !loadError && !materials.length && !sessions.length && !workflows.length ? (
+          <StandardState title="No open planning reviews" description="No RM shortages, session flags or workflow exceptions need review." />
         ) : null}
-        {materials.length || movements.length || sessions.length || workflows.length ? (
+        {materials.length || sessions.length || workflows.length ? (
           <OperationalTable filterStorageKey={`planning-control-flags-${floor}`} containerClassName="max-h-[70vh] rounded-lg border">
             <TableHeader><TableRow>
               <TableHead>Flag Type</TableHead>
@@ -158,23 +156,6 @@ export function PlanningControlReview({ floor, workflowRows, onClose, onResolve,
                     <span className="block max-w-72 break-words" title={String(row.acceptance?.acceptedAt ?? "")}>{String(row.acceptance?.reason ?? "Accepted by planner")}</span>
                   ) : <Button size="sm" variant="outline" disabled={Boolean(savingId) || row.requiredKg === null}
                     onClick={() => { setSelectedMaterial(row); setMaterialReason(""); setMaterialError("") }}>Accept short RM</Button>}</TableCell>
-                </TableRow>
-              ))}
-              {movements.map(row => (
-                <TableRow key={`movement:${row.id}`} data-row-id={`movement:${row.id}`}>
-                  <TableCell><StatusBadge tone="information" value="Floor material wait" /></TableCell>
-                  <TableCell>
-                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(row.jobCardNumber)}?floor=${floor}`}>{row.jobCardNumber}</Link>
-                    <div>{row.partCode}</div>
-                    <div className="text-xs text-muted-foreground">Option {row.optionNumber} · Setup {row.setupNumber}</div>
-                  </TableCell>
-                  <TableCell className="font-medium">{row.machineNumber}</TableCell>
-                  <TableCell>{formatIstDateTime(row.readyAt)}</TableCell>
-                  <TableCell>
-                    <div>Material and machine ready</div>
-                    <div className="tabular-nums">Working wait: {row.workingMinutes == null ? "—" : `${Math.floor(row.workingMinutes / 60)}h ${row.workingMinutes % 60}m`}</div>
-                  </TableCell>
-                  <TableCell><Link className="underline underline-offset-4" href={`/?tab=shopFloorTasksTab&floor=${floor}`}>Open Shop Floor Tasks</Link></TableCell>
                 </TableRow>
               ))}
               {sessions.map(session => {

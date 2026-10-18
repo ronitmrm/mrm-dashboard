@@ -5238,11 +5238,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
-      const [rows, movementWaits] = await Promise.all([
-        readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode),
-        readMaterialMovementWaits(pool, input.organizationId, input.productionFloorCode),
-      ])
-      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient), movementWaits }
+      const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
+      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient) }
     },
 
     async acceptShortRawMaterial(input: {

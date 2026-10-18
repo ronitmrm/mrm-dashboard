@@ -277,7 +277,8 @@ Readiness is recorded when the system processes the confirming planning publicat
 backdating earlier unobserved waits. Recalculations of the same ready assignment
 retain that start time.
 The existing **RM at machine** action ends the wait and records the performer and
-remark. Planning Control shows current waits; the Job Card RM tab retains history.
+remark. The Job Card RM tab shows current waits and retains their history.
+Floor material waits are not shown in Planning Control or Planning Review.
 These are elapsed waits, with no additional completion blocker or grace-period rule.
 
 Count scheduled working time, excluding weekly offs, Planning Calendar holidays,

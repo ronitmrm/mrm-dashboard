@@ -107,7 +107,7 @@ export function materialMovementWorkingMinutes(start: Date, end: Date, floor: st
 }
 
 export async function readMaterialMovementWaits(client: QueryClient, organizationId: string,
-  floor: string, jobCardNumber?: string) {
+  floor: string, jobCardNumber: string) {
   const result = await client.query<{
     id: string; jobCardNumber: string; partCode: string; setupNumber: number; optionNumber: string
     machineNumber: string; readyAt: Date; endedAt: Date | null; outcome: string | null
@@ -144,12 +144,8 @@ export async function readMaterialMovementWaits(client: QueryClient, organizatio
     ) event ON true
     LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
     WHERE wait.organization_id = $1 AND unit.code = $2
-      AND ($3::text IS NULL AND wait.ended_at IS NULL AND event.id IS NULL
-        OR lower(work_order.job_card_number) = lower($3))
-      AND ($3::text IS NOT NULL OR NOT EXISTS (
-        SELECT 1 FROM manufacturing.shop_floor_setup_state state
-        WHERE state.machine_id = wait.machine_id AND state.active AND state.stage <> 'planned'))
-    ORDER BY wait.ready_at DESC`, [organizationId, floor, jobCardNumber ?? null])
+      AND lower(work_order.job_card_number) = lower($3)
+    ORDER BY wait.ready_at DESC`, [organizationId, floor, jobCardNumber])
   const now = new Date()
   return result.rows.map(({ calendar, readyAt, endedAt, ...row }) => ({ ...row,
     readyAt: readyAt.toISOString(), endedAt: endedAt?.toISOString() ?? null,
