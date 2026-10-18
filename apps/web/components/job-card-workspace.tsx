@@ -4,7 +4,7 @@ import { MetricSummary, RecordDetails } from "@/components/ui/golden-patterns"
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
-import { Badge } from "@workspace/ui/components/badge"
+import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
@@ -31,6 +31,7 @@ type Workspace = {
   qualityRecords?: Row[]
   productionFloorCode?: string
   rawMaterialReceipts?: Row[]
+  materialMovementWaits?: Row[]
   routes?: Row[]
   sessions?: Row[]
   setups?: Row[]
@@ -173,6 +174,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const planRows = workspace?.planRows ?? emptyRows
   const plannerMovements = workspace?.plannerMovements ?? emptyRows
   const receipts = workspace?.rawMaterialReceipts ?? emptyRows
+  const materialMovements = workspace?.materialMovementWaits ?? emptyRows
   const delivery = record(analytics.delivery)
   const deliveryTarget = record(analytics.deliveryTarget)
   const material = record(analytics.material)
@@ -378,6 +380,21 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
 
       {activeTab === "rm" ? <section className="grid gap-4">
+        <SectionCard>
+          <CardHeader><CardTitle>Floor Material Movement</CardTitle><CardDescription>Working wait starts when material, the planned date and the assigned machine are ready. Earlier unrecorded waits remain unknown.</CardDescription></CardHeader>
+          <CardContent><OperationalTable filterStorageKey={`material-movement-${floor}-${jobCardNumber}`} containerClassName="max-h-96 rounded-md border">
+            <TableHeader><TableRow><TableHead>Setup / Option</TableHead><TableHead>Machine</TableHead><TableHead>Ready Since</TableHead><TableHead>Arrival / End</TableHead><TableHead>Working Wait</TableHead><TableHead>Status</TableHead><TableHead>Recorded By / Reason</TableHead></TableRow></TableHeader>
+            <TableBody>{materialMovements.length ? materialMovements.map(row => <TableRow key={text(row.id)}>
+              <TableCell>{display(row.setupNumber)} / {display(row.optionNumber)}</TableCell>
+              <TableCell>{display(row.machineNumber)}</TableCell>
+              <TableCell>{date(row.readyAt, true)}</TableCell>
+              <TableCell>{date(row.endedAt, true)}</TableCell>
+              <TableCell>{row.workingMinutes == null ? "—" : `${Math.floor(number(row.workingMinutes) / 60)}h ${number(row.workingMinutes) % 60}m`}</TableCell>
+              <TableCell><StatusBadge tone={row.outcome === "arrived" ? "positive" : row.outcome ? "inactive" : "information"} value={row.outcome === "arrived" ? "At machine" : row.outcome === "blocked" ? "Readiness withdrawn" : row.outcome === "corrected" ? "Arrival corrected" : row.outcome === "unrecorded" ? "Arrival unrecorded" : "Awaiting floor"} /></TableCell>
+              <TableCell>{display(row.recordedBy)}<div>{text(row.reason)}</div></TableCell>
+            </TableRow>) : <TableRow><TableCell colSpan={7}>No material movement wait recorded yet.</TableCell></TableRow>}</TableBody>
+          </OperationalTable></CardContent>
+        </SectionCard>
         <SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM uses ordered pieces and Product Master Blank Piece Weight.</CardDescription></CardHeader>
           <CardContent><RecordDetails items={[
             { label: "Material / Grade", value: display(jobCard.materialGrade) },

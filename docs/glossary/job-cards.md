@@ -266,6 +266,28 @@ delay that setup.
 
 Missing timestamps remain unknown and are never treated as zero minutes.
 
+### Floor material movement wait
+
+The floor's clock starts when the published Shop Floor task is ready: its planned
+date is due, usable RM (or physical WIP for a later setup) is available, and its
+assigned machine is free. Only the next task on that machine starts a clock.
+Partial RM does not have to reach the shortage-review threshold to be moved.
+
+Readiness is recorded when the system processes the confirming planning publication, without
+backdating earlier unobserved waits. Recalculations of the same ready assignment
+retain that start time.
+The existing **RM at machine** action ends the wait and records the performer and
+remark. Planning Control shows current waits; the Job Card RM tab retains history.
+These are elapsed waits, with no additional completion blocker or grace-period rule.
+
+Count scheduled working time, excluding weekly offs, Planning Calendar holidays,
+out-of-shift hours and configured breaks. CNC uses its 06:00 production-day
+boundary. Preserve the calendar and break schedule with each recorded interval.
+If readiness is withdrawn, close that interval; a later ready task starts a new
+interval, including after an RM/WIP release. Machine moves and parallel machines
+have their own intervals. Earlier activity without a recorded ready time remains
+unknown; an arrival correction is labelled corrected rather than delivered.
+
 ## Material Yield
 
 ### RM review and short receipt acceptance
