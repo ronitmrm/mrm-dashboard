@@ -386,7 +386,10 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
             { label: "Received RM", value: quantity(material.receivedKg, 3) + " kg" },
             { label: "Rejected RM", value: quantity(material.rejectedKg, 3) + " kg" },
             { label: "Pending RM", value: material.pendingKg == null ? "Blank piece weight required" : quantity(material.pendingKg, 3) + " kg" },
-            { label: "RM Status", value: material.shortAccepted ? "Short RM accepted by planner" : material.pendingKg == null ? "Requirement unavailable" : number(material.pendingKg) > 0.000001 ? "Balance awaited" : "Fully received" },
+            { label: "RM Status", value: material.pendingKg == null ? "Requirement unavailable"
+              : number(material.pendingKg) <= 0.000001 ? "Fully received"
+              : material.receiptSufficient ? "Within 5% allowance"
+              : material.shortAccepted ? "Short RM accepted by planner" : "Balance awaited" },
           ]} /></CardContent>
         </SectionCard>
         <SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>

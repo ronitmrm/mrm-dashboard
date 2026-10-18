@@ -186,7 +186,7 @@ afterAll(async () => {
 
 async function acceptShortRmFixture(jobCardNumber: string, productionFloorCode = "conventional") {
   const material = (await readJobCardMaterialBalances(pool, organizationId, productionFloorCode))
-    .find(row => row.jobCardNumber === jobCardNumber && (row.pendingKg ?? 0) > 0.000001);
+    .find(row => row.jobCardNumber === jobCardNumber && row.requiredKg !== null && !row.receiptSufficient);
   if (material && !material.shortAccepted) await repository.acceptShortRawMaterial({ organizationId, productionFloorCode,
     jobCardNumber, expectedRowVersion: material.rowVersion, reason: "Test fixture: planner accepted the short RM." });
 }
@@ -2133,3 +2133,28 @@ test("material review blocks completion, releases only selected setups, and clea
   expect(workspace.rawMaterialReceipts).toHaveLength(2);
   expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
 });
+
+test("RM shortage flag and completion blocker clear at 95% usable receipt", async () => {
+  const jobCardNumber = `RM-ALLOWANCE-${suffix}`
+  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+  await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+  const receipt = (quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
+    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
+    receivedOn: "2026-10-12", sourceId: randomUUID() })
+  const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
+    .rows.filter(row => row.jobCardNumber === jobCardNumber)
+  const complete = () => repository.recordSetupCompletion({ organizationId, jobCardNumber,
+    operationSetupCode: "2", completedBy: "Planner" })
+
+  await receipt(47.708)
+  expect(await review()).toMatchObject([{ requiredKg: 50.22, usableKg: 47.708, shortAccepted: false }])
+  await expect(complete()).rejects.toThrow("RM is pending")
+  await receipt(0.001)
+  expect(await review()).toEqual([])
+  await expect(complete()).resolves.toMatchObject({ ok: true })
+  const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber })
+  expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receiptSufficient: true, shortAccepted: false })
+  expect(workspace.analytics.material.receivedKg).toBeCloseTo(47.709, 6)
+  expect(workspace.analytics.material.pendingKg).toBeCloseTo(2.511, 6)
+})
