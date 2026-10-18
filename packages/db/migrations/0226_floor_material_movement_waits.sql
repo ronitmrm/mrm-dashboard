@@ -18,3 +18,6 @@ CREATE INDEX material_movement_waits_job_history
 CREATE INDEX shop_floor_stage_events_material_movement
   ON manufacturing.shop_floor_stage_events (organization_id, machine_id, occurred_at)
   WHERE to_stage NOT IN ('planned', 'item_complete');
+
+GRANT SELECT, INSERT, UPDATE ON manufacturing.material_movement_waits
+  TO mrmpl_worker;
