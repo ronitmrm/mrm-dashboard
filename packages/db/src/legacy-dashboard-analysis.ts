@@ -5372,7 +5372,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         const row = rows[capture.index]!;
         const protectedRow = activeSimulationResources!.protectedMutations.get(row)!;
         const normalized = transitionProtectedPlanningRow(protectedRow, "fallback", undefined, () => capture.normalized).normalized!;
-        normalizedRowCache.set(row, normalized);
+        setToolingPreparationNormalized(row, normalized);
         const state = activePlanningKernel?.rows.get(row);
         if (state) state.dirty = true;
       }
@@ -5410,42 +5410,57 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         ? queue.reduce((count, row) => count + Number(requiredToolingCodesFromPlan(row).length > 0), 0) : 0,
     };
   });
-  const knownHolders = new Map<string, number>();
-  for (const row of details)
-    if (toolingHeld(row)) {
-      for (const code of requiredToolingCodesFromPlan(row)) knownHolders.set(code, (knownHolders.get(code) ?? 0) + 1);
+  const preparationKernel = activeSimulationResources ? activePlanningKernel : undefined;
+  const preparedTooling = preparationKernel?.toolingPreparations.get(details);
+  let slots: Map<string, string[]>;
+  if (preparedTooling && preparedTooling.generation === preparationKernel!.toolingPreparationGeneration) {
+    for (const { row, blocked } of preparedTooling.blockedRows) setPlanningRowField(row, "toolingPlanBlocked", blocked);
+    slots = new Map(preparedTooling.capacities.map(([code, capacity]) => [code, Array.from({ length: capacity }, () => "")]));
+  } else {
+    const blockedRows = preparationKernel ? [] as Array<{ row: Record<string, unknown>; blocked: boolean }> : undefined;
+    const knownHolders = new Map<string, number>();
+    for (const row of details)
+      if (toolingHeld(row)) {
+        for (const code of requiredToolingCodesFromPlan(row)) knownHolders.set(code, (knownHolders.get(code) ?? 0) + 1);
+      }
+    const unplannedHolders = new Map<string, number>();
+    for (const row of details)
+      for (const code of requiredToolingCodesFromPlan(row)) {
+        const known = knownHolders.get(code) ?? 0;
+        unplannedHolders.set(code, Math.max(0, safeNumber(asRecord(row.toolingOccupiedQuantities)[code]) - known));
+      }
+    const blockedJobs = new Set<string>();
+    for (const row of [...details].sort((a, b) => numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")))) {
+      const key = [row.jcNo, row.partCode, row.optionNumber].join("|");
+      setPlanningRowField(
+        row,
+        "toolingPlanBlocked",
+        !toolingHeld(row) &&
+          !shopFloorRowIsComplete(row) &&
+          safeNumber(row.pendingGoodQty) > 0 &&
+          (blockedJobs.has(key) ||
+            requiredToolingCodesFromPlan(row).some(
+              (code) => toolingCapacity(row, code) <= (unplannedHolders.get(code) ?? 0),
+            )),
+      );
+      if (row.toolingPlanBlocked) blockedJobs.add(key);
+      blockedRows?.push({ row, blocked: row.toolingPlanBlocked as boolean });
     }
-  const unplannedHolders = new Map<string, number>();
-  for (const row of details)
-    for (const code of requiredToolingCodesFromPlan(row)) {
-      const known = knownHolders.get(code) ?? 0;
-      unplannedHolders.set(code, Math.max(0, safeNumber(asRecord(row.toolingOccupiedQuantities)[code]) - known));
-    }
-  const blockedJobs = new Set<string>();
-  for (const row of [...details].sort((a, b) => numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")))) {
-    const key = [row.jcNo, row.partCode, row.optionNumber].join("|");
-    setPlanningRowField(
-      row,
-      "toolingPlanBlocked",
-      !toolingHeld(row) &&
-        !shopFloorRowIsComplete(row) &&
-        safeNumber(row.pendingGoodQty) > 0 &&
-        (blockedJobs.has(key) ||
-          requiredToolingCodesFromPlan(row).some(
-            (code) => toolingCapacity(row, code) <= (unplannedHolders.get(code) ?? 0),
-          )),
-    );
-    if (row.toolingPlanBlocked) blockedJobs.add(key);
+    slots = new Map<string, string[]>();
+    for (const row of details)
+      for (const code of requiredToolingCodesFromPlan(row)) {
+        if (!slots.has(code))
+          slots.set(
+            code,
+            Array.from({ length: Math.max(0, toolingCapacity(row, code) - (unplannedHolders.get(code) ?? 0)) }, () => ""),
+          );
+      }
+    if (preparationKernel) preparationKernel.toolingPreparations.set(details, {
+      generation: preparationKernel.toolingPreparationGeneration,
+      blockedRows: blockedRows!,
+      capacities: [...slots].map(([code, values]) => [code, values.length]),
+    });
   }
-  const slots = new Map<string, string[]>();
-  for (const row of details)
-    for (const code of requiredToolingCodesFromPlan(row)) {
-      if (!slots.has(code))
-        slots.set(
-          code,
-          Array.from({ length: Math.max(0, toolingCapacity(row, code) - (unplannedHolders.get(code) ?? 0)) }, () => ""),
-        );
-    }
   // Waiting rows only acquire a different tooling date when one of their
   // required slots changes. Rebuild these dependencies for every settle pass.
   const waitingRows = new Set(queues.flatMap((item) => item.queue));
@@ -5901,7 +5916,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     const previousTransition = activePlanningKernel?.rowTransitions.get(transitionKey);
     if (previousTransition) {
       if (!normalizedRowCache.has(row) && previousTransition.normalized)
-        normalizedRowCache.set(row, previousTransition.normalized);
+        setToolingPreparationNormalized(row, previousTransition.normalized);
       for (const [field, value] of Object.entries(previousTransition.fields)) setPlanningRowField(row, field, value);
       item.nextDate = previousTransition.nextDate;
       item.previousKey = scheduleRowKey(row);
@@ -8149,6 +8164,13 @@ function routeKey(partNo: unknown, setup: unknown) {
 
 const normalizedRowCache = new WeakMap<Record<string, unknown>, Map<string, unknown>>();
 
+function setToolingPreparationNormalized(row: Record<string, unknown>, normalized: Map<string, unknown> | undefined) {
+  if (activeSimulationResources && activePlanningKernel && normalizedRowCache.get(row) !== normalized)
+    activePlanningKernel.toolingPreparationGeneration += 1;
+  if (normalized) normalizedRowCache.set(row, normalized);
+  else normalizedRowCache.delete(row);
+}
+
 function rowValue(row: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
     const value = row[name];
@@ -8161,7 +8183,7 @@ function rowValue(row: Record<string, unknown>, ...names: string[]): unknown {
     normalized = protectedRow
       ? transitionProtectedPlanningRow(protectedRow, "fallback", undefined, calculate).normalized!
       : calculate();
-    normalizedRowCache.set(row, normalized);
+    setToolingPreparationNormalized(row, normalized);
     const state = activePlanningKernel?.rows.get(row);
     if (state) state.dirty = true;
   }
@@ -8857,8 +8879,7 @@ function rescheduleMachineQueues(...args: Parameters<typeof calculateRescheduleM
         else setPlanningRowField(change.row, change.field, change.value);
       }
       for (const { row, normalized } of cached.normalized) {
-        if (normalized) normalizedRowCache.set(row, normalized);
-        else normalizedRowCache.delete(row);
+        setToolingPreparationNormalized(row, normalized);
         kernel.facts.delete(row);
         const state = kernel.rows.get(row);
         if (state) state.dirty = true;
@@ -8908,6 +8929,12 @@ function dateLabel(value: Parameters<typeof calculateDateLabel>[0]): string {
 type QueueComparison = { aToolingDate: unknown; bToolingDate: unknown; aVersion: number; bVersion: number; order: number };
 const scheduledRowFields = ["plannedDate", "setupPlannedDate", "plannedStartDate", "plannedCompletionDate",
   "plannedProductionStartDate", "plannedProductionEndDate", "planVsActual", "machineUnavailableReason", "plannerActionRequired"];
+const toolingPreparationReadFields = new Set([
+  "requiredToolingCodes", "toolingOccupiedQuantities", "toolingAllocatedQuantities", "pendingGoodQty",
+  "jcNo", "partCode", "optionNumber", "setupNo", "runningStatus", "shopFloorStage",
+  "priorityStoppedByJcNo", "planOverrideStoppedByJcNo", "toolingPlanBlocked",
+  "__proto__", "constructor", "prototype",
+]);
 const scheduleDateFields = new Set(scheduledRowFields.slice(0, 6));
 const scheduleDateFacts = ["queueReadyDate", "lockedProductionStartDate", "priorityQueueState", "isAutomaticUnstartedPlan", "isMovablePlannedRow"] as const;
 type PlanningRowState = {
@@ -8953,7 +8980,7 @@ function prepareProtectedPlanningRow(original: Record<string, unknown>) {
     const duplicate = Object.defineProperty({ ...prepared.row }, "__planningMeta", {
       enumerable: false, value: { ...prepared.meta },
     });
-    if (prepared.initial.normalized) normalizedRowCache.set(duplicate, prepared.initial.normalized);
+    if (prepared.initial.normalized) setToolingPreparationNormalized(duplicate, prepared.initial.normalized);
     const version = ++nextPlanningState;
     resources.protectedMutations.set(duplicate, { state: { ...prepared.initial, version }, version, lease: ++nextPlanningState });
     return duplicate;
@@ -8973,6 +9000,7 @@ function acquireProtectedPlanningRow(prepared: PreparedProtectedPlanningRow, ini
       changedFields: new Set(), changedMeta: new Set(), prepared });
   }
   const mutations = resources.protectedMutations.get(working)!;
+  if (activePlanningKernel && mutations.changedFields!.size) activePlanningKernel.toolingPreparationGeneration += 1;
   for (const field of mutations.changedFields!) {
     if (Object.hasOwn(prepared.row, field)) working[field] = prepared.row[field];
     else delete working[field];
@@ -8987,8 +9015,7 @@ function acquireProtectedPlanningRow(prepared: PreparedProtectedPlanningRow, ini
   mutations.state = initial;
   mutations.version = initial.version;
   mutations.lease = ++nextPlanningState;
-  if (initial.normalized) normalizedRowCache.set(working, initial.normalized);
-  else normalizedRowCache.delete(working);
+  setToolingPreparationNormalized(working, initial.normalized);
   resources.protectedLeases.add(working);
   return working;
 }
@@ -9072,6 +9099,12 @@ function createIncrementalPlanningKernel() {
   const identities = new WeakMap<object, number>();
   return {
     jcNoGeneration: 0,
+    toolingPreparationGeneration: 0,
+    toolingPreparations: new WeakMap<Array<Record<string, unknown>>, {
+      generation: number;
+      blockedRows: Array<{ row: Record<string, unknown>; blocked: boolean }>;
+      capacities: Array<[string, number]>;
+    }>(),
     overrideJobIndexes: new WeakMap<Array<Record<string, unknown>>, OverrideJobIndex>(),
     simulationJobs: undefined as ReadonlySet<string> | undefined,
     rows: new WeakMap<Record<string, unknown>, { states: PlanningRowState[]; dirty: boolean; current?: number }>(),
@@ -9150,6 +9183,10 @@ function forkPlanningRow(plan: Record<string, unknown>) {
 }
 function setPlanningRowField(row: Record<string, unknown>, field: string, value: unknown) {
   if (!Object.hasOwn(row, field) || !Object.is(row[field], value)) {
+    // Direct preparation fields and prototype keys dirty this generation.
+    // Captured fallback aliases are guarded by normalized-map identity changes.
+    if (field !== "toolingNextAvailableDate" && activeSimulationResources && activePlanningKernel &&
+      toolingPreparationReadFields.has(field)) activePlanningKernel.toolingPreparationGeneration += 1;
     activeQueuePassChanges?.push({ row, field, value, meta: false });
     if (activePlanningKernel && field === "jcNo") activePlanningKernel.jcNoGeneration += 1;
     row[field] = value;
@@ -9319,8 +9356,8 @@ function finalizeMachineAndSetupSchedule(...args: Parameters<typeof calculateFin
       finalizedPlans.set(key, cached);
       return rows.map(({ row, meta, normalized, cycleNormalized }) => {
         Object.defineProperty(row, "__planningMeta", { enumerable: false, value: meta });
-        if (normalized) normalizedRowCache.set(row, normalized);
-        if (meta.cycle && cycleNormalized) normalizedRowCache.set(meta.cycle, cycleNormalized);
+        if (normalized) setToolingPreparationNormalized(row, normalized);
+        if (meta.cycle && cycleNormalized) setToolingPreparationNormalized(meta.cycle, cycleNormalized);
         return row;
       });
     } catch {
