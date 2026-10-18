@@ -523,12 +523,13 @@ describe("production entry mutation API authorization", () => {
     const saved = await post("data-entry", {
       entryType: "rm_inward",
       productionFloorCode: "cnc",
-      payload: { rmPoNo: "RM-1", rmInwardKg: 12, rmInwardDate: "2026-09-09" },
+      payload: { rmPoNo: "RM-1", rmInwardKg: 12, rmInwardDate: "2026-09-09", rmLocation: "Rack A3" },
     })
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({ ok: true, rowsUpdated: 1 })
     expect(dependencies.upsertRawMaterialReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
+        payload: expect.objectContaining({ rmLocation: "Rack A3" }),
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
         quantityKg: 12,
@@ -539,11 +540,12 @@ describe("production entry mutation API authorization", () => {
       "entries.cnc.rm_inward.read",
       "entries.cnc.rm_inward.import",
     ])
-    const imported = await post("data-import", importBody())
+    const imported = await post("data-import", importBody("rmPoNo,rmInwardKg,rmInwardDate,rmLocation\nRM-1,12,09-09-2026,001\n"))
     expect(imported.status).toBe(200)
     expect(await imported.json()).toMatchObject({ ok: true, inserted: 1 })
     expect(dependencies.upsertRawMaterialReceipts).toHaveBeenCalledWith([
       expect.objectContaining({
+        payload: expect.objectContaining({ rmLocation: "001" }),
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
         quantityKg: 12,

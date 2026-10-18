@@ -409,7 +409,24 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
               : material.shortAccepted ? "Short RM accepted by planner" : "Balance awaited" },
           ]} /></CardContent>
         </SectionCard>
-        <SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total. Pending RM above shows the amount still to be received.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
+        <SectionCard>
+          <CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total. Pending RM above shows the amount still to be received.</CardDescription></CardHeader>
+          <CardContent><div className="rounded-md border min-w-0"><OperationalTable>
+            <TableHeader><TableRow>
+              <TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead>
+              <TableHead>Supplier</TableHead><TableHead>RM Location</TableHead>
+              <TableHead className="text-right">Received Kg</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{receipts.length ? receipts.map((row, index) => (
+              <TableRow key={`${text(row.receiptNumber)}-${index}`}>
+                <TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell>
+                <TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell>
+                <TableCell>{display(row.rmLocation)}</TableCell>
+                <TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell>
+              </TableRow>
+            )) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody>
+          </OperationalTable></div></CardContent>
+        </SectionCard>
       </section> : null}
 
  {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary

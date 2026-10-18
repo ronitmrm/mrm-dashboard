@@ -222,7 +222,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "orderPcs",
     "orderKg",
   ],
-  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
+  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation"],
   machine_master: [
     "machineNo",
     "productionUnit",
@@ -400,6 +400,7 @@ async function rmInwardTemplateResponse(
         partCode: row.partCode,
         rmInwardDate: "",
         rmInwardKg: "",
+        rmLocation: "",
       }))
     )
   )

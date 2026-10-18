@@ -126,8 +126,9 @@ function normalizeImportedPayload(
   return Object.fromEntries(
     Object.entries(row).map(([key, value]) => [
       key,
-      entryType === "machine_master" &&
-      machineMasterTextFields.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""))
+      (entryType === "machine_master" &&
+        machineMasterTextFields.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""))) ||
+      (entryType === "rm_inward" && key === "rmLocation")
         ? text(value)
         : normalizeImportedValue(value),
     ])

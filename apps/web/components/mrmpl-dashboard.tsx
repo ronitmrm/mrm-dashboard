@@ -673,6 +673,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
         type: "number",
         step: "0.01",
       },
+      { name: "rmLocation", label: "RM Location", placeholder: "e.g. RM Store / Rack A3" },
     ],
   },
   {

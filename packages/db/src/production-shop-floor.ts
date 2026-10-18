@@ -3804,6 +3804,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `SELECT receipt_number AS "receiptNumber", received_on AS "receivedOn",
               quantity_kg AS "quantityKg", remaining_quantity_kg AS "remainingQuantityKg",
               heat_number AS "heatNumber", supplier_name AS "supplierName",
+              source_payload->>'rmLocation' AS "rmLocation",
               source_payload AS "sourcePayload"
            FROM manufacturing.raw_material_receipts
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
