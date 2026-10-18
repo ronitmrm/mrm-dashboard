@@ -22,7 +22,7 @@ export function parseTemplateUpload(
     )
   }
   const csvText = decodeDataUrl(fileBase64)
-  const rows = parseCsv(csvText)
+  const rows = parseCsv(csvText, entryType)
     .map((row) => normalizeImportedPayload(row, entryType))
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
@@ -55,7 +55,19 @@ function decodeDataUrl(value: string) {
     .replace(/^\uFEFF/, "")
 }
 
-function parseCsv(csvText: string): Array<Record<string, unknown>> {
+const rmInwardCsvFields = [
+  "jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation",
+]
+
+function csvHeader(entryType: string, header: string) {
+  const trimmed = header.trim()
+  const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")
+  return entryType === "rm_inward"
+    ? rmInwardCsvFields.find((field) => field.toLowerCase() === normalized) ?? trimmed
+    : trimmed
+}
+
+function parseCsv(csvText: string, entryType: string): Array<Record<string, unknown>> {
   const rows: string[][] = []
   let row: string[] = []
   let cell = ""
@@ -99,7 +111,11 @@ function parseCsv(csvText: string): Array<Record<string, unknown>> {
   }
 
   const [headers = [], ...bodyRows] = rows
-  const cleanHeaders = headers.map((header) => header.trim()).filter(Boolean)
+  const cleanHeaders = headers.map((header) => csvHeader(entryType, header)).filter(Boolean)
+  const duplicate = cleanHeaders.find((header, index) => cleanHeaders.indexOf(header) !== index)
+  if (duplicate) {
+    throw new TemplateUploadError(`Duplicate CSV column: ${duplicate}. Keep one column per field.`)
+  }
   return bodyRows
     .filter((bodyRow) => bodyRow.some((value) => value.trim()))
     .map((bodyRow) =>
