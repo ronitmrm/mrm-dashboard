@@ -542,7 +542,7 @@ describe("production entry mutation API authorization", () => {
       "entries.cnc.rm_inward.read",
       "entries.cnc.rm_inward.import",
     ])
-    const imported = await post("data-import", importBody("rmPoNo,rmInwardKg,rmInwardDate,rmLocation\nRM-1,12,09-09-2026,001\n"))
+    const imported = await post("data-import", importBody("Rm Po No.,Rm Inward Kg,Rm Inward Date,RM Location\nRM-1,12,09-09-2026,001\n"))
     expect(imported.status).toBe(200)
     expect(await imported.json()).toMatchObject({ ok: true, inserted: 1 })
     expect(dependencies.upsertRawMaterialReceipts).toHaveBeenCalledWith([

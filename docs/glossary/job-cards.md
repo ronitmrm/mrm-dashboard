@@ -367,6 +367,9 @@ RM Inward CSV uploads require a valid `DD-MM-YYYY` date on every row. A file wit
 an invalid date is rejected before any receipt is saved, with the failed row
 number and required format shown to the uploader. Saved RM Inward dates display
 in that same format, including earlier entries stored in other formats.
+The uploader recognises both template field names (`rmInwardDate`, `rmLocation`)
+and downloaded record headings (`Rm Inward Date`, `RM Location`). Repeated
+headings that identify the same field are rejected. RM Location remains optional.
 A mistaken receipt can be deleted with a reason, even after production starts.
 Deletion reverses that receipt for current RM totals, availability and unlocked
 planning while preserving the receipt, audit trail and recorded production
