@@ -17,6 +17,7 @@ const dependencies = vi.hoisted(() => ({
   reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
   upsertWorkOrder: vi.fn(),
+  updateWorkOrderRequiredRm: vi.fn(),
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
   correctProductionSessionStart: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertCycleStandard: dependencies.upsertCycleStandard,
     upsertWorkOrder: dependencies.upsertWorkOrder,
+    updateWorkOrderRequiredRm: dependencies.updateWorkOrderRequiredRm,
   }),
 }))
 
@@ -599,6 +601,35 @@ describe("production entry mutation API authorization", () => {
     expect(invalid.status).toBe(400)
     expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
     expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+  })
+
+  it("updates only Required RM for existing Work Orders without planning or full saves", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.work_order.import"])
+    dependencies.updateWorkOrderRequiredRm.mockResolvedValue({ updated: 1, unchanged: 0, skipped: 1 })
+    const body = { entryType: "work_order", productionFloorCode: "cnc", importMode: "update_required_rm",
+      fileName: "work_order.csv", fileBase64: Buffer.from('Jc No.,Required RM (kg)\nP1479,"1,300.25"\nUNKNOWN,20\nBLANK,\n').toString("base64") }
+    const response = await post("data-import", body)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, rowsUpdated: 1, rowsUnchanged: 0, rowsSkipped: 1 })
+    expect(dependencies.updateWorkOrderRequiredRm).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", productionFloorCode: "cnc",
+      rows: [{ jobCardNumber: "P1479", requiredRmKg: 1300.25 }, { jobCardNumber: "UNKNOWN", requiredRmKg: 20 }],
+    })
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+
+    dependencies.updateWorkOrderRequiredRm.mockClear()
+    const invalid = await post("data-import", { ...body,
+      fileBase64: Buffer.from("Jc No.,Required RM (kg)\nP1479,12\nP0556,-1\n").toString("base64") })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
+    expect(dependencies.updateWorkOrderRequiredRm).not.toHaveBeenCalled()
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.work_order.save"])
+    expect((await post("data-import", body)).status).toBe(403)
+    expect(dependencies.updateWorkOrderRequiredRm).not.toHaveBeenCalled()
   })
 
   it("rejects a different unit inside manual and imported payloads", async () => {

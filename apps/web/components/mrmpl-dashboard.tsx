@@ -10576,7 +10576,10 @@ function DataEntryPanel({
     [payload, productionControl, selectedSpec]
   )
 
-  async function importEntryFile(file: File, importMode?: "update_locations") {
+  async function importEntryFile(
+    file: File,
+    importMode?: "update_locations" | "update_required_rm"
+  ) {
     if (isImporting || !file.name || !canUseEntry(bulkEntryType, "import"))
       return
     setIsImporting(true)
@@ -10622,6 +10625,13 @@ function DataEntryPanel({
           onFile={file => importEntryFile(file, "update_locations")}
         />
       ) : null}
+      {bulkEntryType === "work_order" ? (
+        <MasterDataCsvClientImportButton
+          disabled={isImporting}
+          label="Update Required RM CSV"
+          onFile={file => importEntryFile(file, "update_required_rm")}
+        />
+      ) : null}
     </>
   )
 
@@ -10657,6 +10667,15 @@ function DataEntryPanel({
           {" "}For existing receipts, fill RM Location in the View Records download
           and use Update locations CSV. This updates all receipts for each Job Card
           and date; received kg and planning stay unchanged.
+        </p>
+      ) : null}
+      {operationalTabs && bulkEntryType === "work_order" ? (
+        <p className="text-xs text-muted-foreground">
+          For existing Job Cards, fill Required RM (kg) in the View Records
+          download and use Update Required RM CSV. Only Job Cards in the selected
+          Production Unit are updated; blank values are ignored and unmatched
+          Job Cards are reported as skipped. Order quantities and plans stay
+          unchanged. Use Upload CSV for full Work Orders.
         </p>
       ) : null}
       {!selectionLocked || isImporting ? (
