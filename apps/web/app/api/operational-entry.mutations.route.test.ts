@@ -570,14 +570,14 @@ describe("production entry mutation API authorization", () => {
       sourcePayload: expect.objectContaining({ requiredRmKg: 125.5 }),
     }))
     const body = { entryType: "work_order", productionFloorCode: "cnc", fileName: "work_order.csv",
-      fileBase64: Buffer.from("jcNo,partCode,orderPcs,requiredRmKg\nJC-2,P-1,1000,130.25\n").toString("base64") }
+      fileBase64: Buffer.from("Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-2,P-1,1000,130.25\n").toString("base64") }
     expect((await post("data-import", body)).status).toBe(200)
     expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
       sourcePayload: expect.objectContaining({ requiredRmKg: 130.25 }),
     }))
     dependencies.upsertWorkOrder.mockClear()
     const invalid = await post("data-import", { ...body,
-      fileBase64: Buffer.from("jcNo,partCode,orderPcs,requiredRmKg\nJC-3,P-1,1000,125\nJC-4,P-1,1000,-1\n").toString("base64") })
+      fileBase64: Buffer.from("Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-3,P-1,1000,125\nJC-4,P-1,1000,-1\n").toString("base64") })
     expect(invalid.status).toBe(400)
     expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
     expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()

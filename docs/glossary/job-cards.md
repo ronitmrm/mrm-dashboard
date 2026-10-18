@@ -329,7 +329,9 @@ invented. Original setup targets remain unchanged; actual output reduces remaini
 work. A running downstream setup may retain its machine while waiting for WIP.
 
 Required RM (kg) is entered on the Work Order form or in the CSV's `requiredRmKg`
-column. It is never calculated from ordered pieces, Blank Piece Weight or ordered
+column. Work Order uploads recognise template field names and downloaded record
+headings, including `Required RM (kg)`, before validating the entered values.
+It is never calculated from ordered pieces, Blank Piece Weight or ordered
 finished-goods kilograms. The value must be positive when entered. Existing Work
 Orders remain blank until someone enters it; no calculated amount is copied in.
 The entered requirement supplies the RM summary, shortage flag, 5% completion
