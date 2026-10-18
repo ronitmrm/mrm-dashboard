@@ -36,6 +36,7 @@ export async function readJobCardMaterialBalances(
     const rejectedKg = Number(row.rejectedKg)
     const usableKg = Math.max(receivedKg - rejectedKg, 0)
     const pendingKg = requiredKg === null ? null : Math.max(requiredKg - usableKg, 0)
+    const receiptSufficient = requiredKg !== null && usableKg + 0.000001 >= requiredKg * 0.95
     const acceptance = row.sourcePayload?.rmShortAcceptance
     const accepted = typeof acceptance === "object" && acceptance !== null && !Array.isArray(acceptance)
       ? acceptance as Record<string, unknown> : null
@@ -43,7 +44,7 @@ export async function readJobCardMaterialBalances(
       && Number(accepted.requiredKg) === requiredKg && usableKg >= Number(accepted.usableKg)
     return { id: row.id, jobCardNumber: row.jobCardNumber, partCode: row.partCode,
       rowVersion: Number(row.rowVersion), requiredKg, receivedKg, rejectedKg, usableKg,
-      pendingKg, shortAccepted, acceptance: shortAccepted ? accepted : null }
+      pendingKg, receiptSufficient, shortAccepted, acceptance: shortAccepted ? accepted : null }
   })
 }
 

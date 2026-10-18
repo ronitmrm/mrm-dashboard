@@ -1063,8 +1063,8 @@ async function assertMaterialCompletion(client: PoolClient, organizationId: stri
   if (!material || material.requiredKg === null) {
     throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before marking Item Complete.")
   }
-  if (Number(material.pendingKg) > 0.000001 && !material.shortAccepted) {
-    throw new ShopFloorConflictError(`RM is pending for ${material.jobCardNumber}. Receive the balance or ask the planner to Accept short RM before marking any setup Item Complete.`)
+  if (!material.receiptSufficient && !material.shortAccepted) {
+    throw new ShopFloorConflictError(`RM is pending for ${material.jobCardNumber}. Usable RM must reach 95% of the requirement, or the planner must Accept short RM before marking any setup Item Complete.`)
   }
 }
 
@@ -4121,6 +4121,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           rejectedKg: materialBalance?.rejectedKg ?? 0,
           usableKg: materialBalance?.usableKg ?? material.receivedKg,
           pendingKg: materialBalance?.pendingKg ?? null,
+          receiptSufficient: materialBalance?.receiptSufficient ?? false,
           shortAccepted: materialBalance?.shortAccepted ?? false,
           acceptance: materialBalance?.acceptance ?? null,
         },
@@ -5235,7 +5236,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
       const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
-      return { rows: rows.filter(row => row.receivedKg > 0 && (row.pendingKg ?? 0) > 0.000001) }
+      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient) }
     },
 
     async acceptShortRawMaterial(input: {
@@ -5248,7 +5249,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const [material] = await readJobCardMaterialBalances(client, input.organizationId, input.productionFloorCode, order.work_order_id)
         if (!material || material.rowVersion !== input.expectedRowVersion) throw new ShopFloorConflictError("Job Card changed. Refresh and review the current RM balance.")
         if (material.requiredKg === null) throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before accepting short RM.")
-        if (!(Number(material.pendingKg) > 0.000001)) throw new ShopFloorConflictError("Full RM is already received. Refresh the RM balance.")
+        if (material.receiptSufficient) throw new ShopFloorConflictError("RM is already within the 5% shortage allowance. Refresh the RM balance.")
         const acceptance = { requiredKg: material.requiredKg, usableKg: material.usableKg,
           acceptedAt: new Date().toISOString(), acceptedBy: input.actorUserId ?? null, reason }
         await client.query(`UPDATE manufacturing.work_orders

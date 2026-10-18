@@ -271,17 +271,21 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 ### RM review and short receipt acceptance
 
 Planning Control shows one RM shortage row per active Job Card only after some RM
-has been received and a known required quantity exceeds the usable received balance.
-No receipt means no RM shortage flag. The row shows required, received, rejected
-where applicable, and pending kilograms. Receipts update the same row; full usable
-receipt removes it automatically. The Job Card's RM tab shows its material
-specification, totals and receipt ledger. An unknown requirement is shown there as
-missing Blank Piece Weight, never as complete.
+has been received and usable received RM is below 95% of a known required quantity.
+A shortage of up to 5% is allowed, including exactly 95% received. Use usable RM
+after rejections for this comparison. No receipt means no RM shortage flag; excess
+RM does not raise a shortage flag. The row shows required, received, rejected where
+applicable, and pending kilograms. Receipts update the same row; reaching the 95%
+threshold removes it automatically. Required, received and pending kilograms retain
+their exact values. The Job Card's RM tab shows its material specification, totals,
+receipt ledger and whether a remaining balance is within the 5% allowance. An
+unknown requirement is shown there as missing Blank Piece Weight, never as complete.
 
-Item Complete on any setup requires full usable RM receipt or an explicit Planner
-**Accept short RM** decision with a reason. Acceptance retains the person, time and
-reviewed material balance; it changes neither receipts nor original order quantity.
-It remains visible as accepted while RM is short. A higher required quantity or a
+Item Complete on any setup requires usable RM of at least 95% of the requirement
+or an explicit Planner **Accept short RM** decision for a larger shortage, with a
+reason. Acceptance retains the person, time and reviewed material balance; it
+changes neither receipts nor original order quantity. It remains visible as
+accepted while RM is below the 95% threshold. A higher required quantity or a
 reduced usable balance requires review again. Releasing a machine is not acceptance.
 
 ### Release a setup awaiting material
