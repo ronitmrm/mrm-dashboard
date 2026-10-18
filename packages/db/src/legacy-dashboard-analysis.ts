@@ -5155,11 +5155,65 @@ function plainPrioritySetupList(raw: unknown) {
   });
 }
 
+// Protected membership is fixed within this kernel. Tracked writes invalidate
+// its scalar proof; changing current rows must pass the native checks each time.
+type ProtectedScalarProof = {
+  details: Array<Record<string, unknown>>; length: number; current: Array<Record<string, unknown>>; generation: number;
+  owners: Map<string, string>; jobs: Set<string>; references: Set<string>;
+};
+function protectedScalarCurrent(proof: ProtectedScalarProof) {
+  const { details, current, owners, jobs, references } = proof;
+  if (current.some((row, index) => details[index] !== row || !normalizedRowCache.has(row))) return false;
+  const currentOwners = new Map<string, string>();
+  return current.every(row => {
+    const before = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
+    const interrupted = row.interruptedSetups || row.priorityInterruptedSetups;
+    if (!Array.isArray(before) || before.length || Object.getPrototypeOf(before) !== Array.prototype
+      || !Array.isArray(interrupted) || interrupted.length || Object.getPrototypeOf(interrupted) !== Array.prototype) return false;
+    const rawMachine = rowText(row, "machine"), machine = canonicalKey(rowText(row, "machine", "machineNo"));
+    const job = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
+    if (!rawMachine || !machine || !job || jobs.has(job) || references.has(job)
+      || !Number.isFinite(Number(rowText(row, "setupNo"))) || safeNumber(rowValue(row, "plannerPriorityScore")) !== 0
+      || priorityQueueState(row) !== "idle" || priorityApprovalMode(row) !== "idle_queue_only") return false;
+    const owner = owners.get(machine) ?? currentOwners.get(machine);
+    if (owner !== undefined && owner !== rawMachine) return false;
+    currentOwners.set(machine, rawMachine);
+    return true;
+  });
+}
+function compileProtectedScalarProof(details: Array<Record<string, unknown>>, members: number, interruptions: boolean) {
+  const resources = activeSimulationResources!, kernel = activePlanningKernel!;
+  const split = details.findIndex(row => resources.protectedMutations.has(row));
+  if (split <= 0 || members !== details.length) return;
+  const proof: ProtectedScalarProof = { details, length: details.length, current: details.slice(0, split), generation: 0,
+    owners: new Map(), jobs: new Set(), references: new Set() };
+  for (let index = split; index < details.length; index++) {
+    const row = details[index]!, protectedRow = resources.protectedMutations.get(row);
+    if (!protectedRow || protectedRow.state.normalized !== normalizedRowCache.get(row)) return;
+    const facts = protectedRow.state.facts, raw = row.queueBeforeSetups || row.priorityQueueBeforeSetups;
+    if (Array.isArray(raw) && raw.length && facts?.priorityQueueBeforeSetups === undefined) return;
+    if (interruptions && facts?.priorityApprovalMode !== "idle_queue_only" && facts?.priorityInterruptedSetups === undefined) return;
+    proof.owners.set(canonicalKey(rowText(row, "machine", "machineNo")), rowText(row, "machine"));
+    proof.jobs.add(canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")));
+    for (const edge of facts?.priorityQueueBeforeSetups ?? []) proof.references.add(edge.jcNo);
+    for (const edge of facts?.priorityInterruptedSetups ?? []) proof.references.add(edge.jcNo);
+  }
+  // The same nonempty current prefix stays idle/default/score-zero and cannot
+  // become a protected reference target, preserving the original scalar proof.
+  if (!protectedScalarCurrent(proof)) return;
+  proof.generation = kernel.protectedScalarGeneration;
+  return proof;
+}
+function invalidateProtectedScalarProof() {
+  if (activePlanningKernel) activePlanningKernel.protectedScalarGeneration++;
+}
+
 // Callers prove warm maps, finite setups and unique canonical queue owners.
 function scalarQueueOrder(
   members: ReadonlyMap<Record<string, unknown>, unknown>,
   groupByRow: ReadonlyMap<Record<string, unknown>, unknown>,
   knownScoreCount?: number,
+  proofEvidence?: { interruptions: boolean },
 ) {
   let byJob: Map<string, Array<Record<string, unknown>>> | undefined;
   const targets = (jcNo: string) => {
@@ -5196,6 +5250,7 @@ function scalarQueueOrder(
   let allIdle = true;
   for (const row of members.keys()) if (priorityQueueState(row) !== "idle") { allIdle = false; break; }
   if (allIdle) return true;
+  if (proofEvidence) proofEvidence.interruptions = true;
   for (const row of members.keys()) {
     if (priorityApprovalMode(row) === "idle_queue_only") continue;
     const protectedRow = activeSimulationResources!.protectedMutations.get(row);
@@ -5222,19 +5277,26 @@ function earlyProtectedQueueGroups(
 ) {
   const original = { groups, scalarOrder: false, focusProjected: false };
   if (!activeSimulationResources || !activePlanningKernel) return original;
+  const kernel = activePlanningKernel;
+  if (kernel.protectedScalarProof?.details !== details) kernel.protectedScalarProof = undefined;
+  const proof = kernel.protectedScalarProof;
+  const lifted = proof && proof.length === details.length && proof.generation === kernel.protectedScalarGeneration
+    && protectedScalarCurrent(proof);
   const rows = groups.flat();
-  if (rows.some(row => !normalizedRowCache.has(row))) return original;
+  if (!lifted && rows.some(row => !normalizedRowCache.has(row))) return original;
   const groupByRow = new Map<Record<string, unknown>, number>();
   const owners = new Map<string, number>();
   for (const [index, group] of groups.entries()) for (const row of group) {
-    if (groupByRow.has(row) || !Number.isFinite(Number(rowText(row, "setupNo")))) return original;
+    if (!lifted && (groupByRow.has(row) || !Number.isFinite(Number(rowText(row, "setupNo"))))) return original;
     const machine = canonicalKey(rowText(row, "machine", "machineNo"));
     const owner = owners.get(machine);
-    if (owner !== undefined && owner !== index) return original;
+    if (!lifted && owner !== undefined && owner !== index) return original;
     owners.set(machine, index);
     groupByRow.set(row, index);
   }
-  if (!scalarQueueOrder(groupByRow, groupByRow)) return original;
+  const evidence = { interruptions: false };
+  if (!lifted && !scalarQueueOrder(groupByRow, groupByRow, undefined, evidence)) return original;
+  if (!lifted) kernel.protectedScalarProof = compileProtectedScalarProof(details, groupByRow.size, evidence.interruptions);
   let retained: Set<number> | undefined;
   const focus = independentSimulationFocusMachines(details, machineRows);
   if (focus) {
@@ -8130,6 +8192,8 @@ function routeKey(partNo: unknown, setup: unknown) {
 const normalizedRowCache = new WeakMap<Record<string, unknown>, Map<string, unknown>>();
 
 function setToolingPreparationNormalized(row: Record<string, unknown>, normalized: Map<string, unknown> | undefined) {
+  if (activeSimulationResources?.protectedMutations.has(row) && normalizedRowCache.get(row) !== normalized)
+    invalidateProtectedScalarProof();
   if (activeSimulationResources && activePlanningKernel && normalizedRowCache.get(row) !== normalized)
     activePlanningKernel.toolingPreparationGeneration += 1;
   if (normalized) normalizedRowCache.set(row, normalized);
@@ -8950,6 +9014,7 @@ function prepareProtectedPlanningRow(original: Record<string, unknown>) {
     if (prepared.initial.normalized) setToolingPreparationNormalized(duplicate, prepared.initial.normalized);
     const version = ++nextPlanningState;
     resources.protectedMutations.set(duplicate, { state: { ...prepared.initial, version }, version, lease: ++nextPlanningState });
+    invalidateProtectedScalarProof();
     return duplicate;
   }
   prepared.solve = resources.solve;
@@ -8957,6 +9022,7 @@ function prepareProtectedPlanningRow(original: Record<string, unknown>) {
 }
 
 function acquireProtectedPlanningRow(prepared: PreparedProtectedPlanningRow, initial: ProtectedPlanningState) {
+  invalidateProtectedScalarProof();
   const resources = activeSimulationResources!;
   let working = prepared.available.pop();
   if (!working) {
@@ -9022,6 +9088,7 @@ function transitionProtectedPlanningRow(
     if (values.size >= 128) values.clear();
     values.set(key, next);
   }
+  if (field !== "row:toolingNextAvailableDate" || next.normalized !== row.state.normalized) invalidateProtectedScalarProof();
   row.state = next;
   // Queue versions, as in the canonical kernel, ignore slot-only changes.
   // The complete token still includes them for exact fallback-map capture.
@@ -9066,6 +9133,8 @@ function createIncrementalPlanningKernel() {
   const identities = new WeakMap<object, number>();
   return {
     jcNoGeneration: 0,
+    protectedScalarGeneration: 0,
+    protectedScalarProof: undefined as ProtectedScalarProof | undefined,
     toolingPreparationGeneration: 0,
     toolingPreparations: new WeakMap<Array<Record<string, unknown>>, {
       generation: number;
@@ -9145,6 +9214,7 @@ function forkPlanningRow(plan: Record<string, unknown>) {
     // without the parent's captured legacy fallback map.
     const version = ++nextPlanningState;
     activeSimulationResources!.protectedMutations.set(fork, { state: { version, normalized: undefined }, version, lease: ++nextPlanningState });
+    invalidateProtectedScalarProof();
   }
   return fork;
 }
