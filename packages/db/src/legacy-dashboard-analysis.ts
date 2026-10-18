@@ -5499,7 +5499,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     (cohort.unsafe > 0 || cohort.machines.size !== cohort.size ||
       (cohort.scores.size > 1 && cohort.nonIdle > 0 && cohort.nonDefaultMode > 0));
   const removeGuard = (candidate: QueueCandidate | undefined) => {
-    if (!candidate) return;
+    if (scalarCertified || !candidate) return;
     pendingGuards.delete(candidate);
     const guard = candidate.heapGuard;
     if (!guard) return;
@@ -5521,6 +5521,10 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   };
   const heapEligible = () => {
     if (!activeSimulationResources || !activePlanningKernel) return false;
+    if (scalarCertified) {
+      pendingGuards.clear();
+      return true;
+    }
     // Previously guarded waiting candidates retain their captured maps. Check
     // ALL new candidates before any guard lookup can capture row aliases.
     for (const candidate of pendingGuards)
@@ -5608,6 +5612,11 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   // Initialize after the first canonical pop, without capturing cold maps.
   const prepareSuffix = () => {
     if (!activeSimulationResources || !activePlanningKernel) return;
+    // Keep the original next-iteration omission trigger without rescanning.
+    if (early.scalarOrder) return {
+      guards: new Map<Record<string, unknown>, { score: number; unsafe: boolean }>(),
+      scores: new Map<number, number>(), unsafe: 0, scalarOrder: true,
+    };
     for (const item of queues)
       for (const row of item.queue) if (!normalizedRowCache.has(row)) return;
     const guards = new Map<Record<string, unknown>, { score: number; unsafe: boolean }>();
@@ -5704,7 +5713,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
         state: transition.state,
         remainingState: transition.remainingState,
       };
-      pendingGuards.add(candidate);
+      if (!scalarCertified) pendingGuards.add(candidate);
       replacements.push(candidate);
       candidates[item.candidateIndex] = candidate;
       frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
