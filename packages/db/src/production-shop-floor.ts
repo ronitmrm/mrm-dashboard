@@ -411,7 +411,7 @@ async function writeRawMaterialReceipt(
     "Job card"
   )
   if (!(input.quantityKg > 0)) {
-    throw new Error("Raw-material receipt quantity must be positive.")
+    throw new ShopFloorConflictError("Raw-material receipt quantity must be positive.")
   }
 
   const workOrderResult = await client.query<RawMaterialWorkOrder>(
@@ -433,12 +433,12 @@ async function writeRawMaterialReceipt(
   )
   const workOrder = workOrderResult.rows[0]
   if (!workOrder) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
     )
   }
   if (workOrder.status === "Cancelled") {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is cancelled.`
     )
   }
@@ -446,14 +446,14 @@ async function writeRawMaterialReceipt(
     throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
   }
   if (!workOrder.rm_po_number) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" has no RM PO Number.`
     )
   }
 
   const requestedRmPo = payloadText(input.payload, "rmPoNo")
   if (requestedRmPo && !sameIdentifier(requestedRmPo, workOrder.rm_po_number)) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: RM PO Number "${requestedRmPo}" does not match Work Order "${workOrder.rm_po_number}" for Job Card "${workOrder.job_card_number}".`
     )
   }
@@ -462,7 +462,7 @@ async function writeRawMaterialReceipt(
     requestedPartCode &&
     !sameIdentifier(requestedPartCode, workOrder.part_code)
   ) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Part Code "${requestedPartCode}" does not match Work Order "${workOrder.part_code}" for Job Card "${workOrder.job_card_number}".`
     )
   }
@@ -500,13 +500,13 @@ async function writeRawMaterialReceipt(
     (!sameIdentifier(existing.rows[0].receipt_number, receiptNumber) ||
       !sameIdentifier(existing.rows[0].job_card_number, workOrder.job_card_number))
   ) {
-    throw new Error("RM receipt source identity already belongs to another receipt.")
+    throw new ShopFloorConflictError("RM receipt source identity already belongs to another receipt.")
   }
   if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
   }
   if (existing.rows[0]?.reversed_at) {
-    throw new Error("This RM Inward row was deleted. Correct the row before uploading it again.")
+    throw new ShopFloorConflictError("This RM Inward row was deleted. Correct the row before uploading it again.")
   }
   return existing.rows[0] ?? (
     await client.query<{ id: string }>(
@@ -1283,6 +1283,90 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     upsertRawMaterialReceipts,
+
+    async updateRawMaterialLocations(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      rows: { jobCardNumber: string; receivedOn: string; location: string }[]
+    }) {
+      const rows = input.rows.filter(row => row.location.trim()).map((row, index) => ({
+        request_index: index + 1,
+        job_card: requiredText(row.jobCardNumber, "Job Card").toLowerCase(),
+        received_on: row.receivedOn,
+        location: row.location.trim(),
+      }))
+      if (!rows.length) throw new ShopFloorConflictError("No RM locations entered. Fill RM Location in the downloaded receipt CSV.")
+      const locations = new Map<string, string>()
+      for (const row of rows) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(row.received_on)) {
+          throw new ShopFloorConflictError("Location update requires the original receipt date.")
+        }
+        const key = JSON.stringify([row.job_card, row.received_on])
+        if (locations.has(key) && locations.get(key) !== row.location) {
+          throw new ShopFloorConflictError(`Conflicting RM locations for Job Card "${row.job_card}" on ${row.received_on}. No locations saved.`)
+        }
+        locations.set(key, row.location)
+      }
+      return transaction(pool, async client => {
+        const matched = await client.query<{
+          id: string
+          request_index: number
+          location: string
+          current_location: string | null
+          before_state: Record<string, unknown>
+        }>(
+          `SELECT receipt.id, requested.request_index,
+             requested.location, receipt.source_payload->>'rmLocation' AS current_location,
+             to_jsonb(receipt) AS before_state
+           FROM jsonb_to_recordset($2::jsonb) AS requested(
+             request_index integer, job_card text, received_on date, location text
+           )
+           JOIN manufacturing.raw_material_receipts receipt
+             ON receipt.organization_id = $1
+             AND lower(receipt.job_card_number) = requested.job_card
+             AND receipt.received_on = requested.received_on
+             AND receipt.reversed_at IS NULL
+             AND derived.dashboard_production_floor_code(receipt.source_payload) = $3
+           ORDER BY receipt.id
+           FOR UPDATE OF receipt`,
+          [input.organizationId, JSON.stringify(rows), input.productionFloorCode]
+        )
+        const matchedIndexes = new Set(matched.rows.map(row => row.request_index))
+        const missing = rows.findIndex((_row, index) => !matchedIndexes.has(index + 1))
+        if (missing !== -1) {
+          const row = rows[missing]!
+          throw new ShopFloorConflictError(`No saved receipt matches Job Card "${row.job_card}" on ${row.received_on} in this Production Unit. Keep the original Job Card and date. No locations saved.`)
+        }
+        const changes = [...new Map(matched.rows
+          .filter(row => (row.current_location ?? "") !== row.location)
+          .map(row => [row.id, row])).values()]
+        if (!changes.length) return { updated: 0 }
+        const updated = await client.query<{ id: string; after_state: Record<string, unknown> }>(
+          `UPDATE manufacturing.raw_material_receipts receipt
+           SET source_payload = receipt.source_payload || jsonb_build_object('rmLocation', change.location),
+             updated_at = now(), updated_by_user_id = $3, row_version = receipt.row_version + 1
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, location text)
+           WHERE receipt.organization_id = $1 AND receipt.id = change.id
+           RETURNING receipt.id, to_jsonb(receipt) AS after_state`,
+          [input.organizationId, JSON.stringify(changes.map(row => ({ id: row.id, location: row.location }))), input.actorUserId ?? null]
+        )
+        const beforeById = new Map(changes.map(row => [row.id, row.before_state]))
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
+           ) SELECT $1, 'raw_material_receipt.location_updated', 'manufacturing',
+             'raw_material_receipts', change.id, $3, 'RM location CSV update',
+             change.before_state, change.after_state, 'mrm-dashboard', 'rm_location', change.id::text
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, before_state jsonb, after_state jsonb)`,
+          [input.organizationId, JSON.stringify(updated.rows.map(row => ({
+            id: row.id, before_state: beforeById.get(row.id), after_state: row.after_state,
+          }))), input.actorUserId ?? null]
+        )
+        return { updated: updated.rows.length }
+      })
+    },
 
     async reverseRawMaterialReceipt(input: {
       actorUserId?: string | null

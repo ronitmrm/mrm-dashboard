@@ -99,6 +99,30 @@ function withLiveSetupStages(
   }
 }
 
+function withLiveRawMaterialLocations(dashboard: JsonRecord, liveControl: JsonRecord) {
+  const receipts = liveControl.rmInwardRows
+  if (!Array.isArray(receipts)) return dashboard
+  const locations = new Map<string, Set<string>>()
+  for (const value of receipts) {
+    const receipt = payloadRecord(value)
+    const key = text(receipt.jcNo).toLowerCase()
+    const location = text(receipt.rmLocation)
+    if (!key || !location) continue
+    const values = locations.get(key) ?? new Set<string>()
+    values.add(location)
+    locations.set(key, values)
+  }
+  const control = payloadRecord(dashboard.productionControl)
+  const refreshed = Object.fromEntries(["machinePlanDetailRows", "workOrders"].flatMap(key => {
+    const rows = control[key]
+    return Array.isArray(rows) ? [[key, rows.map(value => {
+      const row = payloadRecord(value)
+      return { ...row, rmLocation: [...(locations.get(text(row.jcNo).toLowerCase()) ?? [])].join(" · ") }
+    })]] : []
+  }))
+  return { ...dashboard, productionControl: { ...control, ...refreshed, rmInwardRows: receipts } }
+}
+
 function correctionKeyFor(table: string, row: JsonRecord, payload: JsonRecord) {
   const values =
     table === "dataEntries"
@@ -289,8 +313,9 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       const row = result.rows[0]
       if (!row) return null
       const sourceCoverage = normalizeSourceCoverage(row.payload.sourceCoverage)
+      const live = await readDirectDashboardFacts(pool, organizationId, productionFloorCode, ["rm_inward"])
       return {
-        ...row.payload,
+        ...withLiveRawMaterialLocations(row.payload, payloadRecord(live.productionControl)),
         filters,
         productionFloorCode,
         readModelVersion: Number(row.version),
@@ -400,7 +425,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
         `,
         [organizationId, productionFloorCode, knownVersion ?? null,
           knownLiveVersion ?? null,
-          ["setup_state", "corrections", "shop_floor_status", ...dashboardLiveFactEntryTypes,
+          ["setup_state", "corrections", "shop_floor_status", "rm_inward", ...dashboardLiveFactEntryTypes,
             ...dashboardPlannerActionSourceGroups]]
       )
       const row = result.rows[0]!
@@ -411,7 +436,7 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       const liveFacts = row.model_payload
         ? await readDirectDashboardFacts(
             pool, organizationId, productionFloorCode,
-            [...dashboardLiveFactEntryTypes, "shop_floor_status"],
+            [...dashboardLiveFactEntryTypes, "shop_floor_status", "rm_inward"],
             dashboardPlannerActionSourceGroups
           )
         : null
@@ -420,9 +445,9 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           .map(key => [key, payloadRecord(liveFacts.productionControl)[key]])
       ) : {}
       const liveDashboard = row.model_payload
-        ? withLiveSetupStages({ ...row.model_payload, productionControl: {
+        ? withLiveRawMaterialLocations(withLiveSetupStages({ ...row.model_payload, productionControl: {
             ...payloadRecord(row.model_payload.productionControl), ...liveControl,
-          } }, row.live_setup_stages)
+          } }, row.live_setup_stages), payloadRecord(liveFacts?.productionControl))
         : null
       const patch = knownVersion !== undefined && row.model_version === String(knownVersion) && liveDashboard
         ? { productionControl: liveDashboard.productionControl } : null

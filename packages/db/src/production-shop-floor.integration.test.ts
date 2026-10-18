@@ -458,6 +458,42 @@ describe("production and shop-floor workflows", () => {
     }])
   })
 
+  test("updates historical receipt locations atomically without receiving stock or queuing planning", async () => {
+    const sourceId = `test:rm-location:${suffix}`
+    const receipt = await repository.upsertRawMaterialReceipt({
+      organizationId, payload: { jcNo: fourthJobCard }, quantityKg: 31.25,
+      receiptNumber: rmPoNumber, receivedOn: "2026-10-14", sourceId,
+    })
+    await pool.query("UPDATE manufacturing.raw_material_receipts SET remaining_quantity_kg = 12.5 WHERE id = $1", [receipt.id])
+    const stock = () => pool.query(`SELECT id, quantity_kg, remaining_quantity_kg, received_on,
+      source_payload - 'rmLocation' AS payload FROM manufacturing.raw_material_receipts
+      WHERE organization_id = $1 ORDER BY id`, [organizationId])
+    const jobs = () => pool.query("SELECT id FROM derived.refresh_jobs WHERE organization_id = $1 ORDER BY id", [organizationId])
+    const beforeStock = await stock()
+    const beforeJobs = await jobs()
+    const row = { jobCardNumber: fourthJobCard, receivedOn: "2026-10-14", location: "001" }
+    const input = { organizationId, productionFloorCode: "conventional" as const, rows: [row] }
+    await pool.query("UPDATE manufacturing.work_orders SET status = 'Cancelled' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
+    try {
+      await expect(repository.updateRawMaterialLocations({ ...input, rows: [row, { ...row, receivedOn: "2026-10-15" }] }))
+        .rejects.toThrow(/No saved receipt matches/)
+      expect((await pool.query("SELECT source_payload->>'rmLocation' AS location FROM manufacturing.raw_material_receipts WHERE id = $1", [receipt.id])).rows[0].location).toBeNull()
+      expect(await repository.updateRawMaterialLocations(input)).toEqual({ updated: 1 })
+      expect(await repository.updateRawMaterialLocations(input)).toEqual({ updated: 0 })
+      expect((await stock()).rows).toEqual(beforeStock.rows)
+      expect((await jobs()).rows).toEqual(beforeJobs.rows)
+      const audit = await pool.query(`SELECT before_state->'source_payload'->>'rmLocation' AS before,
+        after_state->'source_payload'->>'rmLocation' AS after FROM audit.events
+        WHERE target_id = $1 AND event_type = 'raw_material_receipt.location_updated'`, [receipt.id])
+      expect(audit.rows).toEqual([{ before: null, after: "001" }])
+    } finally {
+      await pool.query("UPDATE manufacturing.work_orders SET status = 'Open' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
+      await pool.query("DELETE FROM audit.events WHERE target_id = $1", [receipt.id])
+      await pool.query("DELETE FROM manufacturing.job_card_finish_baselines WHERE raw_material_receipt_id = $1", [receipt.id])
+      await pool.query("DELETE FROM manufacturing.raw_material_receipts WHERE id = $1", [receipt.id])
+    }
+  })
+
   test("reverses one mistaken RM receipt without removing its audit history", async () => {
     const sourceId = `test:rm-delete:${suffix}`
     const receipt = await repository.upsertRawMaterialReceipt({

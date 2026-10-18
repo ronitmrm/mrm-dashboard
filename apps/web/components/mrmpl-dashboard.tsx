@@ -10673,7 +10673,7 @@ function DataEntryPanel({
     [payload, productionControl, selectedSpec]
   )
 
-  async function importEntryFile(file: File) {
+  async function importEntryFile(file: File, importMode?: "update_locations") {
     if (isImporting || !file.name || !canUseEntry(bulkEntryType, "import"))
       return
     setIsImporting(true)
@@ -10685,6 +10685,7 @@ function DataEntryPanel({
           entryType: bulkEntryType,
           fileName: file.name,
           fileBase64,
+          ...(importMode ? { importMode } : {}),
           ...(selectedMasterIsCompanyWide ? {} : { productionFloorCode }),
         },
         { throwOnError: true }
@@ -10705,10 +10706,20 @@ function DataEntryPanel({
       }}
     />
   ) : (
-    <MasterDataCsvClientImportButton
-      disabled={isImporting}
-      onFile={importEntryFile}
-    />
+    <>
+      <MasterDataCsvClientImportButton
+        disabled={isImporting}
+        label={bulkEntryType === "rm_inward" ? "Receive RM CSV" : "Upload CSV"}
+        onFile={importEntryFile}
+      />
+      {bulkEntryType === "rm_inward" ? (
+        <MasterDataCsvClientImportButton
+          disabled={isImporting}
+          label="Update locations CSV"
+          onFile={file => importEntryFile(file, "update_locations")}
+        />
+      ) : null}
+    </>
   )
 
   return (
@@ -10740,6 +10751,9 @@ function DataEntryPanel({
       {operationalTabs && bulkEntryType === "rm_inward" ? (
         <p className="text-xs text-muted-foreground">
           RM Inward CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
+          {" "}For existing receipts, fill RM Location in the View Records download
+          and use Update locations CSV. This updates all receipts for each Job Card
+          and date; received kg and planning stay unchanged.
         </p>
       ) : null}
       {!selectionLocked || isImporting ? (
@@ -11798,7 +11812,12 @@ function downloadMasterTableCsv(
   const header = columns.map((column) => csvCell(column.label)).join(",")
   const body = rows.map((row) =>
     columns
-      .map((column) => csvCell(masterTableCellText(row, column.key)))
+      .map((column) => csvCell(
+        (spec.entryType === "rm_inward" || spec.entryType === "work_order") &&
+        ["rmInwardKg", "orderPcs", "orderKg", "requiredRmKg"].includes(column.key)
+          ? str(row[column.key])
+          : masterTableCellText(row, column.key)
+      ))
       .join(",")
   )
   const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], {

@@ -2211,6 +2211,9 @@ async function post(request: NextRequest, context: RouteContext) {
       ["rm_inward", "software_raw"].includes(String(body.entryType || ""))
     ) {
       const entryType = String(body.entryType || "")
+      if (body.importMode !== undefined && body.importMode !== "update_locations") {
+        throw new RouteError(400, "Unknown CSV import action. Choose Receive RM CSV or Update locations CSV.")
+      }
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
       const scope = operationalEntryWriteScope(
@@ -2232,6 +2235,24 @@ async function post(request: NextRequest, context: RouteContext) {
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
+      }
+      if (body.importMode === "update_locations") {
+        if (entryType !== "rm_inward") throw new RouteError(400, "Location updates require an RM Inward CSV.")
+        const result = await withCsvImportTransaction(() => withProductionRepository(
+          request,
+          scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.updateRawMaterialLocations({
+            actorUserId,
+            organizationId,
+            productionFloorCode: scope.floor,
+            rows: importedRows.map(payload => ({
+              jobCardNumber: text(payload.jcNo),
+              receivedOn: text(payload.rmInwardDate),
+              location: text(payload.rmLocation),
+            })),
+          })
+        ))
+        return json({ ok: true, rowsUpdated: result.updated, message: `Updated ${result.updated} receipt locations. Received quantities unchanged.` })
       }
       const inserted = await withCsvImportTransaction(() => withProductionRepository(
         request,

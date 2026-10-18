@@ -7,7 +7,11 @@ it("delivers a saved RM stage to the machinist queue before planning refresh", a
   const createdAt = new Date("2026-10-03T12:00:00.000Z")
   const liveVersion = "2026-10-03 12:01:00+00"
   const query = async (_sql: unknown, parameters?: unknown[]) => ({
-    rows: [{
+    rows: typeof _sql === "string" && _sql.includes("FROM derived.dashboard_source_records source") ? [{
+      source_id: "receipt-1", source_kind: "data_entry", source_group: "dataEntries",
+      entry_type: "rm_inward", changed_at: createdAt, production_floor_code: "cnc",
+      source_payload: { jcNo: "P2238", rmLocation: "Rack B2", rmInwardKg: 100 },
+    }] : [{
       attempts: 0,
       completed_at: null,
       job_status: "pending",
@@ -28,6 +32,7 @@ it("delivers a saved RM stage to the machinist queue before planning refresh", a
         jcNo: "P2238", partCode: "M421B", optionNumber: "1",
         setupNo: "1", machine: "CNC-9", shopFloorStage: "planned",
         shopFloorTaskReady: false, shopFloorTaskBlocker: "Planned date not due",
+        plannedDate: "2026-10-07", orderPcs: 1000,
       }] } },
       model_source_watermark: {},
       model_version: "7",
@@ -46,12 +51,13 @@ it("delivers a saved RM stage to the machinist queue before planning refresh", a
   expect(state.notModified).toBe(false)
   expect(state.version).toBe(7)
   expect(state.liveVersion).toBe(liveVersion)
-  expect(state.dashboard).toMatchObject({
+  expect(state.patch).toMatchObject({
     productionControl: { machinePlanDetailRows: [{
       shopFloorStage: "raw_material_at_machine",
       shopFloorTaskReady: true,
       shopFloorTaskBlocker: "",
       shopFloorUpdatedAt: "2026-10-03T12:01:00.000Z",
+      rmLocation: "Rack B2", plannedDate: "2026-10-07", orderPcs: 1000,
     }] },
   })
   const unchanged = await repository.state(
