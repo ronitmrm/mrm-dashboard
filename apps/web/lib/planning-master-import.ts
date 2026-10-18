@@ -57,6 +57,10 @@ function workOrderImportIssues(rows: ImportRow[]) {
   for (const [index, row] of rows.entries()) {
     const csvRow = index + 2
     const jobCard = text(row.jcNo)
+    const requiredRmKg = text(row.requiredRmKg)
+    if (requiredRmKg && (!Number.isFinite(Number(requiredRmKg)) || Number(requiredRmKg) <= 0)) {
+      issues.push(`CSV row ${csvRow}: Required RM (kg) must be a positive number.`)
+    }
 
     if (jobCard && !duplicateJobCard) {
       const key = jobCard.toLowerCase()

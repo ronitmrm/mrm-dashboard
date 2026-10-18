@@ -225,19 +225,16 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           LEFT JOIN rejection_totals rejection
             ON rejection.work_order_id = work_order.id
           CROSS JOIN LATERAL (
-            SELECT COALESCE(
-              NULLIF(btrim(work_order.source_payload->>'orderKg'), ''),
-              NULLIF(btrim(work_order.source_payload->>'ORD. KG.'), ''),
-              NULLIF(btrim(work_order.source_payload->>'ORD. KG'), ''),
-              '0'
-            ) AS ordered_kg_text
+            SELECT COALESCE(NULLIF(btrim(
+              work_order.source_payload->>'requiredRmKg'
+            ), ''), '0') AS required_kg_text
           ) source
           CROSS JOIN LATERAL (
             SELECT CASE
-              WHEN source.ordered_kg_text ~ '^[0-9]+([.][0-9]+)?$'
-                THEN source.ordered_kg_text::numeric
+              WHEN source.required_kg_text ~ '^[+]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$'
+                THEN source.required_kg_text::numeric
               ELSE 0
-            END AS ordered_kg
+            END AS required_kg
           ) requested
           WHERE work_order.organization_id = $1
             AND lower(btrim(work_order.status)) <> 'cancelled'
@@ -249,9 +246,9 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
               OR (
                 COALESCE(rejection.rejected_kg, 0) > 0
                 AND (
-                  requested.ordered_kg <= 0
+                  requested.required_kg <= 0
                   OR COALESCE(receipt.received_kg, 0)
-                    - rejection.rejected_kg < requested.ordered_kg
+                    - rejection.rejected_kg < requested.required_kg
                 )
               )
             )

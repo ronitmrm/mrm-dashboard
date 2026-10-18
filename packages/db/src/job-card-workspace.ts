@@ -169,9 +169,10 @@ export function normalizeDeliveryTargets(input: {
   }
 }
 
-export function calculateRequiredRawMaterialKg(orderedQuantity: number, blankPieceWeightGrams: number) {
-  const blankWeight = finite(blankPieceWeightGrams)
-  return blankWeight > 0 ? Math.max(finite(orderedQuantity), 0) * blankWeight / 1000 : null
+export function readRequiredRawMaterialKg(value: unknown) {
+  const kg = typeof value === "number" || (typeof value === "string" && value.trim())
+    ? Number(value) : NaN
+  return Number.isFinite(kg) && kg > 0 ? kg : null
 }
 
 export function buildMaterialYield(input: {

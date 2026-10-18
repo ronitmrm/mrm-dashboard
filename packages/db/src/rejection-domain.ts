@@ -21,17 +21,17 @@ export type RejectionRegisterRow = {
 }
 
 export function rawMaterialRejectionBalance(input: {
-  orderKg: number
+  requiredRmKg: number
   orderPcs: number
   rejectedKg: number
   usableKgBefore: number
 }) {
   const remainingKg = Math.max(input.usableKgBefore - input.rejectedKg, 0)
-  const supportedPieces = input.orderKg > 0 && input.orderPcs > 0
+  const supportedPieces = input.requiredRmKg > 0 && input.orderPcs > 0
     ? Math.min(
         input.orderPcs,
         Math.max(
-          Math.floor((input.orderPcs * remainingKg) / input.orderKg),
+          Math.floor((input.orderPcs * remainingKg) / input.requiredRmKg),
           0
         )
       )

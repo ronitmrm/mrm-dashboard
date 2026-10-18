@@ -10,7 +10,7 @@ afterEach(() => {
 test("does not continue accepted-quantity planning when usable kg displays as zero", () => {
   expect(
     rawMaterialRejectionBalance({
-      orderKg: 28.1,
+      requiredRmKg: 28.1,
       orderPcs: 10_000,
       rejectedKg: 28.1,
       usableKgBefore: 28.11,
@@ -41,7 +41,8 @@ test("removes or limits plans after full and partial raw-material rejection", ()
         jcNo: "RM-REJECT-JC",
         partCode: "RM-REJECT-PART",
         optionNumber: "1",
-        orderKg: 100,
+        orderKg: 25,
+        requiredRmKg: 100,
         orderPcs: 9_900,
       }),
       entry("rm_inward", {

@@ -221,6 +221,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "poDate",
     "orderPcs",
     "orderKg",
+    "requiredRmKg",
   ],
   rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation"],
   machine_master: [
