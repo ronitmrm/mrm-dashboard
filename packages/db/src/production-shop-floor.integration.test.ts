@@ -2161,6 +2161,7 @@ test("RM shortage flag and completion blocker clear at 95% usable receipt", asyn
 })
 
 test("records floor material wait only while ready and preserves working-time history at arrival", async () => {
+  const movementWorkerPool = new Pool({ connectionString, max: 1, options: "-c role=mrmpl_worker" })
   vi.useFakeTimers({ toFake: ["Date"] })
   try {
     vi.setSystemTime(new Date("2026-10-15T09:00:00+05:30"))
@@ -2184,7 +2185,7 @@ test("records floor material wait only while ready and preserves working-time hi
           plannedProductionStartDate: "15 Oct 2026",
         }],
       } } } }])
-      await syncMaterialMovementWaits(pool, organizationId)
+      await syncMaterialMovementWaits(movementWorkerPool, organizationId)
     }
     const waits = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
       .movementWaits.filter(row => row.jobCardNumber === jobCardNumber)
@@ -2218,5 +2219,8 @@ test("records floor material wait only while ready and preserves working-time hi
       { outcome: "arrived", workingMinutes: 615, recordedBy: "Floor Worker", reason: "Material delivered." },
       { id: first.id, outcome: "blocked", workingMinutes: 60 },
     ])
-  } finally { vi.useRealTimers() }
+  } finally {
+    vi.useRealTimers()
+    await movementWorkerPool.end()
+  }
 })
