@@ -5256,8 +5256,12 @@ function scalarQueueOrder(
   return true;
 }
 
-function earlyProtectedQueueGroups(groups: Array<Array<Record<string, unknown>>>) {
-  const original = { groups, scalarOrder: false };
+function earlyProtectedQueueGroups(
+  groups: Array<Array<Record<string, unknown>>>,
+  details: Array<Record<string, unknown>>,
+  machineRows?: Array<Record<string, unknown>>,
+) {
+  const original = { groups, scalarOrder: false, focusProjected: false };
   if (!activeSimulationResources || !activePlanningKernel) return original;
   const rows = groups.flat();
   if (rows.some(row => !normalizedRowCache.has(row))) return original;
@@ -5272,9 +5276,33 @@ function earlyProtectedQueueGroups(groups: Array<Array<Record<string, unknown>>>
     groupByRow.set(row, index);
   }
   if (!scalarQueueOrder(groupByRow, groupByRow)) return original;
+  let retained: Set<number> | undefined;
+  const focus = independentSimulationFocusMachines(details, machineRows);
+  if (focus) {
+    // Build from ALL original groups, before the existing no-code omission.
+    const users = new Map<string, Set<number>>();
+    for (const [row, index] of groupByRow) for (const code of requiredToolingCodesFromPlan(row)) {
+      const groupsForCode = users.get(code) ?? new Set<number>();
+      groupsForCode.add(index);
+      users.set(code, groupsForCode);
+    }
+    retained = new Set<number>();
+    for (const [machine, index] of owners) if (focus.has(machine)) retained.add(index);
+    for (const index of retained)
+      for (const row of groups[index]!)
+        for (const code of requiredToolingCodesFromPlan(row))
+          for (const user of users.get(code) ?? []) retained.add(user);
+    for (const [row, index] of groupByRow)
+      if (!retained.has(index) && (!activeSimulationResources.protectedMutations.has(row) || !planningMeta(row).simulationReservation)) {
+        retained = undefined;
+        break;
+      }
+  }
   return {
-    groups: groups.filter(group => !group.every(row => !requiredToolingCodesFromPlan(row).length) || protectedQueueSortKey(group) === undefined),
+    groups: groups.filter((group, index) => (!retained || retained.has(index)) &&
+      (!group.every(row => !requiredToolingCodesFromPlan(row).length) || protectedQueueSortKey(group) === undefined)),
     scalarOrder: true,
+    focusProjected: retained !== undefined,
   };
 }
 
@@ -5299,7 +5327,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     queueComparisons.set(details, queueOrderCache);
   }
   const versions = new Map(details.map((row) => [row, planningRowVersion(row)]));
-  const early = earlyProtectedQueueGroups([...byMachine.values()]);
+  const early = earlyProtectedQueueGroups([...byMachine.values()], details, machineRows);
   const compareQueueRows = (a: Record<string, unknown>, b: Record<string, unknown>) => {
     let comparisons = queueOrderCache.get(a);
     const cached = comparisons?.get(b);
@@ -5710,7 +5738,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     changedQueues.clear();
     if (!projectionAttempted && afterFirstPop) {
       projectionAttempted = true;
-      const focus = independentSimulationFocusMachines(details, machineRows);
+      const focus = early.focusProjected ? undefined : independentSimulationFocusMachines(details, machineRows);
       if (focus) {
         const queueMachines = new Map<(typeof queues)[number], string>();
         let independent = true;
@@ -5721,15 +5749,26 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
             independent = false;
         }
         // Use all ORIGINAL queued users, including the first consumed row.
-        for (const item of queues) if (focus.has(queueMachines.get(item)!))
-          for (const code of item.codes)
-            for (const user of toolingDependents.get(code) ?? [])
-              if (queueByRow.get(user) !== item) independent = false;
+        const retainedQueues = scalarCertified
+          ? new Set(queues.filter((item) => focus.has(queueMachines.get(item)!))) : undefined;
+        if (retainedQueues) {
+          // Scalar order preserves the retained winner sequence across shared
+          // tools. Include every original user transitively, even consumed rows.
+          for (const item of retainedQueues)
+            for (const code of item.codes)
+              for (const user of toolingDependents.get(code) ?? [])
+                retainedQueues.add(queueByRow.get(user)!);
+        } else {
+          for (const item of queues) if (focus.has(queueMachines.get(item)!))
+            for (const code of item.codes)
+              for (const user of toolingDependents.get(code) ?? [])
+                if (queueByRow.get(user) !== item) independent = false;
+        }
         if (independent) {
           let retained = 0;
           for (let index = 0; index < candidates.length; index += 1) {
             const candidate = candidates[index]!;
-            if (!focus.has(queueMachines.get(candidate.item)!)) {
+            if (retainedQueues ? !retainedQueues.has(candidate.item) : !focus.has(queueMachines.get(candidate.item)!)) {
               removeGuard(candidate);
               for (const row of candidate.item.queue) waitingRows.delete(row);
             } else {
