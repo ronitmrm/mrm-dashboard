@@ -259,7 +259,9 @@ machine would start the same unstarted setup later, after accounting for its
 queue and unavailable dates. A lighter machine queue alone is not a reason to
 delay that setup.
 
-- Machinist setup time: Pre Setting start to Setting complete.
+- Machinist setup time: the first saved Setting checklist start to Setting
+  complete. Existing historical Pre Setting start evidence remains the start
+  for older setups when present.
 - QC wait: Setting complete to QC approval.
 - Machine-start wait: QC approval to the first Production Session start.
 - Setup variance: machinist setup time minus the Setup Time target in Cycle Master.

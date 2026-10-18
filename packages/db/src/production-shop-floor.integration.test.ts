@@ -746,7 +746,7 @@ describe("production and shop-floor workflows", () => {
     await expect(repository.recordShopFloorStage({
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
       machineNumber: cncMachine, operationSetupCode: "1", stage: "presetting", payload: {},
-    })).rejects.toThrow("CNC uses Setting only")
+    })).rejects.toThrow("Use Setting only")
     await repository.recordShopFloorStage({
       jobCardNumber: cncJobCard,
       machineNumber: cncMachine,
@@ -806,6 +806,7 @@ describe("production and shop-floor workflows", () => {
     const workspace = await repository.readJobCardWorkspace({
       organizationId, jobCardNumber: cncJobCard, productionFloorCode: "cnc",
     })
+    expect(workspace.setupTimings[0]?.machinistSetupMinutes).toBeGreaterThanOrEqual(0)
     expect(workspace.events.filter((event) => event.eventType === "rejection"))
       .toEqual([expect.objectContaining({
         rejectionTypeName: "In-process", rejectionReasonName: "Segregated",
@@ -1953,7 +1954,7 @@ describe("production and shop-floor workflows", () => {
       JOIN catalog.items item ON item.id=route.item_id
       WHERE item.uid=$3 AND route.route_code='1' AND setup.setup_number=1`, [organizationId,code,itemUid])
     const start = (jobCardNumber: string, machineNumber: string) => repository.recordShopFloorStage({
-      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, stage: "presetting", payload: {},
+      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, stage: "operator_started", payload: {},
     })
     await start(jobs[0]!, machines[0]!)
     await expect(start(jobs[1]!, machines[1]!)).rejects.toThrow("1 allocated to this department, 1 occupied")
