@@ -18,6 +18,25 @@ and `1,23,456.70`. These separators are interpreted only in quantity fields,
 not in locations or identifiers. RM Inward validates every received quantity as a
 positive number before saving any row and identifies invalid values by CSV row.
 
+## Existing RM locations
+
+Use **Update locations CSV** in RM Inward to update saved receipt locations from
+the View Records download. Job Card and receipt date identify the receipts;
+all receipts for that Job Card on that date receive the same location. Conflicting
+locations for that combination or a row with no matching receipt reject the whole
+upload. Received kg is informational in this action and is never written back.
+Blank locations leave existing values unchanged. Historical receipts on
+cancelled Work Orders can still have their storage location updated.
+
+This action records an audit entry for each changed receipt, creates no receipts,
+and does not change stock, receipt dates, Work Orders or the saved machine plan.
+Locations are read from current saved receipts on the shop-floor screens, so no
+planning recalculation is queued. **Receive RM CSV** continues to record new
+receipts using the normal receiving rules.
+
+RM Inward and Work Order record downloads retain the full stored precision of
+quantity fields, rather than the rounded numbers used for on-screen display.
+
 ## Deduplication
 
 Every CSV or spreadsheet import keeps the first exact business row and skips

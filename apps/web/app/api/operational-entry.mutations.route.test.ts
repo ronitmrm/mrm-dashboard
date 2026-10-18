@@ -13,6 +13,7 @@ const dependencies = vi.hoisted(() => ({
   organizationIdForCode: vi.fn(),
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
+  updateRawMaterialLocations: vi.fn(),
   reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
   upsertWorkOrder: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+    updateRawMaterialLocations: dependencies.updateRawMaterialLocations,
     reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
@@ -554,6 +556,22 @@ describe("production entry mutation API authorization", () => {
         sourceId: expect.stringMatching(/^csv:/),
       }),
     ])
+    dependencies.upsertRawMaterialReceipts.mockClear()
+    dependencies.requestRefresh.mockClear()
+    dependencies.updateRawMaterialLocations.mockResolvedValue({ updated: 1 })
+    const locations = await post("data-import", { ...importBody('Jc No.,Rm Inward Kg,Rm Inward Date,RM Location\nP1479,"1,015.90",09-09-2026,001\n'), importMode: "update_locations" })
+    expect(locations.status).toBe(200)
+    expect(await locations.json()).toMatchObject({ ok: true, rowsUpdated: 1 })
+    expect(dependencies.updateRawMaterialLocations).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", productionFloorCode: "cnc",
+      rows: [{ jobCardNumber: "P1479", receivedOn: "2026-09-09", location: "001" }],
+    })
+    expect(dependencies.upsertRawMaterialReceipts).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+    dependencies.upsertRawMaterialReceipts.mockRejectedValue(new ShopFloorConflictError('RM receipt rejected: Work Order for Job Card "P1479" is cancelled.'))
+    const cancelled = await post("data-import", importBody())
+    expect(cancelled.status).toBe(409)
+    expect(await cancelled.json()).toMatchObject({ error: expect.stringContaining('P1479" is cancelled') })
   })
 
   it("saves entered Work Order required RM from the form and CSV", async () => {
