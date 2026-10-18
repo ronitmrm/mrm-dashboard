@@ -8,6 +8,10 @@ A feature is unit-specific only when that restriction is explicitly requested
 and recorded in its lifecycle definition. Each unit retains its own records,
 masters, machines, permissions and configured production calendar.
 
+Production pages use the same layout and workflow across all four units, with
+CNC as the reference. Planning Control contains the shared RM status, session
+flag and workflow exception review; it has no unit-specific tool/fixture panel.
+
 ## Work order job cards
 
 Each Job Card identifies one production order line. Multiple Job Cards may share

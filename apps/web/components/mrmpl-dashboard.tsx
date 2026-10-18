@@ -3579,7 +3579,6 @@ function DashboardContent({
     return (
       <PlanningControlPanel
         productionFloorCode={productionFloorCode}
-        payload={payload}
         productionControl={productionControl}
         submitAction={submitAction}
       />
@@ -16278,17 +16277,13 @@ function SetupChecklistMasterForm({
 }
 function PlanningControlPanel({
   productionFloorCode,
-  payload,
   productionControl,
   submitAction,
 }: {
   productionFloorCode: ProductionFloorCode
-  payload: DashboardPayload
   productionControl: DashboardPayload
   submitAction: SubmitAction
 }) {
-  const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers)
-
   return (
     <section className="grid gap-4">
       <PlanningControlReview
@@ -16316,10 +16311,6 @@ function PlanningControlPanel({
           }, { throwOnError: true })
         }}
       />
-      {(productionFloorCode === "conventional" ||
-        productionFloorCode === "conventional-02") && (
-        <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
-      )}
     </section>
   )
 }
@@ -16551,27 +16542,6 @@ function correctionProductionUnitLabel(row: DashboardPayload) {
   return (
     productionFloors.find((floor) => floor.code === floorCode)?.shortLabel ??
     "Unassigned"
-  )
-}
-
-function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
-  return (
-    <SectionCard>
-      <CardHeader>
-        <CardTitle>Next Tool / Fixture Number</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <MetricSummary
-          scope="Tool and fixture recommendations · current records"
-          items={rows.map((row) => ({
-            description: `${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`,
-            label: str(row.category),
-            tone: "information",
-            value: str(row.recommendedNumber || row.nextNew),
-          }))}
-        />
-      </CardContent>
-    </SectionCard>
   )
 }
 
@@ -20569,14 +20539,6 @@ function uniqueValues(values: string[]) {
   return [...new Set(values.map(str).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true })
   )
-}
-
-function numValue(row: DashboardPayload, ...keys: string[]) {
-  for (const key of keys) {
-    const value = Number(row[key])
-    if (Number.isFinite(value)) return value
-  }
-  return 0
 }
 
 function tableColumns(rows: DashboardPayload[]) {
