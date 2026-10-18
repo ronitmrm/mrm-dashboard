@@ -302,6 +302,10 @@ threshold removes it automatically. Required, received and pending kilograms ret
 their exact values. The Job Card's RM tab shows its material specification, totals,
 receipt ledger and whether a remaining balance is within the 5% allowance. An
 unknown requirement is shown there as missing Blank Piece Weight, never as complete.
+The receipt ledger shows received kilograms. **Pending RM** in the Job Card
+summary is the amount still due against the requirement after rejections. A
+receipt's saved remaining-stock quantity is not an outstanding receipt balance
+and is omitted from this ledger to avoid confusing the two.
 
 Item Complete on any setup requires usable RM of at least 95% of the requirement
 or an explicit Planner **Accept short RM** decision for a larger shortage, with a
