@@ -1,5 +1,13 @@
 # Production Sessions
 
+## Production unit scope
+
+Shared production features and fixes apply to Conventional-01, Conventional-02,
+CNC-01 and Forging, including when a request is explained using a CNC example.
+A feature is unit-specific only when that restriction is explicitly requested
+and recorded in its lifecycle definition. Each unit retains its own records,
+masters, machines, permissions and configured production calendar.
+
 ## Work order job cards
 
 Each Job Card identifies one production order line. Multiple Job Cards may share
