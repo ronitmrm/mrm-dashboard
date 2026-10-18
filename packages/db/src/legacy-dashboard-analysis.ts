@@ -1469,6 +1469,7 @@ function buildProductionControl({
         : rmReceived ? "Received" : "Waiting",
       rmInwardDate,
       rmInwardKg,
+      rmLocation: rmInward?.rmLocations.join(" · ") ?? "",
       rmRejectedKg: round(rmRejectedKg),
       rmUsableKg: round(rmUsableKg),
       rmPlanningAction,
@@ -3139,24 +3140,27 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
 }
 
 function accumulatedRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
-  const byJc = new Map<string, Record<string, unknown>>();
+  const byJc = new Map<string, Record<string, unknown> & { rmLocations: string[] }>();
   for (const row of rows) {
     const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
     if (!key) continue;
     const receivedDate = parseDate(rowValue(row, "RM I/W DATE", "rmInwardDate"));
     const receivedKg = safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg"));
+    const rmLocation = rowText(row, "rmLocation");
     const current = byJc.get(key);
     if (!current) {
       byJc.set(key, {
         ...row,
         rmInwardDate: receivedDate,
         rmInwardKg: receivedKg,
+        rmLocations: rmLocation ? [rmLocation] : [],
         rmReceipts: [{ receivedDate, receivedKg }],
       });
       continue;
     }
     current.rmInwardDate = minDateValue(rowText(current, "rmInwardDate"), receivedDate);
     current.rmInwardKg = safeNumber(rowValue(current, "rmInwardKg")) + receivedKg;
+    if (rmLocation && !current.rmLocations.includes(rmLocation)) current.rmLocations.push(rmLocation);
     const receipts = Array.isArray(current.rmReceipts) ? current.rmReceipts : [];
     current.rmReceipts = [...receipts, { receivedDate, receivedKg }];
   }
@@ -3825,6 +3829,7 @@ function initializeMachinePlanDetails(
         operationWeight: safeNumber(rowValue(cycle ?? {}, "operationWeight", "OPERATION WT.", "OPERATION WEIGHT")),
         stageWeight: safeNumber(rowValue(route ?? {}, "stageWeight", "STAGE WT.", "STAGE WEIGHT")),
         rmStatus: rowText(row, "rmStatus"),
+        rmLocation: rowText(row, "rmLocation"),
         rmInwardKg: safeNumber(rowValue(row, "rmInwardKg")),
         rmRejectedKg: safeNumber(rowValue(row, "rmRejectedKg")),
         rmUsableKg: safeNumber(rowValue(row, "rmUsableKg")),
@@ -4001,7 +4006,7 @@ function machinePlanDetails(...args: Parameters<typeof initializeMachinePlanDeta
   return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows, prepared.machineUnavailableWindows, toolingAvailability);
 }
 
-const planningPresentationFields = ["setupName", "description", "fgPoNo", "cycleTime", "loadingUnloading", "operationWeight", "planningAssumption"] as const;
+const planningPresentationFields = ["setupName", "description", "fgPoNo", "rmLocation", "cycleTime", "loadingUnloading", "operationWeight", "planningAssumption"] as const;
 function planningPresentationKey(row: Record<string, unknown>) {
   return [rowText(row, "jcNo"), canonicalKey(row.partCode), rowText(row, "optionNumber"), rowText(row, "setupNo")].join("|");
 }
