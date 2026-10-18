@@ -2091,13 +2091,13 @@ test("material review blocks completion, releases only selected setups, and clea
   await planning.upsertRouteOption({ itemUid, organizationId, routeCode,
     setups: [1, 2, 3].map(n => ({ operationCode: 'WAIT-' + n, sequence: n, setupNumber: n })) });
   await planning.selectRoute({ jobCardNumber, organizationId, routeCode });
-  const receipt = (sourceId: string, quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
-    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
+  const receipt = (sourceId: string, quantityKg: number, rmLocation?: string) => repository.upsertRawMaterialReceipt({ organizationId,
+    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber, rmLocation }, quantityKg, receiptNumber: rmPoNumber,
     receivedOn: '2026-10-12', sourceId });
   const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
   expect(await review()).toEqual([]);
-  await receipt('rm-wait-first-' + suffix, 25.11);
+  await receipt('rm-wait-first-' + suffix, 25.11, 'Rack A3');
   expect(await review()).toMatchObject([{ requiredKg: 50.22, receivedKg: 25.11, pendingKg: 25.11, shortAccepted: false }]);
   for (const [index, machineNumber] of machines.entries()) {
     await planning.upsertMachine({ machineNumber, organizationId });
@@ -2132,6 +2132,7 @@ test("material review blocks completion, releases only selected setups, and clea
   const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber });
   expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receivedKg: 50.22, pendingKg: 0 });
   expect(workspace.rawMaterialReceipts).toHaveLength(2);
+  expect(workspace.rawMaterialReceipts).toMatchObject([{ rmLocation: 'Rack A3' }, { rmLocation: null }]);
   expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
 });
 

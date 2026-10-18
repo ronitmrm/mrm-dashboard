@@ -125,6 +125,7 @@ describe("dashboard-state route", () => {
     const csv = await response.text()
 
     expect(response.status).toBe(200)
+    expect(csv.split(/\r?\n/)[0]).toContain("rmLocation")
     expect(csv).toContain("JC-PENDING")
     expect(csv).not.toContain("JC-ALREADY-INWARDED")
     expect(dashboardMocks.rawMaterialInwardTemplateRows).toHaveBeenCalledWith(
