@@ -542,7 +542,7 @@ describe("production entry mutation API authorization", () => {
       "entries.cnc.rm_inward.read",
       "entries.cnc.rm_inward.import",
     ])
-    const imported = await post("data-import", importBody("Rm Po No.,Rm Inward Kg,Rm Inward Date,RM Location\nRM-1,12,09-09-2026,001\n"))
+    const imported = await post("data-import", importBody('Rm Po No.,Rm Inward Kg,Rm Inward Date,RM Location\nRM-1,"1,015.90",09-09-2026,001\n'))
     expect(imported.status).toBe(200)
     expect(await imported.json()).toMatchObject({ ok: true, inserted: 1 })
     expect(dependencies.upsertRawMaterialReceipts).toHaveBeenCalledWith([
@@ -550,7 +550,7 @@ describe("production entry mutation API authorization", () => {
         payload: expect.objectContaining({ rmLocation: "001" }),
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
-        quantityKg: 12,
+        quantityKg: 1015.9,
         sourceId: expect.stringMatching(/^csv:/),
       }),
     ])
@@ -570,10 +570,10 @@ describe("production entry mutation API authorization", () => {
       sourcePayload: expect.objectContaining({ requiredRmKg: 125.5 }),
     }))
     const body = { entryType: "work_order", productionFloorCode: "cnc", fileName: "work_order.csv",
-      fileBase64: Buffer.from("Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-2,P-1,1000,130.25\n").toString("base64") }
+      fileBase64: Buffer.from('Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-2,P-1,"1,000","1,300.25"\n').toString("base64") }
     expect((await post("data-import", body)).status).toBe(200)
     expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
-      sourcePayload: expect.objectContaining({ requiredRmKg: 130.25 }),
+      sourcePayload: expect.objectContaining({ requiredRmKg: 1300.25 }),
     }))
     dependencies.upsertWorkOrder.mockClear()
     const invalid = await post("data-import", { ...body,

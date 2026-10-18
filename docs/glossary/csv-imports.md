@@ -12,6 +12,12 @@ Dashboard template uploads accept LF, CRLF, and CR line endings, including
 quoted multiline cells. A template without data rows is rejected instead of
 reporting a successful zero-row import.
 
+RM Inward kilograms and Work Order piece/kg quantities accept plain numbers and
+standard or Indian thousands separators used in downloads, such as `1,015.90`
+and `1,23,456.70`. These separators are interpreted only in quantity fields,
+not in locations or identifiers. RM Inward validates every received quantity as a
+positive number before saving any row and identifies invalid values by CSV row.
+
 ## Deduplication
 
 Every CSV or spreadsheet import keeps the first exact business row and skips
