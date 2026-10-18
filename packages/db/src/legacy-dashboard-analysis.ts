@@ -8828,59 +8828,59 @@ function productionOutputTableRows(productionRows: ProductionRow[]) {
 }
 
 function shopFloorRowIsComplete(row: Record<string, unknown>): ReturnType<typeof calculateShopFloorRowIsComplete> {
-  return planningRowFact(row, "shopFloorRowIsComplete", () => calculateShopFloorRowIsComplete(row));
+  return planningRowFact(row, "shopFloorRowIsComplete", calculateShopFloorRowIsComplete);
 }
 
 function priorityQueueState(row: Record<string, unknown>): ReturnType<typeof calculatePriorityQueueState> {
-  return planningRowFact(row, "priorityQueueState", () => calculatePriorityQueueState(row));
+  return planningRowFact(row, "priorityQueueState", calculatePriorityQueueState);
 }
 
 function lockedProductionStartDate(row: Record<string, unknown>): ReturnType<typeof calculateLockedProductionStartDate> {
-  return planningRowFact(row, "lockedProductionStartDate", () => calculateLockedProductionStartDate(row));
+  return planningRowFact(row, "lockedProductionStartDate", calculateLockedProductionStartDate);
 }
 
 function scheduleRowKey(row: Record<string, unknown>): ReturnType<typeof calculateScheduleRowKey> {
-  return planningRowFact(row, "scheduleRowKey", () => calculateScheduleRowKey(row));
+  return planningRowFact(row, "scheduleRowKey", calculateScheduleRowKey);
 }
 
 function toolingHeld(row: Record<string, unknown>): ReturnType<typeof calculateToolingHeld> {
-  return planningRowFact(row, "toolingHeld", () => calculateToolingHeld(row));
+  return planningRowFact(row, "toolingHeld", calculateToolingHeld);
 }
 
 function isMovablePlannedRow(row: Record<string, unknown>): ReturnType<typeof calculateIsMovablePlannedRow> {
-  return planningRowFact(row, "isMovablePlannedRow", () => calculateIsMovablePlannedRow(row));
+  return planningRowFact(row, "isMovablePlannedRow", calculateIsMovablePlannedRow);
 }
 
 function isAutomaticUnstartedPlan(row: Record<string, unknown>): ReturnType<typeof calculateIsAutomaticUnstartedPlan> {
-  return planningRowFact(row, "isAutomaticUnstartedPlan", () => calculateIsAutomaticUnstartedPlan(row));
+  return planningRowFact(row, "isAutomaticUnstartedPlan", calculateIsAutomaticUnstartedPlan);
 }
 
 function priorityApprovalMode(row: Record<string, unknown>): ReturnType<typeof calculatePriorityApprovalMode> {
-  return planningRowFact(row, "priorityApprovalMode", () => calculatePriorityApprovalMode(row));
+  return planningRowFact(row, "priorityApprovalMode", calculatePriorityApprovalMode);
 }
 
 function planOverrideInterruptedSetups(row: Record<string, unknown>): ReturnType<typeof calculatePlanOverrideInterruptedSetups> {
-  return planningRowFact(row, "planOverrideInterruptedSetups", () => calculatePlanOverrideInterruptedSetups(row));
+  return planningRowFact(row, "planOverrideInterruptedSetups", calculatePlanOverrideInterruptedSetups);
 }
 
 function priorityInterruptedSetups(row: Record<string, unknown>): ReturnType<typeof calculatePriorityInterruptedSetups> {
-  return planningRowFact(row, "priorityInterruptedSetups", () => calculatePriorityInterruptedSetups(row));
+  return planningRowFact(row, "priorityInterruptedSetups", calculatePriorityInterruptedSetups);
 }
 
 function priorityQueueBeforeSetups(row: Record<string, unknown>): ReturnType<typeof calculatePriorityQueueBeforeSetups> {
-  return planningRowFact(row, "priorityQueueBeforeSetups", () => calculatePriorityQueueBeforeSetups(row));
+  return planningRowFact(row, "priorityQueueBeforeSetups", calculatePriorityQueueBeforeSetups);
 }
 
 function machineUnavailableHasQueuePlacement(row: Record<string, unknown>): ReturnType<typeof calculateMachineUnavailableHasQueuePlacement> {
-  return planningRowFact(row, "machineUnavailableHasQueuePlacement", () => calculateMachineUnavailableHasQueuePlacement(row));
+  return planningRowFact(row, "machineUnavailableHasQueuePlacement", calculateMachineUnavailableHasQueuePlacement);
 }
 
 function machineUnavailableQueueBeforeSetupsForSort(row: Record<string, unknown>): ReturnType<typeof calculateMachineUnavailableQueueBeforeSetupsForSort> {
-  return planningRowFact(row, "machineUnavailableQueueBeforeSetupsForSort", () => calculateMachineUnavailableQueueBeforeSetupsForSort(row));
+  return planningRowFact(row, "machineUnavailableQueueBeforeSetupsForSort", calculateMachineUnavailableQueueBeforeSetupsForSort);
 }
 
 function queueReadyDate(row: Record<string, unknown>): ReturnType<typeof calculateQueueReadyDate> {
-  return planningRowFact(row, "queueReadyDate", () => calculateQueueReadyDate(row));
+  return planningRowFact(row, "queueReadyDate", calculateQueueReadyDate);
 }
 
 type PlanningRowFacts = {
@@ -8909,19 +8909,19 @@ function withPlanningFacts<Result>(calculate: () => Result): Result {
     currentPlanningFacts = previous;
   }
 }
-function planningRowFact<Key extends keyof PlanningRowFacts>(row: Record<string, unknown>, key: Key, calculate: () => PlanningRowFacts[Key]): PlanningRowFacts[Key] {
+function planningRowFact<Key extends keyof PlanningRowFacts>(row: Record<string, unknown>, key: Key, calculate: (row: Record<string, unknown>) => PlanningRowFacts[Key]): PlanningRowFacts[Key] {
   const protectedRow = activeSimulationResources?.protectedMutations.get(row);
   if (protectedRow) {
     const cached = protectedRow.state.facts?.[key];
     if (cached !== undefined) return cached;
-    const value = calculate();
+    const value = calculate(row);
     // A fact may perform the first fallback lookup. Store it against the
     // resulting complete state, not the state from before that lookup.
     const facts = protectedRow.state.facts ??= {};
     facts[key] = value;
     return value;
   }
-  if (!currentPlanningFacts) return calculate();
+  if (!currentPlanningFacts) return calculate(row);
   let facts = currentPlanningFacts.get(row);
   if (!facts) {
     facts = {};
@@ -8929,7 +8929,7 @@ function planningRowFact<Key extends keyof PlanningRowFacts>(row: Record<string,
   }
   const cached = facts[key];
   if (cached !== undefined) return cached;
-  return facts[key] = calculate();
+  return facts[key] = calculate(row);
 }
 
 function refreshSetupDependencyReadyDates(
