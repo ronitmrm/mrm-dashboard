@@ -657,7 +657,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "rework_received",
     title: "Rework Received",
-    description: "Create the next revision of the same Job Card. Reworkable pieces = returned quantity minus replacement quantity. Replacement pieces require new RM; every revision requires manual route selection.",
+    description: "Create the next revision of the same Job Card. Weight-converted returns allow up to 5% above dispatched pieces. Return Reference is generated on save. Reworkable pieces = returned quantity minus replacement quantity. Replacement pieces require new RM; every revision requires manual route selection.",
     fields: [
       { name: "originalJobCardNumber", label: "Dispatched Job Card / Revision / Activity", required: true },
       { name: "quantity", label: "Returned Quantity (pieces)", type: "number", min: "1", step: "1", required: true },
@@ -665,7 +665,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "replacementRequiredRmKg", label: "New RM Required for Replacement (kg)", type: "number", min: "0.001", step: "0.001" },
       { name: "replacementRmPoNo", label: "Replacement RM PO (blank uses original RM PO)" },
       { name: "receivedOn", label: "Receipt Date", type: "date", required: true },
-      { name: "receiptReference", label: "Return Reference", required: true },
+      { name: "receiptReference", label: "Return Reference", readOnly: true, placeholder: "Generated on save" },
       { name: "reason", label: "Rework Reason", required: true },
     ],
   },

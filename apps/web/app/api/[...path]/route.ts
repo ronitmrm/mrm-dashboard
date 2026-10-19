@@ -2332,11 +2332,11 @@ async function post(request: NextRequest, context: RouteContext) {
             replacementQuantity: Number(payload.replacementQuantity || 0),
             replacementRequiredRmKg: optionalNumeric(payload.replacementRequiredRmKg),
             replacementRmPoNo: optionalText(payload.replacementRmPoNo),
-            receivedOn: text(payload.receivedOn), receiptReference: text(payload.receiptReference), reason: text(payload.reason),
+            receivedOn: text(payload.receivedOn), reason: text(payload.reason),
           }))
         return json(await withPlanningRefresh(request, path, body, {
           ...result, ok: true, rowsUpdated: 1,
-          savedText: `${result.rootJobCardNumber} · Rev ${result.revisionNumber} received. Reworkable pieces await route selection; replacement pieces await new RM.`,
+          savedText: `${result.rootJobCardNumber} · Rev ${result.revisionNumber} received. Return Reference: ${result.receiptReference}. Reworkable pieces await route selection; replacement pieces await new RM.`,
         }))
       }
       if (postgresMasterEntryTypes.has(entryType)) {
