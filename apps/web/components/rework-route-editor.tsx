@@ -3,13 +3,79 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@workspace/ui/components/button"
 import { Dialog, DialogTrigger } from "@workspace/ui/components/dialog"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { Textarea } from "@workspace/ui/components/textarea"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { Plus, Trash2 } from "lucide-react"
 import { FormGrid, FormSection, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
+
+function InspectionParameterFields({
+  name,
+  setupNumber,
+}: {
+  name: string
+  setupNumber: number
+}) {
+  const [parameters, setParameters] = useState([0])
+
+  return (
+    <FieldSet className="gap-3 sm:col-span-2 xl:col-span-3">
+      <FieldLegend variant="label">
+        First-piece &amp; In-process Checks
+      </FieldLegend>
+      <FieldDescription id={`${name}-help`}>
+        Add each parameter separately. Each is recorded as OK / Not OK.
+      </FieldDescription>
+      <FieldGroup className="gap-3">
+        {parameters.map((id, index) => (
+          <Field key={id}>
+            <FieldLabel htmlFor={`${name}-${id}`}>
+              Parameter {index + 1}
+            </FieldLabel>
+            <div className="flex items-center gap-2">
+              <Input
+                id={`${name}-${id}`}
+                name={name}
+                required
+                aria-describedby={`${name}-help`}
+                placeholder="e.g. Thread gauge passes freely"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={parameters.length === 1}
+                aria-label={`Remove parameter ${index + 1} from setup ${setupNumber}`}
+                onClick={() =>
+                  setParameters((current) =>
+                    current.filter((value) => value !== id)
+                  )
+                }
+              >
+                <Trash2 data-icon="inline-start" />
+                Remove
+              </Button>
+            </div>
+          </Field>
+        ))}
+      </FieldGroup>
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setParameters((current) => [...current, Math.max(...current) + 1])
+          }
+        >
+          <Plus data-icon="inline-start" />
+          Add parameter
+        </Button>
+      </div>
+    </FieldSet>
+  )
+}
 
 export function ReworkRouteEditor({ jobCardNumber, machineFamilies, toolingCodes, submitAction }: {
   jobCardNumber: string
@@ -32,7 +98,7 @@ export function ReworkRouteEditor({ jobCardNumber, machineFamilies, toolingCodes
         cycleTimeSeconds: Number(value("cycleTimeSeconds")), setupTimeMinutes: Number(value("setupTimeMinutes")),
         stageWeight: Number(value("stageWeight")), operationWeight: Number(value("operationWeight")) || undefined,
         fixture: value("fixture"), tooling: value("tooling"), foamTool: value("foamTool"),
-        inspectionChecks: value("inspectionChecks").split(/\r?\n/).map(line => line.trim()).filter(Boolean) }
+        inspectionChecks: form.getAll(`${id}-inspectionChecks`).map(value => String(value).trim()).filter(Boolean) }
     })
     setPending(true)
     setError("")
@@ -64,7 +130,7 @@ export function ReworkRouteEditor({ jobCardNumber, machineFamilies, toolingCodes
                 <Field><FieldLabel htmlFor={name("stageWeight")}>Piece Weight at Setup (grams)</FieldLabel><Input id={name("stageWeight")} name={name("stageWeight")} type="number" min="0.001" step="any" required /></Field>
                 <Field><FieldLabel htmlFor={name("operationWeight")}>Weight after Operation (grams, optional)</FieldLabel><Input id={name("operationWeight")} name={name("operationWeight")} type="number" min="0.001" step="any" /></Field>
                 {([ ["fixture", "Fixture"], ["tooling", "Tooling"], ["foamTool", "Foam Tool"] ] as const).map(([key, label]) => <Field key={key}><FieldLabel htmlFor={name(key)}>{label} (optional)</FieldLabel>{toolingCodes.length ? <SearchableSelect id={name(key)} name={name(key)} defaultValue=""><option value="">None required</option>{toolingCodes.map(value => <option key={value} value={value}>{value}</option>)}</SearchableSelect> : <Input id={name(key)} name={name(key)} placeholder="Existing Store Asset Code, if required" />}</Field>)}
-                <Field className="sm:col-span-2 xl:col-span-3"><FieldLabel htmlFor={name("inspectionChecks")}>First-piece &amp; In-process Checks</FieldLabel><Textarea id={name("inspectionChecks")} name={name("inspectionChecks")} required placeholder="One check per line, e.g. Thread gauge passes freely. Each check is recorded as OK / Not OK." /></Field>
+                <InspectionParameterFields name={name("inspectionChecks")} setupNumber={index + 1} />
               </FormGrid>
               {setups.length > 1 ? <Button type="button" variant="ghost" size="sm" onClick={() => setSetups(current => current.filter(value => value !== id))}><Trash2 data-icon="inline-start" />Remove Setup {index + 1}</Button> : null}
             </FormSection>
