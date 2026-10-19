@@ -5617,6 +5617,11 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
     return (candidate.sortState = state);
   };
   const compareCandidates = (a: QueueCandidate, b: QueueCandidate) => {
+    // Simulation heaps need only the already-cached row comparison. Preserve
+    // normal planning's frontier comparison cache for its stable-sort path.
+    if (activeSimulationResources)
+      return Number(candidateHeld(b)) - Number(candidateHeld(a)) ||
+        candidateDate(a).localeCompare(candidateDate(b)) || compareQueueRows(a.row, b.row);
     const state = candidateSortState(a),
       other = candidateSortState(b);
     const cached = state.comparisons.get(other.id);
@@ -5855,7 +5860,11 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       if (!scalarCertified) pendingGuards.add(candidate);
       replacements.push(candidate);
       candidates[item.candidateIndex] = candidate;
-      frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
+      if (activeSimulationResources) {
+        // Preserve the original first-read order: alias maps are captured lazily.
+        candidateHeld(candidate);
+        candidateDate(candidate);
+      } else frontierStates[item.candidateIndex] = candidateSortState(candidate).id;
     }
     changedQueues.clear();
     if (!projectionAttempted && afterFirstPop) {
@@ -5960,7 +5969,9 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
       }
       // Unsafe cohorts retain the original sequence, stable native sort and
       // exact frontier replay, including non-transitive pair-specific rules.
-      const frontier = frontierStates.join(",");
+      const frontier = activeSimulationResources
+        ? candidates.map(candidate => candidateSortState(candidate).id).join(",")
+        : frontierStates.join(",");
       const cachedWinner = activePlanningKernel?.frontiers.get(frontier);
       if (cachedWinner !== undefined) winner = cachedWinner;
       else {
@@ -8976,10 +8987,16 @@ function rescheduleMachineQueues(...args: Parameters<typeof calculateRescheduleM
     const [details, calendar, machineRows] = args;
     // Replay the same rows, complete state and fallback maps within the same
     // master-machine and filtered-simulation context.
-    const key = JSON.stringify([kernel.identity(calendar), kernel.identity(machineRows), kernel.identity(kernel.simulationJobs), currentPlanningProductionDate(calendar), details.map(row => [
-      kernel.identity(row), planningRowVersion(row), kernel.identity(normalizedRowCache.get(row)),
-      Object.hasOwn(row, "toolingNextAvailableDate"), row.toolingNextAvailableDate,
-    ])]);
+    const key = JSON.stringify([kernel.identity(calendar), kernel.identity(machineRows), kernel.identity(kernel.simulationJobs), currentPlanningProductionDate(calendar), details.map(row => {
+      const protectedRow = activeSimulationResources!.protectedMutations.get(row);
+      const normalized = normalizedRowCache.get(row);
+      // The complete protected state includes slot dates, own-field presence
+      // and the captured alias map. Keep row identity for replay bindings.
+      if (protectedRow && protectedRow.state.normalized === normalized)
+        return [kernel.identity(row), protectedRow.state.version, normalized ? 0 : protectedRow.lease];
+      return [kernel.identity(row), planningRowVersion(row), kernel.identity(normalized),
+        Object.hasOwn(row, "toolingNextAvailableDate"), row.toolingNextAvailableDate];
+    })]);
     const cached = kernel.queuePasses.get(key);
     if (cached) {
       for (const change of cached.changes) {
