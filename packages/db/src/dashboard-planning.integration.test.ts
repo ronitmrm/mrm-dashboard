@@ -120,8 +120,8 @@ describe("dashboard planning writes", () => {
     const part = `REWORK-${suffix}`
     const original = `JC-REWORK-${suffix}`
     const parent = await repository.upsertWorkOrder({ organizationId, itemUid: part,
-      jobCardNumber: original, workOrderNumber: original, orderedQuantity: 100,
-      sourcePayload: { jcNo: original, partCode: part, orderPcs: 100, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
+      jobCardNumber: original, workOrderNumber: original, orderedQuantity: 200,
+      sourcePayload: { jcNo: original, partCode: part, orderPcs: 200, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
     await repository.upsertRouteOption({ organizationId, itemUid: part, productionFloorCode: "cnc",
       routeCode: "1", setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
@@ -140,7 +140,7 @@ describe("dashboard planning writes", () => {
     expect(rework.jobCardNumber).toBe(`${original} · Rev 1 · Rework`)
     const read = (revisionReference = rework.jobCardNumber) => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: original, revisionReference })
     const waiting = await read()
-    expect(waiting.revisions.map(row => [row.revisionLabel, row.quantity])).toEqual([["Original", 100], ["Rev 1 · Replacement", 8], ["Rev 1 · Rework", 12]])
+    expect(waiting.revisions.map(row => [row.revisionLabel, row.quantity])).toEqual([["Original", 200], ["Rev 1 · Replacement", 8], ["Rev 1 · Rework", 12]])
     expect(waiting.jobCard.effectiveRouteSource).toBe("planner_required")
     expect(waiting.setups).toEqual([])
     await repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: "1" })
@@ -171,6 +171,10 @@ describe("dashboard planning writes", () => {
     const atLimit = await repository.receiveRework({ ...receipt, quantity: 85, replacementQuantity: 0 })
     expect(atLimit).toMatchObject({ revisionNumber: 3, receiptReference: `RET-${original}-R3`, activities: [expect.objectContaining({ quantity: 85 })] })
     expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 'test', 'dispatchApprovals', $3)`,
+      [organizationId, parent.id, randomUUID()])
+    await expect(repository.receiveRework({ ...receipt, quantity: 1, replacementQuantity: 0 })).rejects.toThrow("Record the actual dispatched quantity")
   })
 
   test("updates only Required RM on existing unit orders without queuing planning", async () => {

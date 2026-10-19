@@ -9,10 +9,11 @@ on save: `RET-<base Job Card>-R<revision number>`. Both activities of a mixed re
 share this reference in their records and history.
 Partial and full returns are supported. Weight-converted piece quantities allow
 a 5% excess: cumulative returns against the dispatched activity cannot exceed
-105% of its recorded dispatch quantity (ordered quantity for historical
-quantity-less dispatches), rounded down to whole pieces. The allowance applies
-once to the total, not separately to each receipt. Smaller partial returns remain
-valid; there is no 95% minimum.
+105% of its recorded dispatch quantity, rounded down to whole pieces. Ordered
+quantity is never used as a substitute. If any approved dispatch has no piece
+quantity, its actual dispatched quantity must be recorded before receiving a
+return. The allowance applies once to the total, not separately to each receipt.
+Smaller partial returns remain valid; there is no 95% minimum.
 
 The Job Card number stays the same. Original production is **Original** (revision
 0); returns create **Rev 1**, **Rev 2**, etc. A return records the quantity that

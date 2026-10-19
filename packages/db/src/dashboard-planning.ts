@@ -1088,9 +1088,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           throw new ShopFloorConflictError("Enter a valid receipt date that is not in the future.")
         }
         const parent = await client.query<{
-          id: string; item_id: string; job_card_number: string; ordered_quantity: string
+          id: string; item_id: string; job_card_number: string
           work_order_number: string; source_payload: Record<string, unknown>; status: string
-        }>(`SELECT id, item_id, job_card_number, ordered_quantity::text, work_order_number, source_payload, status
+        }>(`SELECT id, item_id, job_card_number, work_order_number, source_payload, status
            FROM manufacturing.work_orders WHERE organization_id = $1
              AND lower(job_card_number) = lower($2) FOR UPDATE`, [input.organizationId, original])
         const order = parent.rows[0]
@@ -1111,7 +1111,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `SELECT COALESCE(sum(quantity), 0)::text AS quantity, COALESCE(bool_or(quantity IS NULL), false) AS legacy
            FROM manufacturing.dispatch_approval_events WHERE organization_id = $1 AND work_order_id = $2
              AND decision = 'approved' AND reversed_at IS NULL`, [input.organizationId, order.id])
-        const dispatched = dispatch.rows[0]!.legacy ? Number(order.ordered_quantity) : Number(dispatch.rows[0]!.quantity)
+        if (dispatch.rows[0]!.legacy) {
+          throw new ShopFloorConflictError("Record the actual dispatched quantity for this Job Card before receiving rework. Order quantity cannot be used for returns.")
+        }
+        const dispatched = Number(dispatch.rows[0]!.quantity)
         if (dispatched <= 0) throw new ShopFloorConflictError("Only a dispatched Job Card can receive rework.")
         const prior = await client.query<{ ordered_quantity: string }>(
           `SELECT ordered_quantity::text FROM manufacturing.work_orders
