@@ -8,18 +8,38 @@ quantity, receipt date, unique return reference and reason. Partial and full
 returns are supported. Total returns against that card cannot exceed its recorded
 dispatch quantity (ordered quantity for historical quantity-less dispatches).
 
-Each receipt creates a linked Job Card (`original/RW1`, `original/RW2`, …) for
-exactly the returned quantity. Original orders, output, completion dates and
-dispatch history remain unchanged. Rework output and redispatch belong only to
-the linked card and do not add to original order fulfilment. A repeat return can
-reference the dispatched rework card.
+The Job Card number stays the same. Original production is **Original** (revision
+0); returns create **Rev 1**, **Rev 2**, etc. A return records the quantity that
+can be reworked and the quantity rejected beyond rework. These add to the total
+return quantity. Rejected pieces require replacement production and a separately
+entered positive Required RM (kg). One mixed return creates one revision with
+separate Rework and Replacement activity records. Each activity's reference
+includes the base Job Card, revision and disposition so operational tasks, reports
+and sessions remain unambiguous. References identify activity, not new orders.
 
-Rework starts in Part Readiness with **Rework — Route Selection Required** in
-Planning Control. Only the planner's explicit route selection releases it for
-planning, even when one route exists. Normal Job Cards retain automatic sole-route
-selection. Returned pieces supply the rework material; no new RM receipt or
-Required RM weight is needed. Existing per-setup first-piece and in-process
-inspection, production, completion and partial/full dispatch rules apply.
+Revision numbering is shared by the entire Job Card family. A repeat return must
+identify the original or revised activity that dispatched those pieces. Quantities
+already returned against that activity cannot be returned again. Original orders,
+output, dates and dispatch remain unchanged; revised output never increases the
+original order's recorded fulfilment.
+
+Reworkable pieces start in Part Readiness. Replacement pieces await new RM
+received against their own revision/activity; earlier RM receipts cannot satisfy
+them. Both activities require explicit planner route selection, even for a sole
+route, and are flagged in Planning Control. Only reworkable pieces bypass the
+new-RM requirement. Original Job Cards retain automatic sole-route selection.
+Existing per-setup first-piece/in-process inspection, production, completion and
+partial/full dispatch rules apply independently to each activity.
+
+The register shows one row per base Job Card and the current revision's status.
+Its quantity and progress describe the current revision; mixed-activity dates
+are viewed on the selected activity rather than blended. Earlier open work is
+flagged. Original order totals exclude revised quantities.
+The detail workspace lists all revisions with reason, quantity, status and dates.
+Selecting an activity scopes every tab, report, session, RM balance and dispatch
+to that activity. **All Revisions** is a labelled history, never combined progress
+or fulfilment. No selected revision may inherit completed work or inspection from
+another revision.
 
 ## Job Card Register
 

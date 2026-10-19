@@ -1331,7 +1331,8 @@ function buildProductionControl({
     const availableOptions = routeOptionsByPart.get(partKey) ?? [];
     const optionNumbers = availableOptions.map((option) => rowText(option, "optionNumber"));
     const isRework = rowValue(row, "isRework") === true;
-    const effectiveOption = routeChangeOption || (isRework ? "" : optionNumber) || selectedOptionNumber || (!isRework && optionNumbers.length === 1 ? optionNumbers[0]! : "");
+    const isRevision = rowValue(row, "isRevision") === true;
+    const effectiveOption = routeChangeOption || (isRevision ? "" : optionNumber) || selectedOptionNumber || (!isRevision && optionNumbers.length === 1 ? optionNumbers[0]! : "");
     const allSelectedRoutes = routeGroups.get([partKey, effectiveOption].join("|")) ?? [];
     const selectedRoutes = routeChangeRemainingSetups.length
       ? allSelectedRoutes.filter((route) => {
@@ -1341,8 +1342,8 @@ function buildProductionControl({
       : allSelectedRoutes;
     const rmInward = rmInwardByJc.get(canonicalKey(jcNo));
     const rawMaterialRejection = rawMaterialRejectionByJc.get(canonicalKey(jcNo));
-    const routeStatus = !effectiveOption && (optionNumbers.length > 1 || isRework && optionNumbers.length > 0)
-      ? (isRework ? "Rework — Route Selection Required" : "Select option")
+    const routeStatus = !effectiveOption && (optionNumbers.length > 1 || isRevision && optionNumbers.length > 0)
+      ? (isRevision ? "Revision — Route Selection Required" : "Select option")
       : allSelectedRoutes.length
         ? (routeChange ? "Route change plan" : (optionNumber || selectedOptionNumber ? "Ready" : "Auto single option"))
         : "Route master missing";
@@ -1444,11 +1445,16 @@ function buildProductionControl({
     const outputRow = {
       jcNo,
       isRework,
+      isRevision,
+      rootJobCardNumber: rowText(row, "rootJobCardNumber") || jcNo,
+      revisionNumber: safeNumber(rowValue(row, "revisionNumber")),
+      disposition: rowText(row, "disposition") || "original",
       originalJobCardNumber: rowText(row, "originalJobCardNumber"),
       receivedOn: rowText(row, "receivedOn"),
       receiptReference: rowText(row, "receiptReference"),
       reason: rowText(row, "reason"),
       quantity: isRework ? orderPcs : 0,
+      returnQuantity: safeNumber(rowValue(row, "returnQuantity")),
       fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
       poDate: rowText(row, "PO DATE", "poDate"),
@@ -1532,7 +1538,7 @@ function buildProductionControl({
     const readinessSetupGaps = readinessSetupGapsByWorkOrder.get(row) ?? [];
     const workOrderRow = row;
     const planningItemMissing = row.planningItemPending;
-    const routeSelectionMissing = row.optionSource === "Planner required" && (row.availableOptions.length > 1 || row.isRework && row.availableOptions.length > 0);
+    const routeSelectionMissing = row.optionSource === "Planner required" && (row.availableOptions.length > 1 || row.isRevision && row.availableOptions.length > 0);
     const routeMasterMissing = row.routeStatus === "Route master missing";
     const workOrderGapRows = planningItemMissing || routeSelectionMissing || routeMasterMissing
       ? [{
@@ -1621,9 +1627,9 @@ function buildProductionControl({
   return {
     sourceMap: productionSourceMap(),
     summary: {
-      workOrders: activeWorkOrderRows.length,
+      workOrders: new Set(activeWorkOrderRows.map(row => canonicalKey(row.rootJobCardNumber))).size,
       cancelledWorkOrders: workOrderOutputRows.length - activeWorkOrderRows.length,
-      totalOrderQty: round(sum(activeWorkOrderRows.map((row) => safeNumber(rowValue(row, "orderPcs"))))),
+      totalOrderQty: round(sum(activeWorkOrderRows.filter(row => !row.isRevision).map((row) => safeNumber(rowValue(row, "orderPcs"))))),
       rawRows: productionRows.length,
       rawJobCards: rawByJc.size,
       matchedJobCards: activeWorkOrderRows.filter((row) => rawByJc.has(canonicalKey(row.jcNo))).length,

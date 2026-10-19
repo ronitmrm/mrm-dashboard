@@ -352,7 +352,7 @@ async function qualityContextFor(
           AND candidate.active
           AND candidate_floor.code = $4
       ) automatic_route ON selection.route_option_id IS NULL
-        AND COALESCE(work_order.source_payload->>'isRework', 'false') <> 'true'
+        AND COALESCE(work_order.source_payload->>'isRevision', 'false') <> 'true'
         AND imported.route_code IS NULL
         AND route_change.to_route_option_id IS NULL
       JOIN manufacturing.operation_setups setup

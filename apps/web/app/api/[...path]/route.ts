@@ -923,6 +923,7 @@ async function get(request: NextRequest, context: RouteContext) {
           ({ organizationId, repository }) =>
             repository.readJobCardWorkspace({
               jobCardNumber: path.slice("job-cards/".length),
+              revisionReference: search.get("revision") || undefined,
               organizationId,
               productionFloorCode: search.get("floor") || undefined,
             })
@@ -2328,11 +2329,14 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) => repository.receiveRework({
             actorUserId, organizationId, productionFloorCode: scope.floor,
             originalJobCardNumber: text(payload.originalJobCardNumber), quantity: Number(payload.quantity),
+            replacementQuantity: Number(payload.replacementQuantity || 0),
+            replacementRequiredRmKg: optionalNumeric(payload.replacementRequiredRmKg),
+            replacementRmPoNo: optionalText(payload.replacementRmPoNo),
             receivedOn: text(payload.receivedOn), receiptReference: text(payload.receiptReference), reason: text(payload.reason),
           }))
         return json(await withPlanningRefresh(request, path, body, {
           ...result, ok: true, rowsUpdated: 1,
-          savedText: `Rework received as ${result.jobCardNumber}. Select its route in Part Readiness.`,
+          savedText: `${result.rootJobCardNumber} · Rev ${result.revisionNumber} received. Reworkable pieces await route selection; replacement pieces await new RM.`,
         }))
       }
       if (postgresMasterEntryTypes.has(entryType)) {
