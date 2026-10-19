@@ -3780,7 +3780,10 @@ function initializeMachinePlanDetails(
           : splitRole === "remaining_delayed_on_same_machine"
             ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window) : "")
             : readyDateForAssignment;
-        const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
+        const producedHistory = splitRole === "produced_on_unavailable_machine" && machineOrderPcs <= (productionActual?.actualQty ?? 0);
+        const plannedStartDate = producedHistory
+          ? productionActual?.startDate || productionActual?.latestDate || baseSetupDate
+          : maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const actualStartDate = productionActual?.startDate ?? "";
@@ -3788,7 +3791,9 @@ function initializeMachinePlanDetails(
         const plannedProductionStartDate = rmReplanRequired
           ? maxDateValue(plannedCompletionDate, setupCompletionDate)
           : (machineStarted ? actualStartDate : "") || maxDateValue(plannedCompletionDate, setupCompletionDate, earlyReadyDate);
-        const plannedProductionEndDate = itemComplete && actualCompletionDate
+        const plannedProductionEndDate = producedHistory
+          ? productionActual?.latestDate || plannedStartDate
+          : itemComplete && actualCompletionDate
           ? actualCompletionDate
           : plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
@@ -3809,7 +3814,7 @@ function initializeMachinePlanDetails(
           machinePlannedQty.set(machineKeyValue, (machinePlannedQty.get(machineKeyValue) ?? 0) + remainingMachineQty);
         }
         const machineReleaseDate = itemComplete ? actualCompletionDate || plannedProductionEndDate : plannedProductionEndDate;
-        if (machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate)));
+        if (!producedHistory && machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate)));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward || earlyDownstream, plannedStartDate, planningCalendar);
         if (earlyDownstream && physicalWipQty <= 0 && effectiveStage === "quality_approval") {
           taskReadiness.ready = false;
@@ -4172,6 +4177,11 @@ function calculateShopFloorRowIsComplete(row: Record<string, unknown>) {
     || rowText(row, "shopFloorStage").toLowerCase() === "item_complete";
 }
 
+function shopFloorRowIsProducedHistory(row: Record<string, unknown>) {
+  return rowText(row, "machineUnavailableSplitRole") === "produced_on_unavailable_machine"
+    && safeNumber(row.pendingGoodQty) <= 0;
+}
+
 function machineActiveTaskBlocker(activeRow: Record<string, unknown>) {
   return `${machineActiveTaskBlockerPrefix} ${rowText(activeRow, "partCode") || "item"} ${rowText(activeRow, "jcNo") || "job"} setup ${rowText(activeRow, "setupNo") || "-"}; mark it complete before starting the next setup`;
 }
@@ -4431,7 +4441,7 @@ function calculateBalanceMachineFamilyIdleGaps(
   }
   for (const row of details) {
     const machine = rowText(row, "machine");
-    if (!machine) continue;
+    if (!machine || shopFloorRowIsProducedHistory(row)) continue;
     const rows = byMachine.get(machine) ?? [];
     rows.push(row);
     byMachine.set(machine, rows);
@@ -4972,7 +4982,7 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   for (const row of details) {
     setPlanningRowField(row, "toolingNextAvailableDate", "");
     const machine = rowText(row, "machine");
-    if (!machine) continue;
+    if (!machine || shopFloorRowIsProducedHistory(row)) continue;
     const rows = byMachine.get(machine) ?? [];
     rows.push(row);
     byMachine.set(machine, rows);
