@@ -27,7 +27,7 @@ export function OfferJoiningRegister({ rows, canViewOfferLetters }: {
       <CardContent className="min-w-0">
         <OperationalTable filterStorageKey="hr-offer-joining-register" containerClassName="max-h-[38rem] rounded-md border">
           <TableHeader><TableRow>
-            <TableHead>Candidate</TableHead><TableHead>Job</TableHead>
+            <TableHead>Candidate</TableHead><TableHead>Phone Number</TableHead><TableHead>Job</TableHead>
             <TableHead>Offer Letter</TableHead><TableHead>Issued</TableHead>
             <TableHead>Outcome</TableHead><TableHead>Planned Join</TableHead>
             <TableHead>Actual Join</TableHead>
@@ -35,6 +35,7 @@ export function OfferJoiningRegister({ rows, canViewOfferLetters }: {
           <TableBody>
             {rows.map((row) => <TableRow key={row.applicationId}>
               <TableCell><Link className="font-medium text-primary hover:underline" href={`/hr/candidates/${row.candidateId}`}>{row.candidateName}</Link></TableCell>
+              <TableCell className="whitespace-nowrap">{row.candidatePhone || "—"}</TableCell>
               <TableCell><Link className="text-primary hover:underline" href={`/hr/jobs/${row.jobId}`}>{row.jobNumber} · {row.jobTitle}</Link></TableCell>
               <TableCell>
                 {row.offerId && row.offerFileAvailable && canViewOfferLetters ? (
@@ -58,7 +59,7 @@ export function OfferJoiningRegister({ rows, canViewOfferLetters }: {
               <TableCell>{row.plannedJoiningOn ?? "—"}</TableCell>
               <TableCell>{row.joinedOn ?? "—"}</TableCell>
             </TableRow>)}
-            {!rows.length ? <TableRow><TableCell colSpan={7}>
+            {!rows.length ? <TableRow><TableCell colSpan={8}>
               <StandardState title="No Offer Decisions" description="Candidates appear after final HR approval." />
             </TableCell></TableRow> : null}
           </TableBody>
