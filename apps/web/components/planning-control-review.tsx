@@ -30,9 +30,10 @@ const percentage = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
 const weight = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 })
 const kg = (value: number | null) => value === null ? "Blank weight required" : `${weight.format(value)} kg`
 
-export function PlanningControlReview({ floor, workflowRows, onClose, onResolve, onAcceptMaterial }: {
+export function PlanningControlReview({ floor, workflowRows, reworkRows = [], onClose, onResolve, onAcceptMaterial }: {
   floor: ProductionFloorCode
   workflowRows: Workflow[]
+  reworkRows?: Workflow[]
   onClose: (session: Session, comment: string) => Promise<void>
   onResolve: (row: Workflow) => Promise<void>
   onAcceptMaterial: (row: Material, reason: string) => Promise<unknown>
@@ -124,10 +125,10 @@ export function PlanningControlReview({ floor, workflowRows, onClose, onResolve,
         {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, session flags and workflow exceptions in this Production Unit." /> : null}
         {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError}
           action={<Button variant="outline" onClick={refresh}>Refresh flags</Button>} /> : null}
-        {!loading && !loadError && !materials.length && !sessions.length && !workflows.length ? (
+        {!loading && !loadError && !materials.length && !sessions.length && !workflows.length && !reworkRows.length ? (
           <StandardState title="No open planning reviews" description="No RM shortages, session flags or workflow exceptions need review." />
         ) : null}
-        {materials.length || sessions.length || workflows.length ? (
+        {materials.length || sessions.length || workflows.length || reworkRows.length ? (
           <OperationalTable filterStorageKey={`planning-control-flags-${floor}`} containerClassName="max-h-[70vh] rounded-lg border">
             <TableHeader><TableRow>
               <TableHead>Flag Type</TableHead>
@@ -138,6 +139,15 @@ export function PlanningControlReview({ floor, workflowRows, onClose, onResolve,
               <TableHead className="min-w-72">Action</TableHead>
             </TableRow></TableHeader>
             <TableBody>
+              {reworkRows.map(row => (
+                <TableRow key={`rework:${String(row.jcNo)}`} data-row-id={`rework:${String(row.jcNo)}`}>
+                  <TableCell><StatusBadge tone="warning" value="Rework — Route Selection Required" /></TableCell>
+                  <TableCell><Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link><div>{String(row.partCode)}</div></TableCell>
+                  <TableCell>—</TableCell><TableCell>{String(row.receivedOn ?? "")}</TableCell>
+                  <TableCell>{quantity.format(Number(row.orderPcs))} returned pieces · Original: {String(row.originalJobCardNumber)}</TableCell>
+                  <TableCell><Button size="sm" variant="outline" asChild><Link href={`/?tab=masterGapsTab&floor=${floor}`}>Select route in Part Readiness</Link></Button></TableCell>
+                </TableRow>
+              ))}
               {materials.map(row => (
                 <TableRow key={`rm:${row.id}`} data-row-id={`rm:${row.id}`}>
                   <TableCell><StatusBadge tone={row.shortAccepted ? "information" : "warning"} value="RM status" /></TableCell>

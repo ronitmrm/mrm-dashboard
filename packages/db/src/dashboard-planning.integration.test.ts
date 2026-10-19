@@ -114,6 +114,36 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("receives partial rework separately and requires explicit sole-route selection", async () => {
+    const organizationId = (await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Rework Test') RETURNING id", [`REWORK-${suffix}`])).rows[0]!.id
+    await pool.query("INSERT INTO manufacturing.production_floors (organization_id, code, name) VALUES ($1, 'cnc', 'CNC-01')", [organizationId])
+    const part = `REWORK-${suffix}`
+    const original = `JC-REWORK-${suffix}`
+    const parent = await repository.upsertWorkOrder({ organizationId, itemUid: part,
+      jobCardNumber: original, workOrderNumber: original, orderedQuantity: 100,
+      sourcePayload: { jcNo: original, partCode: part, orderPcs: 100, productionFloorCode: "cnc" } })
+    await repository.upsertRouteOption({ organizationId, itemUid: part, productionFloorCode: "cnc",
+      routeCode: "1", setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 100, 'test', 'dispatchApprovals', $3)`,
+      [organizationId, parent.id, randomUUID()])
+    const before = (await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows
+    const receipt = { organizationId, productionFloorCode: "cnc" as const, originalJobCardNumber: original,
+      quantity: 20, receivedOn: "2026-10-01", receiptReference: "RETURN-1", reason: "Finish correction" }
+    const saved = await repository.receiveRework(receipt)
+    expect(saved.jobCardNumber).toBe(`${original}/RW1`)
+    const read = () => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: saved.jobCardNumber })
+    const waiting = await read()
+    expect((await pool.query("SELECT ordered_quantity::integer AS quantity FROM manufacturing.work_orders WHERE id = $1", [saved.id])).rows[0].quantity).toBe(20)
+    expect(waiting.jobCard.effectiveRouteSource).toBe("planner_required")
+    expect(waiting.setups).toEqual([])
+    await repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: saved.jobCardNumber, routeCode: "1" })
+    expect((await read()).jobCard).toMatchObject({ effectiveRouteSource: "planner_selected" })
+    expect((await read()).setups).toHaveLength(1)
+    await expect(repository.receiveRework({ ...receipt, receiptReference: "RETURN-2", quantity: 81 })).rejects.toThrow("Only 80")
+    expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
+  })
+
   test("updates only Required RM on existing unit orders without queuing planning", async () => {
     const jobCardNumber = `JC-REQUIRED-RM-${suffix}`
     const otherUnitJobCard = `${jobCardNumber}-OTHER`

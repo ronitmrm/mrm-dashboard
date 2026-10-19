@@ -307,7 +307,7 @@ async function currentPlanningRouteOptionId(
          (SELECT route_option_id FROM manufacturing.route_selections
           WHERE work_order_id = $1 AND reversed_at IS NULL
           ORDER BY selected_at DESC, id DESC LIMIT 1),
-         (SELECT CASE WHEN count(*) = 1 THEN (array_agg(route.id))[1] END
+         (SELECT CASE WHEN count(*) = 1 AND NOT $6::boolean THEN (array_agg(route.id))[1] END
           FROM manufacturing.route_options route
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
@@ -315,7 +315,7 @@ async function currentPlanningRouteOptionId(
             AND route.active AND floor.code = $5)
        ) END
      ) AS route_option_id`,
-    [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode]
+    [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode, payload.isRework === true]
   )
   return result.rows[0]?.route_option_id ?? null
 }
@@ -1053,6 +1053,85 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
+    async receiveRework(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      originalJobCardNumber: string
+      quantity: number
+      receivedOn: string
+      receiptReference: string
+      reason: string
+    }) {
+      return transaction(pool, async client => {
+        const original = requiredText(input.originalJobCardNumber, "Original Job Card")
+        const reference = requiredText(input.receiptReference, "Return reference")
+        const reason = requiredText(input.reason, "Rework reason")
+        if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
+          throw new Error("Returned quantity must be a positive whole number.")
+        }
+        const receivedOn = requiredText(input.receivedOn, "Receipt date")
+        const date = new Date(`${receivedOn}T00:00:00Z`)
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedOn) || !Number.isFinite(date.getTime())
+          || date.toISOString().slice(0, 10) !== receivedOn || receivedOn > today) {
+          throw new Error("Enter a valid receipt date that is not in the future.")
+        }
+        const parent = await client.query<{
+          id: string; item_id: string; job_card_number: string; ordered_quantity: string
+          work_order_number: string; source_payload: Record<string, unknown>; status: string
+        }>(`SELECT id, item_id, job_card_number, ordered_quantity::text, work_order_number, source_payload, status
+           FROM manufacturing.work_orders WHERE organization_id = $1
+             AND lower(job_card_number) = lower($2) FOR UPDATE`, [input.organizationId, original])
+        const order = parent.rows[0]
+        if (!order || productionFloorCodeForRecord({ sourcePayload: order.source_payload }) !== input.productionFloorCode) {
+          throw new Error("Original Job Card was not found in this Production Unit.")
+        }
+        if (order.status === "Cancelled") throw new Error("Cancelled Job Cards cannot receive rework.")
+        const dispatch = await client.query<{ quantity: string; legacy: boolean }>(
+          `SELECT COALESCE(sum(quantity), 0)::text AS quantity, COALESCE(bool_or(quantity IS NULL), false) AS legacy
+           FROM manufacturing.dispatch_approval_events WHERE organization_id = $1 AND work_order_id = $2
+             AND decision = 'approved' AND reversed_at IS NULL`, [input.organizationId, order.id])
+        const dispatched = dispatch.rows[0]!.legacy ? Number(order.ordered_quantity) : Number(dispatch.rows[0]!.quantity)
+        if (dispatched <= 0) throw new Error("Only a dispatched Job Card can receive rework.")
+        const prior = await client.query<{ ordered_quantity: string; source_payload: Record<string, unknown> }>(
+          `SELECT ordered_quantity::text, source_payload FROM manufacturing.work_orders
+           WHERE organization_id = $1 AND source_payload->>'reworkOfWorkOrderId' = $2`, [input.organizationId, order.id])
+        if (prior.rows.some(row => String(row.source_payload.receiptReference).toLowerCase() === reference.toLowerCase())) {
+          throw new Error("This return reference is already recorded for this Job Card.")
+        }
+        const returned = prior.rows.reduce((total, row) => total + Number(row.ordered_quantity), 0)
+        if (input.quantity > dispatched - returned) {
+          throw new Error(`Only ${Math.max(dispatched - returned, 0)} dispatched pieces remain available to return.`)
+        }
+        const jobCardNumber = `${order.job_card_number}/RW${prior.rows.length + 1}`
+        await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
+        const item = await client.query<{ uid: string; description: string }>("SELECT uid, description FROM catalog.items WHERE id = $1", [order.item_id])
+        const sourcePayload = {
+          isRework: true, reworkOfWorkOrderId: order.id, originalJobCardNumber: order.job_card_number,
+          jcNo: jobCardNumber, partCode: item.rows[0]!.uid, description: item.rows[0]!.description,
+          fgPoNo: sourcePayloadRecord(order.source_payload).fgPoNo ?? order.work_order_number,
+          orderPcs: input.quantity, quantity: input.quantity, receivedOn, receiptReference: reference, reason,
+          productionFloorCode: input.productionFloorCode, receivedByUserId: input.actorUserId ?? null,
+          receivedAt: new Date().toISOString(),
+        }
+        const saved = await client.query<{ id: string }>(
+          `INSERT INTO manufacturing.work_orders (organization_id, work_order_number, job_card_number,
+            item_id, ordered_quantity, created_by_user_id, updated_by_user_id,
+            source_system, source_table, source_id, source_payload)
+           VALUES ($1, $2, $3, $4, $5, $6, $6, 'mrm-dashboard', 'work_order', $7, $8) RETURNING id`,
+          [input.organizationId, order.work_order_number, jobCardNumber, order.item_id, input.quantity,
+            input.actorUserId ?? null, randomUUID(), sourcePayload])
+        await client.query(`INSERT INTO audit.events (organization_id, actor_user_id, event_type, target_schema,
+          target_table, target_id, before_state, after_state, source_system, source_table, source_id)
+          VALUES ($1, $2, 'production.rework.received', 'manufacturing', 'work_orders', $3, NULL, $4,
+            'mrm-dashboard', 'rework_received', $5)`,
+          [input.organizationId, input.actorUserId ?? null, saved.rows[0]!.id, sourcePayload, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: saved.rows[0]!.id, jobCardNumber }
+      })
+    },
+
     async upsertWorkOrder(input: {
       actorUserId?: string | null
       dueDate?: string | null
@@ -1066,6 +1145,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     }) {
       return transaction(pool, async (client) => {
         const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+        if (sourcePayloadRecord(input.sourcePayload).isRework) throw new Error("Use Rework Received to create rework Job Cards.")
         if (input.orderedQuantity < 0) {
           throw new Error("Ordered quantity cannot be negative.")
         }
@@ -1104,6 +1184,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode
         ) {
           throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
+        }
+        if (sourcePayloadRecord(existing.rows[0]?.source_payload).isRework === true) {
+          throw new Error("Rework receipt quantities and identity cannot be overwritten through Work Order entry.")
         }
         if (existing.rows[0]?.status === "Cancelled") {
           throw new Error(
@@ -1373,6 +1456,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                FOR UPDATE`, [itemId, input.organizationId]
             )
             for (const job of jobs.rows) {
+              if (job.source_payload?.isRework === true) continue
               if (productionFloorCodeForRecord({ sourcePayload: job.source_payload }) !== productionFloorCode) continue
               await client.query(
                 `INSERT INTO manufacturing.route_selections

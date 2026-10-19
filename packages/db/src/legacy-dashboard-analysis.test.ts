@@ -2,6 +2,30 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("rework waits for manual sole-route selection while normal work auto-selects", () => {
+  const createdAt = "2026-10-19T04:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const, productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1", partCode: "PART", orderPcs: 100, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+      entry("work_order", { jcNo: "P1/RW1", partCode: "PART", orderPcs: 20, isRework: true, originalJobCardNumber: "P1", receivedOn: "2026-10-19" }),
+      entry("route", { partNo: "PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
+      entry("cycle", { partNo: "PART", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "PART", optionNumber: "1", setupNo: "1" }),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
+    ],
+  }
+  const control = buildLegacyDashboardSnapshot(input).productionControl
+  expect(control.workOrders.find(row => row.jcNo === "P1")).toMatchObject({ optionNumber: "1", optionSource: "Auto single route" })
+  expect(control.workOrders.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionSource: "Planner required", materialPlanningReady: true })
+  expect(control).toMatchObject({ masterGaps: [expect.objectContaining({ jcNo: "P1/RW1", routeSelectionMissing: true })] })
+  expect(control.machinePlanDetailRows.some(row => row.jcNo === "P1/RW1")).toBe(false)
+  const planned = buildLegacyDashboardSnapshot({ ...input, routeSelections: [{ jobCardNumber: "P1/RW1", routeCode: "1", createdAt }] }).productionControl
+  expect(planned).toMatchObject({ masterGaps: [] })
+  expect(planned.machinePlanDetailRows.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionNumber: "1" })
+})
+
 test("reopened setup retains output without a missing-start exception or machine ownership", () => {
   const createdAt = "2026-10-08T17:53:50Z"
   const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })

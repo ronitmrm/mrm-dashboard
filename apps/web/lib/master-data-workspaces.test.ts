@@ -32,6 +32,7 @@ describe("master data workspaces", () => {
     ])
     expect(operationalDataEntryTypes).toEqual([
       "work_order",
+      "rework_received",
       "rm_inward",
       "software_raw",
     ])

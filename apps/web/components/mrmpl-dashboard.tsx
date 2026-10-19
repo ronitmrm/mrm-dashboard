@@ -655,6 +655,18 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "rework_received",
+    title: "Rework Received",
+    description: "Receive returned pieces. A linked rework Job Card waits in Part Readiness for manual route selection.",
+    fields: [
+      { name: "originalJobCardNumber", label: "Original Job Card", required: true },
+      { name: "quantity", label: "Returned Quantity (pieces)", type: "number", min: "1", step: "1", required: true },
+      { name: "receivedOn", label: "Receipt Date", type: "date", required: true },
+      { name: "receiptReference", label: "Return Reference", required: true },
+      { name: "reason", label: "Rework Reason", required: true },
+    ],
+  },
+  {
     entryType: "rm_inward",
     title: "Rm Inward",
     description:
@@ -10284,7 +10296,7 @@ function WorkOrderGapRow({
 
   return (
     <TableRow>
-      <TableCell className="min-w-32 font-medium">{jcNo || "-"}</TableCell>
+      <TableCell className="min-w-32 font-medium">{jcNo || "-"}{row.isRework === true ? <div><StatusBadge tone="warning" value="Rework" /></div> : null}</TableCell>
       <TableCell className="min-w-40">
         <div>{itemCode(row)}</div>
         <div className="text-xs text-muted-foreground">
@@ -10600,7 +10612,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction = !canUseEntry(
+  const csvImportAction = bulkEntryType === "rework_received" || !canUseEntry(
     bulkEntryType,
     "import"
   ) ? null : bulkEntryType === "store_masters" ? (
@@ -10641,7 +10653,7 @@ function DataEntryPanel({
           <OperationalWorkspaceTabs
             activeView="dataEntry"
             csvDownloadAction={
-              canUseEntry(bulkEntryType, "read") ? (
+              bulkEntryType !== "rework_received" && canUseEntry(bulkEntryType, "read") ? (
                 <MasterDataCsvDownloadButton
                   href={`/api/data-template?${new URLSearchParams({ entryType: bulkEntryType, floor: productionFloorCode })}`}
                 />
@@ -11690,6 +11702,11 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   const columns = columnsForProductionMaster(spec.fields)
+  if (spec.entryType === "rework_received") return [
+    { key: "jcNo", label: "Rework Job Card" },
+    { key: "partCode", label: "Part Code" },
+    ...columns,
+  ]
   return spec.entryType === "work_order"
     ? [
         ...columns,
@@ -14307,7 +14324,7 @@ function DataEntryForm({
     >
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        {spec.entryType === "planning_holiday" ? (
+        {spec.entryType === "planning_holiday" || spec.entryType === "rework_received" ? (
           <CardDescription>{spec.description}</CardDescription>
         ) : null}
         {spec.entryType === "route" ? (
@@ -14315,7 +14332,7 @@ function DataEntryForm({
             Use a new option for changed setup sequence, setup count or
             manufacturing process. Correct names, machine family and stage
             weight here. Existing sessions keep their starting weight. A single
-            available option is selected automatically.
+            available option is selected automatically for normal Job Cards. Rework always requires planner selection.
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -16290,6 +16307,7 @@ function PlanningControlPanel({
         key={productionFloorCode}
         floor={productionFloorCode}
         workflowRows={asArray(productionControl.workflowExceptionRows)}
+        reworkRows={asArray(productionControl.workOrders).filter(row => row.isRework === true && row.optionSource === "Planner required")}
         onAcceptMaterial={(row, reason) =>
           submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,
             expectedRowVersion: row.rowVersion, productionFloorCode, reason }, { throwOnError: true })}

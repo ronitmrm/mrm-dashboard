@@ -49,6 +49,7 @@ function record(value: unknown): Record<string, unknown> {
 
 const sources = {
   work_order: "workOrders",
+  rework_received: "workOrders",
   rm_inward: "rmInwardRows",
   software_raw: "productionOutputRows",
 } as const
@@ -90,7 +91,7 @@ export function operationalEntrySnapshot(
     productionControl: {
       [sources[entry]]: rowsForUnit(
         record(source.productionControl)[sources[entry]]
-      ),
+      ).filter(row => entry !== "rework_received" || record(row).isRework === true),
     },
   }
 }
