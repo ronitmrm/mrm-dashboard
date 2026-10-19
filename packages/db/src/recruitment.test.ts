@@ -211,6 +211,7 @@ test("offer register keeps a joined outcome after the post changes", async () =>
   const query = vi.fn().mockResolvedValue({ rows: [{
     application_id: "application-1", candidate_id: "candidate-1",
     candidate_name: "Employee One", job_id: "job-1", job_number: "JOB-1",
+    candidate_phone: "9876543210",
     job_title: "Operator", offer_id: "letter-1", offer_reference: "OL-1",
     offer_issued_on: "2026-09-01", offer_file_available: true,
     planned_joining_on: "2026-09-05", joined_on: "2026-09-05",
@@ -218,9 +219,10 @@ test("offer register keeps a joined outcome after the post changes", async () =>
   }] })
   const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
   await expect(repository.listOfferOutcomes("org-1")).resolves.toMatchObject([
-    { applicationId: "application-1", outcome: "Joined", joinedOn: "2026-09-05" },
+    { applicationId: "application-1", candidatePhone: "9876543210", outcome: "Joined", joinedOn: "2026-09-05" },
   ])
   expect(query.mock.calls[0]?.[0]).toContain("recruitment.employee_post_assignments")
+  expect(query.mock.calls[0]?.[0]).toContain("candidate.phone AS candidate_phone")
   expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
 })
 

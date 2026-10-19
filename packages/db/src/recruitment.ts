@@ -199,6 +199,7 @@ export type RecruitmentOfferOutcomeRow = {
   applicationId: string
   candidateId: string
   candidateName: string
+  candidatePhone: string
   jobId: string
   jobNumber: string
   jobTitle: string
@@ -3349,6 +3350,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         application_id: string
         candidate_id: string
         candidate_name: string
+        candidate_phone: string
         job_id: string
         job_number: string
         job_title: string
@@ -3363,7 +3365,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         willing_to_join: boolean | null
       }>(
         `SELECT application.id AS application_id, candidate.id AS candidate_id,
-           candidate.name AS candidate_name, job.id AS job_id,
+           candidate.name AS candidate_name, candidate.phone AS candidate_phone, job.id AS job_id,
            job.job_number, job.title AS job_title,
            offer.id AS offer_id, offer.reference_number AS offer_reference,
            offer.issued_on::text AS offer_issued_on,
@@ -3403,6 +3405,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         applicationId: row.application_id,
         candidateId: row.candidate_id,
         candidateName: row.candidate_name,
+        candidatePhone: row.candidate_phone,
         jobId: row.job_id,
         jobNumber: row.job_number,
         jobTitle: row.job_title,
