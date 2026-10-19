@@ -1398,7 +1398,7 @@ describe("candidate conversation logs", () => {
   const organizationId = "00000000-0000-4000-8000-000000000010"
   const eventId = "00000000-0000-4000-8000-000000000011"
 
-  test("includes the candidate department in conversation rows", async () => {
+  test("includes department and a linked interview event without copying conversation logs", async () => {
     const query = vi.fn(async (statement: string) => {
       if (statement.includes("FROM recruitment.candidate_events event")) {
         return {
@@ -1415,6 +1415,19 @@ describe("candidate conversation logs", () => {
               occurred_at: "2026-08-10T10:00:00.000Z",
               title: "Follow-up",
             },
+            {
+              candidate_id: "00000000-0000-4000-8000-000000000012",
+              candidate_name: "Candidate",
+              candidate_phone: "9999999999",
+              department: "Quality",
+              event_type: "Interview Outcome",
+              id: "interview:outcome",
+              job_number: "JOB-1",
+              notes: "Interviewer: HR",
+              occurred_at: "2026-08-10T11:00:00.000Z",
+              title: "Screening Round — Approved",
+              interview_href: "/hr/jobs/job-1#interview-round-1",
+            },
           ],
         }
       }
@@ -1427,6 +1440,9 @@ describe("candidate conversation logs", () => {
     const events = await repository.listCandidateEvents(organizationId)
 
     expect(events[0]?.department).toBe("Quality")
+    expect(events[0]?.interviewHref).toBeNull()
+    expect(events[1]?.interviewHref).toBe("/hr/jobs/job-1#interview-round-1")
+    expect(query).toHaveBeenCalledTimes(1)
     expect(query.mock.calls[0]?.[0]).toContain(
       "department.id = candidate.preferred_department_id"
     )

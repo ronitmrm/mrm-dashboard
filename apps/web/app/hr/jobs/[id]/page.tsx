@@ -429,7 +429,7 @@ export default async function JobWorkspacePage({
               <TableBody>
                 {interviews.length ? (
                   interviews.map((interview) => (
-                    <TableRow key={interview.id}>
+                    <TableRow id={`interview-${interview.id}`} className="scroll-mt-24" key={interview.id}>
                       <TableCell className="font-medium">
                         {interview.candidateName}
                       </TableCell>
