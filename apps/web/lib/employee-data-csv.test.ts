@@ -7,14 +7,14 @@ test("Employee Data CSV round-trips editable details and uses the combined code"
   const row = {
     ...Object.fromEntries(Object.values(employeeDataLabels).map((label) => [label, ""])),
     "Assignment ID": "11111111-1111-4111-8111-111111111111", "Employee ID": "007",
-    "Employee Name": "Employee", "Bank Account No": "0012345678",
+    "Employee Name": "Employee", "Bank Account No": "0012345678", "Date of Birth": "1980-02-29",
     "Residence Address": "Street 1, Building A\nFloor 2", Salary: "20000.50",
   }
   const csv = await masterCsvResponse([row], "employee-data.csv", employeeDataCsvColumns).text()
   const [parsed] = await readMasterCsv(new File([csv], "employee-data.csv"))
   expect(employeeDataInputFromCsvRow(parsed!, 2)).toMatchObject({
     assignmentId: row["Assignment ID"], employeeCode: "007",
-    personal: { bankAccountNo: "0012345678", residenceAddress: row["Residence Address"] },
+    personal: { bankAccountNo: "0012345678", residenceAddress: row["Residence Address"], dateOfBirth: "1980-02-29" },
     term: { salary: "20000.50" },
   })
   expect(employeeDepartmentLabel([

@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { createDepartmentStoreRepository, createStoreRepository } from "@workspace/db"
 import { redirect } from "next/navigation"
@@ -226,7 +227,7 @@ export default async function StoreOrdersPage() {
                     <TableCell className="font-medium">
                       {order.orderNumber}
                     </TableCell>
-                    <TableCell>{order.orderDate}</TableCell>
+                    <TableCell>{formatCalendarDate(order.orderDate)}</TableCell>
                     <TableCell>
                       {order.calibrationVisitId
                         ? "Calibration"

@@ -2,6 +2,7 @@ import {
   simulateProductionPlanning,
   workOrderPlanningSort,
 } from "@workspace/db/dashboard-analysis"
+import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
 
 export type ProposedLine = {
   id: string
@@ -147,11 +148,11 @@ export function validateProposal(input: ProposalInput) {
         "Every line needs a reference, product and positive whole-piece quantity."
       )
     if (line.rmDate && !validDate(line.rmDate))
-      throw new Error(`Invalid RM date for ${line.id}. Use YYYY-MM-DD.`)
+      throw new Error(`Invalid RM date for ${line.id}. Enter DD/MM/YYYY.`)
   }
   for (const date of Object.values(input.existingRmDates))
     if (date && !validDate(date))
-      throw new Error("Existing RM dates must use YYYY-MM-DD.")
+      throw new Error("Enter existing RM dates in DD/MM/YYYY format.")
 }
 
 // All machine/route scheduling is delegated to the actual production planner.
@@ -184,10 +185,7 @@ export function calculateProposal(
   const iso = (value: unknown) => {
     const raw = String(value ?? "")
     if (validDate(raw)) return raw
-    const parsed = Date.parse(`${raw} UTC`)
-    return Number.isFinite(parsed)
-      ? new Date(parsed).toISOString().slice(0, 10)
-      : ""
+    return parseCalendarDateInput(formatCalendarDate(raw)) ?? ""
   }
   const reservationsFor = (plans: Record<string, unknown>[]): Reservation[] =>
     plans.flatMap((row) => {

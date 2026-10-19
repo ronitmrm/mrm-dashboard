@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import fontkit from "@pdf-lib/fontkit"
@@ -12,16 +13,7 @@ const WIDTH = 595.28
 const HEIGHT = 841.89
 
 function date(value: string) {
-  const [year, month, day] = value.split("-").map(Number)
-  const suffix =
-    day! >= 11 && day! <= 13
-      ? "th"
-      : ({ 1: "st", 2: "nd", 3: "rd" }[day! % 10] ?? "th")
-  const name = new Intl.DateTimeFormat("en-GB", {
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year!, month! - 1, day)))
-  return `${day}${suffix} ${name} ${year}`
+  return formatCalendarDate(value)
 }
 
 export async function buildOfferLetterPdf(letter: Offer) {

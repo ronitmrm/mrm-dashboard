@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 
@@ -133,7 +134,7 @@ export default async function PurchaseOrderPage({
             </Badge>
           </div>
           <CardDescription>
-            {order.companyName} · {order.poDate} · Po Total{" "}
+            {order.companyName} · {formatCalendarDate(order.poDate)} · Po Total{" "}
             {money(order.totalAmount)}
           </CardDescription>
         </CardHeader>
@@ -508,7 +509,7 @@ export default async function PurchaseOrderPage({
                     </Badge>
                   </div>
                   <span className="text-muted-foreground">
-                    {currentInvoice.invoiceDate} · Total{" "}
+                    {formatCalendarDate(currentInvoice.invoiceDate)} · Total{" "}
                     {money(currentInvoice.totalAmount)}
                   </span>
                 </div>

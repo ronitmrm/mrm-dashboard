@@ -1,5 +1,7 @@
 import * as XLSX from "xlsx"
 
+import { formatCsvDates, validateCsvDateCells } from "./csv-date"
+
 export type MasterCsvRow = Record<string, string>
 
 function columnKey(value: string) {
@@ -22,7 +24,7 @@ export async function readMasterCsv(
     throw new Error("Only CSV files are accepted.")
   }
   const workbook = XLSX.read(Buffer.from(await file.arrayBuffer()), {
-    raw: false,
+    raw: true,
     type: "buffer",
   })
   const sheetName = workbook.SheetNames[0]
@@ -33,14 +35,15 @@ export async function readMasterCsv(
     raw: false,
   })
   if (!rawRows.length) throw new Error("The CSV file has no data rows.")
-  return rawRows.map((row) =>
-    Object.fromEntries(
+  return rawRows.map((row, index) => {
+    validateCsvDateCells(row, typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2)
+    return Object.fromEntries(
       Object.entries(row).map(([key, value]) => [
         columnKey(key),
         String(value ?? "").trim(),
       ])
     )
-  )
+  })
 }
 
 export function csvValue(row: MasterCsvRow, ...keys: string[]) {
@@ -57,7 +60,7 @@ export function masterCsvResponse(
   columns?: readonly string[]
 ) {
   const csv = XLSX.utils.sheet_to_csv(
-    XLSX.utils.json_to_sheet(rows, {
+    XLSX.utils.json_to_sheet(rows.map(formatCsvDates), {
       header: columns ? [...columns] : undefined,
     })
   )

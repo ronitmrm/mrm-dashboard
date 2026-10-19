@@ -1,3 +1,4 @@
+import { formatIstDateTime } from "@/lib/date-time"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import type { ArtifactLedgerFilters } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -77,11 +78,7 @@ function lifecycleVariant(state: Ledger["rows"][number]["lifecycleState"]) {
 }
 
 function dateTime(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value))
+  return formatIstDateTime(value)
 }
 
 export function ArtifactLedgerView({

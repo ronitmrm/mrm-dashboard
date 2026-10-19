@@ -1,3 +1,5 @@
+import { formatIstDate } from "@/lib/date-time"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { notFound } from "next/navigation"
 import {
   brandingLanguageLabels,
@@ -100,8 +102,8 @@ export default async function PublishedRegisterPage({
                 <TableCell>
                   <StatusBadge tone="positive" value="Published" />
                 </TableCell>
-                <TableCell>{row.effectiveDate}</TableCell>
-                <TableCell>{row.issuedAt.slice(0, 10)}</TableCell>
+                <TableCell>{formatCalendarDate(row.effectiveDate)}</TableCell>
+                <TableCell>{formatIstDate(row.issuedAt)}</TableCell>
                 <TableCell>{row.authorName}</TableCell>
                 <TableCell>
                   <AttachmentViewerLink

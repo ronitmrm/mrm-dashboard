@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 
 import {
@@ -327,7 +328,7 @@ export default async function CommercialRevisionsPage() {
                       <p className="font-semibold">{revision.revisionNumber}</p>
                       <p className="text-sm text-muted-foreground">
                         {revision.companyName ?? "All customers"} · Effective{" "}
-                        {revision.effectiveOn}
+                        {formatCalendarDate(revision.effectiveOn)}
                       </p>
                       <p className="mt-1 text-sm">{revision.reason}</p>
                     </div>

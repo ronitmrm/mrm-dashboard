@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import Link from "next/link"
 import { MasterEntryForm } from "@/components/master-entry-form"
@@ -6,7 +7,7 @@ import { X } from "lucide-react"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
 import { sendQuoteAction } from "../costing/actions"
-import { istDateValue } from "@/lib/date-time"
+import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -245,7 +246,7 @@ export default async function SalesPage({
                   <TableBody>
                     {taskRows.map((task) => (
                       <TableRow key={task.key}>
-                        <TableCell>{task.taskDate || "—"}</TableCell>
+                        <TableCell>{formatCalendarDate(task.taskDate || "—")}</TableCell>
                         <TableCell className="font-medium">
                           {task.taskType}
                         </TableCell>
@@ -648,7 +649,7 @@ export default async function SalesPage({
                 {selectedFollowup.enquiryNumber} ·{" "}
                 {selectedFollowup.companyName}
                 {" · "}
-                {selectedFollowup.dueOn}
+                {formatCalendarDate(selectedFollowup.dueOn)}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -736,7 +737,7 @@ export default async function SalesPage({
                   <TableBody>
                     {followups.map((followup) => (
                       <TableRow key={followup.id}>
-                        <TableCell>{followup.dueOn}</TableCell>
+                        <TableCell>{formatCalendarDate(followup.dueOn)}</TableCell>
                         <TableCell>{followup.enquiryNumber}</TableCell>
                         <TableCell>{followup.quoteNumber ?? "—"}</TableCell>
                         <TableCell>{followup.customerUid}</TableCell>
@@ -799,14 +800,14 @@ export default async function SalesPage({
                   <TableBody>
                     {sentQuoteTasks.map((task) => (
                       <TableRow key={`${task.enquiryId}:${task.quoteRevision}`}>
-                        <TableCell>{task.latestSentAt.toISOString()}</TableCell>
+                        <TableCell>{formatIstDateTime(task.latestSentAt)}</TableCell>
                         <TableCell><Link className="text-primary underline-offset-4 hover:underline" href={`/commercial/enquiries/${task.enquiryId}?revision=${task.quoteRevision}`}>{task.enquiryNumber}</Link></TableCell>
                         <TableCell>{task.customerUid}</TableCell>
                         <TableCell>{task.companyName}</TableCell>
                         <TableCell>{task.currency}</TableCell>
                         <TableCell>{task.totalLines}</TableCell>
                         <TableCell>{task.sentQuoteItems}</TableCell>
-                        <TableCell>{task.nextFollowupDue ?? "—"}</TableCell>
+                        <TableCell>{formatCalendarDate(task.nextFollowupDue ?? "—")}</TableCell>
                         <TableCell>{task.pendingFollowups}</TableCell>
                         <TableCell>{quotationRevisionLabel(task.quoteRevision)}</TableCell>
                         <TableCell>

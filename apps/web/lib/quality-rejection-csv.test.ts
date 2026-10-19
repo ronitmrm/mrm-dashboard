@@ -5,7 +5,7 @@ import { parseQualityRejectionCsv, qualityRejectionCsvColumns, qualityRejectionC
 const row = {
   entry_id: "11111111-1111-4111-8111-111111111111",
   job_card: "JC-123",
-  date: "2026-09-28",
+  date: "28/09/2026",
   stage: "Checking",
   rejection_type: "Surface",
   defect: "Scratch",

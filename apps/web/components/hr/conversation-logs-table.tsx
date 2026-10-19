@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import { useMemo, useState } from "react"
 import Link from "next/link"
 
@@ -214,7 +216,7 @@ export function ConversationLogsTable({
                     {row.notes}
                   </TableCell>
                   <TableCell className="font-mono">{row.job}</TableCell>
-                  <TableCell>{row.date}</TableCell>
+                  <TableCell>{formatCalendarDate(row.date)}</TableCell>
                   {canWrite && !row.event.interviewHref ? (
                     <TableCell>
                       <div className="flex justify-end gap-2">

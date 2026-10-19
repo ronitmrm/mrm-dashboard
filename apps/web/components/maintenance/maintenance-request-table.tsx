@@ -1,3 +1,4 @@
+import { formatIstDateTime } from "@/lib/date-time"
 import { Camera, CheckCircle2, Play, RotateCcw, XCircle } from "lucide-react"
 
 import type { MaintenanceRequestRow } from "@workspace/db"
@@ -27,11 +28,7 @@ import {
 
 function dateTime(value: string | null) {
   if (!value) return "—"
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value))
+  return formatIstDateTime(value)
 }
 
 function PriorityBadge({ value }: { value: string }) {

@@ -17,6 +17,8 @@ describe("dashboard state normalization", () => {
     const localDay = new Date(2026, 8, 16).getTime();
     expect(dateSortValue("2026-09-16")).toBe(localDay);
     expect(dateSortValue("16-Sept-26")).toBe(localDay);
+    expect(dateSortValue("16/09/2026")).toBe(localDay);
+    expect(dateSortValue("10/11/2026")).toBe(new Date(2026, 10, 10).getTime());
   });
 
   it("retains the floor payload when only refresh status changed", () => {

@@ -101,14 +101,21 @@ function progressPercent(value: number, total: number) {
 
 function dateOnly(value: string | null | undefined) {
   if (!value) return null
-  const match = value.match(/^\d{4}-\d{2}-\d{2}/)
-  if (!match) return null
-  const parsed = new Date(`${match[0]}T00:00:00.000Z`)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+  const iso = value.match(/^(\d{4}-\d{2}-\d{2})(?:$|[T ])/)
+  const dayFirst = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  const date = iso?.[1] ?? (dayFirst ? `${dayFirst[3]}-${dayFirst[2]}-${dayFirst[1]}` : "")
+  if (!date || Number(date.slice(0, 4)) < 1) return null
+  const parsed = new Date(`${date}T00:00:00.000Z`)
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? null : parsed
 }
 
 function formatDateOnly(value: Date) {
   return value.toISOString().slice(0, 10)
+}
+
+function calendarDateValue(value: string | null | undefined) {
+  const date = dateOnly(value)
+  return date ? formatDateOnly(date) : null
 }
 
 function isWorkingDay(value: Date, holidays: Set<string>, workingDates: Set<string>) {
@@ -424,10 +431,10 @@ export function buildJobCardAnalytics(input: {
     operationProducedPieces,
     orderedQuantity,
     plannedEndDate: lastDate(
-      input.planRows.map((row) => row.plannedProductionEndDate)
+      input.planRows.map((row) => calendarDateValue(row.plannedProductionEndDate))
     ),
     plannedStartDate: firstDate(
-      input.planRows.map((row) => row.plannedProductionStartDate)
+      input.planRows.map((row) => calendarDateValue(row.plannedProductionStartDate))
     ),
     rejectedPieces,
     rejectionPercent: percent(rejectedPieces, operationProducedPieces),

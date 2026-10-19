@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -83,7 +84,7 @@ export async function BulkRevisionRequestStatus({
                 <TableCell className="min-w-64 whitespace-normal">
                   {request.reason}
                 </TableCell>
-                <TableCell>{request.effectiveOn}</TableCell>
+                <TableCell>{formatCalendarDate(request.effectiveOn)}</TableCell>
                 <TableCell>
                   <StatusBadge value={request.status} />
                 </TableCell>

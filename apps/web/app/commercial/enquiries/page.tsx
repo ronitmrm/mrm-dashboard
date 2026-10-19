@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { pageBounds } from "@/lib/page-bounds"
@@ -210,13 +211,13 @@ export default async function EnquiriesPage({
                           {enquiry.enquiryNumber}
                         </TableCell>
                         <TableCell>{enquiry.companyName}</TableCell>
-                        <TableCell>{enquiry.receivedOn}</TableCell>
+                        <TableCell>{formatCalendarDate(enquiry.receivedOn)}</TableCell>
                         <TableCell>{enquiry.itemCount}</TableCell>
                         <TableCell>
                           {enquiry.quotedLineCount} / {enquiry.orderedLineCount}
                         </TableCell>
                         <TableCell>
-                          {enquiry.nextFollowupDue ?? "—"}
+                          {formatCalendarDate(enquiry.nextFollowupDue ?? "—")}
                           {enquiry.dueFollowupCount > 0
                             ? ` · ${enquiry.dueFollowupCount} due`
                             : ""}

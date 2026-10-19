@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { buildJobCardProgress } from "@workspace/db/job-card-progress"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
@@ -189,19 +191,19 @@ export function JobCardRegister({
               const finished = numeric(row.finalSetupGoodPieces)
               const short = Math.max(ordered - finished, 0)
               const finishDates = finishDatesByJobCard.get(jobCardKey(row))
-              const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
-              const actualFinish = text(finishDates?.actualFinishDate)
+              const plannedFinish = formatCalendarDate(finishDates?.plannedDispatchDateAtRmReceipt)
+              const actualFinish = formatCalendarDate(finishDates?.actualFinishDate)
               return <TableRow key={jobCard}>
                 <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link><div className="text-xs text-muted-foreground">{text(row.revisionLabel)}{numeric(row.revisionCount) > 1 ? ` · ${row.revisionCount} revisions` : ""}</div>{row.otherRevisionsActive ? <StatusBadge tone="information" value="Other revisions have open work" /> : null}</TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
                 <TableCell className="max-w-72 truncate">{first(row, ["description", "DESCRIPTION"])}</TableCell>
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
-                <TableCell>{first(row, ["poDate", "PO DATE"])}</TableCell>
-                <TableCell>{first(finishDates ?? {}, ["rmReceivedDate"])}</TableCell>
+                <TableCell>{formatCalendarDate(first(row, ["poDate", "PO DATE"]))}</TableCell>
+                <TableCell>{formatCalendarDate(first(finishDates ?? {}, ["rmReceivedDate"]))}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{stage}</TableCell>
                 <TableCell>{row.mixedActivities ? "Select activity in details" : plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
-                <TableCell>{row.mixedActivities ? "Select activity in details" : formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
+                <TableCell>{row.mixedActivities ? "Select activity in details" : formatPlanningFinish(formatCalendarDate(finishDates?.currentProbableDispatchDate), finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
                 <TableCell>{row.mixedActivities ? "Select activity in details" : actualFinish || <span className="text-muted-foreground">{dispatched || stage === "Production complete" ? "Not recorded" : "-"}</span>}</TableCell>
                 <TableCell className="min-w-48">
                   {dispatched ? (

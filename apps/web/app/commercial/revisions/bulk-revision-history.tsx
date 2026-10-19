@@ -1,3 +1,5 @@
+import { formatIstDateTime } from "@/lib/date-time"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
@@ -44,11 +46,7 @@ function inputValue(fieldName: string, value: string | null) {
 }
 function date(value: string | null) {
   return value
-    ? new Date(value).toLocaleString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
+    ? formatIstDateTime(value)
     : "Not recorded"
 }
 function Pages({
@@ -138,7 +136,7 @@ export async function BulkRevisionHistoryDetail({
             Revision{revision.companyName ? ` · ${revision.companyName}` : ""}
           </p>
           <p>
-            Effective {revision.effectiveOn} · Completed{" "}
+            Effective {formatCalendarDate(revision.effectiveOn)} · Completed{" "}
             {date(revision.completedAt)} (IST)
           </p>
           <p>

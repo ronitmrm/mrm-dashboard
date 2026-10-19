@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type { RecruitmentEmployeeAssignmentRow, RecruitmentPostRow } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -198,8 +200,8 @@ export function ProbationEndReminders({
                       </TableCell>
                       <TableCell>{assignment.department ?? "—"}</TableCell>
                       <TableCell>{assignment.designation ?? "—"}</TableCell>
-                      <TableCell>{assignment.joinedOn ?? "Date needed"}</TableCell>
-                      <TableCell>{assignment.probationDueOn ?? "Date needed"}</TableCell>
+                      <TableCell>{formatCalendarDate(assignment.joinedOn ?? "Date needed")}</TableCell>
+                      <TableCell>{formatCalendarDate(assignment.probationDueOn ?? "Date needed")}</TableCell>
                       <TableCell><StatusBadge value={reminderStatus} tone={reminderStatus === "Scheduled" ? "information" : "warning"} /></TableCell>
                       <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
                       {canManageEmployees ? <TableCell className="text-right"><ProbationDateEditor assignment={assignment} canGenerateAppointment={Boolean(currentEmployeePost(assignment, posts))} /></TableCell> : null}
@@ -232,8 +234,8 @@ export function ProbationEndReminders({
                     <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                     <TableCell>{assignment.department ?? "—"}</TableCell>
                     <TableCell>{assignment.designation ?? "—"}</TableCell>
-                    <TableCell>{assignment.probationDueOn ?? "—"}</TableCell>
-                    <TableCell>{assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(assignment.probationDueOn ?? "—")}</TableCell>
+                    <TableCell>{formatCalendarDate(assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—")}</TableCell>
                     <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
                     <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
                   </TableRow>)}
@@ -293,9 +295,9 @@ export function EmployeeAssignmentHistory({
                   <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                   <TableCell>{assignment.department ?? "—"}</TableCell>
                   <TableCell>{assignment.designation ?? "—"}</TableCell>
-                  <TableCell>{assignment.joinedOn ?? "Not recorded"}</TableCell>
-                  <TableCell>{assignment.plannedEndOn ?? "—"}</TableCell>
-                  <TableCell>{assignment.endedOn ?? "—"}</TableCell>
+                  <TableCell>{formatCalendarDate(assignment.joinedOn ?? "Not recorded")}</TableCell>
+                  <TableCell>{formatCalendarDate(assignment.plannedEndOn ?? "—")}</TableCell>
+                  <TableCell>{formatCalendarDate(assignment.endedOn ?? "—")}</TableCell>
                   <TableCell>
                     <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" || exitStatus === "Role Changed" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
                     {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}

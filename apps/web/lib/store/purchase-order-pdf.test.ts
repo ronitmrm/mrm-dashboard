@@ -10,7 +10,7 @@ import {
 
 describe("Store Purchase Order PDF", () => {
   test("formats the reference PO date and Indian amount in words", () => {
-    expect(formatPurchaseOrderDate("2026-04-02")).toBe("02 April 2026")
+    expect(formatPurchaseOrderDate("2026-04-02")).toBe("02/04/2026")
     expect(purchaseOrderAmountInWords(5253)).toBe(
       "FIVE THOUSAND TWO HUNDRED FIFTY THREE"
     )

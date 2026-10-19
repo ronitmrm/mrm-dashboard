@@ -6004,9 +6004,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ? `/store/assets/${encodeURIComponent(asset.rows[0]!.assetCode)}/calibrations/${visit.id}/certificate`
             : null,
           dispatchedOn: visit.dispatchedOn?.toLocaleDateString("en-IN", {
+            day: "2-digit", month: "2-digit", year: "numeric",
             timeZone: "Asia/Kolkata",
           }) ?? null,
           returnedOn: visit.returnedOn?.toLocaleDateString("en-IN", {
+            day: "2-digit", month: "2-digit", year: "numeric",
             timeZone: "Asia/Kolkata",
           }) ?? null,
         })),

@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -96,7 +97,7 @@ export default async function AccountableStoreCalibrationPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>{active.scheduleName}</CardTitle>
-                <CardDescription>Due {active.dueOn} · {active.scope}</CardDescription>
+                <CardDescription>Due {formatCalendarDate(active.dueOn)} · {active.scope}</CardDescription>
               </div>
               <StatusBadge
                 tone={active.status === "OPEN" ? "warning" : "information"}
@@ -118,7 +119,7 @@ export default async function AccountableStoreCalibrationPage({
                 {active.offers.map((offer) => (
                   <TableRow key={offer.id}>
                     <TableCell>{offer.supplierName}</TableCell>
-                    <TableCell>{offer.quotedOn}</TableCell>
+                    <TableCell>{formatCalendarDate(offer.quotedOn)}</TableCell>
                     <TableCell>₹ {offer.quotedPrice}</TableCell>
                     <TableCell>{offer.quoteReference || "—"}</TableCell>
                   </TableRow>
@@ -218,11 +219,11 @@ export default async function AccountableStoreCalibrationPage({
               <TableBody>
                 {recent.map((visit) => (
                   <TableRow key={visit.id}>
-                    <TableCell>{visit.dueOn}</TableCell>
+                    <TableCell>{formatCalendarDate(visit.dueOn)}</TableCell>
                     <TableCell>{visit.scheduleName}</TableCell>
                     <TableCell><StatusBadge tone={visit.status === "PASSED" ? "positive" : visit.status === "FAILED" ? "danger" : "warning"} value={visit.status} /></TableCell>
                     <TableCell>{visit.purchaseOrderNumber || "—"}</TableCell>
-                    <TableCell>{visit.completedOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(visit.completedOn || "—")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -86,7 +86,7 @@ it("previews and downloads the complete saved job with long descriptions", async
       "CMB-2-3",
       "POST-1",
       "JRT-1",
-      "17 Oct 2026",
+      "17/10/2026",
       "Not specified",
       "Rs. 18,000 - Rs. 25,000",
       "22:00",

@@ -178,6 +178,7 @@ import {
 } from "@/lib/operational-entry-navigation"
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
 import { formatRmInwardDate } from "@/lib/rm-inward-date"
+import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import {
   refreshLockFromStatus,
@@ -10702,7 +10703,7 @@ function DataEntryPanel({
       ) : null}
       {operationalTabs && bulkEntryType === "rm_inward" ? (
         <p className="text-xs text-muted-foreground">
-          RM Inward CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
+          All CSV dates must be DD/MM/YYYY (e.g. 21/09/2026).
           {" "}For existing receipts, fill RM Location in the View Records download
           and use Update locations CSV. This updates all receipts for each Job Card
           and date; received kg and planning stay unchanged.
@@ -20199,6 +20200,8 @@ function isoDateValue(value: unknown) {
   if (!text || text === "-") return ""
   const isoMatch = text.match(/^\d{4}-\d{2}-\d{2}/)
   if (isoMatch) return isoMatch[0]
+  const calendar = parseCalendarDateInput(formatCalendarDate(text))
+  if (calendar) return calendar
   const parsed = new Date(text)
   return Number.isNaN(parsed.getTime()) ? "" : istDateValue(parsed)
 }
@@ -20676,7 +20679,7 @@ function formatCell(value: unknown): string {
   if (typeof value === "number") return formatNumber(value)
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (typeof value === "string") {
-    return /^\d{4}-\d{2}-\d{2}T/.test(value) ? formatDate(value) : value
+    return /^\d{4}-\d{2}-\d{2}T/.test(value) ? formatDate(value) : formatCalendarDate(value)
   }
   return JSON.stringify(value)
 }

@@ -3,6 +3,7 @@ import type {
   RecruitmentPostRow,
 } from "@workspace/db"
 import * as XLSX from "xlsx"
+import { csvDateValue } from "../../lib/csv-date"
 
 export const combinedJobsSheetName = "Combined Jobs"
 export const individualPostsSheetName = "Individual Posts"
@@ -125,14 +126,21 @@ function cell(row: unknown[], index: number) {
 function parseSheet(
   sheet: XLSX.WorkSheet | undefined,
   sheetName: string,
-  targetType: EmployeeAssignmentWorkbookRow["targetType"]
+  targetType: EmployeeAssignmentWorkbookRow["targetType"],
+  date1904?: boolean
 ) {
   if (!sheet) throw new Error(`The ${sheetName} sheet is missing.`)
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    blankrows: false,
+    blankrows: true,
     defval: "",
     header: 1,
     raw: false,
+  })
+  const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    blankrows: true,
+    defval: "",
+    header: 1,
+    raw: true,
   })
   const headers = (rows[0] ?? []).map((entry) =>
     String(entry ?? "")
@@ -166,7 +174,21 @@ function parseSheet(
     const employeeName = cell(row, employeeNameIndex)
     const employeeCode = cell(row, employeeCodeIndex)
     const employeeEvent = cell(row, employeeEventIndex)
-    const lastWorkingDate = cell(row, lastWorkingDateIndex)
+    let dateText = cell(row, lastWorkingDateIndex)
+    const rawDate = rawRows[index + 1]?.[lastWorkingDateIndex]
+    if (typeof rawDate === "number") {
+      const decoded = XLSX.SSF.parse_date_code(rawDate, { date1904 })
+      if (!decoded)
+        throw new Error(
+          `${sheetName} row ${rowNumber}: Last Working Date must be a valid date.`
+        )
+      dateText = `${String(decoded.d).padStart(2, "0")}/${String(decoded.m).padStart(2, "0")}/${String(decoded.y).padStart(4, "0")}`
+    }
+    const lastWorkingDate = csvDateValue(
+      dateText,
+      rowNumber,
+      `${sheetName}: Last Working Date`
+    )
     if (!employeeName && !employeeCode && !employeeEvent && !lastWorkingDate)
       return
     if (!targetCode) {
@@ -205,12 +227,14 @@ export function parseEmployeeAssignmentWorkbook(workbook: XLSX.WorkBook) {
   const combined = parseSheet(
     workbook.Sheets[combinedJobsSheetName],
     combinedJobsSheetName,
-    "combined"
+    "combined",
+    workbook.Workbook?.WBProps?.date1904
   )
   const individual = parseSheet(
     workbook.Sheets[individualPostsSheetName],
     individualPostsSheetName,
-    "individual"
+    "individual",
+    workbook.Workbook?.WBProps?.date1904
   )
   const assignments = [...combined, ...individual]
   if (!assignments.length) {

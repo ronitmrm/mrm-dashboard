@@ -1,3 +1,4 @@
+import { formatIstDate } from "../date-time"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import fontkit from "@pdf-lib/fontkit"
@@ -230,12 +231,7 @@ export async function buildQuotePdf(
     ["RFQ No:", document.customerReference || "-"],
     [
       "Date:",
-      new Intl.DateTimeFormat("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        timeZone: "Asia/Kolkata",
-      }).format(new Date(date)),
+      formatIstDate(date),
     ],
     ["Copper LME: ($ / MT)", context.copper],
     ["Zinc LME: ($ / MT)", context.zinc],

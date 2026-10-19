@@ -1,3 +1,4 @@
+import { formatIstDateTime } from "@/lib/date-time"
 import type { ComponentProps } from "react"
 
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
@@ -97,7 +98,7 @@ export function StoreTransferRequests({
                       {group.requestNumber}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {group.requestedAt}
+                      {formatIstDateTime(group.requestedAt)}
                     </span>
                   </TableCell>
                   <TableCell>{group.destinationStoreName}</TableCell>

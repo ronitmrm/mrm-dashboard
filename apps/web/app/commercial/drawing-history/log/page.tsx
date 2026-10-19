@@ -1,3 +1,4 @@
+import { formatIstDateTime } from "@/lib/date-time"
 import {
   createCommercialReportingRepository,
   createCustomerRepository,
@@ -112,7 +113,7 @@ export default async function DrawingChangeLogPage() {
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.changeId}>
-                  <TableCell>{row.changedAt}</TableCell>
+                  <TableCell>{formatIstDateTime(row.changedAt)}</TableCell>
                   <TableCell data-filter-value={row.changeType}>
                     <Badge variant="outline">{row.changeType}</Badge>
                   </TableCell>

@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 
 import { createStoreRepository, storeUnitId } from "@workspace/db"
@@ -44,7 +45,7 @@ import { StoreItemMaintenanceMasterForm } from "@/components/store-item-maintena
 import { StoreAssetCalibrationHistory } from "@/components/store-asset-calibration-history"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
-import { formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { formatIstDate, formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import {
   listGrantedCapabilities,
@@ -215,7 +216,7 @@ export default async function StoreAssetWorkspacePage({
               label="Current Assignment"
               value={asset.holderName || asset.locationName || asset.holderType}
             />
-            <Info label="Installed On" value={asset.installedOn || "Not recorded"} />
+            <Info label="Installed On" value={asset.installedOn ? formatIstDate(asset.installedOn) : "Not recorded"} />
             <Info label="Connected Stabiliser Unit ID" value={asset.stabilizerUnitId || "Not recorded"} />
             <Info label="Connected MCB Unit ID" value={asset.mcbNumber || "Not recorded"} />
           </div>
@@ -288,7 +289,7 @@ export default async function StoreAssetWorkspacePage({
             />
             <Info
               label="Acquired On"
-              value={asset.acquiredOn || "Not recorded"}
+              value={asset.acquiredOn ? formatIstDate(asset.acquiredOn) : "Not recorded"}
             />
           </div>
         </StoreAssetWorkspacePane>
@@ -413,7 +414,7 @@ export default async function StoreAssetWorkspacePage({
                   <TableCell className="font-medium">
                     {order.orderNumber}
                   </TableCell>
-                  <TableCell>{order.orderDate}</TableCell>
+                  <TableCell>{formatCalendarDate(order.orderDate)}</TableCell>
                   <TableCell>{order.supplierName}</TableCell>
                   <TableCell>{order.serviceDescription}</TableCell>
                   <TableCell>₹ {order.servicePrice}</TableCell>
@@ -474,13 +475,13 @@ export default async function StoreAssetWorkspacePage({
                     </TableCell>
                     <TableCell>{schedule.name}</TableCell>
                     <TableCell>{schedule.frequencyDays} days</TableCell>
-                    <TableCell>{schedule.lastCompletedOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(schedule.lastCompletedOn || "—")}</TableCell>
                     <TableCell
                           className={
                             due ? "font-semibold text-destructive" : ""
                           }
                     >
-                      {schedule.nextDueOn}
+                      {formatCalendarDate(schedule.nextDueOn)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={due ? "destructive" : schedule.active ? "secondary" : "outline"}>
@@ -524,9 +525,9 @@ export default async function StoreAssetWorkspacePage({
                     <TableRow key={schedule.id}>
                       <TableCell className="font-medium">{schedule.name}</TableCell>
                       <TableCell>{schedule.frequencyDays} days</TableCell>
-                      <TableCell>{schedule.lastCompletedOn || "—"}</TableCell>
+                      <TableCell>{formatCalendarDate(schedule.lastCompletedOn || "—")}</TableCell>
                       <TableCell className={due ? "font-semibold text-destructive" : ""}>
-                        {schedule.nextDueOn}
+                        {formatCalendarDate(schedule.nextDueOn)}
                       </TableCell>
                       <TableCell>
                         <Badge variant={due ? "destructive" : schedule.active ? "secondary" : "outline"}>
@@ -653,14 +654,14 @@ export default async function StoreAssetWorkspacePage({
             <TableBody>
               {maintenance.map((record) => (
                 <TableRow key={record.id}>
-                  <TableCell>{record.completedOn}</TableCell>
+                  <TableCell>{formatCalendarDate(record.completedOn)}</TableCell>
                   <TableCell>{record.maintenanceType}</TableCell>
                   <TableCell>{record.completedBy}</TableCell>
                   <TableCell>
                     {record.workDone || record.result || "—"}
                   </TableCell>
                   <TableCell>{record.certificateNumber || "—"}</TableCell>
-                  <TableCell>{record.nextDueOn || "—"}</TableCell>
+                  <TableCell>{formatCalendarDate(record.nextDueOn || "—")}</TableCell>
                   <TableCell>
                     {record.cost ? `₹ ${record.cost}` : "—"}
                   </TableCell>
@@ -894,10 +895,10 @@ function StoreItemWorkspace({
                       asset.holderType}
                   </TableCell>
                       <TableCell>
-                        {asset.acquiredOn || "Not recorded"}
+                        {formatCalendarDate(asset.acquiredOn || "Not recorded")}
                       </TableCell>
                       <TableCell>
-                        {asset.nextDueOn || "Not scheduled"}
+                        {formatCalendarDate(asset.nextDueOn || "Not scheduled")}
                       </TableCell>
                 </TableRow>
               ))}

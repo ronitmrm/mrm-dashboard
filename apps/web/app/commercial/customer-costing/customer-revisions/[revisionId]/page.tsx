@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import {
   CustomerParameterCells,
@@ -156,7 +157,7 @@ export default async function CustomerRevisionCostingPage({
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {selectedRevision.companyName ?? "All Customers"} ·
-                    Effective {selectedRevision.effectiveOn}
+                    Effective {formatCalendarDate(selectedRevision.effectiveOn)}
                   </p>
                   <p className="mt-2 text-sm whitespace-pre-wrap">
                     {selectedRevision.reason}

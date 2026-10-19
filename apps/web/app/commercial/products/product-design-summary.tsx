@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 
 import type { ProductPortfolioDossier } from "@workspace/db"
@@ -240,7 +241,7 @@ export function ProductDesignSummary({
                     <TableCell>
                       {revision.current ? "Current" : revision.status}
                     </TableCell>
-                    <TableCell>{revision.effectiveOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(revision.effectiveOn || "—")}</TableCell>
                     <TableCell>{revision.changeReason}</TableCell>
                     <TableCell>
                       {revision.ecnNumber || "Initial Release"}

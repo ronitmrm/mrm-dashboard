@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
@@ -91,7 +92,7 @@ export default async function EmployeeDataPage({ params, searchParams }: {
       <ArrowLeft className="size-4" /> Back to Employee Data
     </Link>
     <PageHeader title={`${record.employeeName} · Employee Data`} description={`Employee ID ${record.employeeCode} · ${record.postCode} · ${record.department ?? "Department not recorded"} · ${record.designation ?? "Designation not recorded"}`} />
-    <p className="text-sm text-muted-foreground">Joined {record.joinedOn ?? "date not recorded"}{record.endedOn ? ` · Left ${record.endedOn}` : " · Current term"}. Personal details follow this Employee ID; employment conditions are saved for this joined term.</p>
+    <p className="text-sm text-muted-foreground">Joined {formatCalendarDate(record.joinedOn ?? "date not recorded")}{record.endedOn ? ` · Left ${formatCalendarDate(record.endedOn)}` : " · Current term"}. Personal details follow this Employee ID; employment conditions are saved for this joined term.</p>
     {feedback.error ? <Alert variant="destructive"><AlertDescription>{feedback.error}</AlertDescription></Alert> : null}
     {feedback.success ? <Alert><AlertDescription>{feedback.success}</AlertDescription></Alert> : null}
     <form action={saveEmployeeDataAction} className="grid min-w-0 gap-5">

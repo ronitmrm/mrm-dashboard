@@ -1,4 +1,6 @@
 "use client"
+
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { useCallback, useState } from "react"
 import type { RejectionRegisterRow } from "@workspace/db/rejection-domain"
 import {
@@ -82,7 +84,7 @@ export function RejectionRegister({ rows }: { rows: RejectionRegisterRow[] }) {
             <TableRow key={row.id} data-row-id={row.id}>
               <TableCell>{row.jobCard}</TableCell>
               <TableCell>{row.partCode}</TableCell>
-              <TableCell>{row.date}</TableCell>
+              <TableCell>{formatCalendarDate(row.date)}</TableCell>
               <TableCell>{row.unit}</TableCell>
               <TableCell>{row.stage}</TableCell>
               <TableCell>{row.type || "—"}</TableCell>

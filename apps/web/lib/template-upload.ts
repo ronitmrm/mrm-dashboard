@@ -1,7 +1,7 @@
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
 
 import { dedupeCsvImportRows } from "./auto-coded-master-import"
-import { parseRmInwardUploadDate } from "./rm-inward-date"
+import { csvDateValue, isCsvDateColumn } from "./csv-date"
 
 export class TemplateUploadError extends Error {
   readonly status = 400
@@ -33,8 +33,7 @@ export function parseTemplateUpload(
   }
   if (entryType === "rm_inward") {
     const failures = rows.flatMap((row, index) => {
-      const date = parseRmInwardUploadDate(row.rmInwardDate)
-      const errors = date ? [] : [`Row ${index + 2}: RM Inward Date "${text(row.rmInwardDate) || "blank"}" must be DD-MM-YYYY (e.g. 21-09-2026).`]
+      const errors = text(row.rmInwardDate) ? [] : [`CSV row ${index + 2}: RM Inward Date is required in DD/MM/YYYY format (e.g. 21/09/2026).`]
       const quantity = Number(row.rmInwardKg)
       if (!Number.isFinite(quantity) || quantity <= 0) {
         errors.push(`Row ${index + 2}: RM Inward Kg "${text(row.rmInwardKg) || "blank"}" must be a positive number.`)
@@ -46,11 +45,18 @@ export function parseTemplateUpload(
         `Import failed; no rows saved. ${failures.slice(0, 10).join(" ")}${failures.length > 10 ? ` ${failures.length - 10} more row(s) failed.` : ""}`
       )
     }
-    for (const row of rows) {
-      row.rmInwardDate = parseRmInwardUploadDate(row.rmInwardDate)!
-    }
   }
   return dedupeCsvImportRows(entryType, rows)
+}
+
+function normalizeDateCells(row: Record<string, unknown>, rowNumber: number) {
+  try {
+    return Object.fromEntries(Object.entries(row).map(([column, value]) => [
+      column, isCsvDateColumn(column) ? csvDateValue(value, rowNumber, column) : value,
+    ]))
+  } catch (error) {
+    throw new TemplateUploadError(error instanceof Error ? error.message : "Invalid CSV date.")
+  }
 }
 
 function decodeDataUrl(value: string) {
@@ -125,16 +131,16 @@ function parseCsv(csvText: string, entryType: string): Array<Record<string, unkn
   if (duplicate) {
     throw new TemplateUploadError(`Duplicate CSV column: ${duplicate}. Keep one column per field.`)
   }
-  return bodyRows
-    .filter((bodyRow) => bodyRow.some((value) => value.trim()))
-    .map((bodyRow) =>
-      Object.fromEntries(
+  return bodyRows.flatMap((bodyRow, rowIndex) =>
+    bodyRow.some((value) => value.trim())
+      ? [normalizeDateCells(Object.fromEntries(
         cleanHeaders.map((header, index) => [
           header,
           bodyRow[index]?.trim() ?? "",
         ])
-      )
-    )
+      ), rowIndex + 2)]
+      : []
+  )
 }
 
 const machineMasterTextFields = new Set([

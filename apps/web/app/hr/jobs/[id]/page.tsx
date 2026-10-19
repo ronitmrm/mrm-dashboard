@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -219,10 +220,10 @@ export default async function JobWorkspacePage({
               value: interviews.length.toLocaleString("en-IN"),
               tone: "brand",
             },
-            { label: "Posted", value: job.postDate, tone: "accent" },
+            { label: "Posted", value: formatCalendarDate(job.postDate), tone: "accent" },
             {
               label: "Target",
-              value: job.targetDate ?? "Not Set",
+              value: formatCalendarDate(job.targetDate ?? "Not Set"),
               tone: job.targetDate ? "information" : "warning",
             },
           ] as const
@@ -316,7 +317,7 @@ export default async function JobWorkspacePage({
                         <StatusBadge value={application.status} />
                         {application.didNotJoinOn ? (
                           <div className="mt-1 min-w-48 text-xs whitespace-normal text-muted-foreground">
-                            <p>{application.didNotJoinOn}</p>
+                            <p>{formatCalendarDate(application.didNotJoinOn)}</p>
                             <p>{application.didNotJoinReason}</p>
                           </div>
                         ) : null}
@@ -337,7 +338,7 @@ export default async function JobWorkspacePage({
                             ? "Yes"
                             : "No"}
                       </TableCell>
-                      <TableCell>{application.joiningDate ?? "—"}</TableCell>
+                      <TableCell>{formatCalendarDate(application.joiningDate ?? "—")}</TableCell>
                       <TableCell>
                         {formatSalary(application.salaryBeforeProbation)}
                       </TableCell>
@@ -453,7 +454,7 @@ export default async function JobWorkspacePage({
                       <TableCell className="min-w-56 whitespace-normal">
                         {interview.comments ?? "—"}
                       </TableCell>
-                      <TableCell>{interview.joiningDate ?? "—"}</TableCell>
+                      <TableCell>{formatCalendarDate(interview.joiningDate ?? "—")}</TableCell>
                       {canWrite ? (
                         <TableCell className="text-right">
                           <InterviewRoundEditDialog

@@ -1,4 +1,5 @@
 import { csvValue, type MasterCsvRow } from "../../../lib/master-data-csv"
+import { csvDateValue } from "../../../lib/csv-date"
 
 export type PurchaseOrderCsvLine = {
   currencyCode: string
@@ -57,7 +58,7 @@ export function parsePurchaseOrderCsvRows(
     "customer"
   )
   const poNumber = requiredCsvValue(first, 2, "PO number", "po_number", "po")
-  const poDate = requiredCsvValue(first, 2, "PO date", "po_date", "date")
+  const poDate = csvDateValue(requiredCsvValue(first, 2, "PO date", "po_date", "date"), 2, "PO date")
   const currencyCode = csvValue(first, "currency_code", "currency") || "USD"
   const notes = csvValue(first, "notes", "remark") || undefined
 
@@ -72,7 +73,7 @@ export function parsePurchaseOrderCsvRows(
         "customer_uid",
         "customer"
       ),
-      poDate: requiredCsvValue(row, rowNumber, "PO date", "po_date", "date"),
+      poDate: csvDateValue(requiredCsvValue(row, rowNumber, "PO date", "po_date", "date"), rowNumber, "PO date"),
       poNumber: requiredCsvValue(
         row,
         rowNumber,

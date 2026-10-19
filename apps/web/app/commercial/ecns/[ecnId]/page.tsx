@@ -1,3 +1,4 @@
+import { formatIstDateTime } from "@/lib/date-time"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -154,10 +155,10 @@ export default async function EngineeringChangeNotePage({
               {selected.designSubmittedAt ? (
                 <div className="grid gap-1 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                   <span>
-                    Submitted: {selected.designSubmittedAt.toLocaleString()}
+                    Submitted: {formatIstDateTime(selected.designSubmittedAt)}
                   </span>
                   <span>
-                    Approved: {selected.designApprovedAt?.toLocaleString() || "—"}
+                    Approved: {formatIstDateTime(selected.designApprovedAt) || "—"}
                     {selected.designApprovedBy
                       ? ` by ${selected.designApprovedBy}`
                       : ""}
@@ -177,7 +178,7 @@ export default async function EngineeringChangeNotePage({
                   </span>
                   {selected.designRejectedAt ? (
                     <span className="text-destructive sm:col-span-2 lg:col-span-4">
-                      Rejected {selected.designRejectedAt.toLocaleString()}: {selected.designRejectionRemarks}
+                      Rejected {formatIstDateTime(selected.designRejectedAt)}: {selected.designRejectionRemarks}
                     </span>
                   ) : null}
                 </div>

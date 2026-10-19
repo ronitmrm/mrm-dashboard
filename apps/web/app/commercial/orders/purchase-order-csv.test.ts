@@ -9,7 +9,7 @@ describe("Purchase Order CSV import", () => {
         {
           customer_uid: "C001",
           po_number: "PO-42",
-          po_date: "2026-08-22",
+          po_date: "22/08/2026",
           currency: "USD",
           line_number: "1",
           customer_part_code: "PART-A",
@@ -20,7 +20,7 @@ describe("Purchase Order CSV import", () => {
         {
           customer_uid: "C001",
           po_number: "PO-42",
-          po_date: "2026-08-22",
+          po_date: "22/08/2026",
           currency: "USD",
           line_number: "2",
           customer_part_code: "PART-B",
@@ -62,7 +62,7 @@ describe("Purchase Order CSV import", () => {
         {
           customer_uid: "C001",
           po_number: "PO-42",
-          po_date: "2026-08-22",
+          po_date: "22/08/2026",
           customer_part_code: "PART-A",
           quantity: "1",
           po_price: "2",
@@ -70,7 +70,7 @@ describe("Purchase Order CSV import", () => {
         {
           customer_uid: "C001",
           po_number: "PO-43",
-          po_date: "2026-08-22",
+          po_date: "22/08/2026",
           customer_part_code: "PART-B",
           quantity: "1",
           po_price: "2",

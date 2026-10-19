@@ -1,3 +1,4 @@
+import { formatIstDate } from "@/lib/date-time"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import { MasterEntryForm } from "@/components/master-entry-form"
 import Link from "next/link"
@@ -218,7 +219,7 @@ export default async function EnquiryDetailPage({
       </section>
       {loaded.revisions.length ? <SectionCard><CardHeader><CardTitle>Revision Requests</CardTitle></CardHeader><CardContent>
         <OperationalTable><TableHeader><TableRow><TableHead>Requested</TableHead><TableHead>Type</TableHead><TableHead>Reason</TableHead><TableHead>Status</TableHead><TableHead>Lines</TableHead></TableRow></TableHeader><TableBody>
-          {loaded.revisions.map(revision=><TableRow key={revision.id}><TableCell>{revision.createdAt.toLocaleDateString('en-IN')}</TableCell><TableCell>{revision.kind}</TableCell><TableCell>{revision.reason}</TableCell><TableCell>{revision.status}</TableCell><TableCell>{revision.lines.map(line=><div key={line.enquiryItemId}>Line {line.lineNumber}: {revision.status==='Completed'?'Completed':line.stage}{line.engineeringChangeNoteId?<Link className="ml-2 underline" href={`/commercial/ecns/${line.engineeringChangeNoteId}`}>Open Design Revision</Link>:null}</div>)}</TableCell></TableRow>)}
+          {loaded.revisions.map(revision=><TableRow key={revision.id}><TableCell>{formatIstDate(revision.createdAt)}</TableCell><TableCell>{revision.kind}</TableCell><TableCell>{revision.reason}</TableCell><TableCell>{revision.status}</TableCell><TableCell>{revision.lines.map(line=><div key={line.enquiryItemId}>Line {line.lineNumber}: {revision.status==='Completed'?'Completed':line.stage}{line.engineeringChangeNoteId?<Link className="ml-2 underline" href={`/commercial/ecns/${line.engineeringChangeNoteId}`}>Open Design Revision</Link>:null}</div>)}</TableCell></TableRow>)}
         </TableBody></OperationalTable>
       </CardContent></SectionCard>:null}
 
@@ -364,7 +365,7 @@ export default async function EnquiryDetailPage({
             </FieldGroup>
           </form> : <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Customer',snapshot.enquiry.companyName],['Received On',String(snapshot.enquiry.receivedOn).slice(0,10)],
+              ['Customer',snapshot.enquiry.companyName],['Received On',formatIstDate(String(snapshot.enquiry.receivedOn))],
               ['Buyer',snapshot.enquiry.buyerName],['Source',snapshot.enquiry.source],['Priority',snapshot.enquiry.priority],
               ['Incoterms',snapshot.enquiry.incoterms],['Payment Terms',snapshot.enquiry.paymentTerms],
               ['Shipment Mode',snapshot.enquiry.shipmentMode],['Packaging',snapshot.enquiry.packagingTerms],

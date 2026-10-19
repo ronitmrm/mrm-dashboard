@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import type { RecruitmentOfferOutcomeRow } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -48,16 +49,16 @@ export function OfferJoiningRegister({ rows, canViewOfferLetters }: {
                   </Button>
                 ) : canViewOfferLetters ? row.offerReference ?? "—" : "—"}
               </TableCell>
-              <TableCell>{row.offerIssuedOn ?? "—"}</TableCell>
+              <TableCell>{formatCalendarDate(row.offerIssuedOn ?? "—")}</TableCell>
               <TableCell>
                 <StatusBadge
                   value={row.outcome}
                   tone={row.outcome === "Joined" ? "positive" : row.outcome === "Awaiting Response" || row.outcome === "Awaiting Joining" ? "warning" : "inactive"}
                 />
-                {row.didNotJoinOn ? <span className="block text-xs text-muted-foreground">{row.didNotJoinOn}</span> : null}
+                {row.didNotJoinOn ? <span className="block text-xs text-muted-foreground">{formatCalendarDate(row.didNotJoinOn)}</span> : null}
               </TableCell>
-              <TableCell>{row.plannedJoiningOn ?? "—"}</TableCell>
-              <TableCell>{row.joinedOn ?? "—"}</TableCell>
+              <TableCell>{formatCalendarDate(row.plannedJoiningOn ?? "—")}</TableCell>
+              <TableCell>{formatCalendarDate(row.joinedOn ?? "—")}</TableCell>
             </TableRow>)}
             {!rows.length ? <TableRow><TableCell colSpan={8}>
               <StandardState title="No Offer Decisions" description="Candidates appear after final HR approval." />

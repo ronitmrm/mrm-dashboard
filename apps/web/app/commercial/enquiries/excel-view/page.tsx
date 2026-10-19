@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { quotationRevisionLabel } from "@/lib/pricing/quotation-revision"
@@ -234,7 +235,7 @@ export default async function EnquiryExcelViewPage({ searchParams }: {
                         ? formatIstDateTime(row.quotePdfSentAt)
                         : "—"}
                     </TableCell>
-                    <TableCell>{row.receivedOn}</TableCell>
+                    <TableCell>{formatCalendarDate(row.receivedOn)}</TableCell>
                   </TableRow>
                 ))}
                 {!result.rows.length ? (

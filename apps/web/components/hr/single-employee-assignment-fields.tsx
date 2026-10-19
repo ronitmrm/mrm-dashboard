@@ -1,5 +1,9 @@
 "use client"
 
+import { formatIstDateTime } from "../../lib/date-time"
+
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type {
   RecruitmentCombinedRoleRow,
   RecruitmentEmployeeAssignmentRow,
@@ -224,7 +228,7 @@ export function SingleEmployeeAssignmentFields({
               : ""}{" "}
             · {selected.post.status}
             {selected.post.lastWorkingDate
-              ? ` · last working date ${selected.post.lastWorkingDate}`
+              ? ` · last working date ${formatCalendarDate(selected.post.lastWorkingDate)}`
               : ""}
           </AlertDescription>
         </Alert>
@@ -250,17 +254,17 @@ export function SingleEmployeeAssignmentFields({
                 {appointment.employeeName} · {appointment.status}
               </p>
               <p>Employee ID: {appointment.employeeCode || "Not assigned"}</p>
-              <p>Appointed: {appointment.appointedAt}</p>
+              <p>Appointed: {formatIstDateTime(appointment.appointedAt)}</p>
               {appointment.completedAt ? (
                 <p>
-                  {appointment.status}: {appointment.completedAt}
+                  {appointment.status}: {formatIstDateTime(appointment.completedAt)}
                 </p>
               ) : null}
               <p className="mt-2 text-muted-foreground">
                 Outgoing: {appointment.outgoingEmployeeName} (
                 {appointment.outgoingEmployeeCode || "No ID"}){" · "}Last
                 working date:{" "}
-                {appointment.outgoingLastWorkingDate || "Not recorded"}
+                {formatCalendarDate(appointment.outgoingLastWorkingDate || "Not recorded")}
               </p>
             </div>
           ))}
@@ -380,7 +384,7 @@ export function SingleEmployeeAssignmentFields({
         </NativeSelect>
         {appointed && selected.post.joiningDate ? (
           <FieldDescription>
-            Planned Joining Date: {selected.post.joiningDate}. The Post Stays
+            Planned Joining Date: {formatCalendarDate(selected.post.joiningDate)}. The Post Stays
             Appointed Until Actual Joining Is Confirmed With An Employee ID.
           </FieldDescription>
         ) : null}

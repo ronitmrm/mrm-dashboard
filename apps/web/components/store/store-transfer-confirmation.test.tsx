@@ -55,7 +55,7 @@ test("reviews assigned units by item with acquisition date, location and one tra
   )
   expect(html).toContain("Cordless Drill")
   expect(html).toContain("1 of 1 units selected")
-  expect(html).toContain("02 Jan 2026")
+  expect(html).toContain("02/01/2026")
   expect(html).toContain("Receiving Location")
   expect(html).toContain('value="NC287-0001" selected=""')
   expect(html).not.toContain('value="NC287-0002"')

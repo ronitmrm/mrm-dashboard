@@ -1,3 +1,4 @@
+import { formatIstDate } from "@/lib/date-time"
 import Link from "next/link"
 
 import { createCommercialRevisionsRepository } from "@workspace/db"
@@ -192,7 +193,7 @@ export default async function EngineeringChangeNotesPage() {
                       {ecn.ecnNumber}
                     </TableCell>
                     <TableCell>
-                      {ecn.createdAt.toLocaleDateString("en-IN")}
+                      {formatIstDate(ecn.createdAt)}
                     </TableCell>
                     <TableCell>{ecn.itemUid}</TableCell>
                     <TableCell className="max-w-80 whitespace-normal">
