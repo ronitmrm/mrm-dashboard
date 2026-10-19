@@ -247,7 +247,11 @@ downstream work does not reserve a machine or bypass actual-WIP readiness withou
 the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
 An approved route change sets the selected route and the remaining setup
-quantities for future planning. A saved route with zero remaining setup quantity
+quantities for future planning. Settle open Production Sessions first. Saving
+the change releases unfinished active setups from their machines and returns
+them to Planned; the new route requires RM at Machine, Setting, Quality Approval
+and Machine Start again. Recorded production and the old route remain historical.
+A saved route with zero remaining setup quantity
 still exists; it does not create a Route Master gap or new machine work. An
 explicit remaining-setup plan with no positive planned quantity creates no machine
 plan or finish forecast; completed production and workflow remain historical.

@@ -480,7 +480,7 @@ async function releasePlannerInterruptedSetups(
   input: {
     actorUserId?: string | null
     decisionId: string
-    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections"
+    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections" | "routeChanges"
     interruptions: Array<InterruptedSetupInput & { operationSetupId?: string }>
     organizationId: string
     reason: string
@@ -3151,6 +3151,28 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           normalizeProductionFloorCode(input.productionFloorCode),
           workOrder.id
         )
+        const activeSetups = await client.query<{
+          machine_number: string
+          setup_number: number
+        }>(
+          `SELECT machine.machine_number, setup.setup_number
+           FROM manufacturing.shop_floor_setup_state state
+           JOIN catalog.machines machine ON machine.id = state.machine_id
+           JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+           WHERE state.organization_id = $1 AND state.work_order_id = $2
+             AND state.active AND state.stage <> 'item_complete'
+           FOR UPDATE OF state`,
+          [input.organizationId, workOrder.id]
+        )
+        const interruptedSetups = await settledPlannerInterruptions(
+          client,
+          input.organizationId,
+          activeSetups.rows.map((setup) => ({
+            jobCardNumber: input.jobCardNumber,
+            machineNumber: setup.machine_number,
+            setupNumber: setup.setup_number,
+          }))
+        )
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.route_change_events (
@@ -3170,9 +3192,17 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             requiredText(input.reason, "Route-change reason"),
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            { ...input, interruptedSetups },
           ]
         )
+        await releasePlannerInterruptedSetups(client, {
+          actorUserId: input.actorUserId,
+          decisionId: created.rows[0]!.id,
+          decisionSource: "routeChanges",
+          interruptions: interruptedSetups,
+          organizationId: input.organizationId,
+          reason: requiredText(input.reason, "Route-change reason"),
+        })
         for (const [sequence, remaining] of (
           input.remainingSetups ?? []
         ).entries()) {
