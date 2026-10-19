@@ -918,8 +918,7 @@ async function buildDashboardReadModel(
       floorCorrections
     )
     const input: LegacyDashboardInput = {
-      includeToolFixtureNumbers:
-        floorCode === "conventional" || floorCode === "conventional-02",
+      includeToolFixtureNumbers: false,
       productionFloorCode: floorCode,
       currentShopFloorStatusRows: currentShopFloorStates.rows
         .filter((row) => row.production_floor_code === floorCode)
