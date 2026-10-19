@@ -4,9 +4,15 @@
 
 Operational Entries → Rework Received records returned pieces against a previously
 dispatched Job Card in the same Production Unit. Record a positive whole-piece
-quantity, receipt date, unique return reference and reason. Partial and full
-returns are supported. Total returns against that card cannot exceed its recorded
-dispatch quantity (ordered quantity for historical quantity-less dispatches).
+quantity, receipt date and reason. The system generates a unique Return Reference
+on save: `RET-<base Job Card>-R<revision number>`. Both activities of a mixed return
+share this reference in their records and history.
+Partial and full returns are supported. Weight-converted piece quantities allow
+a 5% excess: cumulative returns against the dispatched activity cannot exceed
+105% of its recorded dispatch quantity (ordered quantity for historical
+quantity-less dispatches), rounded down to whole pieces. The allowance applies
+once to the total, not separately to each receipt. Smaller partial returns remain
+valid; there is no 95% minimum.
 
 The Job Card number stays the same. Original production is **Original** (revision
 0); returns create **Rev 1**, **Rev 2**, etc. A return records the quantity that

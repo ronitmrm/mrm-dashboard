@@ -112,7 +112,7 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     ...revisions.filter(row => row.revisionNumber > 0).map(row => ({
       revisionReference: row.jobCardNumber, revisionLabel: row.revisionLabel,
       eventType: "return_received", eventTime: row.sourcePayload.receivedAt,
-      detail: row.reason, quantity: row.quantity,
+      detail: [row.sourcePayload.receiptReference, row.reason].filter(Boolean).join(" · "), quantity: row.quantity,
     })),
   ]
   return history.sort((left, right) => new Date(String(right.eventTime)).getTime() - new Date(String(left.eventTime)).getTime())

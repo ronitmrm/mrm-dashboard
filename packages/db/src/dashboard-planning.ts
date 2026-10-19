@@ -1063,14 +1063,12 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       replacementRequiredRmKg?: number
       replacementRmPoNo?: string
       receivedOn: string
-      receiptReference: string
       reason: string
     }) {
       return transaction(pool, async client => {
         const original = input.originalJobCardNumber.trim()
-        const reference = input.receiptReference.trim()
         const reason = input.reason.trim()
-        if (!original || !reference || !reason) throw new ShopFloorConflictError("Job Card, return reference and reason are required.")
+        if (!original || !reason) throw new ShopFloorConflictError("Job Card and reason are required.")
         if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
           throw new ShopFloorConflictError("Returned quantity must be a positive whole number.")
         }
@@ -1115,21 +1113,20 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
              AND decision = 'approved' AND reversed_at IS NULL`, [input.organizationId, order.id])
         const dispatched = dispatch.rows[0]!.legacy ? Number(order.ordered_quantity) : Number(dispatch.rows[0]!.quantity)
         if (dispatched <= 0) throw new ShopFloorConflictError("Only a dispatched Job Card can receive rework.")
-        const prior = await client.query<{ ordered_quantity: string; source_payload: Record<string, unknown> }>(
-          `SELECT ordered_quantity::text, source_payload FROM manufacturing.work_orders
+        const prior = await client.query<{ ordered_quantity: string }>(
+          `SELECT ordered_quantity::text FROM manufacturing.work_orders
            WHERE organization_id = $1 AND source_payload->>'reworkOfWorkOrderId' = $2`, [input.organizationId, order.id])
-        if (prior.rows.some(row => String(row.source_payload.receiptReference).toLowerCase() === reference.toLowerCase())) {
-          throw new ShopFloorConflictError("This return reference is already recorded for this Job Card.")
-        }
         const returned = prior.rows.reduce((total, row) => total + Number(row.ordered_quantity), 0)
-        if (input.quantity > dispatched - returned) {
-          throw new ShopFloorConflictError(`Only ${Math.max(dispatched - returned, 0)} dispatched pieces remain available to return.`)
+        const maximumReturn = Math.floor(dispatched * 105 / 100)
+        if (input.quantity > maximumReturn - returned) {
+          throw new ShopFloorConflictError(`Only ${Math.max(maximumReturn - returned, 0)} pieces remain available to return, including the 5% weight-conversion allowance.`)
         }
         const revisions = await client.query<{ revision: number }>(
           `SELECT COALESCE(max((source_payload->>'revisionNumber')::integer), 0) AS revision
            FROM manufacturing.work_orders WHERE organization_id = $1
              AND source_payload->>'revisionRootWorkOrderId' = $2`, [input.organizationId, rootId])
         const revisionNumber = Number(revisions.rows[0]!.revision) + 1
+        const reference = `RET-${rootJobCardNumber}-R${revisionNumber}`
         const item = await client.query<{ uid: string; description: string }>("SELECT uid, description FROM catalog.items WHERE id = $1", [order.item_id])
         const activities = [
           { disposition: "rework", quantity: input.quantity - replacementQuantity },
@@ -1168,7 +1165,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           savedActivities.push({ id: saved.rows[0]!.id, jobCardNumber, disposition: activity.disposition, quantity: activity.quantity })
         }
         await queueDashboardRefresh(client, input.organizationId)
-        return { rootJobCardNumber, revisionNumber, activities: savedActivities }
+        return { rootJobCardNumber, revisionNumber, receiptReference: reference, activities: savedActivities }
       })
     },
 

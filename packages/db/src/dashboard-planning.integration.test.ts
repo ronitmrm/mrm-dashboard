@@ -130,11 +130,13 @@ describe("dashboard planning writes", () => {
     const before = (await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows
     const receipt = { organizationId, productionFloorCode: "cnc" as const, originalJobCardNumber: original,
       quantity: 20, replacementQuantity: 8, replacementRequiredRmKg: 2,
-      receivedOn: "2026-10-01", receiptReference: "RETURN-1", reason: "Finish correction" }
+      receivedOn: "2026-10-01", reason: "Finish correction" }
     const saved = await repository.receiveRework(receipt)
     const rework = saved.activities.find(row => row.disposition === "rework")!
     const replacement = saved.activities.find(row => row.disposition === "replacement")!
-    expect(saved).toMatchObject({ rootJobCardNumber: original, revisionNumber: 1 })
+    expect(saved).toMatchObject({ rootJobCardNumber: original, revisionNumber: 1, receiptReference: `RET-${original}-R1` })
+    const references = await pool.query("SELECT source_payload->>'receiptReference' AS reference FROM manufacturing.work_orders WHERE id = ANY($1::uuid[])", [saved.activities.map(row => row.id)])
+    expect(references.rows.map(row => row.reference)).toEqual([saved.receiptReference, saved.receiptReference])
     expect(rework.jobCardNumber).toBe(`${original} · Rev 1 · Rework`)
     const read = (revisionReference = rework.jobCardNumber) => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: original, revisionReference })
     const waiting = await read()
@@ -157,14 +159,17 @@ describe("dashboard planning writes", () => {
     expect(history.revisionHistory).toEqual(expect.arrayContaining([
       expect.objectContaining({ revisionLabel: "Original", eventType: "raw_material_received" }),
       expect.objectContaining({ revisionLabel: "Rev 1 · Replacement", eventType: "raw_material_received" }),
+      expect.objectContaining({ eventType: "return_received", detail: `${saved.receiptReference} · ${receipt.reason}` }),
     ]))
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
       decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 12, 'test', 'dispatchApprovals', $3)`,
       [organizationId, rework.id, randomUUID()])
     const repeated = await repository.receiveRework({ ...receipt, originalJobCardNumber: rework.jobCardNumber,
-      quantity: 1, replacementQuantity: 0, receiptReference: "REPEAT-RETURN" })
-    expect(repeated).toMatchObject({ rootJobCardNumber: original, revisionNumber: 2 })
-    await expect(repository.receiveRework({ ...receipt, receiptReference: "RETURN-2", quantity: 81 })).rejects.toThrow("Only 80")
+      quantity: 1, replacementQuantity: 0 })
+    expect(repeated).toMatchObject({ rootJobCardNumber: original, revisionNumber: 2, receiptReference: `RET-${original}-R2` })
+    await expect(repository.receiveRework({ ...receipt, quantity: 86 })).rejects.toThrow("Only 85 pieces remain available to return, including the 5%")
+    const atLimit = await repository.receiveRework({ ...receipt, quantity: 85, replacementQuantity: 0 })
+    expect(atLimit).toMatchObject({ revisionNumber: 3, receiptReference: `RET-${original}-R3`, activities: [expect.objectContaining({ quantity: 85 })] })
     expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
   })
 
