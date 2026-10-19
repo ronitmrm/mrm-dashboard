@@ -1,3 +1,4 @@
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { DuplicateMasterError, ShopFloorConflictError } from "@workspace/db"
 import {
   createDashboardPlanningRepository,
@@ -1170,6 +1171,23 @@ async function post(request: NextRequest, context: RouteContext) {
       return json({ ...result, message: "Delivery target saved." })
     }
 
+    if (path === "rework-route") {
+      const setups = Array.isArray(body.setups) ? body.setups.map(value => {
+        const setup = plainRecord(value)
+        return { setupName: text(setup.setupName), machineFamily: text(setup.machineFamily),
+          cycleTimeSeconds: Number(setup.cycleTimeSeconds), setupTimeMinutes: Number(setup.setupTimeMinutes),
+          stageWeight: Number(setup.stageWeight), operationWeight: optionalNumeric(setup.operationWeight),
+          fixture: optionalText(setup.fixture), tooling: optionalText(setup.tooling), foamTool: optionalText(setup.foamTool),
+          inspectionChecks: Array.isArray(setup.inspectionChecks) ? setup.inspectionChecks.map(text) : [] }
+      }) : []
+      const result = await withPlanningRepository(request, "operations.route_selection.write",
+        ({ actorUserId, organizationId, repository }) => repository.createReworkRoute({
+          actorUserId, organizationId, productionFloorCode: normalizeProductionFloorCode(body.productionFloorCode),
+          jobCardNumber: text(body.jcNo), setups,
+        }))
+      return json(await withPlanningRefresh(request, path, body, { ...result, rowsUpdated: 1, message: "Job-specific rework route saved and selected." }))
+    }
+
     if (path === "route-selection") {
       const result = await withPlanningRepository(
         request,
@@ -2322,6 +2340,20 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
+      if (entryType === "rework_rejected") {
+        const payload = plainRecord(body.payload)
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const result = await withPlanningRepository(request, scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.rejectRework({
+            actorUserId, organizationId, productionFloorCode: scope.floor,
+            jobCardNumber: text(payload.jobCardNumber), quantity: Number(payload.quantity),
+            rejectedOn: text(payload.rejectedOn), reason: text(payload.reason),
+            replacementRequiredRmKg: Number(payload.replacementRequiredRmKg), replacementRmPoNo: optionalText(payload.replacementRmPoNo),
+          }))
+        return json(await withPlanningRefresh(request, path, body, { ...result, ok: true, rowsUpdated: 1,
+          savedText: `${result.replacementJobCardNumber} created. Receive new RM and select the full route in Part Readiness. Return Reference: ${result.receiptReference}.`,
+        }))
+      }
       if (entryType === "rework_received") {
         const payload = plainRecord(body.payload)
         const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
@@ -2785,6 +2817,7 @@ const knownDashboardApiPaths = new Set([
   "reverse-entry",
   "route-change",
   "route-selection",
+  "rework-route",
   "setup-checklist",
   "status",
   "training",

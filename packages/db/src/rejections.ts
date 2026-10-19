@@ -248,7 +248,7 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
       filters: { from: string; to: string; unit: string }
     ) {
       const values = [organizationId, filters.from, filters.to, filters.unit]
-      const [entries, sessions, legacy] = await Promise.all([
+      const [entries, sessions, legacy, failedRework] = await Promise.all([
         pool.query<RejectionRegisterRow>(
           `SELECT e.id, w.job_card_number AS "jobCard", i.uid AS "partCode", e.rejection_date::text AS date,
           e.production_floor_code AS unit, e.stage, e.type_name AS type, e.defect_name AS defect, e.reason_name AS reason,
@@ -288,6 +288,19 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
              AND NOT EXISTS (SELECT 1 FROM manufacturing.production_sessions s WHERE s.production_entry_id = e.id)`,
           values
         ),
+        pool.query<RejectionRegisterRow>(
+          `SELECT w.id::text || ':rework' AS id, w.job_card_number AS "jobCard", i.uid AS "partCode",
+            w.source_payload->>'reworkRejectedOn' AS date, w.source_payload->>'productionFloorCode' AS unit,
+            'Rework' AS stage, 'Rework Rejected' AS type, '' AS defect,
+            w.source_payload->>'reworkRejectionReason' AS reason,
+            (w.source_payload->>'additionalBatchRejectedQuantity')::integer AS pieces,
+            NULL::float8 AS kg, 'Not recorded' AS "weightBasis"
+           FROM manufacturing.work_orders w JOIN catalog.items i ON i.id = w.item_id
+           WHERE w.organization_id = $1 AND w.status = 'Rejected'
+             AND w.source_payload->>'reworkRejectedOn' BETWEEN $2 AND $3
+             AND ($4 = '' OR w.source_payload->>'productionFloorCode' = $4)
+             AND COALESCE((w.source_payload->>'additionalBatchRejectedQuantity')::integer, 0) > 0`, values
+        ),
       ])
       const historical: RejectionRegisterRow[] = legacy.rows.flatMap((row) => {
         const payload = row.payload ?? {}
@@ -318,6 +331,7 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
       })
       return [
         ...entries.rows,
+        ...failedRework.rows,
         ...sessions.rows.map((row) => ({
           ...row,
           stage: productionRejectionStage(row.type),

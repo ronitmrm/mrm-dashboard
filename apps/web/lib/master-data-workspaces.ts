@@ -20,6 +20,7 @@ export const masterDataEntryTypes = [
 export const operationalDataEntryTypes = [
   "work_order",
   "rework_received",
+  "rework_rejected",
   "rm_inward",
   "software_raw",
 ] as const
@@ -62,8 +63,11 @@ export function operationalEntryRows(
   dataEntry: Record<string, unknown>,
   productionControl: Record<string, unknown>
 ) {
+  if (entryType === "rework_rejected") {
+    return recordRows(productionControl.workOrders).filter(row => Number(row.reworkRejectedQuantity) > 0 && row.createdFromReworkRejection !== true)
+  }
   if (entryType === "rework_received") {
-    return recordRows(productionControl.workOrders).filter(row => row.isRevision === true).map<Record<string, unknown>>(row => ({
+    return recordRows(productionControl.workOrders).filter(row => row.isRevision === true && row.createdFromReworkRejection !== true).map<Record<string, unknown>>(row => ({
       ...row, quantity: row.orderPcs,
       replacementQuantity: row.disposition === "replacement" ? row.orderPcs : 0,
       replacementRequiredRmKg: row.disposition === "replacement" ? row.requiredRmKg : "",

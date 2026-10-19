@@ -43,7 +43,7 @@ export function rowsForProductionMaster<T extends Record<string, unknown>>(
   return rows.filter((row) => {
     const rowEntryType =
       typeof row.entryType === "string" ? row.entryType.trim() : ""
-    return !rowEntryType || rowEntryType === entryType
+    return !row.reworkJobCardNumber && (!rowEntryType || rowEntryType === entryType)
   })
 }
 
@@ -60,7 +60,7 @@ export function dataEntryRowsForProductionMaster(
   dataEntry: Record<string, unknown>
 ) {
   return recordRows(dataEntry.rows).filter(
-    (row) => row.entryType === entryType
+    (row) => row.entryType === entryType && !row.reworkJobCardNumber
   )
 }
 

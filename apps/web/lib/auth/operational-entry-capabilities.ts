@@ -12,6 +12,7 @@ export type OperationalEntryAction = (typeof operationalEntryActions)[number]
 export const productionOperationalEntries = [
   { id: "work_order", label: "Work Order" },
   { id: "rework_received", label: "Rework Received" },
+  { id: "rework_rejected", label: "Rework Rejected" },
   { id: "rm_inward", label: "RM Inward" },
   { id: "software_raw", label: "Software Production Output" },
 ] as const
@@ -41,7 +42,7 @@ export const operationalEntryPermissionOptions =
   scopedOperationalEntries.flatMap((entry) =>
     operationalEntryActions.filter((action) =>
       (action !== "delete" || entry.entry === "rm_inward") &&
-      (entry.entry !== "rework_received" || action === "read" || action === "save" || action === "export")
+      (!entry.entry.startsWith("rework_") || action === "read" || action === "save" || action === "export")
     ).map((action) => ({
       key: operationalEntryPermissionKey(entry.unit, entry.entry, action),
       module: "entries",
@@ -59,7 +60,7 @@ export function operationalEntryCapability(
       (item) => item.entry === entry && item.unit === unit
     ) ||
     (action === "delete" && entry !== "rm_inward") ||
-    (entry === "rework_received" && action === "import")
+    (entry.startsWith("rework_") && action === "import")
   ) {
     throw new Error("Unknown operational entry or unit.")
   }

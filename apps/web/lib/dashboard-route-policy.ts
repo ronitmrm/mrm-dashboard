@@ -38,6 +38,7 @@ const mutationCapabilitiesByPath: Record<string, readonly string[]> = {
   "reverse-entry": ["operations.corrections.write"],
   "route-change": ["planning.route_change.write"],
   "route-selection": ["operations.route_selection.write"],
+  "rework-route": ["operations.route_selection.write"],
   training: ["operations.training.write"],
 }
 

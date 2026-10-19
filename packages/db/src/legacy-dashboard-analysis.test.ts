@@ -13,6 +13,7 @@ test("rework waits for manual sole-route selection while normal work auto-select
       entry("route", { partNo: "PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
       entry("cycle", { partNo: "PART", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
       entry("tooling", { partNo: "PART", optionNumber: "1", setupNo: "1" }),
+      entry("route", { partNo: "PART", optionNumber: "RW-PRIVATE", setupNo: "1", machineType: "CNC", machineFamily: "HX", reworkJobCardNumber: "ANOTHER-REVISION" }),
       entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
     ],
   }
@@ -22,6 +23,8 @@ test("rework waits for manual sole-route selection while normal work auto-select
   expect(control.workOrders.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionSource: "Planner required", materialPlanningReady: true })
   expect(control).toMatchObject({ masterGaps: [expect.objectContaining({ jcNo: "P1/RW1", routeSelectionMissing: true })] })
   expect(control.machinePlanDetailRows.some(row => row.jcNo === "P1/RW1")).toBe(false)
+  expect("routeMasterRows" in control && control.routeMasterRows).toHaveLength(1)
+  expect(control.workOrders.find(row => row.jcNo === "P1/RW1")?.availableOptions).toHaveLength(1)
   const planned = buildLegacyDashboardSnapshot({ ...input, routeSelections: [{ jobCardNumber: "P1/RW1", routeCode: "1", createdAt }] }).productionControl
   expect(planned).toMatchObject({ masterGaps: [] })
   expect(planned.machinePlanDetailRows.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionNumber: "1" })

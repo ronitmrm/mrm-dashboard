@@ -33,9 +33,10 @@ export async function syncMaterialMovementWaits(pool: Pool, organizationId: stri
         floor.payload #> '{productionControl,machinePlanDetailRows}', '[]'::jsonb)) plan(row)
       JOIN manufacturing.work_orders work_order ON work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower(plan.row->>'jcNo')
-        AND work_order.status <> 'Cancelled'
+        AND work_order.status NOT IN ('Cancelled', 'Rejected')
       JOIN manufacturing.route_options route ON route.item_id = work_order.item_id
         AND route.route_code = plan.row->>'optionNumber'
+        AND (route.work_order_id IS NULL OR route.work_order_id = work_order.id)
       JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id
         AND setup.setup_number::text = COALESCE(NULLIF(plan.row->>'routeSetupNo', ''), plan.row->>'setupNo')
       JOIN catalog.machines machine ON machine.organization_id = $1

@@ -8,6 +8,7 @@ import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
+import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -123,7 +124,8 @@ describe("dashboard planning writes", () => {
       jobCardNumber: original, workOrderNumber: original, orderedQuantity: 200,
       sourcePayload: { jcNo: original, partCode: part, orderPcs: 200, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
     await repository.upsertRouteOption({ organizationId, itemUid: part, productionFloorCode: "cnc",
-      routeCode: "1", setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
+      routeCode: "1", sourcePayload: { partNo: part, optionNumber: "1", setupNo: "1", setupName: "TURN", machineType: "CNC", machineFamily: "HX" },
+      setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
       decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 100, 'test', 'dispatchApprovals', $3)`,
       [organizationId, parent.id, randomUUID()])
@@ -170,6 +172,47 @@ describe("dashboard planning writes", () => {
     await expect(repository.receiveRework({ ...receipt, quantity: 86 })).rejects.toThrow("Only 85 pieces remain available to return, including the 5%")
     const atLimit = await repository.receiveRework({ ...receipt, quantity: 85, replacementQuantity: 0 })
     expect(atLimit).toMatchObject({ revisionNumber: 3, receiptReference: `RET-${original}-R3`, activities: [expect.objectContaining({ quantity: 85 })] })
+    const failed = atLimit.activities[0]!
+    await repository.upsertMachine({ organizationId, machineNumber: `RW-MC-${suffix}`, productionFloorCode: "cnc",
+      sourcePayload: { machineFamily: "HX", machineType: "CNC" } })
+    const routeInput = { organizationId, productionFloorCode: "cnc" as const, jobCardNumber: failed.jobCardNumber,
+      setups: [{ setupName: "Thread correction", machineFamily: "HX", cycleTimeSeconds: 30, setupTimeMinutes: 10,
+        stageWeight: 5, inspectionChecks: ["Thread gauge passes freely"] }] }
+    const privateRoute = await repository.createReworkRoute(routeInput)
+    const custom = await read(failed.jobCardNumber)
+    expect(custom.jobCard.effectiveRouteSource).toBe("planner_selected")
+    expect(custom.setups).toEqual([expect.objectContaining({ operationName: "Thread correction", cycleTimeSeconds: "30.00000000",
+      qualityParameters: [expect.objectContaining({ name: "Thread gauge passes freely" })] })])
+    expect((await read(original)).routes).not.toContainEqual(expect.objectContaining({ id: privateRoute.routeId }))
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    const control = buildLegacyDashboardSnapshot({ workbookName: "PostgreSQL", productionFloorCode: "cnc",
+      dataEntries: source.allDataEntries, productionEntries: [], routeSelections: source.routeSelections }).productionControl
+    expect(control).toMatchObject({ routeMasterRows: [expect.objectContaining({ optionNumber: "1" })],
+      cycleMasterRows: [], toolingMasterRows: [], qualityParameterMasterRows: [],
+      jobReworkRouteRows: [expect.objectContaining({ reworkJobCardNumber: failed.jobCardNumber })],
+      jobReworkInspectionRows: [expect.objectContaining({ parameterName: "Thread gauge passes freely" })] })
+    await expect(repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: privateRoute.routeCode })).rejects.toThrow("Route option was not found")
+    const setupId = String(custom.setups[0]!.id)
+    await pool.query(`INSERT INTO manufacturing.production_entries (organization_id, work_order_id, operation_setup_id,
+      route_option_id, production_date, quantity_good, quantity_rejected, source_system, source_table, source_id)
+      VALUES ($1,$2,$3,$4,'2026-10-02',0,2,'test','productionEntries',$5)`, [organizationId, failed.id, setupId, privateRoute.routeId, randomUUID()])
+    await expect(repository.createReworkRoute(routeInput)).rejects.toThrow("after execution starts")
+    const remade = await repository.rejectRework({ organizationId, productionFloorCode: "cnc", jobCardNumber: failed.jobCardNumber,
+      quantity: 85, rejectedOn: "2026-10-02", reason: "Thread cannot be recovered", replacementRequiredRmKg: 1 })
+    expect(remade).toMatchObject({ revisionNumber: 4, receiptReference: atLimit.receiptReference })
+    const rejected = await read(failed.jobCardNumber)
+    expect(rejected.jobCard).toMatchObject({ status: "Rejected", workOrderSource: { trialRejectedQuantity: 2, additionalBatchRejectedQuantity: 83 } })
+    expect(rejected.setups).toHaveLength(1)
+    const remake = await read(remade.replacementJobCardNumber)
+    expect(remake.jobCard.effectiveRouteSource).toBe("planner_required")
+    expect(remake.rawMaterialReceipts).toEqual([])
+    expect(remake.analytics.material).toMatchObject({ requiredKg: 1, receivedKg: 0, receiptSufficient: false })
+    expect((await read("all")).revisionHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "rework_rejected", quantity: 85 }),
+      expect.objectContaining({ eventType: "replacement_created", revisionReference: remade.replacementJobCardNumber }),
+    ]))
+    await expect(repository.rejectRework({ organizationId, productionFloorCode: "cnc", jobCardNumber: failed.jobCardNumber,
+      quantity: 85, rejectedOn: "2026-10-02", reason: "Duplicate", replacementRequiredRmKg: 1 })).rejects.toThrow("already closed")
     expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
       decision, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 'test', 'dispatchApprovals', $3)`,

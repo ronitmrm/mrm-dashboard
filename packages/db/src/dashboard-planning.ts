@@ -22,6 +22,7 @@ import { plannerInterruptionRequirement } from "./planner-interruption-settlemen
 import { ShopFloorConflictError } from "./production-shop-floor"
 import { rawMaterialRejectionBalance } from "./rejection-domain"
 import { readRequiredRawMaterialKg } from "./job-card-workspace"
+import { createJobReworkRoute, rejectJobRework, type ReworkRouteSetup } from "./job-card-rework"
 import {
   normalizeProductionFloorCode,
   ProductionUnitAccessError,
@@ -267,8 +268,8 @@ async function workOrderFor(
     [organizationId, requiredText(jobCardNumber, "Job card")]
   )
   if (!result.rows[0]) throw new Error("Planning work order was not found.")
-  if (result.rows[0].status === "Cancelled") {
-    throw new Error("Cancelled Work Order lines cannot receive planner actions.")
+  if (["Cancelled", "Rejected"].includes(result.rows[0].status)) {
+    throw new Error(`${result.rows[0].status} Work Order lines cannot receive planner actions.`)
   }
   return result.rows[0]
 }
@@ -299,7 +300,7 @@ async function currentPlanningRouteOptionId(
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $2 AND route.item_id = $3
-            AND route.active AND floor.code = $5
+            AND route.active AND floor.code = $5 AND route.work_order_id IS NULL
             AND (lower(route.route_code) = lower($4)
               OR lower(COALESCE(route.legacy_option_number, '')) = lower($4))
           ORDER BY route.revision DESC LIMIT 1)
@@ -312,7 +313,7 @@ async function currentPlanningRouteOptionId(
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $2 AND route.item_id = $3
-            AND route.active AND floor.code = $5)
+            AND route.active AND floor.code = $5 AND route.work_order_id IS NULL)
        ) END
      ) AS route_option_id`,
     [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode, payload.isRevision === true]
@@ -742,7 +743,8 @@ async function routeFor(
   organizationId: string,
   itemId: string,
   routeCode: string,
-  productionFloorCode: ProductionFloorCode
+  productionFloorCode: ProductionFloorCode,
+  workOrderId: string | null = null
 ) {
   const result = await client.query<{ id: string }>(
     `
@@ -755,7 +757,7 @@ async function routeFor(
           OR lower(COALESCE(route.legacy_option_number, '')) = lower($3)
         )
         AND floor.code = $4
-        AND route.active
+        AND route.active AND (route.work_order_id IS NULL OR route.work_order_id = $5)
       ORDER BY route.revision DESC
       LIMIT 1
       FOR UPDATE
@@ -765,6 +767,7 @@ async function routeFor(
       itemId,
       requiredText(routeCode, "Route option"),
       productionFloorCode,
+      workOrderId,
     ]
   )
   if (!result.rows[0]) throw new Error("Route option was not found.")
@@ -1050,6 +1053,23 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             )
         await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]!
+      })
+    },
+
+    async createReworkRoute(input: { actorUserId?: string | null; organizationId: string; productionFloorCode: ProductionFloorCode; jobCardNumber: string; setups: ReworkRouteSetup[] }) {
+      return transaction(pool, async client => {
+        const result = await createJobReworkRoute(client, input)
+        await queueDashboardRefresh(client, input.organizationId)
+        return result
+      })
+    },
+
+    async rejectRework(input: { actorUserId?: string | null; organizationId: string; productionFloorCode: ProductionFloorCode;
+      jobCardNumber: string; quantity: number; rejectedOn: string; reason: string; replacementRequiredRmKg: number; replacementRmPoNo?: string }) {
+      return transaction(pool, async client => {
+        const result = await rejectJobRework(client, input)
+        await queueDashboardRefresh(client, input.organizationId)
+        return result
       })
     },
 
@@ -1447,6 +1467,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               )
               AND floor.code = $3
               AND route.revision = 1
+              AND route.work_order_id IS NULL
             FOR UPDATE
           `,
           [itemId, routeCode, productionFloorCode]
@@ -1487,7 +1508,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           // Materialize the old automatic choice before introducing another option.
           const sole = await client.query<{ id: string; route_code: string }>(
             `SELECT id, route_code FROM manufacturing.route_options
-             WHERE item_id = $1 AND production_floor_id = $2 AND active`, [itemId, productionFloorId]
+             WHERE item_id = $1 AND production_floor_id = $2 AND active AND work_order_id IS NULL`, [itemId, productionFloorId]
           )
           if (sole.rows.length === 1) {
             const jobs = await client.query<{ id: string; job_card_number: string; source_payload: Record<string, unknown> | null }>(
@@ -1991,12 +2012,21 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           input.jobCardNumber
         )
+        if (workOrder.source_payload?.isRework === true) {
+          if (productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== normalizeProductionFloorCode(input.productionFloorCode))
+            throw new Error("Select a Rework activity in this Production Unit.")
+          const used = await client.query(`SELECT 1 FROM manufacturing.production_sessions WHERE work_order_id = $1 AND reversed_at IS NULL
+            UNION ALL SELECT 1 FROM manufacturing.production_entries WHERE work_order_id = $1 AND reversed_at IS NULL
+            UNION ALL SELECT 1 FROM manufacturing.shop_floor_setup_state WHERE work_order_id = $1 AND active AND stage <> 'planned' LIMIT 1`, [workOrder.id])
+          if (used.rows.length) throw new Error("The rework route cannot be replaced after execution starts.")
+        }
         const routeOptionId = await routeFor(
           client,
           input.organizationId,
           workOrder.item_id,
           input.routeCode,
-          normalizeProductionFloorCode(input.productionFloorCode)
+          normalizeProductionFloorCode(input.productionFloorCode),
+          workOrder.id
         )
         const current = await client.query<{ id: string }>(
           `
@@ -3118,7 +3148,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           workOrder.item_id,
           input.newRouteCode,
-          normalizeProductionFloorCode(input.productionFloorCode)
+          normalizeProductionFloorCode(input.productionFloorCode),
+          workOrder.id
         )
         const created = await client.query<{ id: string }>(
           `

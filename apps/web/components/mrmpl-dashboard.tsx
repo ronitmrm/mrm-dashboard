@@ -13,6 +13,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react"
+import { ReworkRouteEditor } from "@/components/rework-route-editor"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -667,6 +668,19 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "receivedOn", label: "Receipt Date", type: "date", required: true },
       { name: "receiptReference", label: "Return Reference", readOnly: true, placeholder: "Generated on save" },
       { name: "reason", label: "Rework Reason", required: true },
+    ],
+  },
+  {
+    entryType: "rework_rejected",
+    title: "Rework Rejected",
+    description: "Close failed rework and create the next Replacement revision under the same Job Card. Close trial sessions first. The full undispatched batch is rejected; replacement requires fresh RM and manual route selection.",
+    fields: [
+      { name: "jobCardNumber", label: "Failed Rework Revision / Activity", required: true },
+      { name: "quantity", label: "Full Rework Quantity (pieces)", type: "number", readOnly: true, required: true },
+      { name: "rejectedOn", label: "Rejection Date", type: "date", required: true },
+      { name: "reason", label: "Why Rework Failed", required: true },
+      { name: "replacementRequiredRmKg", label: "New RM Required for Replacement (kg)", type: "number", min: "0.001", step: "0.001", required: true },
+      { name: "replacementRmPoNo", label: "Replacement RM PO (blank uses original RM PO)" },
     ],
   },
   {
@@ -5255,7 +5269,7 @@ function EarlyDownstreamPlannerForm({
 }) {
   const plannedRows = asArray(productionControl.machinePlanDetailRows)
   const machineRows = asArray(productionControl.machinePlanningRows)
-  const routeRows = asArray(productionControl.routeMasterRows)
+  const routeRows = [...asArray(productionControl.routeMasterRows), ...asArray(productionControl.jobReworkRouteRows)]
   const setupNumber = (value: unknown) =>
     Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
   const setupOneRows = plannedRows.filter(
@@ -7725,7 +7739,7 @@ function JobCardsPanel({
     <section className="grid gap-4">
       <JobCardRegister
         rows={jobCardRows}
-        routeRows={asArray(productionControl.routeMasterRows)}
+        routeRows={[...asArray(productionControl.routeMasterRows), ...asArray(productionControl.jobReworkRouteRows)]}
         productionRows={asArray(productionControl.productionOutputRows)}
         finishDateRows={asArray(productionControl.productionDashboardRows)}
         floor={productionFloorCode}
@@ -8555,7 +8569,7 @@ function RoleTaskPanel({
           />
           <DataRowsCard
             title="Quality Inspection Parameter Master"
-            rows={combinedQualityInspectionMasterRows(productionControl)}
+            rows={combinedQualityInspectionMasterRows(productionControl).filter(row => !row.reworkJobCardNumber)}
             empty="No quality inspection parameters saved yet"
           />
         </>
@@ -10164,7 +10178,7 @@ function MasterReadinessPanel({
   openDataEntry,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const masterGaps = asArray(productionControl.masterGaps)
@@ -10191,12 +10205,14 @@ function MasterReadinessPanel({
       <WorkOrderGapTable
         title="Production Validation"
         rows={masterGaps}
+        productionControl={productionControl}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
       />
       <WorkOrderGapTable
         title="Whole Work-Order Missing Details"
         rows={allWorkOrderGaps}
+        productionControl={productionControl}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
       />
@@ -10207,12 +10223,14 @@ function MasterReadinessPanel({
 function WorkOrderGapTable({
   title,
   rows,
+  productionControl,
   submitAction,
   openDataEntry,
 }: {
   title: string
   rows: DashboardPayload[]
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  productionControl: DashboardPayload
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const [visibleRowCount, setVisibleRowCount] = useState(rows.length)
@@ -10253,6 +10271,7 @@ function WorkOrderGapTable({
                   <WorkOrderGapRow
                     key={`${title}-${jobCardNumber(row)}-${index}`}
                     row={row}
+                    productionControl={productionControl}
                     submitAction={submitAction}
                     openDataEntry={openDataEntry}
                   />
@@ -10277,11 +10296,13 @@ function WorkOrderGapTable({
 
 function WorkOrderGapRow({
   row,
+  productionControl,
   submitAction,
   openDataEntry,
 }: {
   row: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  productionControl: DashboardPayload
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const jcNo = str(row.jcNo || row.jobCard)
@@ -10335,7 +10356,7 @@ function WorkOrderGapRow({
               onSubmit={(event) => void submitRoute(event)}
             >
               <Label className="text-xs text-muted-foreground">
-                Select Option Number
+                {row.isRework === true ? "Use Existing Route" : "Select Option Number"}
               </Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
                 <SearchableSelect
@@ -10363,8 +10384,12 @@ function WorkOrderGapRow({
               </div>
             </form>
           ) : null}
+          {row.isRework === true ? <ReworkRouteEditor jobCardNumber={jcNo}
+            machineFamilies={machineFamilyOptions(asArray(productionControl.machinePlanningRows))}
+            toolingCodes={Array.isArray(productionControl.toolingAssetCodes) ? productionControl.toolingAssetCodes.filter((value): value is string => typeof value === "string") : []}
+            submitAction={submitAction} /> : null}
           <div className="grid gap-2 sm:grid-cols-4">
-            {row.routeMasterMissing ? (
+            {row.routeMasterMissing && row.isRework !== true ? (
               <Button
                 type="button"
                 size="sm"
@@ -10615,7 +10640,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction = bulkEntryType === "rework_received" || !canUseEntry(
+  const csvImportAction = bulkEntryType.startsWith("rework_") || !canUseEntry(
     bulkEntryType,
     "import"
   ) ? null : bulkEntryType === "store_masters" ? (
@@ -10656,7 +10681,7 @@ function DataEntryPanel({
           <OperationalWorkspaceTabs
             activeView="dataEntry"
             csvDownloadAction={
-              bulkEntryType !== "rework_received" && canUseEntry(bulkEntryType, "read") ? (
+              !bulkEntryType.startsWith("rework_") && canUseEntry(bulkEntryType, "read") ? (
                 <MasterDataCsvDownloadButton
                   href={`/api/data-template?${new URLSearchParams({ entryType: bulkEntryType, floor: productionFloorCode })}`}
                 />
@@ -11705,6 +11730,14 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   const columns = columnsForProductionMaster(spec.fields)
+  if (spec.entryType === "rework_rejected") return [
+    { key: "jcNo", label: "Failed Rework Revision" },
+    { key: "receiptReference", label: "Return Reference" },
+    { key: "reworkRejectedQuantity", label: "Rejected Pieces" },
+    { key: "reworkRejectedOn", label: "Rejection Date" },
+    { key: "reworkRejectionReason", label: "Reason" },
+    { key: "replacementJobCardNumber", label: "Replacement Revision" },
+  ]
   if (spec.entryType === "rework_received") return [
     { key: "rootJobCardNumber", label: "Job Card" },
     { key: "revisionNumber", label: "Revision" },
@@ -14242,11 +14275,13 @@ function DataEntryForm({
   ])
   const resolvedFields = spec.fields.map((field) => {
     if ((spec.entryType === "rm_inward" && field.name === "jcNo") ||
-      (spec.entryType === "rework_received" && field.name === "originalJobCardNumber")) {
+      (spec.entryType === "rework_received" && field.name === "originalJobCardNumber") ||
+      (spec.entryType === "rework_rejected" && field.name === "jobCardNumber")) {
       const activities = asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders)
         .filter(row => spec.entryType !== "rm_inward" || row.isRework !== true)
+        .filter(row => spec.entryType !== "rework_rejected" || row.isRework === true && !["Cancelled", "Rejected"].includes(str(row.status)))
         .map(row => str(row.jcNo)).filter(Boolean)
-      if (activities.length) return { ...field, options: ["", ...activities] }
+      return { ...field, options: ["", ...activities] }
     }
     const routeOptions =
       spec.entryType === "route" && field.name === "setupName"
@@ -14338,7 +14373,7 @@ function DataEntryForm({
     >
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        {spec.entryType === "planning_holiday" || spec.entryType === "rework_received" ? (
+        {spec.entryType === "planning_holiday" || spec.entryType.startsWith("rework_") ? (
           <CardDescription>{spec.description}</CardDescription>
         ) : null}
         {spec.entryType === "route" ? (
@@ -14364,7 +14399,9 @@ function DataEntryForm({
                     values.machineFamily
                   ),
                 })
-              : undefined
+              : spec.entryType === "rework_rejected"
+                ? (values) => ({ quantity: str(asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders).find(row => row.jcNo === values.jobCardNumber)?.orderPcs) })
+                : undefined
           }
           buttonLabel={`Save ${spec.title}`}
           onSubmit={async (body) => {
@@ -14377,7 +14414,7 @@ function DataEntryForm({
                 ...body,
                 ...(productionFloorCode ? { productionFloorCode } : {}),
               },
-            })
+            }, { throwOnError: true })
             if (generatedCode)
               setLocallyGeneratedCodes((current) => [...current, generatedCode])
           }}
@@ -14586,7 +14623,7 @@ function QualityParameterMasterForm({
     return mergeQualityParameterRows([
       ...masterRows,
       ...qualityParameterRowsFromDataEntry(dataEntry),
-      ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
+      ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows).filter(row => !row.reworkJobCardNumber),
     ])
   }, [
     dataEntry,
@@ -16607,6 +16644,7 @@ function LegacyActionForm({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [values, setValues] = useState(defaults)
+  const [formError, setFormError] = useState("")
   const derivedValues = deriveValues?.(values) ?? {}
   const displayedFields = fields.map((field) => {
     if (field.name === "dayType" && fields.some((candidate) => candidate.name === "shift" && candidate.readOnly) && str(defaults.shift) !== "All")
@@ -16624,6 +16662,7 @@ function LegacyActionForm({
     if (isSubmitting) return
     const form = event.currentTarget
     setIsSubmitting(true)
+    setFormError("")
     try {
       await onSubmit({
         ...formPayload(new FormData(form), fields),
@@ -16631,6 +16670,8 @@ function LegacyActionForm({
       })
       form.reset()
       setValues(defaults)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Entry could not be saved.")
     } finally {
       setIsSubmitting(false)
     }
@@ -16642,6 +16683,7 @@ function LegacyActionForm({
       className="grid w-full max-w-5xl gap-3 rounded-xl border bg-background p-3"
       onSubmit={(event) => void submit(event)}
     >
+      {formError ? <StandardState variant="error" title="Entry not saved" description={formError} /> : null}
       <fieldset className="contents" disabled={isSubmitting}>
         <div>
           <div className="text-sm font-medium">{title}</div>
@@ -16697,7 +16739,7 @@ function LegacyActionForm({
                                   field.name
                                 )
                               ? "Select Store Asset Code"
-                              : "Normal"}
+                              : field.name === "jobCardNumber" || field.name === "originalJobCardNumber" || field.name === "jcNo" ? "Select Job Card / Activity" : "Normal"}
                     </option>
                   ))}
                 </SearchableSelect>
@@ -19356,7 +19398,7 @@ function combinedQualityInspectionMasterRows(
   productionControl: DashboardPayload
 ) {
   return mergeQualityInspectionParameterRows(
-    asArray(productionControl.qualityParameterMasterRows),
+    [...asArray(productionControl.qualityParameterMasterRows), ...asArray(productionControl.jobReworkInspectionRows)],
     asArray(productionControl.firstPieceInspectionMasterRows)
   )
 }

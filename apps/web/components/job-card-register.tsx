@@ -31,6 +31,7 @@ function jobCardProgress(row: Row) {
 }
 
 function jobCardStage(row: Row) {
+  if (text(row.status) === "Rejected") return "Rejected — Remake Required"
   const progress = jobCardProgress(row)
   const dispatch = first(row, ["dispatchStatus", "status"]).toLowerCase()
   if (dispatch === "partially dispatched") return "Partially dispatched"
@@ -110,7 +111,7 @@ export function JobCardRegister({
       const quantity = current.reduce((sum, row) => sum + numeric(row.orderPcs), 0)
       return { ...representative, rootJobCardNumber, revisionNumber,
         mixedActivities: current.length > 1,
-        otherRevisionsActive: family.some(row => numeric(row.revisionNumber) < revisionNumber && jobCardStage(row) !== "Dispatched"),
+        otherRevisionsActive: family.some(row => numeric(row.revisionNumber) < revisionNumber && !["Dispatched", "Rejected — Remake Required"].includes(jobCardStage(row))),
         revisionLabel: revisionNumber ? `Rev ${revisionNumber}` : "Original",
         revisionCount: new Set(family.map(row => numeric(row.revisionNumber))).size,
         orderPcs: quantity,

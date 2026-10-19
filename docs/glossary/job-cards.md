@@ -48,6 +48,35 @@ to that activity. **All Revisions** is a labelled history, never combined progre
 or fulfilment. No selected revision may inherit completed work or inspection from
 another revision.
 
+### Job-specific rework routes
+
+In Part Readiness the planner can explicitly select an existing route or create
+a route for the selected Rework activity. Its ordered operations, machine
+families, setup/cycle times, tooling and inspection requirements belong only to
+that activity. They are excluded from shared Route, Cycle, Tooling, Setup Name
+and Quality Parameter masters and from other Job Cards' route choices. Existing
+per-setup first-piece and in-process inspections still apply. There is no copy
+from previous rework route feature. Once execution has started, the route remains
+immutable so its sessions and reports retain the instructions used.
+
+### Rework rejected
+
+Operational Entries → Rework Rejected records that the entire selected Rework
+activity cannot be salvaged. Close all its Production Sessions first. Record the
+batch quantity, rejection date, reason and positive fresh RM requirement. The
+activity must be undispatched and cannot be rejected twice. Trial rejections are
+included in the rejected batch total; only the additional unreported balance
+appears as batch rejection, without inventing production output.
+
+Saving atomically marks the activity Rejected — Remake Required, removes its
+pending planning and machine ownership, and creates a Replacement activity in the
+next revision of the same base Job Card. Replacement quantity equals the rejected
+batch quantity. This is a disposition of the existing return; it does not consume
+another dispatch-return allowance. The original Return Reference and the failed
+activity remain linked. Historical sessions, inspections, timings and reports
+are retained. Replacement awaits its own fresh RM and explicit full-route
+selection, starting with Setup 1; it does not inherit the correction route.
+
 ## Job Card Register
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.

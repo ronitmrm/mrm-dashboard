@@ -981,9 +981,9 @@ function buildProductionAnalysis({
     previousMachinePlanDetailRows,
     productionFinishBaselineRows,
   });
-  const routingStatus = buildRoutingStatus(routeRows, productionRows);
-  const toolFixtureNumbers = includeToolFixtureNumbers ? buildToolFixtureNumbers(toolingRows) : undefined;
-  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, maintenanceMasterRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
+  const routingStatus = buildRoutingStatus(routeRows.filter(row => !row.reworkJobCardNumber), productionRows);
+  const toolFixtureNumbers = includeToolFixtureNumbers ? buildToolFixtureNumbers(toolingRows.filter(row => !row.reworkJobCardNumber)) : undefined;
+  const dataEntry = buildDataEntryContext({ routeRows: routeRows.filter(row => !row.reworkJobCardNumber), cycleRows: cycleRows.filter(row => !row.reworkJobCardNumber), toolingRows: toolingRows.filter(row => !row.reworkJobCardNumber), workOrderRows, setupChecklistRows, maintenanceMasterRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
 
   return {
     updatedAt,
@@ -1243,7 +1243,7 @@ function buildProductionControl({
     const jcNo = entry.jobCard ?? "";
     if (!jcNo) continue;
     canonicalProductionJobCards.add(canonicalKey(jcNo));
-    const options = routeOptionsByPart.get(canonicalKey(entry.partCode)) ?? [];
+    const options = (routeOptionsByPart.get(canonicalKey(entry.partCode)) ?? []).filter(option => !option.reworkJobCardNumber || canonicalKey(String(option.reworkJobCardNumber)) === canonicalKey(jcNo));
     const optionNumber = entry.optionNumber || (options.length === 1 ? rowText(options[0]!, "optionNumber") : "");
     const key = setupKeyWithoutMachine({ jcNo, partCode: entry.partCode, optionNumber, setupNo: entry.setupNo ?? "" });
     if (!key) continue;
@@ -1328,7 +1328,7 @@ function buildProductionControl({
     const routeChangeFromOption = rowText(routeChange ?? {}, "fromRouteCode");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
     const partKey = canonicalKey(partCode);
-    const availableOptions = routeOptionsByPart.get(partKey) ?? [];
+    const availableOptions = (routeOptionsByPart.get(partKey) ?? []).filter(option => !option.reworkJobCardNumber || canonicalKey(String(option.reworkJobCardNumber)) === canonicalKey(jcNo));
     const optionNumbers = availableOptions.map((option) => rowText(option, "optionNumber"));
     const isRework = rowValue(row, "isRework") === true;
     const isRevision = rowValue(row, "isRevision") === true;
@@ -1452,6 +1452,11 @@ function buildProductionControl({
       originalJobCardNumber: rowText(row, "originalJobCardNumber"),
       receivedOn: rowText(row, "receivedOn"),
       receiptReference: rowText(row, "receiptReference"),
+      createdFromReworkRejection: rowValue(row, "createdFromReworkRejection") === true,
+      reworkRejectedOn: rowText(row, "reworkRejectedOn"),
+      reworkRejectedQuantity: safeNumber(rowValue(row, "reworkRejectedQuantity")),
+      reworkRejectionReason: rowText(row, "reworkRejectionReason"),
+      replacementJobCardNumber: rowText(row, "replacementJobCardNumber"),
       reason: rowText(row, "reason"),
       quantity: isRework ? orderPcs : 0,
       returnQuantity: safeNumber(rowValue(row, "returnQuantity")),
@@ -1714,10 +1719,11 @@ function buildProductionControl({
     routeChanges,
     routeChangeRows: routeChanges,
     routeChangeImpacts: [],
-    routeMasterRows: dedupedRouteRows.map(routeMasterTableRow),
+    routeMasterRows: dedupedRouteRows.filter(row => !row.reworkJobCardNumber).map(routeMasterTableRow),
+    jobReworkRouteRows: dedupedRouteRows.filter(row => row.reworkJobCardNumber).map(row => ({ ...routeMasterTableRow(row), reworkJobCardNumber: row.reworkJobCardNumber })),
     setupNameMasterRows,
-    cycleMasterRows: [...latestMasterRows(cycleRows).values()].map(cycleMasterTableRow),
-    toolingMasterRows: [...latestMasterRows(toolingRows).values()].map(toolingMasterTableRow),
+    cycleMasterRows: [...latestMasterRows(cycleRows.filter(row => !row.reworkJobCardNumber)).values()].map(cycleMasterTableRow),
+    toolingMasterRows: [...latestMasterRows(toolingRows.filter(row => !row.reworkJobCardNumber)).values()].map(toolingMasterTableRow),
     toolingAvailabilityRows: toolingAvailability,
     employeeMasterRows: employeeRows.map(employeeMasterTableRow),
     routeOptions: routeSelections,
@@ -1737,7 +1743,8 @@ function buildProductionControl({
     setupChecklistSessionRows,
     productionCardRows,
     productionRunRows: productionRows.map((row) => ({ machine: row.machine, prodDate: row.prodDate })).filter((row) => row.machine && row.prodDate),
-    qualityParameterMasterRows,
+    qualityParameterMasterRows: qualityParameterMasterRows.filter(row => !row.reworkJobCardNumber),
+    jobReworkInspectionRows: qualityParameterMasterRows.filter(row => row.reworkJobCardNumber),
     hourlyQualityCheckRows,
     maintenanceMasterRows,
     maintenanceChecklistMasterRows,
@@ -2192,7 +2199,8 @@ function normalizedRawSoftwareRows(rows: Record<string, unknown>[], routeLookup:
     .map((row) => {
       const partNo = rowValue(row, "PART NO");
       const setup = rowValue(row, "SET UP");
-      const route = routeLookup.get(routeKey(partNo, setup)) ?? {};
+      const route = routeLookup.get(`${canonicalKey(rowText(row, "JobCardNo"))}|${routeKey(partNo, setup)}`)
+        ?? routeLookup.get(routeKey(partNo, setup)) ?? {};
       const mapped: Record<string, unknown> = {
         "PRODUCTION DATE": rowValue(row, "PROD DATE"),
         SHIFT: rowValue(row, "Shift"),
@@ -2274,7 +2282,7 @@ export function directDashboardControlRows(
   productionEntries: Array<Partial<ProductionEntry> | Record<string, unknown>> = [],
 ) {
   const buckets = bucketDataEntries(dataEntries);
-  const rows = (type: string) => entryRows(buckets, type);
+  const rows = (type: string) => entryRows(buckets, type).filter(row => !row.reworkJobCardNumber);
   const latest = (type: string, key: (row: Record<string, unknown>) => string) =>
     latestEntryRowsByKey(rows(type), key);
   const softwareRows = rows("software_raw");
@@ -2290,6 +2298,7 @@ export function directDashboardControlRows(
       .sort((a, b) => rowText(a, "dateValue").localeCompare(rowText(b, "dateValue"))),
     setupChecklistMasterRows: rows("setup_checklist_master"),
     setupChecklistSessionRows: latest("setup_checklist_session", setupChecklistSessionEntryKey),
+    jobReworkInspectionRows: latestEntryRowsByKey(entryRows(buckets, "quality_parameter_master").filter(row => row.reworkJobCardNumber), qualityParameterMasterEntryKey),
     qualityParameterMasterRows: latestEntryRowsByKey(
       rows("quality_parameter_master").map(row => ({ ...row, code: qualityParameterCode(row) })), qualityParameterMasterEntryKey),
     firstPieceInspectionMasterRows: rows("first_piece_inspection_master"),
@@ -2317,7 +2326,7 @@ export function directDashboardControlRows(
     })),
     rmInwardRows: rows("rm_inward"),
     productionOutputRows: productionOutputTableRows(softwareRows.length
-      ? normalizedRawSoftwareRows(softwareRows, loadRouteLookup(rows("route")))
+      ? normalizedRawSoftwareRows(softwareRows, loadRouteLookup(entryRows(buckets, "route")))
       : normalizedProductionEntries(productionEntries)),
   };
 }
@@ -2477,7 +2486,8 @@ function loadRouteLookup(rows: Record<string, unknown>[]) {
   for (const row of rows) {
     const partNo = rowValue(row, "PART CODE", "PART NO", "partNo");
     const setupNo = rowValue(row, "SETUP CODE", "SETUP NO.", "SET UP", "setupNo");
-    const key = routeKey(partNo, setupNo);
+    const baseKey = routeKey(partNo, setupNo);
+    const key = row.reworkJobCardNumber ? `${canonicalKey(String(row.reworkJobCardNumber))}|${baseKey}` : baseKey;
     if (!key || lookup.has(key)) continue;
     lookup.set(key, {
       machineType: rowText(row, "MACHINE TYPE", "machineType"),
@@ -3226,7 +3236,7 @@ function isMaterialPlanningReady(row: Record<string, unknown>) {
 }
 
 function isCancelledWorkOrder(row: Record<string, unknown>) {
-  return rowText(row, "status", "workOrderStatus").toLowerCase() === "cancelled";
+  return ["cancelled", "rejected"].includes(rowText(row, "status", "workOrderStatus").toLowerCase());
 }
 
 function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
@@ -7240,6 +7250,7 @@ function routeOptionSummariesByPart(rows: Record<string, unknown>[]) {
     setupCount: number;
     machines: Set<string>;
     setupNames: Set<string>;
+    reworkJobCardNumber: string;
   }>();
   for (const row of latestMasterRows(rows).values()) {
     const partKey = canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo"));
@@ -7253,6 +7264,7 @@ function routeOptionSummariesByPart(rows: Record<string, unknown>[]) {
       setupCount: 0,
       machines: new Set<string>(),
       setupNames: new Set<string>(),
+      reworkJobCardNumber: rowText(row, "reworkJobCardNumber"),
     };
     summary.setupCount += 1;
     const machine = rowText(row, "MACHINE USED", "machineUsed", "MACHINE TYPE", "machineType");
@@ -7266,6 +7278,7 @@ function routeOptionSummariesByPart(rows: Record<string, unknown>[]) {
     const rowsForPart = byPart.get(summary.partKey) ?? [];
     rowsForPart.push({
       optionNumber: summary.optionNumber,
+      reworkJobCardNumber: summary.reworkJobCardNumber,
       setupCount: summary.setupCount,
       machineUsed: compactJoin([...summary.machines], 3),
       setupName: compactJoin([...summary.setupNames], 3),
