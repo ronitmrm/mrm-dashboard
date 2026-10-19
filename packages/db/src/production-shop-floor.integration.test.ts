@@ -1140,7 +1140,7 @@ describe("production and shop-floor workflows", () => {
       `,
       [organizationId, randomUUID()]
     )
-    await pool.query(
+    const post = await pool.query<{ id: string }>(
       `
         INSERT INTO recruitment.posts (
           organization_id, department_id, designation_id, vacancy_number,
@@ -1148,6 +1148,7 @@ describe("production and shop-floor workflows", () => {
           source_system, source_table, source_id
         ) VALUES ($1, $2, $3, '1', $4, $4, 'HR Operator', $5,
           'Occupied', 'test', 'posts', $6)
+        RETURNING id
       `,
       [
         organizationId,
@@ -1157,6 +1158,14 @@ describe("production and shop-floor workflows", () => {
         hrOperator,
         randomUUID(),
       ]
+    )
+    // The replaced worker may still own the legacy, post-only source identity.
+    const previousWorker = await pool.query<{ id: string }>(
+      `INSERT INTO workforce.employees (
+         organization_id, employee_code, name, source_system, source_table, source_id
+       ) VALUES ($1, $2, 'Previous Worker', 'mrm-dashboard', 'recruitment.posts', $3)
+       RETURNING id`,
+      [organizationId, `${hrOperator}-previous`, post.rows[0]!.id]
     )
     await repository.recordShopFloorStage({
       jobCardNumber: firstJobCard,
@@ -1191,6 +1200,12 @@ describe("production and shop-floor workflows", () => {
 
     expect(session.id).toBeTruthy()
     expect(projected.rows[0]).toEqual({ active: true, employee_code: hrOperator })
+    expect((await pool.query(
+      `SELECT employee_code, name, source_id FROM workforce.employees WHERE id = $1`,
+      [previousWorker.rows[0]!.id]
+    )).rows[0]).toEqual({
+      employee_code: `${hrOperator}-previous`, name: 'Previous Worker', source_id: post.rows[0]!.id,
+    })
     const pending = await repository.closeProductionSession({
       endedAt: "2026-08-15T09:30:00+05:30",
       endReason: "shift_end",
