@@ -11,6 +11,10 @@ masters, machines, permissions and configured production calendar.
 Production pages use the same layout and workflow across all four units, with
 CNC as the reference. Planning Control contains the shared RM status, session
 flag and workflow exception review; it has no unit-specific tool/fixture panel.
+All production rules use this same CNC reference, except each unit keeps its
+measurement methods and working hours. Masters and operational records remain
+scoped to their unit. Quality session closing and corrections follow the same
+rules in every unit, subject to that unit's recording permission.
 
 ## Work order job cards
 

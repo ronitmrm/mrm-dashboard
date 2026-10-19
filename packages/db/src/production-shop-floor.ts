@@ -2576,9 +2576,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (current.status !== "open") {
           throw new Error("Production session is already closed.")
         }
-        if (closedByRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can close production sessions only in CNC.")
-        }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
@@ -2853,9 +2850,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!current || Number(current.row_version) !== input.expectedRowVersion) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start count.")
         }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
-        }
         if (current.measurement_method !== "counter") {
           throw new Error("Start count can be corrected only for a machine-counter session.")
         }
@@ -2943,9 +2937,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const current = result.rows[0]
         if (!current || Number(current.row_version) !== input.expectedRowVersion) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start.")
-        }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
         }
         if (current.ended_at && startedAt > current.ended_at) {
           throw new Error("Session start cannot be after session end.")
@@ -3097,9 +3088,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         if (input.downtimeCorrection && input.expectedRowVersion !== Number(current.row_version)) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting downtime.")
-        }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
         }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")

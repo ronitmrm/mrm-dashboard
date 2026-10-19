@@ -1393,7 +1393,7 @@ describe("production and shop-floor workflows", () => {
     const jobCardNumber = `FLOOR-JC-${suffix}-START-CORRECT`
     const machineNumber = `FLOOR-MC-${suffix}-START-CORRECT`
     await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
-      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 1 }, workOrderNumber: jobCardNumber })
     await acceptShortRmFixture(jobCardNumber)
     await planning.upsertMachine({ machineNumber, organizationId })
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
@@ -1406,6 +1406,7 @@ describe("production and shop-floor workflows", () => {
     const original = await read(first.id)
     const correct = async (sessionId: string, startedAt: string) => repository.correctProductionSessionStart({
       organizationId, productionFloorCode: "conventional", sessionId, startedAt,
+      enteredRole: "quality",
       expectedRowVersion: Number((await read(sessionId)).rowVersion),
       correctionReason: "Start date/time was entered incorrectly.",
     })
@@ -1415,7 +1416,7 @@ describe("production and shop-floor workflows", () => {
       goodPieces: 0, shift: "General" })
     expect((open.startedAt as Date).toISOString()).toBe("2026-08-14T03:00:00.000Z")
     await repository.closeProductionSession({ sessionId: first.id, organizationId, grossWeightKg: 0.154,
-      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop" })
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop", enteredRole: "quality" })
     const second = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
     expect((await read(second.id)).sessionReference).toBe(`${machineNumber.toUpperCase()}-20260815-02`)
     await repository.recordProductionSessionDowntime({ sessionId: second.id, organizationId,
