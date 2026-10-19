@@ -8,6 +8,7 @@ import {
   productionPlanningDailyHours,
   requiredToolingCodes,
 } from "@workspace/db/dashboard-analysis"
+import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
 import {
   validDate,
   type PlanningContext,
@@ -26,27 +27,7 @@ const same = (a: unknown, b: unknown) =>
 function date(value: unknown) {
   const raw = text(value)
   if (validDate(raw.slice(0, 10))) return raw.slice(0, 10)
-  // Canonical dashboard dates use day-month-name-year, never locale-ambiguous slash dates.
-  const match = raw.match(/^(\d{1,2})[- ]+([A-Za-z]+)[- ]+(\d{2}|\d{4})$/)
-  if (!match) return ""
-  const month =
-    [
-      "jan",
-      "feb",
-      "mar",
-      "apr",
-      "may",
-      "jun",
-      "jul",
-      "aug",
-      "sep",
-      "oct",
-      "nov",
-      "dec",
-    ].indexOf(match[2]!.slice(0, 3).toLowerCase()) + 1
-  const year = match[3]!.length === 2 ? `20${match[3]}` : match[3]
-  const result = `${year}-${String(month).padStart(2, "0")}-${match[1]!.padStart(2, "0")}`
-  return validDate(result) ? result : ""
+  return parseCalendarDateInput(formatCalendarDate(raw)) ?? ""
 }
 
 export function proposalContext(

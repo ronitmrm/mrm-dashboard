@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import {
   brandingOutline,
   plainBrandingRichText,
@@ -181,7 +182,7 @@ export async function drawBrandingBook(
     const metadata = [
       `Document No.: ${input.number}`,
       `Revision: ${reference}`,
-      `Effective Date: ${input.content.effectiveDate || "Pending"}`,
+      `Effective Date: ${formatCalendarDate(input.content.effectiveDate) || "Pending"}`,
       `Prepared by: ${details?.preparedBy || input.content.department}`,
     ].map((text) => paragraph(ctx, text, "en", "caption", mm(1)))
     metadata[0]!.parts.forEach((part) => (part.y += mm(7)))
@@ -441,7 +442,7 @@ export async function drawBrandingBook(
     const coverValues = [
       input.number,
       `Rev No. ${reference}`,
-      input.content.effectiveDate || "Date pending",
+      formatCalendarDate(input.content.effectiveDate) || "Date pending",
     ]
     const footerWidth = panel.width - mm(20)
     const values = coverValues.map((value) =>
@@ -491,7 +492,7 @@ export async function drawBrandingBook(
       }
       const footer = textLayout(
         ctx,
-        `Doc. No.: ${input.number} | Rev. No.: ${reference} | Effective Date: ${input.content.effectiveDate || "Pending"}`,
+        `Doc. No.: ${input.number} | Rev. No.: ${reference} | Effective Date: ${formatCalendarDate(input.content.effectiveDate) || "Pending"}`,
         "en",
         "caption",
         WIDTH - mm(12)

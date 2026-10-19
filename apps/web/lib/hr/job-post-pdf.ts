@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import PDFDocument from "pdfkit"
 import type { RecruitmentJobPostDocument } from "@workspace/db"
 
@@ -14,14 +15,7 @@ const BOTTOM = A4[1] - 70
 const UNSPECIFIED = "Not specified"
 
 function date(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(new Date(`${value}T00:00:00Z`))
-    : UNSPECIFIED
+  return value ? formatCalendarDate(value) : UNSPECIFIED
 }
 
 function salary(job: RecruitmentJobPostDocument) {

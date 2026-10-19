@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type {
   RecruitmentPendingOfferRow,
   RecruitmentInterviewRecordRow,
@@ -443,7 +445,7 @@ export function InterviewResultsWorkspace({
               </p>
               <p>
                 <span className="text-muted-foreground">Joining Date:</span>{" "}
-                {selectedRecord.joiningDate ?? "—"}
+                {formatCalendarDate(selectedRecord.joiningDate ?? "—")}
               </p>
               {selectedRecord.roundName === "HR Round" ? (
                 <>

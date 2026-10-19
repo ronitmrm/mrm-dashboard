@@ -22,6 +22,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { readMasterCsv } from "@/lib/master-data-csv"
+import { validateCsvDateCells } from "../../../lib/csv-date"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import {
   consumePendingArtifactUpload,
@@ -194,7 +195,7 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
   if (upload.size > 5 * 1024 * 1024) {
     throw new Error("PO workbook must be 5 MB or smaller")
   }
-  const workbook = XLSX.read(await upload.arrayBuffer(), { type: "array" })
+  const workbook = XLSX.read(await upload.arrayBuffer(), { type: "array", raw: true })
   const firstSheet = workbook.SheetNames[0]
   const sheet = firstSheet ? workbook.Sheets[firstSheet] : undefined
   if (!sheet) {
@@ -203,6 +204,9 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
   const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: "",
   })
+  if (/\.csv$/i.test(upload.name)) {
+    rawRows.forEach((row, index) => validateCsvDateCells(row, typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2))
+  }
   const rows = rawRows.map((raw, index) => {
     const row = normalizedRecord(raw)
     return {

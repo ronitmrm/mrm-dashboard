@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import {
   brandingNoticeBody,
   brandingNoticeRichText,
@@ -60,7 +61,7 @@ export async function drawNotice(ctx: PdfContext, input: BrandingPdfInput) {
     banner.y - MARGIN
   )
   metadata(
-    input.content.effectiveDate.split("-").reverse().join(" / ") ||
+    formatCalendarDate(input.content.effectiveDate) ||
       "Date pending",
     mm(77),
     mm(13)

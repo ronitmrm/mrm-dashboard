@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type {
   RecruitmentCombinedRoleRow,
   RecruitmentEmployeeAssignmentRow,
@@ -334,8 +336,8 @@ export function ApprovedPostsTable({
                             </Link>
                           ) : row.employeeCode ?? "—"}
                         </TableCell>
-                        <TableCell>{row.joiningDate ?? "—"}</TableCell>
-                        <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
+                        <TableCell>{formatCalendarDate(row.joiningDate ?? "—")}</TableCell>
+                        <TableCell>{formatCalendarDate(row.lastWorkingDate ?? "—")}</TableCell>
                         <TableCell>
                           <PostStatusBadge status={row.status} />
                         </TableCell>

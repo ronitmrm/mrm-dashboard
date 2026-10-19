@@ -162,13 +162,13 @@ test("quantified dispatch stays partial until final production is complete and s
   }
   const started = buildLegacyDashboardSnapshot(input).productionControl
   expect(started.workOrders[0]).toMatchObject({ dispatchStatus: "Partially dispatched", dispatchedPieces: 40, dispatchAvailablePieces: 60 })
-  expect(started.productionDashboardRows[0]).toMatchObject({ status: "Partially dispatched", actualFinishDate: "", dispatchedPieces: 40, dispatchAvailablePieces: 60, dispatchedDate: "24-Sept-26" })
+  expect(started.productionDashboardRows[0]).toMatchObject({ status: "Partially dispatched", actualFinishDate: "", dispatchedPieces: 40, dispatchAvailablePieces: 60, dispatchedDate: "24/09/2026" })
 
   const completed = buildLegacyDashboardSnapshot({
     ...input,
     currentShopFloorStatusRows: [{ ...input.currentShopFloorStatusRows[0]!, stage: "item_complete" }],
   }).productionControl
-  expect(completed.productionDashboardRows[0]).toMatchObject({ status: "Partially dispatched", actualFinishDate: "24-Sept-26", dispatchedPieces: 40, dispatchAvailablePieces: 60 })
+  expect(completed.productionDashboardRows[0]).toMatchObject({ status: "Partially dispatched", actualFinishDate: "24/09/2026", dispatchedPieces: 40, dispatchAvailablePieces: 60 })
 
   const shipped = buildLegacyDashboardSnapshot({
     ...input,
@@ -177,7 +177,7 @@ test("quantified dispatch stays partial until final production is complete and s
   }).productionControl
   if (!("jobCardStatusTiles" in shipped)) throw new Error("Missing Job Card tiles")
   expect(shipped.jobCardStatusTiles[0]).toMatchObject({ dispatchStatus: "Shifted to dispatch", dispatchedPieces: 100, dispatchAvailablePieces: 0 })
-  expect(shipped.productionDashboardRows[0]).toMatchObject({ status: "Dispatched", actualFinishDate: "24-Sept-26", dispatchedPieces: 100, dispatchAvailablePieces: 0, dispatchedDate: "25-Sept-26" })
+  expect(shipped.productionDashboardRows[0]).toMatchObject({ status: "Dispatched", actualFinishDate: "24/09/2026", dispatchedPieces: 100, dispatchAvailablePieces: 0, dispatchedDate: "25/09/2026" })
 
   const overdrawn = buildLegacyDashboardSnapshot({
     ...input,
@@ -287,7 +287,7 @@ test("actual finish waits for every machine on the final setup", () => {
 
   const completed = buildLegacyDashboardSnapshot(input).productionControl
   expect(completed.machinePlanDetailRows.filter((row) => row.jcNo === "P-FINISH")).toHaveLength(2)
-  expect(completed.productionDashboardRows[0]?.actualFinishDate).toBe("24-Sept-26")
+  expect(completed.productionDashboardRows[0]?.actualFinishDate).toBe("24/09/2026")
 
   const withoutPlan = buildLegacyDashboardSnapshot({
     ...input,
@@ -296,7 +296,7 @@ test("actual finish waits for every machine on the final setup", () => {
       : row),
   }).productionControl
   expect(withoutPlan.machinePlanDetailRows).toHaveLength(0)
-  expect(withoutPlan.productionDashboardRows[0]?.actualFinishDate).toBe("24-Sept-26")
+  expect(withoutPlan.productionDashboardRows[0]?.actualFinishDate).toBe("24/09/2026")
 
   const incomplete = buildLegacyDashboardSnapshot({
     ...input,
@@ -329,7 +329,7 @@ test("actual finish carries completed final work across an equivalent route chan
 
   expect(control.workOrders[0]).toMatchObject({ optionNumber: "2", routeStatus: "Route change plan", finalSetupNumber: "1", finalSetupGoodPieces: 100, dispatchedPieces: 0, dispatchAvailablePieces: 100 })
   expect(control).toMatchObject({ allWorkOrderGaps: [], masterGaps: [], machinePlanDetailRows: [], workflowExceptionRows: [] })
-  expect(control.productionDashboardRows[0]).toMatchObject({ actualFinishDate: "1-Oct-26", dispatchAvailablePieces: 100 })
+  expect(control.productionDashboardRows[0]).toMatchObject({ actualFinishDate: "01/10/2026", dispatchAvailablePieces: 100 })
 
   const unrecordedNewRouteWorkflow = buildLegacyDashboardSnapshot({
     ...input,
@@ -367,7 +367,7 @@ test("actual finish carries completed final work across an equivalent route chan
       { ...input.currentShopFloorStatusRows[0]!, optionNumber: "3", completedAt: "2026-10-02T10:00:00Z" },
     ],
   }).productionControl
-  expect(changedSetupNumber.productionDashboardRows[0]?.actualFinishDate).toBe("1-Oct-26")
+  expect(changedSetupNumber.productionDashboardRows[0]?.actualFinishDate).toBe("01/10/2026")
   expect(changedSetupNumber.workOrders[0]).toMatchObject({ finalSetupGoodPieces: 100, dispatchAvailablePieces: 100 })
 
   const differentOperation = buildLegacyDashboardSnapshot({
@@ -397,7 +397,7 @@ test("finished good and Item Complete carry across two equivalent route changes"
     dispatchApprovals: [{ jobCardNumber: "P-CHAIN", decision: "approved", quantity: 100, createdAt: "2026-10-04T10:00:00Z" }],
   }).productionControl
   expect(snapshot.workOrders[0]).toMatchObject({ optionNumber: "C", finalSetupGoodPieces: 100, dispatchRecordedGoodPieces: 100, dispatchAvailablePieces: 0, dispatchStatus: "Shifted to dispatch" })
-  expect(snapshot.productionDashboardRows[0]).toMatchObject({ status: "Dispatched", actualFinishDate: "1-Oct-26", dispatchedPieces: 100 })
+  expect(snapshot.productionDashboardRows[0]).toMatchObject({ status: "Dispatched", actualFinishDate: "01/10/2026", dispatchedPieces: 100 })
 })
 
 describe("legacy dashboard route selections", () => {
@@ -628,7 +628,7 @@ describe("legacy dashboard route selections", () => {
       }],
     } as Parameters<typeof buildLegacyDashboardSnapshot>[0])
       .productionControl.productionDashboardRows[0]!
-    expect(withBaseline.plannedDispatchDateAtRmReceipt).toBe("30-Sept-26")
+    expect(withBaseline.plannedDispatchDateAtRmReceipt).toBe("30/09/2026")
   })
 
   test("creates one readiness row per setup missing cycle time", () => {

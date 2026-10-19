@@ -6,6 +6,7 @@ import { createStoreRepository } from "@workspace/db"
 import { storeUnitValue } from "@/lib/store-units"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
+import { csvDateValue } from "@/lib/csv-date"
 
 import {
   csvValue,
@@ -39,27 +40,6 @@ function form(row: MasterCsvRow, fields: Record<string, string[]>) {
   return formData
 }
 
-function normalizedCsvDate(value: string, label: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return ""
-
-  const dayFirst = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(trimmed)
-  const normalized = dayFirst
-    ? `${dayFirst[3]!}-${dayFirst[2]!.padStart(2, "0")}-${dayFirst[1]!.padStart(2, "0")}`
-    : trimmed
-  const parsed = new Date(`${normalized}T00:00:00Z`)
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(normalized) ||
-    Number.isNaN(parsed.valueOf()) ||
-    parsed.toISOString().slice(0, 10) !== normalized
-  ) {
-    throw new Error(
-      `${label} must be a valid date in YYYY-MM-DD, DD-MM-YYYY, or DD/MM/YYYY format.`
-    )
-  }
-  return normalized
-}
-
 export async function importStoreMasterCsvAction(formData: FormData) {
   const master = normalizeStoreMasterKey(formData.get("store_master"))
   await requireCapability(masterCapability(master, "import"), "/masters")
@@ -72,15 +52,17 @@ export async function importStoreMasterCsvAction(formData: FormData) {
         rowNumber = index + 2
         const result = await importRow(
           master,
-          resolveReferences(master, row, references)
+          resolveReferences(master, row, references),
+          rowNumber
         )
         if (result?.error) throw new Error(result.error)
       }
     })
   } catch (error) {
     unstable_rethrow(error)
+    const message = error instanceof Error ? error.message : "Import failed."
     return {
-      error: `Row ${rowNumber}: ${error instanceof Error ? error.message : "Import failed."} No rows were imported. Correct the file and upload it again.`,
+      error: `${message.startsWith("CSV row ") ? "" : `Row ${rowNumber}: `}${message} No rows were imported. Correct the file and upload it again.`,
     }
   }
   revalidatePath("/store/masters")
@@ -190,7 +172,7 @@ function resolveReferences(
   }
 }
 
-async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
+async function importRow(master: StoreMasterKey, row: MasterCsvRow, rowNumber: number) {
   switch (master) {
     case "CATEGORY":
       return createStoreAssetCategoryAction(
@@ -238,8 +220,9 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow) {
         form(
           {
             ...row,
-            valid_from: normalizedCsvDate(
+            valid_from: csvDateValue(
               csvValue(row, "valid_from"),
+              rowNumber,
               "Valid From"
             ),
           },

@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -66,7 +67,7 @@ export function StoreAssetCalibrationHistory({
                     : visit.status === "CANCELLED" ? "inactive" : "warning"
                 return (
                   <TableRow key={visit.id} data-row-id={visit.id}>
-                    <TableCell>{visit.dueOn}</TableCell>
+                    <TableCell>{formatCalendarDate(visit.dueOn)}</TableCell>
                     <TableCell>
                       <span className="font-medium">{visit.scheduleName}</span>
                       <span className="block text-xs text-muted-foreground">{visit.scope}</span>
@@ -74,7 +75,7 @@ export function StoreAssetCalibrationHistory({
                     <TableCell>{visit.method === "IN_HOUSE" ? "In House" : "Supplier"}</TableCell>
                     <TableCell>{supplier?.supplierName || "—"}</TableCell>
                     <TableCell><StatusBadge tone={tone} value={visit.status} /></TableCell>
-                    <TableCell>{visit.completedOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(visit.completedOn || "—")}</TableCell>
                     <TableCell>
                       {visit.certificateHref ? (
                         <Button asChild size="sm" variant="outline">

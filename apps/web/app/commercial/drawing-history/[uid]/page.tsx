@@ -1,3 +1,5 @@
+import { formatIstDateTime } from "@/lib/date-time"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -110,14 +112,14 @@ export default async function DrawingRevisionHistoryPage({
                         : row.status}
                       {` · ${row.requirement}`}
                     </TableCell>
-                    <TableCell>{row.effectiveOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(row.effectiveOn || "—")}</TableCell>
                     <TableCell>
                       {row.raisedBy || "—"} / {row.uploadedBy || "—"}
                     </TableCell>
                     <TableCell>
                       {row.approvedBy || "—"}
                       {row.approvedAt
-                        ? ` · ${row.approvedAt.toLocaleString()}`
+                        ? ` · ${formatIstDateTime(row.approvedAt)}`
                         : ""}
                     </TableCell>
                     <TableCell>
@@ -192,9 +194,7 @@ export default async function DrawingRevisionHistoryPage({
                     <TableCell>{holding.location || "—"}</TableCell>
                     <TableCell>{holding.updatedBy || "—"}</TableCell>
                     <TableCell>
-                      {holding.updatedAt.toLocaleString("en-IN", {
-                        timeZone: "Asia/Kolkata",
-                      })}
+                      {formatIstDateTime(holding.updatedAt)}
                     </TableCell>
                   </TableRow>
                 ))}

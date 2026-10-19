@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import type { RecruitmentEmploymentLetterRow } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -59,10 +60,10 @@ export function CandidateOfferLetterRegister({
                 {context === "job" ? (
                   <TableCell>{letter.employeeName}</TableCell>
                 ) : null}
-                <TableCell>{letter.issuedOn}</TableCell>
+                <TableCell>{formatCalendarDate(letter.issuedOn)}</TableCell>
                 <TableCell>{letter.designation}</TableCell>
                 <TableCell>{letter.department || "—"}</TableCell>
-                <TableCell>{letter.joiningDate}</TableCell>
+                <TableCell>{formatCalendarDate(letter.joiningDate)}</TableCell>
                 <TableCell className="text-right">
                   {letter.fileAvailable ? (
                     <Button asChild size="sm" variant="outline">

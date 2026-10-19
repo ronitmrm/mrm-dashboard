@@ -5,6 +5,7 @@ import {
 } from "@workspace/db"
 
 import { csvValue, type MasterCsvRow } from "./master-data-csv"
+import { csvDateValue } from "./csv-date"
 
 export const employeeDataLabels = {
   pfCode: "PF Code", dateOfBirth: "Date of Birth", contactNo: "Contact No",
@@ -34,7 +35,8 @@ function details<const T extends readonly (keyof typeof employeeDataLabels)[]>(r
     const label = employeeDataLabels[field]
     const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_")
     if (!(key in row)) throw new Error(`CSV row ${rowNumber}: ${label} column is missing. Use Download CSV first.`)
-    return [field, csvValue(row, label)]
+    const value = csvValue(row, label)
+    return [field, field === "dateOfBirth" ? csvDateValue(value, rowNumber, label) : value]
   })) as Record<T[number], string>
 }
 

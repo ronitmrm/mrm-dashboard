@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import type {
   DrawingRevisionHistoryRow,
   PrintedDrawingHolding,
@@ -184,7 +186,7 @@ export function DrawingRegister({
                         tone={row.pendingUpload ? "warning" : undefined}
                       />
                     </TableCell>
-                    <TableCell>{row.effectiveOn || "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(row.effectiveOn || "—")}</TableCell>
                     <TableCell>
                       {row.pendingUpload
                         ? "Legacy Baseline"

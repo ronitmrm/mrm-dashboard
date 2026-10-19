@@ -210,7 +210,6 @@ const monthNames: Record<string, number> = {
   dec: 12,
 };
 
-const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const defaultProductiveHoursPerDay = 8;
 const cncProductiveHoursPerDay = 22.5;
@@ -7599,9 +7598,7 @@ function dateKey(value: string) {
 function calculateDateLabel(value: unknown) {
   const date = parseDate(value);
   if (!date) return cleanText(value);
-  const day = Number(date.slice(8, 10));
-  const monthIndex = Number(date.slice(5, 7)) - 1;
-  return `${day}-${monthShort[monthIndex]}-${date.slice(2, 4)}`;
+  return `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 }
 
 function monthLabelFromKey(key: string) {

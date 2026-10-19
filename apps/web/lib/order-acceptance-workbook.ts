@@ -1,4 +1,6 @@
 import { read, utils, writeFileXLSX, SSF } from "xlsx"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+import { csvDateValue } from "./csv-date"
 import type {
   PlanningContext,
   ProposalInput,
@@ -7,12 +9,14 @@ import type {
 } from "./order-acceptance"
 
 type WorkbookRow = Record<string, string | number>
+const rmDateColumn = "RM ready date (DD/MM/YYYY)"
 async function workbookRows(file: File, sheetName?: string) {
   if (file.size > 5 * 1024 * 1024)
     throw new Error("Use an Excel file smaller than 5 MB.")
   const workbook = read(await file.arrayBuffer(), {
     type: "array",
     cellDates: false,
+    raw: true,
   })
   const name = sheetName ?? workbook.SheetNames[0]
   const sheet = name ? workbook.Sheets[name] : undefined
@@ -23,17 +27,28 @@ async function workbookRows(file: File, sheetName?: string) {
     raw: false,
   })
   const raw = utils.sheet_to_json<WorkbookRow>(sheet, { defval: "", raw: true })
-  const dateColumn = "RM ready date (YYYY-MM-DD)"
-  return formatted.map((row, index) => {
-    const value = raw[index]?.[dateColumn]
-    if (typeof value !== "number") return row
-    const decoded = SSF.parse_date_code(value, {
-      date1904: workbook.Workbook?.WBProps?.date1904,
-    })
-    if (!decoded) throw new Error(`Invalid Excel RM date at row ${index + 2}.`)
+  return formatted.map<WorkbookRow>((row, index) => {
+    const rowNumber =
+      typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2
+    if (!(rmDateColumn in row))
+      throw new Error(
+        `Row ${rowNumber}: the ${rmDateColumn} column is required. Download the current template.`
+      )
+    const value = raw[index]?.[rmDateColumn]
+    let date = row[rmDateColumn]
+    if (typeof value === "number" && !/\.csv$/i.test(file.name)) {
+      const decoded = SSF.parse_date_code(value, {
+        date1904: workbook.Workbook?.WBProps?.date1904,
+      })
+      if (!decoded)
+        throw new Error(
+          `Row ${rowNumber}: ${rmDateColumn} must be a valid date.`
+        )
+      date = `${String(decoded.d).padStart(2, "0")}/${String(decoded.m).padStart(2, "0")}/${String(decoded.y).padStart(4, "0")}`
+    }
     return {
       ...row,
-      [dateColumn]: `${decoded.y}-${String(decoded.m).padStart(2, "0")}-${String(decoded.d).padStart(2, "0")}`,
+      [rmDateColumn]: csvDateValue(date, rowNumber, rmDateColumn),
     }
   })
 }
@@ -59,7 +74,7 @@ export function proposalTemplate() {
           Product: "",
           "Route option": "",
           "Quantity pcs": "",
-          "RM ready date (YYYY-MM-DD)": "",
+          [rmDateColumn]: "",
         },
       ],
     },
@@ -74,7 +89,7 @@ export async function importProposedOrder(file: File): Promise<ProposedLine[]> {
     part: String(row.Product ?? "").trim(),
     option: String(row["Route option"] ?? "").trim(),
     quantity: Number(String(row["Quantity pcs"] ?? "").replaceAll(",", "")),
-    rmDate: String(row["RM ready date (YYYY-MM-DD)"] ?? "").trim(),
+    rmDate: String(row[rmDateColumn] ?? "").trim(),
   }))
 }
 export function exportRmDates(input: ProposalInput, context: PlanningContext) {
@@ -90,7 +105,9 @@ export function exportRmDates(input: ProposalInput, context: PlanningContext) {
             "Line reference": line.id,
             Product: line.part,
             "Quantity pcs": line.quantity,
-            "RM ready date (YYYY-MM-DD)": input.existingRmDates[line.id] ?? "",
+            [rmDateColumn]: formatCalendarDate(
+              input.existingRmDates[line.id] ?? ""
+            ),
           })),
         ...input.lines.map((line) => ({
           Proposal: input.reference,
@@ -98,7 +115,7 @@ export function exportRmDates(input: ProposalInput, context: PlanningContext) {
           "Line reference": line.id,
           Product: line.part,
           "Quantity pcs": line.quantity,
-          "RM ready date (YYYY-MM-DD)": line.rmDate,
+          [rmDateColumn]: formatCalendarDate(line.rmDate),
         })),
       ],
     },
@@ -134,7 +151,7 @@ export async function importRmDates(
       throw new Error(
         `RM workbook no longer matches ${key}. Export the current workbook again.`
       )
-    const date = String(row["RM ready date (YYYY-MM-DD)"] ?? "").trim()
+    const date = String(row[rmDateColumn] ?? "").trim()
     if (source === "Existing") result.existingRmDates[id] = date
     else line.rmDate = date
   }
@@ -158,8 +175,8 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
           Setup: row.setup,
           Machine: row.machine,
           "Quantity pcs": row.quantity,
-          "Production start": row.start,
-          "Production finish": row.end,
+          "Production start": formatCalendarDate(row.start),
+          "Production finish": formatCalendarDate(row.end),
         }))
       ),
     },
@@ -171,8 +188,8 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
         Product: line.part,
         "Quantity pcs": line.quantity,
         Selected: line.selected ? "Yes" : "No",
-        "Machining completion": line.completion,
-        "RM required by": line.rmRequiredBy,
+        "Machining completion": formatCalendarDate(line.completion),
+        "RM required by": formatCalendarDate(line.rmRequiredBy),
         Reason: line.reason,
       })),
     },
@@ -191,11 +208,11 @@ export function exportProposalResult(input: ProposalInput, plan: ProposalPlan) {
       name: "Assumptions",
       rows: [
         {
-          "Machining start": input.startDate,
-          "Machining deadline": input.deadline,
+          "Machining start": formatCalendarDate(input.startDate),
+          "Machining deadline": formatCalendarDate(input.deadline),
           "Tentative RM available from":
             input.mode === "deadline"
-              ? input.tentativeRmDate || input.startDate
+              ? formatCalendarDate(input.tentativeRmDate || input.startDate)
               : "Per-line RM dates",
           "Daily hours": input.hoursPerDay,
           "Time factor %": input.efficiency,

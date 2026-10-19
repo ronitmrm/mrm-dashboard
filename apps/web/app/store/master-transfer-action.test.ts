@@ -4,6 +4,7 @@ const { save } = vi.hoisted(() => ({
   save: vi.fn<(data: FormData) => Promise<void | { error: string }>>(),
 }))
 vi.mock("@/lib/master-data-csv", () => import("../../lib/master-data-csv"))
+vi.mock("@/lib/csv-date", () => import("../../lib/csv-date"))
 vi.mock("@/lib/store-master-selection", () => import("../../lib/store-master-selection"))
 vi.mock("@/lib/store-units", () => import("../../lib/store-units"))
 vi.mock("@/lib/auth/master-capabilities", () => ({ masterCapability: () => "store.import" }))
@@ -77,7 +78,7 @@ test("resolves readable references across Store master CSVs and form labels", as
   expect(save.mock.lastCall?.[0].get("asset_category_id")).toBe("category-id")
   expect(await importCsv("ASSET_NAME", "asset_name,asset_category,asset_subcategory\nNew Fixture,Production Tooling,Tools")).toBeUndefined()
   expect(save.mock.lastCall?.[0].get("asset_subcategory_id")).toBe("subcategory-id")
-  expect(await importCsv("SUPPLIER_PRICE", "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,2026-09-20\nSUP-001,NC001,110,2026-09-21")).toBeUndefined()
+  expect(await importCsv("SUPPLIER_PRICE", "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,20/09/2026\nSUP-001,NC001,110,21/09/2026")).toBeUndefined()
   expect(save.mock.lastCall?.[0].get("supplier_id")).toBe("supplier-id")
   expect(save.mock.lastCall?.[0].get("item_type_id")).toBe("item-id")
   expect(await importCsv("LOCATION", "location_code,location_name,location_type\nSTR,Main Store,Store")).toBeUndefined()
@@ -102,11 +103,20 @@ test("normalizes day-first Supplier Price dates before saving", async () => {
 
   const result = await importCsv(
     "SUPPLIER_PRICE",
-    "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,19-09-2026"
+    "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,19/09/2026"
   )
 
   expect(result).toBeUndefined()
   expect(save.mock.lastCall?.[0].get("valid_from")).toBe("2026-09-19")
+})
+
+test("rejects invalid calendar dates before saving any supplier prices", async () => {
+  const result = await importCsv(
+    "SUPPLIER_PRICE",
+    "supplier,asset_code,unit_price,valid_from\nTool Supplier,NC001,100,19/09/2026\nTool Supplier,NC001,110,31/02/2026"
+  )
+  expect(result?.error).toContain('CSV row 3: valid_from "31/02/2026" must be a valid date in DD/MM/YYYY')
+  expect(save).not.toHaveBeenCalled()
 })
 
 test("rejects an ambiguous Subcategory without choosing a parent arbitrarily", async () => {

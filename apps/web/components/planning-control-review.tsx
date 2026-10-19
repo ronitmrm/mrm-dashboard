@@ -1,5 +1,7 @@
 "use client"
 
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
 import { useState, type FormEvent } from "react"
 import Link from "next/link"
 import { CheckCircle2 } from "lucide-react"
@@ -18,7 +20,7 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 import { Textarea } from "@workspace/ui/components/textarea"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import { useConditionalRecords } from "@/hooks/use-conditional-records"
-import { formatIstDate } from "@/lib/date-time"
+import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 
 type Session = Record<string, unknown>
 type Workflow = Record<string, unknown>
@@ -143,7 +145,7 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
                 <TableRow key={`rework:${String(row.jcNo)}`} data-row-id={`rework:${String(row.jcNo)}`}>
                   <TableCell><StatusBadge tone="warning" value={row.materialPlanningReady === false ? "Replacement — Awaiting New RM" : "Revision — Route Selection Required"} /></TableCell>
                   <TableCell><Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link><div>{String(row.partCode)}</div></TableCell>
-                  <TableCell>—</TableCell><TableCell>{String(row.receivedOn ?? "")}</TableCell>
+                  <TableCell>—</TableCell><TableCell>{formatCalendarDate(row.receivedOn)}</TableCell>
                   <TableCell>{quantity.format(Number(row.orderPcs))} returned pieces · Original: {String(row.originalJobCardNumber)}</TableCell>
                   <TableCell><Button size="sm" variant="outline" asChild><Link href={row.materialPlanningReady === false ? `/?tab=operationalEntryTab&floor=${floor}&entry=rm_inward` : `/?tab=masterGapsTab&floor=${floor}`}>{row.materialPlanningReady === false ? "Receive new RM for this revision" : "Select route in Part Readiness"}</Link></Button></TableCell>
                 </TableRow>
@@ -163,7 +165,7 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
                     <StatusBadge tone={row.shortAccepted ? "information" : "warning"} value={row.shortAccepted ? "Short RM accepted" : "RM pending"} />
                   </TableCell>
                   <TableCell>{row.shortAccepted ? (
-                    <span className="block max-w-72 break-words" title={String(row.acceptance?.acceptedAt ?? "")}>{String(row.acceptance?.reason ?? "Accepted by planner")}</span>
+                    <span className="block max-w-72 break-words" title={formatIstDateTime(String(row.acceptance?.acceptedAt ?? ""))}>{String(row.acceptance?.reason ?? "Accepted by planner")}</span>
                   ) : <Button size="sm" variant="outline" disabled={Boolean(savingId) || row.requiredKg === null}
                     onClick={() => { setSelectedMaterial(row); setMaterialReason(""); setMaterialError("") }}>Accept short RM</Button>}</TableCell>
                 </TableRow>

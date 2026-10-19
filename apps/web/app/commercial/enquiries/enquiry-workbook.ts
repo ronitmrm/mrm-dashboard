@@ -1,4 +1,7 @@
 import * as XLSX from "xlsx"
+import { csvDateValue, isCsvDateColumn } from "../../../lib/csv-date"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+import { formatIstDateTime } from "../../../lib/date-time"
 
 const headers = [
   "part",
@@ -68,18 +71,26 @@ function firstSheetRows(buffer: Buffer, fileName: string) {
     throw new Error("Please upload a CSV, XLS, or XLSX file.")
   }
   const workbook = XLSX.read(buffer, {
-    raw: false,
+    raw: normalizedName.endsWith(".csv"),
     type: "buffer",
   })
   const firstSheetName = workbook.SheetNames[0]
   const sheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined
   if (!sheet) return [] as unknown[][]
-  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     blankrows: true,
     defval: "",
     header: 1,
     raw: false,
   })
+  if (normalizedName.endsWith(".csv")) {
+    const columns = rows[0] ?? []
+    rows.slice(1).forEach((row, index) => columns.forEach((column, columnIndex) => {
+      const name = String(column ?? "")
+      if (isCsvDateColumn(name)) csvDateValue(row[columnIndex], index + 2, name)
+    }))
+  }
+  return rows
 }
 
 export function parseEnquiryImportFile(buffer: Buffer, fileName: string) {
@@ -213,7 +224,7 @@ export function buildEnquiryRegisterExport(rows: EnquiryRegisterExportRow[]) {
     rows.map((row) => ({
       Type: "Customer Enquiry",
       Reference: row.enquiryNumber,
-      Received: row.receivedOn,
+      Received: formatCalendarDate(row.receivedOn),
       "Customer UID": row.customerUid,
       Customer: row.companyName,
       Source: row.source,
@@ -225,14 +236,14 @@ export function buildEnquiryRegisterExport(rows: EnquiryRegisterExportRow[]) {
       "Ordered Lines": row.orderedLineCount,
       "Pending Lines": row.pendingLineCount,
       "Not Feasible Lines": row.notFeasibleLineCount,
-      "Handover At": row.technicalHandoverAt?.toISOString() ?? "",
+      "Handover At": row.technicalHandoverAt ? formatIstDateTime(row.technicalHandoverAt) : "",
       "Quote Items Sent": row.quoteSentCount,
-      "PDF Sent At": row.latestQuoteSentAt?.toISOString() ?? "",
+      "PDF Sent At": row.latestQuoteSentAt ? formatIstDateTime(row.latestQuoteSentAt) : "",
       "Quote PDF Link":
         row.quoteSentCount > 0
           ? `/commercial/quotes/enquiry/${row.id}/pdf`
           : "",
-      "Next Follow-up": row.nextFollowupDue ?? "",
+      "Next Follow-up": formatCalendarDate(row.nextFollowupDue),
       "Due Follow-ups": row.dueFollowupCount,
       "Can Edit": row.canEdit ? "Yes" : "No",
       "Can Delete": row.canDelete ? "Yes" : "No",

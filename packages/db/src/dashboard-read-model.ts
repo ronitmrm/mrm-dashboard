@@ -442,6 +442,12 @@ function finishBaselineKey(value: JsonRecord) {
 function dashboardDateIso(value: unknown) {
   const text = String(value ?? "").trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
+  const numeric = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text)
+  if (numeric) {
+    const iso = `${numeric[3]}-${numeric[2]}-${numeric[1]}`
+    const parsed = new Date(`${iso}T00:00:00Z`)
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : ""
+  }
   const match = text.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2})$/)
   if (!match) return ""
   const month = new Map([

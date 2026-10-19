@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 
 import {
@@ -287,7 +288,7 @@ export default async function PurchaseOrdersPage({
                           {order.poNumber}
                         </TableCell>
                         <TableCell>{order.companyName}</TableCell>
-                        <TableCell>{order.poDate}</TableCell>
+                        <TableCell>{formatCalendarDate(order.poDate)}</TableCell>
                         <TableCell>{order.lineCount}</TableCell>
                         <TableCell>
                           <Badge

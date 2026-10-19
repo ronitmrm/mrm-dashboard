@@ -12,6 +12,14 @@ Dashboard template uploads accept LF, CRLF, and CR line endings, including
 quoted multiline cells. A template without data rows is rejected instead of
 reporting a successful zero-row import.
 
+All non-empty calendar-date cells must use `DD/MM/YYYY`, with two digits for the
+day and month and four digits for the year, and must identify a real calendar
+date. Other formats, including ISO dates, month names, two-digit years, and
+spreadsheet serial numbers, reject the complete CSV before any imported changes
+are applied. Errors identify the CSV row and date column. Downloads use the same
+format so valid date fields can be imported again. Stored dates remain canonical
+calendar dates; this input rule does not change stored timestamps.
+
 RM Inward kilograms and Work Order piece/kg quantities accept plain numbers and
 standard or Indian thousands separators used in downloads, such as `1,015.90`
 and `1,23,456.70`. These separators are interpreted only in quantity fields,

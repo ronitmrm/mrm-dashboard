@@ -1,3 +1,5 @@
+import { formatIstDate } from "@/lib/date-time"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import Link from "next/link"
 import type { BrandingRegisterRow } from "@workspace/db"
 import {
@@ -86,12 +88,10 @@ export function BrandingDocumentTable({
                   </span>
                 ) : null}
               </TableCell>
-              <TableCell>{row.effectiveDate || "—"}</TableCell>
+              <TableCell>{formatCalendarDate(row.effectiveDate || "—")}</TableCell>
               <TableCell>{row.authorName}</TableCell>
               <TableCell>
-                {new Date(row.updatedAt).toLocaleDateString("en-IN", {
-                  timeZone: "Asia/Kolkata",
-                })}
+                {formatIstDate(row.updatedAt)}
               </TableCell>
             </TableRow>
           ))

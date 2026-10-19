@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import PDFDocument from "pdfkit"
@@ -85,25 +86,7 @@ function formatNumber(value: number, maximumFractionDigits = 2) {
 }
 
 export function formatPurchaseOrderDate(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
-  if (!match) return cleanText(value)
-  const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ]
-  const month = months[Number(match[2]) - 1]
-  if (!month) return cleanText(value)
-  return `${match[3]} ${month} ${match[1]}`
+  return cleanText(formatCalendarDate(value))
 }
 
 function underThousand(value: number) {

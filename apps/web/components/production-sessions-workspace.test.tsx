@@ -29,5 +29,5 @@ test("shows the close reason and downtime end time in the session timeline", () 
   expect(sessionTimelineDetail({
     eventType: "downtime", reasonName: "No Electricity",
     startedAt: "2026-10-15T12:39:00Z", endedAt: "2026-10-15T17:00:00Z",
-  })).toBe("No Electricity · End: 15 Oct 2026, 22:30 IST")
+  })).toBe("No Electricity · End: 15/10/2026, 22:30 IST")
 })

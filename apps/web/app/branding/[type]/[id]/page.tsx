@@ -1,3 +1,5 @@
+import { formatIstDate } from "@/lib/date-time"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { DocumentControlMetadataForm } from "@/components/branding/document-control-metadata-form"
 import { BrandingBookContent } from "@/components/branding/book-content"
 import Link from "next/link"
@@ -218,7 +220,7 @@ export default async function BrandingDocumentPage({
           <FormSection title="Document details">
             <p>
               {selected.content.department} · Effective{" "}
-              {selected.content.effectiveDate || "date pending"} ·{" "}
+              {formatCalendarDate(selected.content.effectiveDate || "date pending")} ·{" "}
               {selected.authorName}
             </p>
             {selected.content.changeReason ? (
@@ -375,7 +377,7 @@ export default async function BrandingDocumentPage({
                     </TableCell>
                     <TableCell>{revision.authorName}</TableCell>
                     <TableCell>
-                      {revision.issuedAt?.slice(0, 10) ?? "—"}
+                      {revision.issuedAt ? formatIstDate(revision.issuedAt) : "—"}
                     </TableCell>
                     <TableCell className="max-w-96 whitespace-pre-wrap">
                       {revision.content.changeReason || "Initial issue"}

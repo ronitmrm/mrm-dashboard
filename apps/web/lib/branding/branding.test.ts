@@ -490,7 +490,7 @@ describe("Branding issue contract", () => {
     const output = await inspect(notice)
     portrait(output)
     expect(output.text).toContain("MRM-NTC-0001")
-    expect(output.text).toContain("14 / 09 / 2026")
+    expect(output.text).toContain("14/09/2026")
     expect(output.text).not.toContain("R00")
     const items = output.pages[0]!.items
     const number = items.find((item) => item.text === "MRM-NTC-0001")!

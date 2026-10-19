@@ -72,13 +72,13 @@ describe("job card workspace", () => {
         setupNumbers: ["1", "2"],
         planRows: [
           {
-            plannedProductionEndDate: "2026-08-12",
-            plannedProductionStartDate: "2026-08-10",
+            plannedProductionEndDate: "31/08/2026",
+            plannedProductionStartDate: "30/08/2026",
             setupNumber: "1",
           },
           {
-            plannedProductionEndDate: "2026-08-14",
-            plannedProductionStartDate: "2026-08-13",
+            plannedProductionEndDate: "02/09/2026",
+            plannedProductionStartDate: "01/09/2026",
             setupNumber: "2",
           },
         ],
@@ -116,8 +116,10 @@ describe("job card workspace", () => {
       completionPercent: 29,
       finishedCompletionPercent: 20,
       downtimeMinutes: 90,
-      plannedEndDate: "2026-08-14",
-      plannedStartDate: "2026-08-10",
+      plannedEndDate: "2026-09-02",
+      plannedStartDate: "2026-08-30",
+      actualStartAt: "2026-08-11T04:00:00.000Z",
+      actualEndAt: "2026-08-15T10:00:00.000Z",
       rejectedPieces: 20,
       rejectionPercent: 3.33,
       runtimeMinutes: 900,
@@ -254,10 +256,10 @@ describe("job card workspace", () => {
   it("rates delivery in working days excluding Fridays and holidays", () => {
     expect(
       buildDeliveryPerformance({
-        actualOrProjectedDate: "2026-08-13",
+        actualOrProjectedDate: "13/08/2026",
         asOfDate: "2026-08-16",
         holidayDates: ["2026-08-08"],
-        rawMaterialCompleteDate: "2026-08-03",
+        rawMaterialCompleteDate: "03/08/2026",
         targetWorkingDays: 5,
       })
     ).toEqual({

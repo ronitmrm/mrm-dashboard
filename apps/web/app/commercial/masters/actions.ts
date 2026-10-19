@@ -16,6 +16,7 @@ import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
+import { validateCsvDateCells } from "../../../lib/csv-date"
 import {
   listGrantedCapabilities,
   requireAuthenticatedSession,
@@ -336,6 +337,7 @@ export async function importMastersWorkbookAction(formData: FormData) {
     }
 
     const workbook = XLSX.read(Buffer.from(await file.arrayBuffer()), {
+      raw: true,
       type: "buffer",
     })
     if (/\.csv$/i.test(file.name)) {
@@ -346,6 +348,8 @@ export async function importMastersWorkbookAction(formData: FormData) {
       const target = csvSheetNameByEntryKind[selection.entryKind]
       const sheet = source ? workbook.Sheets[source] : undefined
       if (sheet) {
+        XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false })
+          .forEach((row, index) => validateCsvDateCells(row, typeof row.__rowNum__ === "number" ? row.__rowNum__ + 1 : index + 2))
         workbook.SheetNames = [target]
         workbook.Sheets = { [target]: sheet }
       }

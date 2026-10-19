@@ -1,4 +1,6 @@
 import type { MasterCsvRow } from "./master-data-csv"
+import { csvDateValue } from "./csv-date"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 
 export const qualityRejectionCsvColumns = [
   "entry_id", "job_card", "date", "stage", "rejection_type", "defect",
@@ -19,7 +21,7 @@ export function qualityRejectionCsvRows(rows: {
   return rows.map((row) => ({
     entry_id: row.id,
     job_card: row.jobCard,
-    date: row.date,
+    date: formatCalendarDate(row.date),
     stage: row.stage,
     rejection_type: row.type,
     defect: row.defect,
@@ -45,7 +47,7 @@ export function parseQualityRejectionCsv(rows: MasterCsvRow[]) {
     return {
       id,
       jobCard: row.job_card!,
-      date: row.date!,
+      date: csvDateValue(row.date, line, "date"),
       stage: row.stage!,
       type: row.rejection_type!,
       defect: row.defect!,

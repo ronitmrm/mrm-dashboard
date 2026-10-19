@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { groupEmployeeTerms, type RecruitmentEmployeeAssignmentRow } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -45,8 +46,8 @@ export function EmployeeDataRegister({ assignments, canManage }: {
               <TableCell className="font-medium">{first.employeeName}</TableCell>
               <TableCell>{employeeDepartmentLabel(term.assignments)}</TableCell>
               <TableCell>{designations.join(", ") || "—"}</TableCell>
-              <TableCell>{term.joinedOn ?? "Date needed"}</TableCell>
-              <TableCell>{term.endedOn ?? "Current"}</TableCell>
+              <TableCell>{formatCalendarDate(term.joinedOn ?? "Date needed")}</TableCell>
+              <TableCell>{formatCalendarDate(term.endedOn ?? "Current")}</TableCell>
               <TableCell><StatusBadge value={personalSaved ? "Saved" : "Add details"} tone={personalSaved ? "positive" : "warning"} /></TableCell>
               <TableCell><StatusBadge value={termSaved ? "Saved" : "Add details"} tone={termSaved ? "positive" : "warning"} /></TableCell>
               {canManage ? <TableCell className="text-right">

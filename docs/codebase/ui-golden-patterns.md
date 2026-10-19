@@ -90,8 +90,16 @@ container. `OperationalTable` continues to own scrolling for its rows.
 Use shared `TimeInput` for standalone 24-hour hour/minute fields. It displays
 a permanent colon between hour and minute segments. Two hour digits move focus
 to minutes; each segment selects its value on entry for easy replacement.
-It keeps required and 00:00–23:59 validation. Native combined date/time
-controls already supply their separator.
+It keeps required and 00:00–23:59 validation. Combined date/time inputs
+include the `HH:mm` separator.
+
+Use shared `Input` with `type="date"` or `type="datetime-local"` for calendar
+entry. It displays and accepts `DD/MM/YYYY` (plus `HH:mm` for date/time), preserves
+required/range/step validation, and supplies ISO values to forms and change
+handlers. Format dates with `formatIstDate` / `formatIstDateTime`, or
+`formatCalendarDate` for existing calendar-only values. Keep ISO dates and
+timestamps in storage and calculation; CSV calendar dates must pass the strict
+DD/MM/YYYY import validator before saving.
 
 ## Operational tables
 

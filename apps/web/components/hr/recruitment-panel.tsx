@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { PendingRetainedUploadForm } from "@/components/pending-retained-upload-form"
 import type { RetainedUploadRegistration } from "@/lib/pending-retained-upload-client"
 import Link from "next/link"
@@ -846,8 +847,8 @@ function JobsPanel({
                         ? `${row.shiftType}${row.shiftStartTime && row.shiftEndTime ? ` · ${row.shiftStartTime}–${row.shiftEndTime}` : ""}`
                         : "—"}
                     </TableCell>
-                    <TableCell>{row.postDate}</TableCell>
-                    <TableCell>{row.targetDate ?? "—"}</TableCell>
+                    <TableCell>{formatCalendarDate(row.postDate)}</TableCell>
+                    <TableCell>{formatCalendarDate(row.targetDate ?? "—")}</TableCell>
                     <TableCell>{row.applicantCount}</TableCell>
                     <TableCell>
                       <StatusBadge value={row.status} />

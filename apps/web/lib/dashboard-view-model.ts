@@ -8,6 +8,7 @@ import {
   normalizeSourceCoverage,
   type SourceCoverage,
 } from "@workspace/db/dashboard-coverage";
+import { tableFilterDate } from "@workspace/ui/lib/table-date-filter";
 
 export type DashboardRecord = Record<string, unknown>;
 
@@ -453,26 +454,14 @@ export function dateSortValue(value: unknown) {
 export function parseSortableDate(value: unknown) {
   const raw = str(value);
   if (!raw || raw === "-") return undefined;
-  // Date inputs are local calendar days, just like the dashboard's named dates.
-  // Native parsing treats YYYY-MM-DD as UTC and shifts same-day comparisons.
-  const isoDay = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (isoDay) return normalizedDate(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]));
-  const directDate = new Date(raw);
-  if (!Number.isNaN(directDate.getTime())) return directDate;
-  const slashMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (slashMatch) {
-    const [, day, month, year] = slashMatch;
-    return normalizedDate(Number(year), Number(month) - 1, Number(day));
+  const calendar = tableFilterDate(raw);
+  if (!calendar) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:/.test(raw)) {
+    const instant = new Date(raw);
+    return Number.isNaN(instant.getTime()) ? undefined : instant;
   }
-  const namedMatch = raw.match(/^(\d{1,2})[-\s]([A-Za-z]+)[-\s](\d{2,4})$/);
-  if (namedMatch) {
-    const day = namedMatch[1] ?? "";
-    const monthName = namedMatch[2] ?? "";
-    const year = namedMatch[3] ?? "";
-    const monthIndex = monthNameToIndex(monthName);
-    if (monthIndex !== undefined) return normalizedDate(Number(year), monthIndex, Number(day));
-  }
-  return undefined;
+  // Calendar dates compare on the same local day, independent of browser locale.
+  return new Date(calendar.year, calendar.month - 1, calendar.day);
 }
 
 function rankedRows(
@@ -540,42 +529,6 @@ function str(value: unknown) {
 function displayText(value: unknown) {
   if (value === undefined || value === null || value === "") return "-";
   return String(value);
-}
-
-function normalizedDate(year: number, monthIndex: number, day: number) {
-  const fullYear = year < 100 ? 2000 + year : year;
-  const date = new Date(fullYear, monthIndex, day);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-function monthNameToIndex(value: string) {
-  const months: Record<string, number> = {
-    jan: 0,
-    january: 0,
-    feb: 1,
-    february: 1,
-    mar: 2,
-    march: 2,
-    apr: 3,
-    april: 3,
-    may: 4,
-    jun: 5,
-    june: 5,
-    jul: 6,
-    july: 6,
-    aug: 7,
-    august: 7,
-    sep: 8,
-    sept: 8,
-    september: 8,
-    oct: 9,
-    october: 9,
-    nov: 10,
-    november: 10,
-    dec: 11,
-    december: 11,
-  };
-  return months[value.trim().toLowerCase()];
 }
 
 function sum(values: number[]) {

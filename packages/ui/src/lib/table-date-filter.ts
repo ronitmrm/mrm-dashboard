@@ -22,7 +22,7 @@ export function tableFilterDate(value: string) {
   const named = /^(\d{1,2})[- ]([a-z]{3,9})[- ](\d{4}|\d{2})(?:$|[, ·])/i.exec(
     text
   )
-  const numeric = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:$|[, ])/.exec(text)
+  const numeric = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})(?:$|[, ])/.exec(text)
   if (iso) {
     year = Number(iso[1])
     month = Number(iso[2])
@@ -35,7 +35,7 @@ export function tableFilterDate(value: string) {
       ) + 1
     day = Number(named[1])
   } else if (numeric) {
-    year = Number(numeric[3])
+    year = Number(numeric[3]) + (numeric[3]!.length === 2 ? 2000 : 0)
     month = Number(numeric[2])
     day = Number(numeric[1])
   } else return null

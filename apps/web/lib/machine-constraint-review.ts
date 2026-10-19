@@ -1,4 +1,5 @@
 import { machineFamilyMatches, machineMasterFamily } from "@workspace/db/planning-rules";
+import { tableFilterDate } from "@workspace/ui/lib/table-date-filter";
 
 export type MachineConstraintReviewRow = Record<string, unknown>;
 
@@ -284,21 +285,8 @@ function machineConstraintRowOverlaps(
 function dateSortValue(value: unknown) {
   const text = rowText({ value }, "value");
   if (!text || text === "-") return Number.MAX_SAFE_INTEGER;
-  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso?.[1] && iso[2] && iso[3]) return Number(`${iso[1]}${iso[2]}${iso[3]}`);
-  const dashboard = text.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
-  if (dashboard?.[1] && dashboard[2] && dashboard[3]) {
-    const month = monthNumber(dashboard[2]);
-    const year = Number(dashboard[3].length === 2 ? `20${dashboard[3]}` : dashboard[3]);
-    if (month) return Number(`${year}${String(month).padStart(2, "0")}${dashboard[1].padStart(2, "0")}`);
-  }
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) return Number.MAX_SAFE_INTEGER;
-  return Number(`${parsed.getFullYear()}${String(parsed.getMonth() + 1).padStart(2, "0")}${String(parsed.getDate()).padStart(2, "0")}`);
-}
-
-function monthNumber(value: string) {
-  return ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"].indexOf(value.toLowerCase()) + 1;
+  const calendar = tableFilterDate(text);
+  return calendar ? calendar.year * 10000 + calendar.month * 100 + calendar.day : Number.MAX_SAFE_INTEGER;
 }
 
 function setupSortValue(value: unknown) {

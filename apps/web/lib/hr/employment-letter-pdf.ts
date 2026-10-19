@@ -1,3 +1,4 @@
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { buildOfferLetterPdf } from "./offer-letter-pdf"
 import type { PreparedEmploymentLetter } from "@workspace/db"
 import {
@@ -46,20 +47,7 @@ function wrapped(value: unknown, font: PDFFont, size: number, width: number) {
 }
 
 function dateLabel(value: string) {
-  const [year, month, day] = value.split("-").map(Number)
-  const suffix =
-    day! % 10 === 1 && day !== 11
-      ? "st"
-      : day! % 10 === 2 && day !== 12
-        ? "nd"
-        : day! % 10 === 3 && day !== 13
-          ? "rd"
-          : "th"
-  const monthName = new Intl.DateTimeFormat("en-GB", {
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year!, month! - 1, day)))
-  return `${day}${suffix} ${monthName} ${year}`
+  return formatCalendarDate(value)
 }
 
 function money(value: number) {
