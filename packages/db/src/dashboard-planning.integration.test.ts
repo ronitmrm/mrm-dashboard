@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
+import { readDirectDashboardFacts } from "./dashboard-direct-facts"
 import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
@@ -1244,11 +1245,40 @@ describe("dashboard planning writes", () => {
     })
     await repository.selectRoute({ jobCardNumber: changedJobCard, organizationId,
       productionFloorCode: "cnc", routeCode: "OLD" })
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, stage, active, source_system, source_table, source_id
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
+         'operator_started', true, 'test', 'old-route-state', $2
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 2
+       JOIN catalog.machines machine
+         ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
+      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+    )
     await repository.recordRouteChange({
       jobCardNumber: changedJobCard, organizationId, newRouteCode: "NEW",
       productionFloorCode: "cnc",
       reason: "Use revised route", remainingSetups: [{ setupNumber: 2, plan: true, quantity: 20 }],
     })
+    const released = await pool.query<{ stage: string; active: boolean }>(
+      `SELECT state.stage, state.active FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $2`,
+      [organizationId, changedJobCard]
+    )
+    expect(released.rows).toEqual([{ stage: "planned", active: false }])
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.routeChanges.find((row) => row.jobCardNumber === changedJobCard)?.partCode).toBe(changedItem)
+    const live = await readDirectDashboardFacts(pool, organizationId, "cnc", [], ["routeChanges"])
+    expect(live.productionControl.plannerActionLog).toEqual(expect.arrayContaining([
+      expect.objectContaining({ jobCardNumber: changedJobCard, partCode: changedItem }),
+    ]))
     const saved = await repository.recordPlanOverride({
       assignmentMode: "add_parallel_machine", jobCardNumber: changedJobCard,
       organizationId, productionFloorCode: "cnc", reason: "Use new route setup", setupNumber: 2,
@@ -1275,20 +1305,9 @@ describe("dashboard planning writes", () => {
     expect(reference.rows[0]?.detail_setup_id).toBe(reference.rows[0]?.expected_setup_id)
 
     await pool.query(
-      `INSERT INTO manufacturing.shop_floor_setup_state (
-         organization_id, work_order_id, route_option_id, operation_setup_id,
-         machine_id, stage, active, source_system, source_table, source_id
-       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
-         'operator_started', true, 'test', 'old-route-state', $2
-       FROM manufacturing.work_orders work_order
-       JOIN manufacturing.route_options route
-         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
-       JOIN manufacturing.operation_setups setup
-         ON setup.route_option_id = route.id AND setup.setup_number = 2
-       JOIN catalog.machines machine
-         ON machine.organization_id = $1 AND machine.machine_number = $3
-       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
-      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+      `UPDATE manufacturing.shop_floor_setup_state SET stage = 'operator_started', active = true
+       WHERE organization_id = $1 AND source_id = $2`,
+      [organizationId, `old-route-state:${suffix}`]
     )
     await expect(repository.recordMachineConstraint({
       interruptedSetups: [{ jobCardNumber: changedJobCard, machineNumber: staleMachine, setupNumber: 2 }],

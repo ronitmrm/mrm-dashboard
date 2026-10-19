@@ -16774,6 +16774,7 @@ function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
     <DataRowsCard
       title="Planner Action Log"
       rows={plannerActionHistoryRows(rows)}
+      rowLimit={rows.length}
       empty="No planner actions saved yet"
     />
   )
