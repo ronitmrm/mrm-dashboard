@@ -203,7 +203,7 @@ describe("independent master permissions", () => {
     expect(selectedStoreMasterData(data, "SUPPLIER_PRICE", false).items).toEqual([])
   })
   it("keeps setup checklist grants separate for each unit", () => {
-    expect(scopedMasters).toHaveLength(78)
+    expect(scopedMasters).toHaveLength(79)
     expect(
       scopedMasters
         .filter(({ master }) => master === "setup_checklist_master")
