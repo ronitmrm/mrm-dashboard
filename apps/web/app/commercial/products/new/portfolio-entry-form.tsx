@@ -42,7 +42,13 @@ const processes = [
   "Buffing",
   "Sealant",
 ]
-export function PortfolioEntryForm({ options }: { options: Options }) {
+export function PortfolioEntryForm({
+  options,
+  masterData = false,
+}: {
+  options: Options
+  masterData?: boolean
+}) {
   const [state, action, pending] = useActionState(
     createPortfolioProductAction,
     { error: "" }
@@ -93,6 +99,9 @@ export function PortfolioEntryForm({ options }: { options: Options }) {
   )
   return (
     <form action={action} className="grid gap-6">
+      {masterData ? (
+        <input type="hidden" name="master_data" value="true" />
+      ) : null}
       {state.error ? (
         <p role="alert" className="text-sm text-destructive">
           {state.error}

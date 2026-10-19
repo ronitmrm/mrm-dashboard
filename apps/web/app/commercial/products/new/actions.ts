@@ -9,14 +9,18 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
+import { masterCapability } from "@/lib/auth/master-capabilities"
 
 export async function createPortfolioProductAction(
   _state: { error: string },
   form: FormData
 ) {
+  const masterData = form.get("master_data") === "true"
   const session = await requireCapability(
-    commercialTaskCapabilities.saveDesign,
-    "/commercial/products/new"
+    masterData
+      ? masterCapability("products", "create")
+      : commercialTaskCapabilities.saveDesign,
+    masterData ? "/masters/products" : "/commercial/products/new"
   )
   const text = (name: string) => String(form.get(name) ?? "").trim()
   const type = text("item_type")
@@ -62,5 +66,7 @@ export async function createPortfolioProductAction(
     await repository.close()
   }
   revalidatePath("/commercial/products")
+  revalidatePath("/masters/products")
+  if (masterData) redirect("/masters/products?masterView=masterTables")
   redirect(`/commercial/products/${encodeURIComponent(uid)}`)
 }

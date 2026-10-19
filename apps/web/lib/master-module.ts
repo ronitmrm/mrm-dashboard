@@ -19,6 +19,7 @@ export type MasterModuleView = "dataEntry" | "masterTables"
 export type MasterModuleAccess = {
   scopedReadKeys?: readonly string[]
   commercialCustomers: boolean
+  commercialProducts?: boolean
   commercialPricing: boolean
   commercialWebsiteProducts: boolean
   hrApprovedPosts: boolean
@@ -155,6 +156,7 @@ const websiteProductSubMasters = [
 
 const universalMasterDefinitions = [
   ...sharedOperationalMasterDefinitions,
+  { id: "products", label: "Products", access: "commercialProducts", scope: "universal" },
   {
     id: "rejection",
     label: "Rejection",
@@ -253,6 +255,7 @@ export function masterModuleAccess(
 ): MasterModuleAccess {
   return {
     scopedReadKeys: navigationAccess.masterReadKeys,
+    commercialProducts: navigationAccess.commercialHrefs.includes("/commercial/products"),
     commercialCustomers: navigationAccess.commercialHrefs.includes(
       "/commercial/customers"
     ),
@@ -385,6 +388,11 @@ export function masterFormHref(
   view: MasterModuleView = "dataEntry"
 ) {
   const params = new URLSearchParams()
+  if (selection.main === "products") {
+    params.set("masterView", view)
+    addContext(params, selection)
+    return `/masters/products?${params.toString()}`
+  }
   if (selection.main === "production_break_schedule") {
     params.set("floor", selection.unit)
     params.set("masterView", view)
@@ -578,6 +586,9 @@ export function masterSelectionMatchesDestination(
   }
   if (pathname === "/commercial/customers") {
     return selection.main === "commercial_customers"
+  }
+  if (pathname === "/masters/products") {
+    return selection.main === "products" && selection.sub === "products"
   }
   if (pathname === "/commercial/website-products") {
     return (

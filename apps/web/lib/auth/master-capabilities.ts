@@ -48,6 +48,7 @@ export function supportedMasterActions(
 ): MasterAction[] {
   if (master.master === "production_break_schedule") return ["read", "save"]
   if (master.master === "priceMaster") return ["read", "save"]
+  if (master.master === "products") return ["read", "create", "import"]
   if (master.master === "commercial_customers")
     return ["read", "create", "update", "import"]
   if (master.master === "approved_posts")
@@ -154,6 +155,9 @@ export function previousMasterCapabilities(
   master: (typeof scopedMasters)[number],
   action: MasterAction
 ): string[] {
+  if (master.master === "products") {
+    return [action === "read" ? "pricing.products.read" : "pricing.design.save"]
+  }
   if (master.main === "commercial_customers") {
     return [
       action === "read"
