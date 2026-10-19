@@ -778,7 +778,8 @@ async function requiredActiveEmployeeIdFor(
         )
         SELECT $1, employee_code, employee_name, department_name,
           designation_name, true, joining_date, last_working_date, $4, $4,
-          'mrm-dashboard', 'recruitment.posts', id::text,
+          -- Posts are reused for replacements; retain a distinct source identity per worker.
+          'mrm-dashboard', 'recruitment.posts', id::text || ':employee:' || lower(employee_code),
           jsonb_build_object(
             'postId', id,
             'departmentCode', department_code,
