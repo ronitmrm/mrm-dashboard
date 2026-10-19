@@ -89,9 +89,14 @@ export function operationalEntrySnapshot(
       ),
     },
     productionControl: {
+      ...(entry === "rm_inward" || entry === "rework_received" ? {
+        jobCardActivityOptions: rowsForUnit(record(source.productionControl).workOrders)
+          .filter(row => entry !== "rm_inward" || record(row).isRework !== true)
+          .map(row => ({ jcNo: record(row).jcNo })),
+      } : {}),
       [sources[entry]]: rowsForUnit(
         record(source.productionControl)[sources[entry]]
-      ).filter(row => entry !== "rework_received" || record(row).isRework === true),
+      ).filter(row => entry !== "rework_received" || record(row).isRevision === true),
     },
   }
 }

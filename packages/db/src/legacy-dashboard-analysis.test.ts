@@ -9,7 +9,7 @@ test("rework waits for manual sole-route selection while normal work auto-select
     workbookName: "PostgreSQL", productionFloorCode: "cnc" as const, productionEntries: [],
     dataEntries: [
       entry("work_order", { jcNo: "P1", partCode: "PART", orderPcs: 100, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
-      entry("work_order", { jcNo: "P1/RW1", partCode: "PART", orderPcs: 20, isRework: true, originalJobCardNumber: "P1", receivedOn: "2026-10-19" }),
+      entry("work_order", { jcNo: "P1/RW1", partCode: "PART", orderPcs: 20, isRework: true, isRevision: true, revisionNumber: 1, rootJobCardNumber: "P1", originalJobCardNumber: "P1", receivedOn: "2026-10-19" }),
       entry("route", { partNo: "PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
       entry("cycle", { partNo: "PART", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
       entry("tooling", { partNo: "PART", optionNumber: "1", setupNo: "1" }),
@@ -17,6 +17,7 @@ test("rework waits for manual sole-route selection while normal work auto-select
     ],
   }
   const control = buildLegacyDashboardSnapshot(input).productionControl
+  expect(control).toMatchObject({ summary: { workOrders: 1, totalOrderQty: 100 } })
   expect(control.workOrders.find(row => row.jcNo === "P1")).toMatchObject({ optionNumber: "1", optionSource: "Auto single route" })
   expect(control.workOrders.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionSource: "Planner required", materialPlanningReady: true })
   expect(control).toMatchObject({ masterGaps: [expect.objectContaining({ jcNo: "P1/RW1", routeSelectionMissing: true })] })

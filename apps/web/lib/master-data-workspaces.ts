@@ -63,7 +63,12 @@ export function operationalEntryRows(
   productionControl: Record<string, unknown>
 ) {
   if (entryType === "rework_received") {
-    return recordRows(productionControl.workOrders).filter(row => row.isRework === true).map<Record<string, unknown>>(row => ({ ...row, quantity: row.orderPcs }))
+    return recordRows(productionControl.workOrders).filter(row => row.isRevision === true).map<Record<string, unknown>>(row => ({
+      ...row, quantity: row.orderPcs,
+      replacementQuantity: row.disposition === "replacement" ? row.orderPcs : 0,
+      replacementRequiredRmKg: row.disposition === "replacement" ? row.requiredRmKg : "",
+      replacementRmPoNo: row.disposition === "replacement" ? row.rmPoNo : "",
+    }))
   }
   const projectedRows = recordRows(
     productionControl[operationalRowSourceByEntryType[entryType] ?? ""]

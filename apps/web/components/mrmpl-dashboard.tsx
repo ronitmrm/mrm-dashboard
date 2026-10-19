@@ -657,10 +657,13 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "rework_received",
     title: "Rework Received",
-    description: "Receive returned pieces. A linked rework Job Card waits in Part Readiness for manual route selection.",
+    description: "Create the next revision of the same Job Card. Reworkable pieces = returned quantity minus replacement quantity. Replacement pieces require new RM; every revision requires manual route selection.",
     fields: [
-      { name: "originalJobCardNumber", label: "Original Job Card", required: true },
+      { name: "originalJobCardNumber", label: "Dispatched Job Card / Revision / Activity", required: true },
       { name: "quantity", label: "Returned Quantity (pieces)", type: "number", min: "1", step: "1", required: true },
+      { name: "replacementQuantity", label: "Rejected Beyond Rework / Replacement (pieces)", type: "number", min: "0", step: "1" },
+      { name: "replacementRequiredRmKg", label: "New RM Required for Replacement (kg)", type: "number", min: "0.001", step: "0.001" },
+      { name: "replacementRmPoNo", label: "Replacement RM PO (blank uses original RM PO)" },
       { name: "receivedOn", label: "Receipt Date", type: "date", required: true },
       { name: "receiptReference", label: "Return Reference", required: true },
       { name: "reason", label: "Rework Reason", required: true },
@@ -672,7 +675,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     description:
       "Record Each Raw-Material Receipt Against The Job Card; Received Kilograms Accumulate.",
     fields: [
-      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "jcNo", label: "Job Card / Revision / Activity", required: true },
       {
         name: "rmInwardDate",
         label: "Rm Inward Date",
@@ -10296,7 +10299,7 @@ function WorkOrderGapRow({
 
   return (
     <TableRow>
-      <TableCell className="min-w-32 font-medium">{jcNo || "-"}{row.isRework === true ? <div><StatusBadge tone="warning" value="Rework" /></div> : null}</TableCell>
+      <TableCell className="min-w-32 font-medium">{jcNo || "-"}{row.isRevision === true ? <div><StatusBadge tone="warning" value={row.disposition === "replacement" ? "Replacement" : "Rework"} /></div> : null}</TableCell>
       <TableCell className="min-w-40">
         <div>{itemCode(row)}</div>
         <div className="text-xs text-muted-foreground">
@@ -11703,9 +11706,13 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   const columns = columnsForProductionMaster(spec.fields)
   if (spec.entryType === "rework_received") return [
-    { key: "jcNo", label: "Rework Job Card" },
+    { key: "rootJobCardNumber", label: "Job Card" },
+    { key: "revisionNumber", label: "Revision" },
+    { key: "disposition", label: "Activity" },
+    { key: "returnQuantity", label: "Total Return Qty" },
+    { key: "jcNo", label: "Activity Reference" },
     { key: "partCode", label: "Part Code" },
-    ...columns,
+    ...columns.map(column => column.key === "quantity" ? { ...column, label: "Activity Qty" } : column),
   ]
   return spec.entryType === "work_order"
     ? [
@@ -14234,6 +14241,13 @@ function DataEntryForm({
     ...(spec.entryType === "machine_master" ? ["productionFloorCode"] : []),
   ])
   const resolvedFields = spec.fields.map((field) => {
+    if ((spec.entryType === "rm_inward" && field.name === "jcNo") ||
+      (spec.entryType === "rework_received" && field.name === "originalJobCardNumber")) {
+      const activities = asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders)
+        .filter(row => spec.entryType !== "rm_inward" || row.isRework !== true)
+        .map(row => str(row.jcNo)).filter(Boolean)
+      if (activities.length) return { ...field, options: ["", ...activities] }
+    }
     const routeOptions =
       spec.entryType === "route" && field.name === "setupName"
         ? { ...field, options: ["", ...setupNames] }
@@ -16307,7 +16321,7 @@ function PlanningControlPanel({
         key={productionFloorCode}
         floor={productionFloorCode}
         workflowRows={asArray(productionControl.workflowExceptionRows)}
-        reworkRows={asArray(productionControl.workOrders).filter(row => row.isRework === true && row.optionSource === "Planner required")}
+        reworkRows={asArray(productionControl.workOrders).filter(row => row.isRevision === true && row.optionSource === "Planner required")}
         onAcceptMaterial={(row, reason) =>
           submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,
             expectedRowVersion: row.rowVersion, productionFloorCode, reason }, { throwOnError: true })}

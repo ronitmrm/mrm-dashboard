@@ -114,14 +114,14 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
-  test("receives partial rework separately and requires explicit sole-route selection", async () => {
+  test("keeps mixed return revision activities, new RM and original history separate", async () => {
     const organizationId = (await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Rework Test') RETURNING id", [`REWORK-${suffix}`])).rows[0]!.id
     await pool.query("INSERT INTO manufacturing.production_floors (organization_id, code, name) VALUES ($1, 'cnc', 'CNC-01')", [organizationId])
     const part = `REWORK-${suffix}`
     const original = `JC-REWORK-${suffix}`
     const parent = await repository.upsertWorkOrder({ organizationId, itemUid: part,
       jobCardNumber: original, workOrderNumber: original, orderedQuantity: 100,
-      sourcePayload: { jcNo: original, partCode: part, orderPcs: 100, productionFloorCode: "cnc" } })
+      sourcePayload: { jcNo: original, partCode: part, orderPcs: 100, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
     await repository.upsertRouteOption({ organizationId, itemUid: part, productionFloorCode: "cnc",
       routeCode: "1", setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
@@ -129,17 +129,41 @@ describe("dashboard planning writes", () => {
       [organizationId, parent.id, randomUUID()])
     const before = (await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows
     const receipt = { organizationId, productionFloorCode: "cnc" as const, originalJobCardNumber: original,
-      quantity: 20, receivedOn: "2026-10-01", receiptReference: "RETURN-1", reason: "Finish correction" }
+      quantity: 20, replacementQuantity: 8, replacementRequiredRmKg: 2,
+      receivedOn: "2026-10-01", receiptReference: "RETURN-1", reason: "Finish correction" }
     const saved = await repository.receiveRework(receipt)
-    expect(saved.jobCardNumber).toBe(`${original}/RW1`)
-    const read = () => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: saved.jobCardNumber })
+    const rework = saved.activities.find(row => row.disposition === "rework")!
+    const replacement = saved.activities.find(row => row.disposition === "replacement")!
+    expect(saved).toMatchObject({ rootJobCardNumber: original, revisionNumber: 1 })
+    expect(rework.jobCardNumber).toBe(`${original} · Rev 1 · Rework`)
+    const read = (revisionReference = rework.jobCardNumber) => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: original, revisionReference })
     const waiting = await read()
-    expect((await pool.query("SELECT ordered_quantity::integer AS quantity FROM manufacturing.work_orders WHERE id = $1", [saved.id])).rows[0].quantity).toBe(20)
+    expect(waiting.revisions.map(row => [row.revisionLabel, row.quantity])).toEqual([["Original", 100], ["Rev 1 · Replacement", 8], ["Rev 1 · Rework", 12]])
     expect(waiting.jobCard.effectiveRouteSource).toBe("planner_required")
     expect(waiting.setups).toEqual([])
-    await repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: saved.jobCardNumber, routeCode: "1" })
+    await repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: "1" })
     expect((await read()).jobCard).toMatchObject({ effectiveRouteSource: "planner_selected" })
     expect((await read()).setups).toHaveLength(1)
+    await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 100, receivedOn: "2026-10-01",
+      receiptNumber: `OLD-RM-${suffix}`, payload: { jcNo: original, productionFloorCode: "cnc" } })
+    const fresh = await read(replacement.jobCardNumber)
+    expect(fresh.rawMaterialReceipts).toEqual([])
+    expect(fresh.analytics.material).toMatchObject({ requiredKg: 2, receivedKg: 0, receiptSufficient: false })
+    await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 2, receivedOn: "2026-10-02",
+      receiptNumber: `NEW-RM-${suffix}`, payload: { jcNo: replacement.jobCardNumber, productionFloorCode: "cnc" } })
+    expect((await read(replacement.jobCardNumber)).analytics.material).toMatchObject({ requiredKg: 2, receivedKg: 2, receiptSufficient: true })
+    expect((await read()).rawMaterialReceipts).toEqual([])
+    const history = await read("all")
+    expect(history.revisionHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ revisionLabel: "Original", eventType: "raw_material_received" }),
+      expect.objectContaining({ revisionLabel: "Rev 1 · Replacement", eventType: "raw_material_received" }),
+    ]))
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 12, 'test', 'dispatchApprovals', $3)`,
+      [organizationId, rework.id, randomUUID()])
+    const repeated = await repository.receiveRework({ ...receipt, originalJobCardNumber: rework.jobCardNumber,
+      quantity: 1, replacementQuantity: 0, receiptReference: "REPEAT-RETURN" })
+    expect(repeated).toMatchObject({ rootJobCardNumber: original, revisionNumber: 2 })
     await expect(repository.receiveRework({ ...receipt, receiptReference: "RETURN-2", quantity: 81 })).rejects.toThrow("Only 80")
     expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
   })

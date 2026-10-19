@@ -42,7 +42,7 @@ test("combines RM, session and workflow flags with their actions in one filterab
   expect(markup).toContain("Required: 100 kg")
   expect(markup).toContain("Pending: 60 kg")
   expect(markup).toContain("Accept short RM")
-  expect(markup).toContain("Rework — Route Selection Required")
+  expect(markup).toContain("Revision — Route Selection Required")
   expect(markup).toContain("Select route in Part Readiness")
   expect(markup).not.toContain("Floor material wait")
   expect(markup).not.toContain("Working wait:")

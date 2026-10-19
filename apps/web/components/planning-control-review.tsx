@@ -141,11 +141,11 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
             <TableBody>
               {reworkRows.map(row => (
                 <TableRow key={`rework:${String(row.jcNo)}`} data-row-id={`rework:${String(row.jcNo)}`}>
-                  <TableCell><StatusBadge tone="warning" value="Rework — Route Selection Required" /></TableCell>
+                  <TableCell><StatusBadge tone="warning" value={row.materialPlanningReady === false ? "Replacement — Awaiting New RM" : "Revision — Route Selection Required"} /></TableCell>
                   <TableCell><Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link><div>{String(row.partCode)}</div></TableCell>
                   <TableCell>—</TableCell><TableCell>{String(row.receivedOn ?? "")}</TableCell>
                   <TableCell>{quantity.format(Number(row.orderPcs))} returned pieces · Original: {String(row.originalJobCardNumber)}</TableCell>
-                  <TableCell><Button size="sm" variant="outline" asChild><Link href={`/?tab=masterGapsTab&floor=${floor}`}>Select route in Part Readiness</Link></Button></TableCell>
+                  <TableCell><Button size="sm" variant="outline" asChild><Link href={row.materialPlanningReady === false ? `/?tab=operationalEntryTab&floor=${floor}&entry=rm_inward` : `/?tab=masterGapsTab&floor=${floor}`}>{row.materialPlanningReady === false ? "Receive new RM for this revision" : "Select route in Part Readiness"}</Link></Button></TableCell>
                 </TableRow>
               ))}
               {materials.map(row => (

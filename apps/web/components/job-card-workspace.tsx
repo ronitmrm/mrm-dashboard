@@ -10,6 +10,7 @@ import { StandardState } from "@workspace/ui/components/standard-state"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ArrowLeft, ChevronDown, Factory, History, RefreshCw, Route, Save, Settings2, Truck } from "lucide-react"
 import Link from "next/link"
@@ -23,6 +24,10 @@ import { JobCardQualityRecords, SetupProduction } from "./job-card-workspace-sec
 
 type Row = Record<string, unknown>
 type Workspace = {
+  rootJobCardNumber?: string
+  selectedRevisionReference?: string
+  revisions?: Row[]
+  revisionHistory?: Row[]
   analytics?: Row
   dashboardSummary?: Row | null
   events?: Row[]
@@ -71,8 +76,9 @@ const date = (input: unknown, includeTime = false) => {
   return includeTime ? formatIstDateTime(text(input)) : formatIstDate(text(input))
 }
 
-async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode) {
-  const response = await fetch(`/api/job-cards/${encodeURIComponent(jobCardNumber)}?floor=${encodeURIComponent(floor)}`, {
+async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode, revisionReference: string) {
+  const params = new URLSearchParams({ floor, ...(revisionReference ? { revision: revisionReference } : {}) })
+  const response = await fetch(`/api/job-cards/${encodeURIComponent(jobCardNumber)}?${params}`, {
     cache: "no-store",
     credentials: "same-origin",
   })
@@ -101,8 +107,8 @@ function PatternBars({ emptyText, rows, valueKey = "minutes" }: { emptyText: str
   })}</div>
 }
 
-function EventTable({ emptyText, rows, rejectionColumns = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean }) {
- return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}><TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={rejectionColumns ? 8 : 6} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
+function EventTable({ emptyText, rows, rejectionColumns = false, showRevision = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean; showRevision?: boolean }) {
+ return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{showRevision ? <TableHead>Revision / Activity</TableHead> : null}<TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}>{showRevision ? <TableCell>{display(row.revisionLabel)}</TableCell> : null}<TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={(rejectionColumns ? 8 : 6) + (showRevision ? 1 : 0)} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
 }
 
 function SetupMaster({ setup }: { setup: Row }) {
@@ -121,6 +127,7 @@ function SetupMaster({ setup }: { setup: Row }) {
 }
 
 export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFloorCode; jobCardNumber: string }) {
+  const [revisionReference, setRevisionReference] = useState("")
   const [activeTab, setActiveTab] = useState<TabKey>("overview")
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [error, setError] = useState("")
@@ -129,15 +136,19 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const [overrideDays, setOverrideDays] = useState("")
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
-  const loadingRef = useRef(false)
+  const loadingReferenceRef = useRef<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const load = useCallback(async (silent = false) => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+    const reference = `${floor}|${jobCardNumber}|${revisionReference}`
+    if (loadingReferenceRef.current === reference) return
+    loadingReferenceRef.current = reference
+    const requestId = ++requestIdRef.current
     if (!silent) setLoading(true)
     setError("")
     try {
-      const next = await loadWorkspace(jobCardNumber, floor)
+      const next = await loadWorkspace(jobCardNumber, floor, revisionReference)
+      if (requestId !== requestIdRef.current) return
       setWorkspace(next)
       if (!silent) {
         const target = record(record(next.analytics).deliveryTarget)
@@ -145,12 +156,14 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
         setOverrideDays(text(target.jobCardOverrideWorkingDays))
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Job Card could not be loaded.")
+      if (requestId === requestIdRef.current) setError(reason instanceof Error ? reason.message : "Job Card could not be loaded.")
     } finally {
-      loadingRef.current = false
-      if (!silent) setLoading(false)
+      if (requestId === requestIdRef.current) {
+        loadingReferenceRef.current = null
+        if (!silent) setLoading(false)
+      }
     }
-  }, [floor, jobCardNumber])
+  }, [floor, jobCardNumber, revisionReference])
 
   useEffect(() => { queueMicrotask(() => void load()) }, [load])
   useEffect(() => {
@@ -169,8 +182,11 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const jobCard = workspace?.jobCard ?? {}
   const rework = record(jobCard.workOrderSource)
   const isRework = rework.isRework === true
+  const isRevision = rework.isRevision === true
   const sessions = workspace?.sessions ?? emptyRows
-  const events = workspace?.events ?? emptyRows
+  const allRevisions = revisionReference === "all"
+  const events = (allRevisions ? workspace?.revisionHistory : workspace?.events) ?? emptyRows
+  const revisions = workspace?.revisions ?? emptyRows
   const routes = workspace?.routes ?? emptyRows
   const setups = workspace?.setups ?? emptyRows
   const setupTimings = workspace?.setupTimings ?? list(analytics.setupTimings)
@@ -190,7 +206,17 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const selectedRoute = routes.find((row) => row.selected === true)
   const downtimeEvents = events.filter((row) => text(row.eventType).startsWith("downtime"))
   const rejectionEvents = events.filter((row) => text(row.eventType) === "rejection")
-  const currentStage = jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows })
+  const currentStage = jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows,
+    materialReady: isRework ? true : isRevision ? Boolean(material.receiptSufficient || material.shortAccepted) : undefined })
+
+  function selectRevision(reference: string) {
+    if (reference === revisionReference || (!revisionReference && reference === workspace?.selectedRevisionReference)) return
+    requestIdRef.current += 1
+    setWorkspace(null)
+    setSaveMessage("")
+    setRevisionReference(reference)
+    setActiveTab(reference === "all" ? "log" : "overview")
+  }
 
   async function saveDeliveryTarget() {
     setSaving(true)
@@ -198,7 +224,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
     try {
       const response = await fetch("/api/job-card-delivery-target", {
         body: JSON.stringify({
-          jcNo: jobCardNumber,
+          jcNo: workspace?.selectedRevisionReference ?? jobCardNumber,
           jobCardOverrideWorkingDays: overrideDays || null,
           productDefaultWorkingDays: productDays || null,
           productionFloorCode: floor,
@@ -220,17 +246,27 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
   return <main className="grid gap-4 p-4 md:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex items-start gap-3"><Button asChild size="icon" variant="outline"><Link href={dashboardTabHref("jobCardStatusTab", floor)} aria-label="Back to Job Cards"><ArrowLeft /></Link></Button><div><p className="text-sm text-muted-foreground">Job Card · {title(floor)}</p><h1 className="text-2xl font-semibold">{jobCardNumber}</h1><p className="text-sm text-muted-foreground">{display(jobCard.partCode)} · {display(jobCard.description)}</p></div></div>
-      <div className="flex items-center gap-2"><Badge variant={(completion ?? 0) >= 100 ? "default" : "secondary"}>{currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
+      <div className="flex items-start gap-3"><Button asChild size="icon" variant="outline"><Link href={dashboardTabHref("jobCardStatusTab", floor)} aria-label="Back to Job Cards"><ArrowLeft /></Link></Button><div><p className="text-sm text-muted-foreground">Job Card · {title(floor)}</p><h1 className="text-2xl font-semibold">{workspace?.rootJobCardNumber ?? jobCardNumber}</h1><p className="text-sm text-muted-foreground">{display(jobCard.partCode)} · {display(jobCard.description)}</p></div></div>
+      <div className="flex items-center gap-2"><Badge variant={(completion ?? 0) >= 100 ? "default" : "secondary"}>{allRevisions ? "All Revisions · History" : currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
     </div>
 
     {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
     {loading && !workspace ? <div className="rounded-md border p-10 text-center text-sm text-muted-foreground">Loading Job Card…</div> : null}
     {workspace ? <>
-      <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
+      <SectionCard><CardHeader><CardTitle>Job Card Revisions</CardTitle><CardDescription>Each selection has its own planning, RM, sessions, inspection reports and dispatch. Original production stays separate.</CardDescription></CardHeader><CardContent className="grid gap-3">
+        <div className="grid max-w-md gap-2"><Label htmlFor="job-card-revision">Revision / Activity</Label><SearchableSelect id="job-card-revision" value={allRevisions ? "all" : workspace.selectedRevisionReference} disabled={loading} onChange={event => selectRevision(event.target.value)}>
+          {revisions.map(row => <option key={text(row.jobCardNumber)} value={text(row.jobCardNumber)}>{text(row.revisionLabel)}</option>)}
+          <option value="all">All Revisions — History</option>
+        </SearchableSelect></div>
+        <OperationalTable filterStorageKey={`job-card-revisions-${floor}-${workspace.rootJobCardNumber}`} containerClassName="max-h-72 rounded-lg border"><TableHeader><TableRow><TableHead>Revision / Activity</TableHead><TableHead>Quantity</TableHead><TableHead>Status</TableHead><TableHead>Reason</TableHead><TableHead>Received</TableHead><TableHead>First Session</TableHead><TableHead>Latest Session</TableHead></TableRow></TableHeader><TableBody>{revisions.map(row => <TableRow key={text(row.jobCardNumber)} data-row-id={text(row.jobCardNumber)}>
+          <TableCell><Button variant="link" disabled={loading} onClick={() => selectRevision(text(row.jobCardNumber))}>{text(row.revisionLabel)}</Button></TableCell><TableCell>{quantity(row.quantity)}</TableCell><TableCell><StatusBadge value={text(row.status)} /></TableCell><TableCell>{text(row.reason)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{date(row.firstSessionAt, true)}</TableCell><TableCell>{date(row.latestSessionAt, true)}</TableCell>
+        </TableRow>)}</TableBody></OperationalTable>
+        <StatusBadge tone="information" value={allRevisions ? "All Revisions · History only" : text(revisions.find(row => row.jobCardNumber === workspace.selectedRevisionReference)?.revisionLabel)} />
+      </CardContent></SectionCard>
+      {!allRevisions ? <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav> : null}
 
       {activeTab === "overview" ? <section className="grid gap-4">
-        {isRework ? <SectionCard><CardHeader><CardTitle>Rework Received</CardTitle></CardHeader><CardContent><RecordDetails items={[
+        {isRevision ? <SectionCard><CardHeader><CardTitle>Return Receipt</CardTitle></CardHeader><CardContent><RecordDetails items={[
           { label: "Original Job Card", value: <Link className="underline" href={`/dashboard/job-cards/${encodeURIComponent(text(rework.originalJobCardNumber))}?floor=${floor}`}>{text(rework.originalJobCardNumber)}</Link> },
           { label: "Returned Pieces", value: quantity(rework.quantity) },
           { label: "Receipt Date", value: date(rework.receivedOn) },
@@ -469,7 +505,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
    ]}
  /><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Closed Fridays and holidays follow the Universal Planning Calendar.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard></section> : null}
 
- {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} /></CardContent></SectionCard> : null}
+ {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} showRevision={allRevisions} /></CardContent></SectionCard> : null}
     </> : null}
   </main>
 }

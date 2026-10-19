@@ -1,4 +1,5 @@
 import { assertToolingAvailable } from "./tooling-availability"
+import { readJobCardRevisions, readJobCardRevisionHistory } from "./job-card-revisions"
 import { randomUUID } from "node:crypto"
 import { materialWaitPending, readJobCardMaterialBalances } from "./production-material"
 import { readMaterialMovementWaits } from "./material-movement-waits"
@@ -594,7 +595,7 @@ async function workOrderContext(
           AND route.active
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
-        AND COALESCE(work_order.source_payload->>'isRework', 'false') <> 'true'
+        AND COALESCE(work_order.source_payload->>'isRevision', 'false') <> 'true'
         AND imported.route_code IS NULL
         AND route_change.to_route_option_id IS NULL
       WHERE work_order.organization_id = $1
@@ -611,7 +612,7 @@ async function workOrderContext(
   if (result.rows[0].status === "Cancelled") {
     throw new Error("Cancelled Work Order lines cannot receive production activity.")
   }
-  if (objectRecord(result.rows[0].source_payload).isRework === true && !result.rows[0].route_option_id) {
+  if (objectRecord(result.rows[0].source_payload).isRevision === true && !result.rows[0].route_option_id) {
     throw new Error("Select the rework route in Part Readiness before recording production activity.")
   }
   return result.rows[0]
@@ -3457,9 +3458,18 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       jobCardNumber: string
       organizationId: string
       productionFloorCode?: string
+      revisionReference?: string
     }) {
-      const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const revisions = await readJobCardRevisions(pool, { ...input,
+        jobCardNumber: requiredText(input.jobCardNumber, "Job card"), productionFloorCode: floorCode })
+      const selectedReference = input.revisionReference === "all" ? input.jobCardNumber
+        : input.revisionReference || input.jobCardNumber
+      const revision = revisions.find(row => row.jobCardNumber.toLowerCase() === selectedReference.toLowerCase())
+      if (!revision) throw new Error("Job Card revision was not found in this Production Unit.")
+      const jobCardNumber = revision.jobCardNumber
+      const revisionHistory = input.revisionReference === "all"
+        ? await readJobCardRevisionHistory(pool, input.organizationId, floorCode, revisions) : []
       const workOrderResult = await pool.query<Record<string, unknown>>(
         `
           SELECT work_order.id, work_order.job_card_number AS "jobCardNumber",
@@ -3527,7 +3537,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
       const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
-        ?? (objectRecord(jobCard.workOrderSource).isRework !== true && activeRoutes.length === 1 ? activeRoutes[0] : undefined)
+        ?? (objectRecord(jobCard.workOrderSource).isRevision !== true && activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
       const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult, materialMovementWaits] = await Promise.all([
         pool.query<Record<string, unknown>>(
@@ -4257,6 +4267,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
       return {
         analytics,
+        rootJobCardNumber: revision.rootJobCardNumber,
+        selectedRevisionReference: jobCardNumber,
+        revisions,
+        revisionHistory,
         dashboardSummary,
         events: eventLog,
         jobCard: {

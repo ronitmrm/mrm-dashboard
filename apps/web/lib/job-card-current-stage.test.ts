@@ -13,5 +13,7 @@ describe("job card current stage", () => {
     }
     expect(jobCardCurrentStage(input)).toBe("Production running")
     expect(jobCardCurrentStage({ ...input, planRows: [] })).toBe("Awaiting raw material")
+    expect(jobCardCurrentStage({ ...input, planRows: [], materialReady: true })).toBe("Ready for setup")
+    expect(jobCardCurrentStage({ ...input, planRows: [], selectedRoute: undefined, materialReady: false })).toBe("Awaiting raw material")
   })
 })
