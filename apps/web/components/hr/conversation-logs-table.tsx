@@ -6,7 +6,7 @@ import Link from "next/link"
 import type { RecruitmentCandidateEventRow } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import {
- SectionCard,
+  SectionCard,
   CardContent,
   CardDescription,
   CardHeader,
@@ -26,7 +26,7 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -138,14 +138,14 @@ export function ConversationLogsTable({
       }}
       open={editingEvent !== null}
     >
- <SectionCard>
+      <SectionCard>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>
             Showing {visibleRows.length} Of {events.length} Timestamped Logs
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 min-w-0">
+        <CardContent className="min-w-0 space-y-2">
           <div className="flex justify-end">
             <Button
               disabled={!table.hasFilters}
@@ -157,7 +157,7 @@ export function ConversationLogsTable({
               Clear All Filters
             </Button>
           </div>
- <OperationalTable>
+          <OperationalTable>
             <TableHeader>
               <TableRow>
                 {columns.map(([key, label]) => (
@@ -198,13 +198,24 @@ export function ConversationLogsTable({
                   ) : null}
                   <TableCell>{row.department}</TableCell>
                   <TableCell>{row.type}</TableCell>
-                  <TableCell>{row.title}</TableCell>
+                  <TableCell>
+                    {row.event.interviewHref ? (
+                      <Link
+                        className="text-primary underline-offset-4 hover:underline"
+                        href={row.event.interviewHref}
+                      >
+                        {row.title} · View Interview
+                      </Link>
+                    ) : (
+                      row.title
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-lg whitespace-normal">
                     {row.notes}
                   </TableCell>
                   <TableCell className="font-mono">{row.job}</TableCell>
                   <TableCell>{row.date}</TableCell>
-                  {canWrite ? (
+                  {canWrite && !row.event.interviewHref ? (
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button
@@ -258,6 +269,12 @@ export function ConversationLogsTable({
                         </form>
                       </div>
                     </TableCell>
+                  ) : canWrite ? (
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">
+                        From Interview
+                      </span>
+                    </TableCell>
                   ) : null}
                 </TableRow>
               ))}
@@ -272,9 +289,9 @@ export function ConversationLogsTable({
                 </TableRow>
               ) : null}
             </TableBody>
- </OperationalTable>
+          </OperationalTable>
         </CardContent>
- </SectionCard>
+      </SectionCard>
 
       {editingEvent ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
