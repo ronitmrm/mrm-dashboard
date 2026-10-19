@@ -263,7 +263,7 @@ async function routeAndSetupFor(
           OR setup.setup_number = CASE
             WHEN $5 ~ '^[0-9]+$' THEN $5::integer ELSE -1 END
         )
-        AND route.active AND setup.active
+        AND route.active AND route.work_order_id IS NULL AND setup.active
       ORDER BY route.revision DESC
       LIMIT 1
     `,
@@ -327,7 +327,7 @@ async function qualityContextFor(
         JOIN manufacturing.production_floors floor
           ON floor.id = route.production_floor_id
         WHERE route.organization_id = work_order.organization_id
-          AND route.item_id = work_order.item_id AND route.active
+          AND route.item_id = work_order.item_id AND route.active AND route.work_order_id IS NULL
           AND floor.code = $4
           AND (lower(route.route_code) = lower(imported.route_code)
             OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
@@ -349,7 +349,7 @@ async function qualityContextFor(
           ON candidate_floor.id = candidate.production_floor_id
         WHERE candidate.organization_id = work_order.organization_id
           AND candidate.item_id = work_order.item_id
-          AND candidate.active
+          AND candidate.active AND candidate.work_order_id IS NULL
           AND candidate_floor.code = $4
       ) automatic_route ON selection.route_option_id IS NULL
         AND COALESCE(work_order.source_payload->>'isRevision', 'false') <> 'true'
@@ -366,7 +366,7 @@ async function qualityContextFor(
         ON floor.id = route.production_floor_id
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
-        AND work_order.status <> 'Cancelled'
+        AND work_order.status NOT IN ('Cancelled', 'Rejected')
         AND floor.code = $4
         AND (
           lower(COALESCE(setup.legacy_setup_code, '')) = lower($3)

@@ -166,6 +166,7 @@ const directMutationTasks = {
   reschedule: "planner_recalculation",
   "route-change": "route_change",
   "route-selection": "route_selection",
+  "rework-route": "route_selection",
 } as const satisfies Partial<Record<string, ProductionFloorTaskId>>
 
 function record(value: unknown): Record<string, unknown> {

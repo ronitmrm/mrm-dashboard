@@ -438,9 +438,9 @@ async function writeRawMaterialReceipt(
       `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
     )
   }
-  if (workOrder.status === "Cancelled") {
+  if (["Cancelled", "Rejected"].includes(workOrder.status)) {
     throw new ShopFloorConflictError(
-      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is cancelled.`
+      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is ${workOrder.status.toLowerCase()}.`
     )
   }
   if (input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== input.requiredProductionFloorCode) {
@@ -570,7 +570,7 @@ async function workOrderContext(
         JOIN manufacturing.production_floors floor
           ON floor.id = route.production_floor_id
         WHERE route.organization_id = work_order.organization_id
-          AND route.item_id = work_order.item_id AND route.active
+          AND route.item_id = work_order.item_id AND route.active AND route.work_order_id IS NULL
           AND floor.code = $3
           AND (lower(route.route_code) = lower(imported.route_code)
             OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
@@ -592,7 +592,7 @@ async function workOrderContext(
           ON floor.id = route.production_floor_id
         WHERE route.organization_id = work_order.organization_id
           AND route.item_id = work_order.item_id
-          AND route.active
+          AND route.active AND route.work_order_id IS NULL
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
         AND COALESCE(work_order.source_payload->>'isRevision', 'false') <> 'true'
@@ -609,8 +609,8 @@ async function workOrderContext(
     ]
   )
   if (!result.rows[0]) throw new Error("Production work order was not found.")
-  if (result.rows[0].status === "Cancelled") {
-    throw new Error("Cancelled Work Order lines cannot receive production activity.")
+  if (["Cancelled", "Rejected"].includes(result.rows[0].status)) {
+    throw new Error(`${result.rows[0].status} Work Order lines cannot receive production activity.`)
   }
   if (objectRecord(result.rows[0].source_payload).isRevision === true && !result.rows[0].route_option_id) {
     throw new Error("Select the rework route in Part Readiness before recording production activity.")
@@ -1056,6 +1056,10 @@ async function lockProductionSessionMachine(
   client: PoolClient,
   input: { organizationId: string; sessionId: string }
 ) {
+  const workOrder = await client.query<{ status: string }>(`SELECT work_order.status
+    FROM manufacturing.work_orders work_order JOIN manufacturing.production_sessions session ON session.work_order_id = work_order.id
+    WHERE session.id = $1 AND session.organization_id = $2 FOR UPDATE OF work_order`, [input.sessionId, input.organizationId])
+  if (workOrder.rows[0]?.status === "Rejected") throw new ShopFloorConflictError("Failed rework is closed. Its trial records are retained with the replacement revision.")
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(machine_id::text))
      FROM manufacturing.production_sessions
@@ -3420,9 +3424,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const workOrder = workOrderResult.rows[0]
         if (!workOrder) throw new Error("Job card was not found.")
-        if (workOrder.status === "Cancelled") {
+        if (["Cancelled", "Rejected"].includes(workOrder.status)) {
           throw new Error(
-            "Cancelled Work Order lines cannot change delivery targets."
+            `${workOrder.status} Work Order lines cannot change delivery targets.`
           )
         }
 
@@ -3529,10 +3533,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $1 AND route.item_id = $2
-            AND floor.code = $3
+            AND floor.code = $3 AND (route.work_order_id IS NULL OR route.work_order_id = $4)
           ORDER BY route.active DESC, route.revision DESC, route.route_code
         `,
-        [input.organizationId, jobCard.itemId, floorCode]
+        [input.organizationId, jobCard.itemId, floorCode, jobCard.id]
       )
       const activeRoutes = routesResult.rows.filter((route) => route.active === true)
       const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
@@ -5388,7 +5392,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           AND session.operation_setup_id = state.operation_setup_id AND session.machine_id = state.machine_id
           AND session.status = 'open' AND session.reversed_at IS NULL
         WHERE state.organization_id = $1 AND floor.code = $2 AND state.active
-          AND state.stage <> 'item_complete' AND work_order.status <> 'Cancelled'
+          AND state.stage <> 'item_complete' AND work_order.status NOT IN ('Cancelled', 'Rejected')
         ORDER BY work_order.job_card_number, setup.sequence, machine.machine_number`, [input.organizationId, input.productionFloorCode])
       return { rows: result.rows }
     },
@@ -5494,7 +5498,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         WHERE state.organization_id = $1 AND floor.code = $2
           AND state.stage = 'item_complete' AND NOT state.active
           AND ($3::uuid IS NULL OR state.id = $3)
-          AND work_order.status <> 'Cancelled' AND NOT dispatch.legacy_terminal
+          AND work_order.status NOT IN ('Cancelled', 'Rejected') AND NOT dispatch.legacy_terminal
           AND NOT EXISTS (
             SELECT 1 FROM manufacturing.operation_setups later
             WHERE later.route_option_id = route.id AND later.active AND later.sequence > setup.sequence

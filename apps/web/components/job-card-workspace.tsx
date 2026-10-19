@@ -206,7 +206,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const selectedRoute = routes.find((row) => row.selected === true)
   const downtimeEvents = events.filter((row) => text(row.eventType).startsWith("downtime"))
   const rejectionEvents = events.filter((row) => text(row.eventType) === "rejection")
-  const currentStage = jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows,
+  const currentStage = jobCard.status === "Rejected" ? "Rejected — Remake Required" : jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows,
     materialReady: isRework ? true : isRevision ? Boolean(material.receiptSufficient || material.shortAccepted) : undefined })
 
   function selectRevision(reference: string) {
@@ -272,6 +272,14 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
           { label: "Receipt Date", value: date(rework.receivedOn) },
           { label: "Return Reference", value: display(rework.receiptReference) },
           { label: "Reason", value: display(rework.reason) },
+        ]} /></CardContent></SectionCard> : null}
+        {isRework && rework.reworkRejectedQuantity ? <SectionCard><CardHeader><CardTitle>Rework Rejected</CardTitle></CardHeader><CardContent><RecordDetails items={[
+          { label: "Rejected Batch", value: `${quantity(rework.reworkRejectedQuantity)} pcs` },
+          { label: "Trial Rejects Already Recorded", value: `${quantity(rework.trialRejectedQuantity)} pcs` },
+          { label: "Additional Batch Rejection", value: `${quantity(rework.additionalBatchRejectedQuantity)} pcs` },
+          { label: "Rejection Date", value: date(rework.reworkRejectedOn) },
+          { label: "Reason", value: display(rework.reworkRejectionReason) },
+          { label: "Replacement Revision", value: <Link className="underline" href={`/dashboard/job-cards/${encodeURIComponent(text(rework.replacementJobCardNumber))}?floor=${floor}`}>{text(rework.replacementJobCardNumber)}</Link> },
         ]} /></CardContent></SectionCard> : null}
         <MetricSummary
           scope="Current Job Card · Job Complete"

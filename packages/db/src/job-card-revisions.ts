@@ -39,7 +39,7 @@ export async function readJobCardRevisions(client: QueryClient, input: {
     const disposition = String(row.sourcePayload.disposition ?? "original")
     const revisionLabel = revisionNumber === 0 ? "Original" : `Rev ${revisionNumber} · ${disposition === "replacement" ? "Replacement" : "Rework"}`
     const requiredKg = Number(row.sourcePayload.requiredRmKg ?? 0)
-    const status = row.status === "Cancelled" ? "Cancelled"
+    const status = row.status === "Rejected" ? "Rejected — Remake Required" : row.status === "Cancelled" ? "Cancelled"
       : disposition === "replacement" && Number(row.receivedKg) < requiredKg * 0.95 ? "Awaiting new RM"
       : Number(row.dispatchedQuantity) > 0 ? `${Number(row.dispatchedQuantity)} pcs dispatched`
       : row.firstSessionAt ? "In production"
@@ -111,8 +111,14 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     ...result.rows.map(row => ({ ...row, revisionLabel: labels.get(row.revisionReference) ?? "Original" })),
     ...revisions.filter(row => row.revisionNumber > 0).map(row => ({
       revisionReference: row.jobCardNumber, revisionLabel: row.revisionLabel,
-      eventType: "return_received", eventTime: row.sourcePayload.receivedAt,
+      eventType: row.sourcePayload.createdFromReworkRejection === true ? "replacement_created" : "return_received", eventTime: row.sourcePayload.receivedAt,
       detail: [row.sourcePayload.receiptReference, row.reason].filter(Boolean).join(" · "), quantity: row.quantity,
+    })),
+    ...revisions.filter(row => row.sourcePayload.reworkRejectedAt && row.sourcePayload.createdFromReworkRejection !== true).map(row => ({
+      revisionReference: row.jobCardNumber, revisionLabel: row.revisionLabel,
+      eventType: "rework_rejected", eventTime: row.sourcePayload.reworkRejectedAt,
+      detail: [row.sourcePayload.receiptReference, row.sourcePayload.reworkRejectionReason, row.sourcePayload.replacementJobCardNumber].filter(Boolean).join(" · "),
+      quantity: row.sourcePayload.reworkRejectedQuantity,
     })),
   ]
   return history.sort((left, right) => new Date(String(right.eventTime)).getTime() - new Date(String(left.eventTime)).getTime())

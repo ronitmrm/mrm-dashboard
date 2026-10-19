@@ -216,7 +216,10 @@ async function masterRow(
      FOR UPDATE`,
     [organizationId, recordId]
   )
-  return result.rows[0]
+  const row = result.rows[0]
+  const payload = row?.snapshot.source_payload as Record<string, unknown> | undefined
+  if (payload?.reworkJobCardNumber) throw new Error("Job-specific rework routes are managed through their Job Card, not Master Data.")
+  return row
 }
 
 function validateReplacement(kind: MasterDataKind, source: Record<string, unknown>, replacement: Record<string, unknown>) {
