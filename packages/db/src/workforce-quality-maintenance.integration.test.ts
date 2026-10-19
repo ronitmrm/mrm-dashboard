@@ -172,7 +172,7 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
   })
 
-  test("normalizes quality masters, five-sample reports, hourly readings, and two-phase setup checklists", async () => {
+  test("normalizes quality masters, five-sample reports, hourly readings, and Setting checklists with historical start answers", async () => {
     await quality.upsertQualityReference({
       kind: "parameter_master", name: "Total length", active: true,
       organizationId, payload: {},
@@ -320,8 +320,8 @@ describe("workforce, quality, and maintenance workflows", () => {
       machineNumber,
       operationSetupCode: "1.1",
       organizationId,
-      payload: { phase: "start" },
-      phase: "start",
+      payload: { phase: "end" },
+      phase: "end",
       results: [
         {
           itemKey: "1|Drawing checked",
@@ -335,6 +335,18 @@ describe("workforce, quality, and maintenance workflows", () => {
       status: "In progress",
       templateCode: `SETUP-${suffix}`,
     })
+    // Preserve old Pre Setting answers, but require Setting answers independently.
+    await pool.query("UPDATE quality.setup_checklist_results SET phase = 'start' WHERE session_id = $1", [session.id])
+    await pool.query("UPDATE quality.setup_checklist_template_items SET source_payload = source_payload || $2::jsonb WHERE template_id = $1", [template.id, { section: "Pre Setting" }])
+    const staleChecklist = {
+      jobCardNumber, machineNumber, operationSetupCode: "1.1", organizationId,
+      payload: {}, results: [], sessionKey: `SESSION-${suffix}`,
+      status: "Completed", templateCode: template.code,
+    }
+    await expect(quality.saveSetupChecklistSession({ ...staleChecklist, phase: "start" }))
+      .rejects.toThrow("Use a Setting checklist only")
+    await expect(quality.saveSetupChecklistSession({ ...staleChecklist, phase: "end" }))
+      .rejects.toThrow("Complete required checklist points")
     const sameSession = await quality.saveSetupChecklistSession({
       completedBy: "SETTER-1",
       completedAt: "2026-07-21T11:00:00.000Z",

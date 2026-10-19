@@ -1,3 +1,4 @@
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { DuplicateMasterError, ShopFloorConflictError } from "@workspace/db"
 import {
   createDashboardPlanningRepository,
@@ -221,8 +222,9 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "poDate",
     "orderPcs",
     "orderKg",
+    "requiredRmKg",
   ],
-  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
+  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation"],
   machine_master: [
     "machineNo",
     "productionUnit",
@@ -400,6 +402,7 @@ async function rmInwardTemplateResponse(
         partCode: row.partCode,
         rmInwardDate: "",
         rmInwardKg: "",
+        rmLocation: "",
       }))
     )
   )
@@ -921,6 +924,7 @@ async function get(request: NextRequest, context: RouteContext) {
           ({ organizationId, repository }) =>
             repository.readJobCardWorkspace({
               jobCardNumber: path.slice("job-cards/".length),
+              revisionReference: search.get("revision") || undefined,
               organizationId,
               productionFloorCode: search.get("floor") || undefined,
             })
@@ -1165,6 +1169,23 @@ async function post(request: NextRequest, context: RouteContext) {
           })
       )
       return json({ ...result, message: "Delivery target saved." })
+    }
+
+    if (path === "rework-route") {
+      const setups = Array.isArray(body.setups) ? body.setups.map(value => {
+        const setup = plainRecord(value)
+        return { setupName: text(setup.setupName), machineFamily: text(setup.machineFamily),
+          cycleTimeSeconds: Number(setup.cycleTimeSeconds), setupTimeMinutes: Number(setup.setupTimeMinutes),
+          stageWeight: Number(setup.stageWeight), operationWeight: optionalNumeric(setup.operationWeight),
+          fixture: optionalText(setup.fixture), tooling: optionalText(setup.tooling), foamTool: optionalText(setup.foamTool),
+          inspectionChecks: Array.isArray(setup.inspectionChecks) ? setup.inspectionChecks.map(text) : [] }
+      }) : []
+      const result = await withPlanningRepository(request, "operations.route_selection.write",
+        ({ actorUserId, organizationId, repository }) => repository.createReworkRoute({
+          actorUserId, organizationId, productionFloorCode: normalizeProductionFloorCode(body.productionFloorCode),
+          jobCardNumber: text(body.jcNo), setups,
+        }))
+      return json(await withPlanningRefresh(request, path, body, { ...result, rowsUpdated: 1, message: "Job-specific rework route saved and selected." }))
     }
 
     if (path === "route-selection") {
@@ -2205,6 +2226,16 @@ async function post(request: NextRequest, context: RouteContext) {
     }
 
     if (
+      path === "data-import" && body.importMode !== undefined &&
+      !(
+        (body.entryType === "rm_inward" && body.importMode === "update_locations") ||
+        (body.entryType === "work_order" && body.importMode === "update_required_rm")
+      )
+    ) {
+      throw new RouteError(400, "Unknown CSV import action for this entry type.")
+    }
+
+    if (
       path === "data-import" &&
       ["rm_inward", "software_raw"].includes(String(body.entryType || ""))
     ) {
@@ -2230,6 +2261,24 @@ async function post(request: NextRequest, context: RouteContext) {
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
+      }
+      if (body.importMode === "update_locations") {
+        if (entryType !== "rm_inward") throw new RouteError(400, "Location updates require an RM Inward CSV.")
+        const result = await withCsvImportTransaction(() => withProductionRepository(
+          request,
+          scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.updateRawMaterialLocations({
+            actorUserId,
+            organizationId,
+            productionFloorCode: scope.floor,
+            rows: importedRows.map(payload => ({
+              jobCardNumber: text(payload.jcNo),
+              receivedOn: text(payload.rmInwardDate),
+              location: text(payload.rmLocation),
+            })),
+          })
+        ))
+        return json({ ok: true, rowsUpdated: result.updated, message: `Updated ${result.updated} receipt locations. Received quantities unchanged.` })
       }
       const inserted = await withCsvImportTransaction(() => withProductionRepository(
         request,
@@ -2291,6 +2340,37 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
+      if (entryType === "rework_rejected") {
+        const payload = plainRecord(body.payload)
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const result = await withPlanningRepository(request, scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.rejectRework({
+            actorUserId, organizationId, productionFloorCode: scope.floor,
+            jobCardNumber: text(payload.jobCardNumber), quantity: Number(payload.quantity),
+            rejectedOn: text(payload.rejectedOn), reason: text(payload.reason),
+            replacementRequiredRmKg: Number(payload.replacementRequiredRmKg), replacementRmPoNo: optionalText(payload.replacementRmPoNo),
+          }))
+        return json(await withPlanningRefresh(request, path, body, { ...result, ok: true, rowsUpdated: 1,
+          savedText: `${result.replacementJobCardNumber} created. Receive new RM and select the full route in Part Readiness. Return Reference: ${result.receiptReference}.`,
+        }))
+      }
+      if (entryType === "rework_received") {
+        const payload = plainRecord(body.payload)
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const result = await withPlanningRepository(request, scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.receiveRework({
+            actorUserId, organizationId, productionFloorCode: scope.floor,
+            originalJobCardNumber: text(payload.originalJobCardNumber), quantity: Number(payload.quantity),
+            replacementQuantity: Number(payload.replacementQuantity || 0),
+            replacementRequiredRmKg: optionalNumeric(payload.replacementRequiredRmKg),
+            replacementRmPoNo: optionalText(payload.replacementRmPoNo),
+            receivedOn: text(payload.receivedOn), reason: text(payload.reason),
+          }))
+        return json(await withPlanningRefresh(request, path, body, {
+          ...result, ok: true, rowsUpdated: 1,
+          savedText: `${result.rootJobCardNumber} · Rev ${result.revisionNumber} received. Return Reference: ${result.receiptReference}. Reworkable pieces await route selection; replacement pieces await new RM.`,
+        }))
+      }
       if (postgresMasterEntryTypes.has(entryType)) {
         const rawPayload = plainRecord(body.payload)
         const payload =
@@ -2415,6 +2495,37 @@ async function post(request: NextRequest, context: RouteContext) {
             payload.productionFloorCode
           )
           if (capability) await authorizedDashboardSession(request, capability)
+        }
+        if (entryType === "work_order" && body.importMode === "update_required_rm") {
+          const rows = importedRows.flatMap((payload, index) => {
+            if (!text(payload.requiredRmKg)) return []
+            const requiredRmKg = Number(payload.requiredRmKg)
+            if (!Number.isFinite(requiredRmKg) || requiredRmKg <= 0) {
+              throw new RouteError(400, `CSV row ${index + 2}: Required RM (kg) must be a positive number. No values saved.`)
+            }
+            if (!text(payload.jcNo)) {
+              throw new RouteError(400, `CSV row ${index + 2}: Job Card is required. No values saved.`)
+            }
+            return [{ jobCardNumber: text(payload.jcNo), requiredRmKg }]
+          })
+          const scope = operationalEntryWriteScope(entryType, "import", body.productionFloorCode, {})
+          const result = await withCsvImportTransaction(() => withPlanningRepository(
+            request,
+            scope.capability,
+            ({ actorUserId, organizationId, repository }) => repository.updateWorkOrderRequiredRm({
+              actorUserId,
+              organizationId,
+              productionFloorCode: scope.floor,
+              rows,
+            })
+          ))
+          return json({
+            ok: true,
+            rowsUpdated: result.updated,
+            rowsUnchanged: result.unchanged,
+            rowsSkipped: result.skipped,
+            message: `Required RM: ${result.updated} updated, ${result.unchanged} unchanged, ${result.skipped} skipped (no matching Job Card in this unit). Order quantities and planning unchanged.`,
+          })
         }
         const inserted = await withCsvImportTransaction(() => withPlanningRepository(
           request,
@@ -2706,6 +2817,7 @@ const knownDashboardApiPaths = new Set([
   "reverse-entry",
   "route-change",
   "route-selection",
+  "rework-route",
   "setup-checklist",
   "status",
   "training",

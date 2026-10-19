@@ -13,6 +13,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react"
+import { ReworkRouteEditor } from "@/components/rework-route-editor"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -103,7 +104,6 @@ import {
   useShellPageActions,
 } from "@/components/ui/page-actions"
 import { PlanningControlReview } from "@/components/planning-control-review"
-import { RawMaterialReview } from "@/components/raw-material-review"
 import { ReleaseSetupPlannerForm } from "@/components/release-setup-planner-form"
 import { plannerWorkflowResolutionPayload } from "@/lib/planner-workflow-resolution"
 import { DataDownloadButton } from "@/components/data-download-button"
@@ -258,7 +258,6 @@ import {
   normalizeShopFloorStage,
   openProductionSessionForShopFloorItem,
   productionSessionDetailHref,
-  setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProducedHistory,
@@ -653,6 +652,35 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "poDate", label: "Po Date", type: "date" },
       { name: "orderPcs", label: "Order Pcs", type: "number", required: true },
       { name: "orderKg", label: "Order Kg", type: "number", step: "0.01" },
+      { name: "requiredRmKg", label: "Required RM (kg)", type: "number", min: "0.001", step: "0.001" },
+    ],
+  },
+  {
+    entryType: "rework_received",
+    title: "Rework Received",
+    description: "Create the next revision of the same Job Card. Weight-converted returns allow up to 5% above dispatched pieces. Return Reference is generated on save. Reworkable pieces = returned quantity minus replacement quantity. Replacement pieces require new RM; every revision requires manual route selection.",
+    fields: [
+      { name: "originalJobCardNumber", label: "Dispatched Job Card / Revision / Activity", required: true },
+      { name: "quantity", label: "Returned Quantity (pieces)", type: "number", min: "1", step: "1", required: true },
+      { name: "replacementQuantity", label: "Rejected Beyond Rework / Replacement (pieces)", type: "number", min: "0", step: "1" },
+      { name: "replacementRequiredRmKg", label: "New RM Required for Replacement (kg)", type: "number", min: "0.001", step: "0.001" },
+      { name: "replacementRmPoNo", label: "Replacement RM PO (blank uses original RM PO)" },
+      { name: "receivedOn", label: "Receipt Date", type: "date", required: true },
+      { name: "receiptReference", label: "Return Reference", readOnly: true, placeholder: "Generated on save" },
+      { name: "reason", label: "Rework Reason", required: true },
+    ],
+  },
+  {
+    entryType: "rework_rejected",
+    title: "Rework Rejected",
+    description: "Close failed rework and create the next Replacement revision under the same Job Card. Close trial sessions first. The full undispatched batch is rejected; replacement requires fresh RM and manual route selection.",
+    fields: [
+      { name: "jobCardNumber", label: "Failed Rework Revision / Activity", required: true },
+      { name: "quantity", label: "Full Rework Quantity (pieces)", type: "number", readOnly: true, required: true },
+      { name: "rejectedOn", label: "Rejection Date", type: "date", required: true },
+      { name: "reason", label: "Why Rework Failed", required: true },
+      { name: "replacementRequiredRmKg", label: "New RM Required for Replacement (kg)", type: "number", min: "0.001", step: "0.001", required: true },
+      { name: "replacementRmPoNo", label: "Replacement RM PO (blank uses original RM PO)" },
     ],
   },
   {
@@ -661,7 +689,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     description:
       "Record Each Raw-Material Receipt Against The Job Card; Received Kilograms Accumulate.",
     fields: [
-      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "jcNo", label: "Job Card / Revision / Activity", required: true },
       {
         name: "rmInwardDate",
         label: "Rm Inward Date",
@@ -674,6 +702,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
         type: "number",
         step: "0.01",
       },
+      { name: "rmLocation", label: "RM Location", placeholder: "e.g. RM Store / Rack A3" },
     ],
   },
   {
@@ -806,7 +835,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     entryType: "setup_checklist_master",
     title: "Setup Checklist",
     description:
-      "Coded Machinist Checklists Used From Pre Setting Start Through Setting Completion.",
+      "Coded Machinist Checklists Used For Setting Completion.",
     fields: [
       {
         name: "checklistCode",
@@ -832,7 +861,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       {
         name: "section",
         label: "Section",
-        defaultValue: "Pre setting / setting",
+        defaultValue: "Setting",
       },
       { name: "effectiveFrom", label: "Effective From", type: "date" },
       { name: "remark", label: "Remark" },
@@ -2294,14 +2323,12 @@ function setupChecklistQueryFromLocation() {
   if (typeof window === "undefined")
     return {
       sessionId: "",
-      phase: "",
       selectedMachinist: "",
       row: {} as DashboardPayload,
     }
   const params = new URLSearchParams(window.location.search)
   return {
     sessionId: params.get("sessionId") ?? "",
-    phase: params.get("phase") ?? "",
     selectedMachinist: params.get("doneBy") ?? "",
     row: {
       jcNo: params.get("jcNo") ?? "",
@@ -2329,19 +2356,12 @@ function SetupChecklistShell({
     clientHydrationSnapshot,
     serverHydrationSnapshot
   )
-  const {
-    sessionId,
-    phase: requestedPhase,
-    row,
-  } = isClientHydrated
+  const { sessionId, row } = isClientHydrated
     ? setupChecklistQueryFromLocation()
     : {
         sessionId: "",
-        phase: "",
         row: {} as DashboardPayload,
       }
-  const settingOnly = productionFloorCode === "cnc"
-  const phase = settingOnly ? "end" : requestedPhase
   const checklistPage = usePostgresOperationalPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -2378,20 +2398,13 @@ function SetupChecklistShell({
   const savedChecklistItems = Array.isArray(currentChecklistSession?.items)
     ? (currentChecklistSession.items as DashboardPayload[])
     : setupChecklistItemsFromMaster(activeChecklistMasters)
-  const checklistItems = settingOnly
-    ? savedChecklistItems.map((item) => ({ ...item, section: "Setting" }))
-    : savedChecklistItems
-  const phaseChecklistItems = setupChecklistItemsForPhase(checklistItems, phase)
-  const canSave =
-    Boolean(
-      sessionId &&
-      effectiveDoneBy &&
-      (phase === "start" || phase === "end") &&
-      phaseChecklistItems.length
-    ) &&
-    (settingOnly || phase === "start" || Boolean(currentChecklistSession))
+  const checklistItems = savedChecklistItems.map((item) => ({
+    ...item,
+    section: "Setting",
+  }))
+  const canSave = Boolean(sessionId && effectiveDoneBy && checklistItems.length)
   const isComplete =
-    canSave && setupChecklistValuesComplete(phaseChecklistItems, values, phase)
+    canSave && setupChecklistValuesComplete(checklistItems, values)
 
   useEffect(() => {
     if (!isClientHydrated || !sessionId) return
@@ -2413,21 +2426,15 @@ function SetupChecklistShell({
       const nextItemRemarks: Record<string, string> = {}
       for (const item of asArray(currentChecklistSession.items)) {
         const itemKey = setupChecklistItemKey(item)
-        nextValues[itemKey] = setupChecklistExistingValue(item, phase)
-        nextItemRemarks[itemKey] = setupChecklistExistingItemRemark(item, phase)
+        nextValues[itemKey] = setupChecklistExistingValue(item)
+        nextItemRemarks[itemKey] = setupChecklistExistingItemRemark(item)
       }
       setValues(nextValues)
       setItemRemarks(nextItemRemarks)
-      setRemark(
-        str(
-          phase === "start"
-            ? currentChecklistSession.startRemark
-            : currentChecklistSession.endRemark
-        )
-      )
+      setRemark(str(currentChecklistSession.endRemark))
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [currentChecklistSession, phase])
+  }, [currentChecklistSession])
 
   function updateValue(item: DashboardPayload, value: string) {
     const itemKey = setupChecklistItemKey(item)
@@ -2444,9 +2451,8 @@ function SetupChecklistShell({
 
   async function saveProgress() {
     if (!row || !canSave || isSaving) return
-    const session = setupChecklistSessionForStage({
+    const session = setupChecklistSessionForSetting({
       row,
-      phase,
       values,
       itemRemarks,
       items: checklistItems,
@@ -2456,7 +2462,10 @@ function SetupChecklistShell({
       remark,
       completedAt: new Date().toISOString(),
     })
-    const payload = { ...setupChecklistSessionPayload(row, session), phase }
+    const payload = {
+      ...setupChecklistSessionPayload(row, session),
+      phase: "end",
+    }
     setIsSaving(true)
     setStatus(null)
     try {
@@ -2502,9 +2511,7 @@ function SetupChecklistShell({
               <SectionCard>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {phase === "end"
-                      ? "Setting Completion"
-                      : "Pre Setting Start"}
+                    Setting Completion
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-3">
@@ -2514,36 +2521,16 @@ function SetupChecklistShell({
                     <TileField label="Option" value={row.optionNumber} />
                     <TileField label="Setup No." value={row.setupNo} />
                     <TileField label="Machine" value={row.machine} />
-                    <TileField
-                      label="Phase"
-                      value={phase === "end" ? "Completion" : "Start"}
-                    />
+                    <TileField label="Phase" value="Completion" />
                   </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {!settingOnly && (
-                      <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-                        Pre Setting Done By
-                        <Input
-                          value={
-                            phase === "start"
-                              ? signedInMachinist
-                                ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
-                                : "Signed-in account required"
-                              : str(currentChecklistSession?.startedBy)
-                          }
-                          readOnly
-                        />
-                      </label>
-                    )}
+                  <div className="grid gap-3 md:grid-cols-2">
                     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
                       Setting Done By
                       <Input
                         value={
-                          phase === "end"
-                            ? signedInMachinist
-                              ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
-                              : "Signed-in account required"
-                            : str(currentChecklistSession?.endedBy)
+                          signedInMachinist
+                            ? [signedInMachinist.code, signedInMachinist.name].filter(Boolean).join(" - ")
+                            : "Signed-in account required"
                         }
                         readOnly
                       />
@@ -2561,8 +2548,7 @@ function SetupChecklistShell({
               ) : (
                 <SetupChecklistForm
                   row={row}
-                  phase={phase}
-                  items={phaseChecklistItems}
+                  items={checklistItems}
                   session={currentChecklistSession}
                   values={values}
                   itemRemarks={itemRemarks}
@@ -3622,7 +3608,6 @@ function DashboardContent({
     return (
       <PlanningControlPanel
         productionFloorCode={productionFloorCode}
-        payload={payload}
         productionControl={productionControl}
         submitAction={submitAction}
       />
@@ -4187,12 +4172,12 @@ function RawMaterialRejectionPlannerForm({
     selectedWorkOrder?.rmUsableKg === undefined
       ? receivedKg
       : Number(selectedWorkOrder.rmUsableKg) || 0
-  const orderKg = Number(selectedWorkOrder?.orderKg) || 0
+  const requiredRmKg = Number(selectedWorkOrder?.requiredRmKg) || 0
   const orderPcs = Number(selectedWorkOrder?.orderPcs) || 0
   const enteredRejectedKg = Number(rejectedKg) || 0
   const validQuantity = enteredRejectedKg > 0 && enteredRejectedKg <= usableKg
   const rejectionBalance = rawMaterialRejectionBalance({
-    orderKg,
+    requiredRmKg,
     orderPcs,
     rejectedKg: enteredRejectedKg,
     usableKgBefore: usableKg,
@@ -5284,7 +5269,7 @@ function EarlyDownstreamPlannerForm({
 }) {
   const plannedRows = asArray(productionControl.machinePlanDetailRows)
   const machineRows = asArray(productionControl.machinePlanningRows)
-  const routeRows = asArray(productionControl.routeMasterRows)
+  const routeRows = [...asArray(productionControl.routeMasterRows), ...asArray(productionControl.jobReworkRouteRows)]
   const setupNumber = (value: unknown) =>
     Number(str(value).match(/^(?:setup\s*|p)?(\d+)$/i)?.[1])
   const setupOneRows = plannedRows.filter(
@@ -7754,7 +7739,7 @@ function JobCardsPanel({
     <section className="grid gap-4">
       <JobCardRegister
         rows={jobCardRows}
-        routeRows={asArray(productionControl.routeMasterRows)}
+        routeRows={[...asArray(productionControl.routeMasterRows), ...asArray(productionControl.jobReworkRouteRows)]}
         productionRows={asArray(productionControl.productionOutputRows)}
         finishDateRows={asArray(productionControl.productionDashboardRows)}
         floor={productionFloorCode}
@@ -7804,7 +7789,6 @@ function MachineDetailPanel({
 
 type ShopFloorStageId =
   | "raw_material_at_machine"
-  | "presetting"
   | "setting"
   | "quality_approval"
   | "operator_started"
@@ -7821,12 +7805,6 @@ const shopFloorStages: Array<{
     label: "Raw Material At The Machine",
     role: "Shop floor",
     button: "RM at machine",
-  },
-  {
-    id: "presetting",
-    label: "Pre Setting Started",
-    role: "Assistant machinist",
-    button: "Start pre setting",
   },
   {
     id: "setting",
@@ -8591,7 +8569,7 @@ function RoleTaskPanel({
           />
           <DataRowsCard
             title="Quality Inspection Parameter Master"
-            rows={combinedQualityInspectionMasterRows(productionControl)}
+            rows={combinedQualityInspectionMasterRows(productionControl).filter(row => !row.reworkJobCardNumber)}
             empty="No quality inspection parameters saved yet"
           />
         </>
@@ -9400,6 +9378,11 @@ function ShopFloorItemSummary({
       <div className="text-xs text-muted-foreground">
         Rm: {displayValue(row.rmStatus)}
       </div>
+      {tone === "next" && nextShopFloorStage(row)?.id === "raw_material_at_machine" ? (
+        <div className="text-sm">
+          RM Location: {optionalText(row.rmLocation) ?? "Not recorded"}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -9488,14 +9471,8 @@ function ShopFloorRowAction({
     () => activeSetupChecklistMasterRows(setupChecklistMasters),
     [setupChecklistMasters]
   )
-  const checklistPhase =
-    nextStage?.id === "presetting"
-      ? "start"
-      : nextStage?.id === "setting"
-        ? "end"
-        : ""
   const needsSetupChecklist = Boolean(
-    checklistPhase && onSaveSetupChecklistSession
+    nextStage?.id === "setting" && onSaveSetupChecklistSession
   )
   const needsWorkerSelection = nextStage?.id === "operator_started"
   const performer =
@@ -9513,23 +9490,17 @@ function ShopFloorRowAction({
     !needsSetupChecklist ||
     (Boolean(currentChecklistSession) &&
       setupChecklistValuesComplete(
-        setupChecklistItemsForPhase(
-          asArray(currentChecklistSession?.items),
-          checklistPhase
-        ),
-        {},
-        checklistPhase
+        asArray(currentChecklistSession?.items),
+        {}
       ))
   const checklistPageHref =
-    next && checklistPhase
-      ? setupChecklistPageHref(next, checklistPhase, effectiveDoneBy)
+    next && needsSetupChecklist
+      ? setupChecklistPageHref(next, effectiveDoneBy)
       : ""
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
     : setupChecklistReady
-      ? checklistPhase === "end"
-        ? "Completion saved"
-        : "Start saved"
+      ? "Completion saved"
       : currentChecklistSession
         ? "Saved progress"
         : "Checklist pending"
@@ -9671,12 +9642,7 @@ function ShopFloorRowAction({
   if (nextStage && next.shopFloorTaskReady === false) {
     return (
       <div className="grid gap-2">
-        <ShopFloorProgress
-          activeIndex={stageIndex}
-          productionFloorCode={
-            str(row?.productionFloorCode) || productionFloorFromLocation()
-          }
-        />
+        <ShopFloorProgress activeIndex={stageIndex} />
         <StatusBadge value="Task not ready" />
         <div className="text-sm text-muted-foreground">
           {displayValue(next.shopFloorTaskBlocker) ||
@@ -9688,12 +9654,7 @@ function ShopFloorRowAction({
 
   return (
     <div className="grid gap-2">
-      <ShopFloorProgress
-        activeIndex={stageIndex}
-        productionFloorCode={
-          str(row?.productionFloorCode) || productionFloorFromLocation()
-        }
-      />
+      <ShopFloorProgress activeIndex={stageIndex} />
       {nextStage ? (
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
@@ -9760,8 +9721,7 @@ function ShopFloorRowAction({
                 >
                   Open Checklist
                 </Button>
-                {checklistPhase === "start" &&
-                !activeChecklistMasters.length &&
+                {!activeChecklistMasters.length &&
                 openDataEntry ? (
                   <Button
                     type="button"
@@ -9819,7 +9779,6 @@ function ShopFloorRowAction({
 
 function SetupChecklistForm({
   row,
-  phase,
   items,
   session,
   values,
@@ -9829,7 +9788,6 @@ function SetupChecklistForm({
   onAddMaster,
 }: {
   row: DashboardPayload
-  phase: string
   items: DashboardPayload[]
   session?: DashboardPayload
   values: Record<string, string>
@@ -9846,9 +9804,7 @@ function SetupChecklistForm({
           Setup Checklist Missing
         </div>
         <div className="text-[var(--color-warning-text)]">
-          {phase === "start"
-            ? "Create An Active Pre Setting Checklist Before Continuing."
-            : "Create An Active Setting Checklist Before Continuing."}
+          Create An Active Setting Checklist Before Continuing.
         </div>
         {onAddMaster ? (
           <Button
@@ -9864,21 +9820,12 @@ function SetupChecklistForm({
       </div>
     )
   }
-  if (phase === "end" && !session && row.productionFloorCode !== "cnc") {
-    return (
-      <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
-        Pre Setting Checklist Session Is Missing. Start Pre Setting For This
-        Setup Before Saving Setting Done.
-      </div>
-    )
-  }
-
   return (
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
-            Setup Checklist {phase === "start" ? "start" : "completion"}
+            Setup Checklist completion
           </div>
           <div className="text-xs text-muted-foreground">
             {itemCode(row)} / Jc {jobCardNumber(row)} / Option{" "}
@@ -9906,11 +9853,11 @@ function SetupChecklistForm({
             {items.map((item, index) => {
               const itemKey = setupChecklistItemKey(item, index)
               const inputType = str(item.inputType || "checkbox").toLowerCase()
-              const existingValue = setupChecklistExistingValue(item, phase)
+              const existingValue = setupChecklistExistingValue(item)
               const value = values[itemKey] ?? existingValue
               const itemRemark =
                 itemRemarks[itemKey] ??
-                setupChecklistExistingItemRemark(item, phase)
+                setupChecklistExistingItemRemark(item)
               return (
                 <TableRow key={itemKey}>
                   <TableCell>
@@ -10186,35 +10133,25 @@ function FirstPieceReadingControl({
   )
 }
 
-function ShopFloorProgress({
-  activeIndex,
-  productionFloorCode,
-}: {
-  activeIndex: number
-  productionFloorCode: string
-}) {
+function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {shopFloorStages
-        .filter(
-          (stage) => productionFloorCode !== "cnc" || stage.id !== "presetting"
+      {shopFloorStages.map((stage, index) => {
+        const done = shopFloorStageIndex(stage.id) <= activeIndex
+        return (
+          <Badge
+            key={stage.id}
+            variant="outline"
+            className={
+              done
+                ? "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]"
+                : "text-muted-foreground"
+            }
+          >
+            {index + 1}
+          </Badge>
         )
-        .map((stage, index) => {
-          const done = shopFloorStageIndex(stage.id) <= activeIndex
-          return (
-            <Badge
-              key={stage.id}
-              variant="outline"
-              className={
-                done
-                  ? "border-[var(--color-positive)]/30 bg-[var(--color-positive-bg)] text-[var(--color-positive-text)]"
-                  : "text-muted-foreground"
-              }
-            >
-              {index + 1}
-            </Badge>
-          )
-        })}
+      })}
     </div>
   )
 }
@@ -10241,7 +10178,7 @@ function MasterReadinessPanel({
   openDataEntry,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const masterGaps = asArray(productionControl.masterGaps)
@@ -10268,12 +10205,14 @@ function MasterReadinessPanel({
       <WorkOrderGapTable
         title="Production Validation"
         rows={masterGaps}
+        productionControl={productionControl}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
       />
       <WorkOrderGapTable
         title="Whole Work-Order Missing Details"
         rows={allWorkOrderGaps}
+        productionControl={productionControl}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
       />
@@ -10284,12 +10223,14 @@ function MasterReadinessPanel({
 function WorkOrderGapTable({
   title,
   rows,
+  productionControl,
   submitAction,
   openDataEntry,
 }: {
   title: string
   rows: DashboardPayload[]
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  productionControl: DashboardPayload
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const [visibleRowCount, setVisibleRowCount] = useState(rows.length)
@@ -10330,6 +10271,7 @@ function WorkOrderGapTable({
                   <WorkOrderGapRow
                     key={`${title}-${jobCardNumber(row)}-${index}`}
                     row={row}
+                    productionControl={productionControl}
                     submitAction={submitAction}
                     openDataEntry={openDataEntry}
                   />
@@ -10354,11 +10296,13 @@ function WorkOrderGapTable({
 
 function WorkOrderGapRow({
   row,
+  productionControl,
   submitAction,
   openDataEntry,
 }: {
   row: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  productionControl: DashboardPayload
+  submitAction: SubmitAction
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
   const jcNo = str(row.jcNo || row.jobCard)
@@ -10376,7 +10320,7 @@ function WorkOrderGapRow({
 
   return (
     <TableRow>
-      <TableCell className="min-w-32 font-medium">{jcNo || "-"}</TableCell>
+      <TableCell className="min-w-32 font-medium">{jcNo || "-"}{row.isRevision === true ? <div><StatusBadge tone="warning" value={row.disposition === "replacement" ? "Replacement" : "Rework"} /></div> : null}</TableCell>
       <TableCell className="min-w-40">
         <div>{itemCode(row)}</div>
         <div className="text-xs text-muted-foreground">
@@ -10412,7 +10356,7 @@ function WorkOrderGapRow({
               onSubmit={(event) => void submitRoute(event)}
             >
               <Label className="text-xs text-muted-foreground">
-                Select Option Number
+                {row.isRework === true ? "Use Existing Route" : "Select Option Number"}
               </Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
                 <SearchableSelect
@@ -10440,8 +10384,12 @@ function WorkOrderGapRow({
               </div>
             </form>
           ) : null}
+          {row.isRework === true ? <ReworkRouteEditor jobCardNumber={jcNo}
+            machineFamilies={machineFamilyOptions(asArray(productionControl.machinePlanningRows))}
+            toolingCodes={Array.isArray(productionControl.toolingAssetCodes) ? productionControl.toolingAssetCodes.filter((value): value is string => typeof value === "string") : []}
+            submitAction={submitAction} /> : null}
           <div className="grid gap-2 sm:grid-cols-4">
-            {row.routeMasterMissing ? (
+            {row.routeMasterMissing && row.isRework !== true ? (
               <Button
                 type="button"
                 size="sm"
@@ -10667,7 +10615,10 @@ function DataEntryPanel({
     [payload, productionControl, selectedSpec]
   )
 
-  async function importEntryFile(file: File) {
+  async function importEntryFile(
+    file: File,
+    importMode?: "update_locations" | "update_required_rm"
+  ) {
     if (isImporting || !file.name || !canUseEntry(bulkEntryType, "import"))
       return
     setIsImporting(true)
@@ -10679,6 +10630,7 @@ function DataEntryPanel({
           entryType: bulkEntryType,
           fileName: file.name,
           fileBase64,
+          ...(importMode ? { importMode } : {}),
           ...(selectedMasterIsCompanyWide ? {} : { productionFloorCode }),
         },
         { throwOnError: true }
@@ -10688,7 +10640,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction = !canUseEntry(
+  const csvImportAction = bulkEntryType.startsWith("rework_") || !canUseEntry(
     bulkEntryType,
     "import"
   ) ? null : bulkEntryType === "store_masters" ? (
@@ -10699,10 +10651,27 @@ function DataEntryPanel({
       }}
     />
   ) : (
-    <MasterDataCsvClientImportButton
-      disabled={isImporting}
-      onFile={importEntryFile}
-    />
+    <>
+      <MasterDataCsvClientImportButton
+        disabled={isImporting}
+        label={bulkEntryType === "rm_inward" ? "Receive RM CSV" : "Upload CSV"}
+        onFile={importEntryFile}
+      />
+      {bulkEntryType === "rm_inward" ? (
+        <MasterDataCsvClientImportButton
+          disabled={isImporting}
+          label="Update locations CSV"
+          onFile={file => importEntryFile(file, "update_locations")}
+        />
+      ) : null}
+      {bulkEntryType === "work_order" ? (
+        <MasterDataCsvClientImportButton
+          disabled={isImporting}
+          label="Update Required RM CSV"
+          onFile={file => importEntryFile(file, "update_required_rm")}
+        />
+      ) : null}
+    </>
   )
 
   return (
@@ -10712,7 +10681,7 @@ function DataEntryPanel({
           <OperationalWorkspaceTabs
             activeView="dataEntry"
             csvDownloadAction={
-              canUseEntry(bulkEntryType, "read") ? (
+              !bulkEntryType.startsWith("rework_") && canUseEntry(bulkEntryType, "read") ? (
                 <MasterDataCsvDownloadButton
                   href={`/api/data-template?${new URLSearchParams({ entryType: bulkEntryType, floor: productionFloorCode })}`}
                 />
@@ -10734,6 +10703,18 @@ function DataEntryPanel({
       {operationalTabs && bulkEntryType === "rm_inward" ? (
         <p className="text-xs text-muted-foreground">
           RM Inward CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
+          {" "}For existing receipts, fill RM Location in the View Records download
+          and use Update locations CSV. This updates all receipts for each Job Card
+          and date; received kg and planning stay unchanged.
+        </p>
+      ) : null}
+      {operationalTabs && bulkEntryType === "work_order" ? (
+        <p className="text-xs text-muted-foreground">
+          For existing Job Cards, fill Required RM (kg) in the View Records
+          download and use Update Required RM CSV. Only Job Cards in the selected
+          Production Unit are updated; blank values are ignored and unmatched
+          Job Cards are reported as skipped. Order quantities and plans stay
+          unchanged. Use Upload CSV for full Work Orders.
         </p>
       ) : null}
       {!selectionLocked || isImporting ? (
@@ -11749,6 +11730,23 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   const columns = columnsForProductionMaster(spec.fields)
+  if (spec.entryType === "rework_rejected") return [
+    { key: "jcNo", label: "Failed Rework Revision" },
+    { key: "receiptReference", label: "Return Reference" },
+    { key: "reworkRejectedQuantity", label: "Rejected Pieces" },
+    { key: "reworkRejectedOn", label: "Rejection Date" },
+    { key: "reworkRejectionReason", label: "Reason" },
+    { key: "replacementJobCardNumber", label: "Replacement Revision" },
+  ]
+  if (spec.entryType === "rework_received") return [
+    { key: "rootJobCardNumber", label: "Job Card" },
+    { key: "revisionNumber", label: "Revision" },
+    { key: "disposition", label: "Activity" },
+    { key: "returnQuantity", label: "Total Return Qty" },
+    { key: "jcNo", label: "Activity Reference" },
+    { key: "partCode", label: "Part Code" },
+    ...columns.map(column => column.key === "quantity" ? { ...column, label: "Activity Qty" } : column),
+  ]
   return spec.entryType === "work_order"
     ? [
         ...columns,
@@ -11792,7 +11790,12 @@ function downloadMasterTableCsv(
   const header = columns.map((column) => csvCell(column.label)).join(",")
   const body = rows.map((row) =>
     columns
-      .map((column) => csvCell(masterTableCellText(row, column.key)))
+      .map((column) => csvCell(
+        (spec.entryType === "rm_inward" || spec.entryType === "work_order") &&
+        ["rmInwardKg", "orderPcs", "orderKg", "requiredRmKg"].includes(column.key)
+          ? str(row[column.key])
+          : masterTableCellText(row, column.key)
+      ))
       .join(",")
   )
   const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], {
@@ -14271,6 +14274,15 @@ function DataEntryForm({
     ...(spec.entryType === "machine_master" ? ["productionFloorCode"] : []),
   ])
   const resolvedFields = spec.fields.map((field) => {
+    if ((spec.entryType === "rm_inward" && field.name === "jcNo") ||
+      (spec.entryType === "rework_received" && field.name === "originalJobCardNumber") ||
+      (spec.entryType === "rework_rejected" && field.name === "jobCardNumber")) {
+      const activities = asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders)
+        .filter(row => spec.entryType !== "rm_inward" || row.isRework !== true)
+        .filter(row => spec.entryType !== "rework_rejected" || row.isRework === true && !["Cancelled", "Rejected"].includes(str(row.status)))
+        .map(row => str(row.jcNo)).filter(Boolean)
+      return { ...field, options: ["", ...activities] }
+    }
     const routeOptions =
       spec.entryType === "route" && field.name === "setupName"
         ? { ...field, options: ["", ...setupNames] }
@@ -14361,7 +14373,7 @@ function DataEntryForm({
     >
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        {spec.entryType === "planning_holiday" ? (
+        {spec.entryType === "planning_holiday" || spec.entryType.startsWith("rework_") ? (
           <CardDescription>{spec.description}</CardDescription>
         ) : null}
         {spec.entryType === "route" ? (
@@ -14369,7 +14381,7 @@ function DataEntryForm({
             Use a new option for changed setup sequence, setup count or
             manufacturing process. Correct names, machine family and stage
             weight here. Existing sessions keep their starting weight. A single
-            available option is selected automatically.
+            available option is selected automatically for normal Job Cards. Rework always requires planner selection.
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -14387,7 +14399,9 @@ function DataEntryForm({
                     values.machineFamily
                   ),
                 })
-              : undefined
+              : spec.entryType === "rework_rejected"
+                ? (values) => ({ quantity: str(asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders).find(row => row.jcNo === values.jobCardNumber)?.orderPcs) })
+                : undefined
           }
           buttonLabel={`Save ${spec.title}`}
           onSubmit={async (body) => {
@@ -14400,7 +14414,7 @@ function DataEntryForm({
                 ...body,
                 ...(productionFloorCode ? { productionFloorCode } : {}),
               },
-            })
+            }, { throwOnError: true })
             if (generatedCode)
               setLocallyGeneratedCodes((current) => [...current, generatedCode])
           }}
@@ -14609,7 +14623,7 @@ function QualityParameterMasterForm({
     return mergeQualityParameterRows([
       ...masterRows,
       ...qualityParameterRowsFromDataEntry(dataEntry),
-      ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
+      ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows).filter(row => !row.reworkJobCardNumber),
     ])
   }, [
     dataEntry,
@@ -16264,33 +16278,7 @@ function SetupChecklistMasterForm({
                       </SearchableSelect>
                     </TableCell>
                     <TableCell>
-                      <SearchableSelect
-                        className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm"
-                        value={
-                          productionFloorFromLocation() === "cnc"
-                            ? "Setting"
-                            : draft.section
-                        }
-                        disabled={productionFloorFromLocation() === "cnc"}
-                        onChange={(event) =>
-                          updateDraft(
-                            draft.draftId,
-                            "section",
-                            event.target.value
-                          )
-                        }
-                      >
-                        {productionFloorFromLocation() !== "cnc" && (
-                          <option value="Pre setting">Pre Setting</option>
-                        )}
-                        <option value="Setting">Setting</option>
-                        {productionFloorFromLocation() !== "cnc" &&
-                        draft.section === "Pre setting / setting" ? (
-                          <option value="Pre setting / setting">
-                            Both Phases (Legacy)
-                          </option>
-                        ) : null}
-                      </SearchableSelect>
+                      Setting
                     </TableCell>
                     <TableCell>
                       <Input
@@ -16357,26 +16345,23 @@ function SetupChecklistMasterForm({
 }
 function PlanningControlPanel({
   productionFloorCode,
-  payload,
   productionControl,
   submitAction,
 }: {
   productionFloorCode: ProductionFloorCode
-  payload: DashboardPayload
   productionControl: DashboardPayload
   submitAction: SubmitAction
 }) {
-  const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers)
-
   return (
     <section className="grid gap-4">
-      <RawMaterialReview floor={productionFloorCode} onAccept={(row, reason) =>
-        submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,
-          expectedRowVersion: row.rowVersion, productionFloorCode, reason }, { throwOnError: true })} />
       <PlanningControlReview
         key={productionFloorCode}
         floor={productionFloorCode}
         workflowRows={asArray(productionControl.workflowExceptionRows)}
+        reworkRows={asArray(productionControl.workOrders).filter(row => row.isRevision === true && row.optionSource === "Planner required")}
+        onAcceptMaterial={(row, reason) =>
+          submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,
+            expectedRowVersion: row.rowVersion, productionFloorCode, reason }, { throwOnError: true })}
         onClose={(session, comment) =>
           submitAction("production-session-efficiency-flag-close", {
             productionFloorCode,
@@ -16395,10 +16380,6 @@ function PlanningControlPanel({
           }, { throwOnError: true })
         }}
       />
-      {(productionFloorCode === "conventional" ||
-        productionFloorCode === "conventional-02") && (
-        <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
-      )}
     </section>
   )
 }
@@ -16633,27 +16614,6 @@ function correctionProductionUnitLabel(row: DashboardPayload) {
   )
 }
 
-function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
-  return (
-    <SectionCard>
-      <CardHeader>
-        <CardTitle>Next Tool / Fixture Number</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <MetricSummary
-          scope="Tool and fixture recommendations · current records"
-          items={rows.map((row) => ({
-            description: `${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`,
-            label: str(row.category),
-            tone: "information",
-            value: str(row.recommendedNumber || row.nextNew),
-          }))}
-        />
-      </CardContent>
-    </SectionCard>
-  )
-}
-
 type LegacyField = {
   name: string
   label: string
@@ -16684,6 +16644,7 @@ function LegacyActionForm({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [values, setValues] = useState(defaults)
+  const [formError, setFormError] = useState("")
   const derivedValues = deriveValues?.(values) ?? {}
   const displayedFields = fields.map((field) => {
     if (field.name === "dayType" && fields.some((candidate) => candidate.name === "shift" && candidate.readOnly) && str(defaults.shift) !== "All")
@@ -16701,6 +16662,7 @@ function LegacyActionForm({
     if (isSubmitting) return
     const form = event.currentTarget
     setIsSubmitting(true)
+    setFormError("")
     try {
       await onSubmit({
         ...formPayload(new FormData(form), fields),
@@ -16708,6 +16670,8 @@ function LegacyActionForm({
       })
       form.reset()
       setValues(defaults)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Entry could not be saved.")
     } finally {
       setIsSubmitting(false)
     }
@@ -16719,6 +16683,7 @@ function LegacyActionForm({
       className="grid w-full max-w-5xl gap-3 rounded-xl border bg-background p-3"
       onSubmit={(event) => void submit(event)}
     >
+      {formError ? <StandardState variant="error" title="Entry not saved" description={formError} /> : null}
       <fieldset className="contents" disabled={isSubmitting}>
         <div>
           <div className="text-sm font-medium">{title}</div>
@@ -16774,7 +16739,7 @@ function LegacyActionForm({
                                   field.name
                                 )
                               ? "Select Store Asset Code"
-                              : "Normal"}
+                              : field.name === "jobCardNumber" || field.name === "originalJobCardNumber" || field.name === "jcNo" ? "Select Job Card / Activity" : "Normal"}
                     </option>
                   ))}
                 </SearchableSelect>
@@ -16809,6 +16774,7 @@ function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
     <DataRowsCard
       title="Planner Action Log"
       rows={plannerActionHistoryRows(rows)}
+      rowLimit={rows.length}
       empty="No planner actions saved yet"
     />
   )
@@ -18506,11 +18472,7 @@ function shopFloorRowStatus(
 }
 
 function shopFloorWorkflowLabel(row: DashboardPayload) {
-  const floor = str(row.productionFloorCode) || productionFloorFromLocation()
-  if (
-    floor === "cnc" &&
-    ["presetting", "tools_drawing"].includes(str(row.shopFloorStage))
-  ) {
+  if (normalizeShopFloorStage(row.shopFloorStage) === "presetting") {
     return "Setting pending"
   }
   return str(row.shopFloorStageLabel)
@@ -18671,17 +18633,13 @@ function roleTaskMatches(
   }
   if (role === "quality") return nextStage.id === "quality_approval"
   return (
-    nextStage.id === "presetting" ||
     nextStage.id === "setting" ||
     nextStage.id === "operator_started"
   )
 }
 
 function nextShopFloorStage(row: DashboardPayload) {
-  const nextId = nextShopFloorStageId(
-    row.shopFloorStage,
-    str(row.productionFloorCode) || productionFloorFromLocation()
-  )
+  const nextId = nextShopFloorStageId(row.shopFloorStage)
   return shopFloorStages.find((stage) => stage.id === nextId)
 }
 
@@ -18737,7 +18695,8 @@ function shopFloorStageIndex(stage: string) {
   const normalizedStage =
     {
       shop_floor_rm: "raw_material_at_machine",
-      tools_drawing: "presetting",
+      presetting: "raw_material_at_machine",
+      tools_drawing: "raw_material_at_machine",
       qc_approval: "quality_approval",
       worker_start: "operator_started",
     }[stage] ?? stage
@@ -19440,7 +19399,7 @@ function combinedQualityInspectionMasterRows(
   productionControl: DashboardPayload
 ) {
   return mergeQualityInspectionParameterRows(
-    asArray(productionControl.qualityParameterMasterRows),
+    [...asArray(productionControl.qualityParameterMasterRows), ...asArray(productionControl.jobReworkInspectionRows)],
     asArray(productionControl.firstPieceInspectionMasterRows)
   )
 }
@@ -19573,8 +19532,7 @@ function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section:
-      productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
+    section: "Setting",
     remark: "",
   }
 }
@@ -19592,7 +19550,7 @@ function setupChecklistDraftFromRow(
     checkPoint: str(row.checkPoint),
     inputType: str(row.inputType || "checkbox"),
     required: str(row.required || "Yes"),
-    section: str(row.section || "Pre setting / setting"),
+    section: "Setting",
     remark: str(row.remark),
   }
 }
@@ -19613,7 +19571,7 @@ function setupChecklistPayload(
     checkPoint: str(draft.checkPoint),
     inputType: str(draft.inputType || "checkbox"),
     required: str(draft.required || "Yes"),
-    section: str(draft.section || "Pre setting / setting"),
+    section: "Setting",
     effectiveFrom,
     status,
     remark: str(draft.remark),
@@ -20337,12 +20295,11 @@ function writeStoredSetupChecklistSession(session: DashboardPayload) {
 }
 function setupChecklistPageHref(
   row: DashboardPayload,
-  phase: string,
   doneBy = ""
 ) {
   const params = new URLSearchParams({
     sessionId: setupChecklistSessionId(row),
-    phase,
+    phase: "end",
     jcNo: jobCardNumber(row),
     partCode: itemCode(row),
     optionNumber: displayValue(row.optionNumber),
@@ -20407,16 +20364,10 @@ function mostCompleteSetupChecklistSession(
   localSession: DashboardPayload | undefined,
   stageId: string | undefined
 ) {
-  const phase =
-    stageId === "presetting" ? "start" : stageId === "setting" ? "end" : ""
-  if (!phase) return snapshotSession ?? localSession
+  if (stageId !== "setting") return snapshotSession ?? localSession
   if (
     localSession &&
-    setupChecklistValuesComplete(
-      setupChecklistItemsForPhase(asArray(localSession.items), phase),
-      {},
-      phase
-    )
+    setupChecklistValuesComplete(asArray(localSession.items), {})
   )
     return localSession
   return snapshotSession ?? localSession
@@ -20452,7 +20403,7 @@ function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
     checkPoint: displayValue(row.checkPoint),
     inputType: displayValue(row.inputType || "checkbox"),
     required: displayValue(row.required || "Yes"),
-    section: displayValue(row.section || "Pre setting / setting"),
+    section: "Setting",
     masterCreatedAt: displayValue(row.createdAt),
   }))
 }
@@ -20475,45 +20426,32 @@ function setupChecklistItemRequired(item: DashboardPayload) {
   )
 }
 
-function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
-  return displayValue(phase === "start" ? item.startValue : item.endValue) ===
-    "-"
+function setupChecklistExistingValue(item: DashboardPayload) {
+  return displayValue(item.endValue) === "-"
     ? ""
-    : displayValue(phase === "start" ? item.startValue : item.endValue)
+    : displayValue(item.endValue)
 }
 
-function setupChecklistExistingItemRemark(
-  item: DashboardPayload,
-  phase: string
-) {
-  return str(phase === "start" ? item.startItemRemark : item.endItemRemark)
-}
-
-function setupChecklistItemsForPhase(items: DashboardPayload[], phase: string) {
-  const normalizedPhase = phase === "end" ? "end" : "start"
-  return items.filter((item) =>
-    setupChecklistItemAppliesToPhase(item.section, normalizedPhase)
-  )
+function setupChecklistExistingItemRemark(item: DashboardPayload) {
+  return str(item.endItemRemark)
 }
 
 function setupChecklistValuesComplete(
   items: DashboardPayload[],
-  values: Record<string, string>,
-  phase: string
+  values: Record<string, string>
 ) {
   if (!items.length) return false
   return items.every((item, index) => {
     if (!setupChecklistItemRequired(item)) return true
     const value =
       values[setupChecklistItemKey(item, index)] ??
-      setupChecklistExistingValue(item, phase)
+      setupChecklistExistingValue(item)
     return Boolean(str(value))
   })
 }
 
-function setupChecklistSessionForStage({
+function setupChecklistSessionForSetting({
   row,
-  phase,
   values,
   itemRemarks,
   items,
@@ -20524,7 +20462,6 @@ function setupChecklistSessionForStage({
   completedAt,
 }: {
   row: DashboardPayload
-  phase: string
   values: Record<string, string>
   itemRemarks: Record<string, string>
   items: DashboardPayload[]
@@ -20541,28 +20478,13 @@ function setupChecklistSessionForStage({
       "1"
   )
   const sessionItems = items.map((item, index) => {
-    if (
-      !setupChecklistItemAppliesToPhase(
-        item.section,
-        phase === "end" ? "end" : "start"
-      )
-    )
-      return item
     const itemKey = setupChecklistItemKey(item, index)
-    const value = values[itemKey] ?? setupChecklistExistingValue(item, phase)
+    const value = values[itemKey] ?? setupChecklistExistingValue(item)
     const itemRemark =
-      itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item, phase)
-    return phase === "start"
-      ? { ...item, startValue: value, startItemRemark: itemRemark }
-      : { ...item, endValue: value, endItemRemark: itemRemark }
+      itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item)
+    return { ...item, endValue: value, endItemRemark: itemRemark }
   })
-  const complete =
-    phase === "end" &&
-    setupChecklistValuesComplete(
-      setupChecklistItemsForPhase(sessionItems, phase),
-      {},
-      phase
-    )
+  const complete = setupChecklistValuesComplete(sessionItems, {})
   return {
     ...(existingSession ?? {}),
     sessionId: setupChecklistSessionId(row),
@@ -20571,23 +20493,10 @@ function setupChecklistSessionForStage({
       masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom
     ),
     status: complete ? "Completed" : "In progress",
-    startedAt: phase === "start" ? completedAt : existingSession?.startedAt,
-    startedBy: phase === "start" ? doneBy : existingSession?.startedBy,
-    startRemark: phase === "start" ? remark : existingSession?.startRemark,
-    endedAt:
-      phase === "end"
-        ? complete
-          ? completedAt
-          : null
-        : existingSession?.endedAt,
-    completedAt:
-      phase === "end"
-        ? complete
-          ? completedAt
-          : null
-        : existingSession?.completedAt,
-    endedBy: phase === "end" ? doneBy : existingSession?.endedBy,
-    endRemark: phase === "end" ? remark : existingSession?.endRemark,
+    endedAt: complete ? completedAt : null,
+    completedAt: complete ? completedAt : null,
+    endedBy: doneBy,
+    endRemark: remark,
     items: sessionItems,
   }
 }
@@ -20600,8 +20509,7 @@ function setupChecklistMasterDefaults() {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section:
-      productionFloorFromLocation() === "cnc" ? "Setting" : "Pre setting",
+    section: "Setting",
     effectiveFrom: istDateValue(),
     status: "Active",
   }
@@ -20706,14 +20614,6 @@ function uniqueValues(values: string[]) {
   return [...new Set(values.map(str).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true })
   )
-}
-
-function numValue(row: DashboardPayload, ...keys: string[]) {
-  for (const key of keys) {
-    const value = Number(row[key])
-    if (Number.isFinite(value)) return value
-  }
-  return 0
 }
 
 function tableColumns(rows: DashboardPayload[]) {

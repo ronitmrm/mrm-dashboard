@@ -291,3 +291,4 @@ export {
 } from "./branding"
 export { createOrderAcceptanceRepository } from "./order-acceptance"
 export { createRejectionRepository } from "./rejections"
+export { syncMaterialMovementWaits } from "./material-movement-waits"

@@ -4,7 +4,6 @@ import {
   nextShopFloorStageId,
   openProductionSessionForShopFloorItem,
   productionSessionDetailHref,
-  setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProductionCurrent,
@@ -26,10 +25,11 @@ describe("shop-floor workflow action labels", () => {
     expect(shopFloorRowIsProductionCurrent({ ...reopened, shopFloorStage: "operator_started" })).toBe(true)
     expect(shopFloorRowIsProductionCurrent({ ...reopened, shopFloorStage: "" })).toBe(true)
   })
-  it("skips Pre Setting only for CNC, including existing Pre Setting records", () => {
-    expect(nextShopFloorStageId("raw_material_at_machine", "cnc")).toBe("setting")
-    expect(nextShopFloorStageId("presetting", "cnc")).toBe("setting")
-    expect(nextShopFloorStageId("raw_material_at_machine", "conventional")).toBe("presetting")
+  it("uses the shared workflow, including existing Pre Setting records", () => {
+    expect(nextShopFloorStageId("raw_material_at_machine")).toBe("setting")
+    expect(nextShopFloorStageId("presetting")).toBe("setting")
+    expect(nextShopFloorStageId("tools_drawing")).toBe("setting")
+    expect(nextShopFloorStageId("setting")).toBe("quality_approval")
   })
   it("does not label an already-started machine row as ready to start", () => {
     expect(shopFloorNoPendingActionLabel("operator_started")).toBe("Machine already started");
@@ -43,13 +43,6 @@ describe("shop-floor workflow action labels", () => {
       shopFloorStage: "planned",
     })).toBe(true)
   })
-
-  it("shows each setup checklist point only in its assigned phase", () => {
-    expect(setupChecklistItemAppliesToPhase("Pre setting", "start")).toBe(true);
-    expect(setupChecklistItemAppliesToPhase("Pre setting", "end")).toBe(false);
-    expect(setupChecklistItemAppliesToPhase("Setting", "start")).toBe(false);
-    expect(setupChecklistItemAppliesToPhase("Setting", "end")).toBe(true);
-  });
 
   it("links a running item to its exact open production session", () => {
     const item = {

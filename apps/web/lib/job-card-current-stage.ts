@@ -2,13 +2,14 @@ type Row = Record<string, unknown>
 const text = (value: unknown) => String(value ?? "").trim()
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
 
-export function jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows }: {
+export function jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows, materialReady }: {
   analytics: Row
   sessions: Row[]
   setupTimings: Row[]
   selectedRoute: Row | undefined
   receipts: Row[]
   planRows: Row[]
+  materialReady?: boolean
 }) {
   return number(analytics.completionPercent) >= 100
     ? "Production complete"
@@ -22,9 +23,11 @@ export function jobCardCurrentStage({ analytics, sessions, setupTimings, selecte
             ? "Awaiting quality approval"
             : setupTimings.some((row) => row.settingStartedAt)
               ? "Setup in progress"
-              : !selectedRoute
+              : materialReady === false
+                ? "Awaiting raw material"
+                : !selectedRoute
                 ? "Part readiness"
-                : receipts.length === 0
+                : receipts.length === 0 && !materialReady
                   ? "Awaiting raw material"
                   : "Ready for setup"
 }

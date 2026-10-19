@@ -5,8 +5,11 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
+import { readDirectDashboardFacts } from "./dashboard-direct-facts"
+import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
+import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -15,6 +18,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 const repository = createDashboardPlanningRepository({ connectionString })
 const jobCards = createProductionShopFloorRepository({ connectionString })
+const dashboard = createDashboardReadModelRepository({ connectionString })
 let organizationId: string
 let itemId: string
 const suffix = randomUUID().slice(0, 8)
@@ -105,12 +109,210 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await dashboard.close()
   await jobCards.close()
   await repository.close()
   await pool.end()
 })
 
 describe("dashboard planning writes", () => {
+  test("keeps mixed return revision activities, new RM and original history separate", async () => {
+    const organizationId = (await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Rework Test') RETURNING id", [`REWORK-${suffix}`])).rows[0]!.id
+    await pool.query("INSERT INTO manufacturing.production_floors (organization_id, code, name) VALUES ($1, 'cnc', 'CNC-01')", [organizationId])
+    const part = `REWORK-${suffix}`
+    const original = `JC-REWORK-${suffix}`
+    const parent = await repository.upsertWorkOrder({ organizationId, itemUid: part,
+      jobCardNumber: original, workOrderNumber: original, orderedQuantity: 200,
+      sourcePayload: { jcNo: original, partCode: part, orderPcs: 200, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
+    await repository.upsertRouteOption({ organizationId, itemUid: part, productionFloorCode: "cnc",
+      routeCode: "1", sourcePayload: { partNo: part, optionNumber: "1", setupNo: "1", setupName: "TURN", machineType: "CNC", machineFamily: "HX" },
+      setups: [{ setupNumber: 1, sequence: 1, operationCode: "TURN" }] })
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 100, 'test', 'dispatchApprovals', $3)`,
+      [organizationId, parent.id, randomUUID()])
+    const before = (await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows
+    const receipt = { organizationId, productionFloorCode: "cnc" as const, originalJobCardNumber: original,
+      quantity: 20, replacementQuantity: 8, replacementRequiredRmKg: 2,
+      receivedOn: "2026-10-01", reason: "Finish correction" }
+    const saved = await repository.receiveRework(receipt)
+    const rework = saved.activities.find(row => row.disposition === "rework")!
+    const replacement = saved.activities.find(row => row.disposition === "replacement")!
+    expect(saved).toMatchObject({ rootJobCardNumber: original, revisionNumber: 1, receiptReference: `RET-${original}-R1` })
+    const references = await pool.query("SELECT source_payload->>'receiptReference' AS reference FROM manufacturing.work_orders WHERE id = ANY($1::uuid[])", [saved.activities.map(row => row.id)])
+    expect(references.rows.map(row => row.reference)).toEqual([saved.receiptReference, saved.receiptReference])
+    expect(rework.jobCardNumber).toBe(`${original} · Rev 1 · Rework`)
+    const read = (revisionReference = rework.jobCardNumber) => jobCards.readJobCardWorkspace({ organizationId, productionFloorCode: "cnc", jobCardNumber: original, revisionReference })
+    const waiting = await read()
+    expect(waiting.revisions.map(row => [row.revisionLabel, row.quantity])).toEqual([["Original", 200], ["Rev 1 · Replacement", 8], ["Rev 1 · Rework", 12]])
+    expect(waiting.jobCard.effectiveRouteSource).toBe("planner_required")
+    expect(waiting.setups).toEqual([])
+    await repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: "1" })
+    expect((await read()).jobCard).toMatchObject({ effectiveRouteSource: "planner_selected" })
+    expect((await read()).setups).toHaveLength(1)
+    await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 100, receivedOn: "2026-10-01",
+      receiptNumber: `OLD-RM-${suffix}`, payload: { jcNo: original, productionFloorCode: "cnc" } })
+    const fresh = await read(replacement.jobCardNumber)
+    expect(fresh.rawMaterialReceipts).toEqual([])
+    expect(fresh.analytics.material).toMatchObject({ requiredKg: 2, receivedKg: 0, receiptSufficient: false })
+    await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 2, receivedOn: "2026-10-02",
+      receiptNumber: `NEW-RM-${suffix}`, payload: { jcNo: replacement.jobCardNumber, productionFloorCode: "cnc" } })
+    expect((await read(replacement.jobCardNumber)).analytics.material).toMatchObject({ requiredKg: 2, receivedKg: 2, receiptSufficient: true })
+    expect((await read()).rawMaterialReceipts).toEqual([])
+    const history = await read("all")
+    expect(history.revisionHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ revisionLabel: "Original", eventType: "raw_material_received" }),
+      expect.objectContaining({ revisionLabel: "Rev 1 · Replacement", eventType: "raw_material_received" }),
+      expect.objectContaining({ eventType: "return_received", detail: `${saved.receiptReference} · ${receipt.reason}` }),
+    ]))
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, quantity, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 12, 'test', 'dispatchApprovals', $3)`,
+      [organizationId, rework.id, randomUUID()])
+    const repeated = await repository.receiveRework({ ...receipt, originalJobCardNumber: rework.jobCardNumber,
+      quantity: 1, replacementQuantity: 0 })
+    expect(repeated).toMatchObject({ rootJobCardNumber: original, revisionNumber: 2, receiptReference: `RET-${original}-R2` })
+    await expect(repository.receiveRework({ ...receipt, quantity: 86 })).rejects.toThrow("Only 85 pieces remain available to return, including the 5%")
+    const atLimit = await repository.receiveRework({ ...receipt, quantity: 85, replacementQuantity: 0 })
+    expect(atLimit).toMatchObject({ revisionNumber: 3, receiptReference: `RET-${original}-R3`, activities: [expect.objectContaining({ quantity: 85 })] })
+    const failed = atLimit.activities[0]!
+    await repository.upsertMachine({ organizationId, machineNumber: `RW-MC-${suffix}`, productionFloorCode: "cnc",
+      sourcePayload: { machineFamily: "HX", machineType: "CNC" } })
+    const routeInput = { organizationId, productionFloorCode: "cnc" as const, jobCardNumber: failed.jobCardNumber,
+      setups: [{ setupName: "Thread correction", machineFamily: "HX", cycleTimeSeconds: 30, setupTimeMinutes: 10,
+        stageWeight: 5, inspectionChecks: ["Thread gauge passes freely"] }] }
+    const privateRoute = await repository.createReworkRoute(routeInput)
+    const custom = await read(failed.jobCardNumber)
+    expect(custom.jobCard.effectiveRouteSource).toBe("planner_selected")
+    expect(custom.setups).toEqual([expect.objectContaining({ operationName: "Thread correction", cycleTimeSeconds: "30.00000000",
+      qualityParameters: [expect.objectContaining({ name: "Thread gauge passes freely" })] })])
+    expect((await read(original)).routes).not.toContainEqual(expect.objectContaining({ id: privateRoute.routeId }))
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    const control = buildLegacyDashboardSnapshot({ workbookName: "PostgreSQL", productionFloorCode: "cnc",
+      dataEntries: source.allDataEntries, productionEntries: [], routeSelections: source.routeSelections }).productionControl
+    expect(control).toMatchObject({ routeMasterRows: [expect.objectContaining({ optionNumber: "1" })],
+      cycleMasterRows: [], toolingMasterRows: [], qualityParameterMasterRows: [],
+      jobReworkRouteRows: [expect.objectContaining({ reworkJobCardNumber: failed.jobCardNumber })],
+      jobReworkInspectionRows: [expect.objectContaining({ parameterName: "Thread gauge passes freely" })] })
+    await expect(repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: privateRoute.routeCode })).rejects.toThrow("Route option was not found")
+    const setupId = String(custom.setups[0]!.id)
+    await pool.query(`INSERT INTO manufacturing.production_entries (organization_id, work_order_id, operation_setup_id,
+      route_option_id, production_date, quantity_good, quantity_rejected, source_system, source_table, source_id)
+      VALUES ($1,$2,$3,$4,'2026-10-02',0,2,'test','productionEntries',$5)`, [organizationId, failed.id, setupId, privateRoute.routeId, randomUUID()])
+    await expect(repository.createReworkRoute(routeInput)).rejects.toThrow("after execution starts")
+    const remade = await repository.rejectRework({ organizationId, productionFloorCode: "cnc", jobCardNumber: failed.jobCardNumber,
+      quantity: 85, rejectedOn: "2026-10-02", reason: "Thread cannot be recovered", replacementRequiredRmKg: 1 })
+    expect(remade).toMatchObject({ revisionNumber: 4, receiptReference: atLimit.receiptReference })
+    const rejected = await read(failed.jobCardNumber)
+    expect(rejected.jobCard).toMatchObject({ status: "Rejected", workOrderSource: { trialRejectedQuantity: 2, additionalBatchRejectedQuantity: 83 } })
+    expect(rejected.setups).toHaveLength(1)
+    const remake = await read(remade.replacementJobCardNumber)
+    expect(remake.jobCard.effectiveRouteSource).toBe("planner_required")
+    expect(remake.rawMaterialReceipts).toEqual([])
+    expect(remake.analytics.material).toMatchObject({ requiredKg: 1, receivedKg: 0, receiptSufficient: false })
+    expect((await read("all")).revisionHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "rework_rejected", quantity: 85 }),
+      expect.objectContaining({ eventType: "replacement_created", revisionReference: remade.replacementJobCardNumber }),
+    ]))
+    await expect(repository.rejectRework({ organizationId, productionFloorCode: "cnc", jobCardNumber: failed.jobCardNumber,
+      quantity: 85, rejectedOn: "2026-10-02", reason: "Duplicate", replacementRequiredRmKg: 1 })).rejects.toThrow("already closed")
+    expect((await pool.query("SELECT to_jsonb(work_order) AS row FROM manufacturing.work_orders work_order WHERE id = $1", [parent.id])).rows).toEqual(before)
+    await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
+      decision, source_system, source_table, source_id) VALUES ($1, $2, 'approved', 'test', 'dispatchApprovals', $3)`,
+      [organizationId, parent.id, randomUUID()])
+    await expect(repository.receiveRework({ ...receipt, quantity: 1, replacementQuantity: 0 })).rejects.toThrow("Record the actual dispatched quantity")
+  })
+
+  test("updates only Required RM on existing unit orders without queuing planning", async () => {
+    const jobCardNumber = `JC-REQUIRED-RM-${suffix}`
+    const otherUnitJobCard = `${jobCardNumber}-OTHER`
+    await pool.query(
+      `INSERT INTO manufacturing.work_orders (
+         organization_id, work_order_number, job_card_number, item_id,
+         ordered_quantity, completed_quantity, due_date, status,
+         source_system, source_table, source_id, source_payload
+       ) VALUES ($1, $2, $2, $3, 5000, 1000, '2026-11-01', 'Cancelled',
+         'test', 'work_order', $2, $4),
+         ($1, $5, $5, $3, 2000, 0, '2026-12-01', 'Open',
+         'test', 'work_order', $5, '{"productionFloorCode":"cnc","requiredRmKg":20}')`,
+      [organizationId, jobCardNumber, itemId, {
+        productionFloorCode: "conventional-02", requiredRmKg: 10,
+        selectedRouteCode: "ROUTE-A", rmShortAccepted: true, orderKg: 50,
+      }, otherUnitJobCard]
+    )
+    try {
+      const business = () => pool.query(`SELECT
+        to_jsonb(work_order) - ARRAY['source_payload', 'updated_at', 'updated_by_user_id', 'row_version'] AS order_fields,
+        source_payload - 'requiredRmKg' AS payload
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])
+      const planning = () => pool.query(`SELECT 'refresh' AS kind, to_jsonb(job) AS state
+        FROM derived.refresh_jobs job WHERE organization_id = $1
+        UNION ALL SELECT 'outbox', to_jsonb(event) FROM derived.outbox_events event
+        WHERE organization_id = $1 ORDER BY kind, state`, [organizationId])
+      const beforeBusiness = (await business()).rows
+      const beforePlanning = (await planning()).rows
+      const row = { jobCardNumber: jobCardNumber.toLowerCase(), requiredRmKg: 12.5 }
+      const input = {
+        organizationId, productionFloorCode: "conventional-02" as const,
+        rows: [row, row, { jobCardNumber: otherUnitJobCard, requiredRmKg: 99 },
+          { jobCardNumber: `${jobCardNumber}-MISSING`, requiredRmKg: 99 }],
+      }
+      expect(await repository.updateWorkOrderRequiredRm(input)).toEqual({ updated: 1, unchanged: 0, skipped: 2 })
+      const afterFirst = await pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])
+      expect(await repository.updateWorkOrderRequiredRm(input)).toEqual({ updated: 0, unchanged: 1, skipped: 2 })
+      expect((await pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 ORDER BY id`, [organizationId])).rows).toEqual(afterFirst.rows)
+      expect((await business()).rows).toEqual(beforeBusiness)
+      expect((await planning()).rows).toEqual(beforePlanning)
+      const requiredRm = await pool.query(`SELECT job_card_number, source_payload->'requiredRmKg' AS kg
+        FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])
+        ORDER BY job_card_number`, [organizationId, [jobCardNumber, otherUnitJobCard]])
+      expect(requiredRm.rows).toEqual([
+        { job_card_number: jobCardNumber, kg: 12.5 },
+        { job_card_number: otherUnitJobCard, kg: 20 },
+      ])
+      const audit = await pool.query(`SELECT before_state->'source_payload'->'requiredRmKg' AS before,
+        after_state->'source_payload'->'requiredRmKg' AS after FROM audit.events
+        WHERE event_type = 'manufacturing.work_order.required_rm_updated' AND target_id = (
+          SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2)`,
+        [organizationId, jobCardNumber])
+      expect(audit.rows).toEqual([{ before: 10, after: 12.5 }])
+    } finally {
+      await pool.query(`WITH removed_audit AS (DELETE FROM audit.events WHERE target_id IN (
+        SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])))
+        DELETE FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = ANY($2::text[])`,
+        [organizationId, [jobCardNumber, otherUnitJobCard]])
+    }
+  })
+
+  test("rejects conflicting Required RM rows atomically and reports unmatched Job Cards", async () => {
+    const jobCardNumber = `JC-REQUIRED-RM-CONFLICT-${suffix}`
+    await pool.query(`INSERT INTO manufacturing.work_orders (
+      organization_id, work_order_number, job_card_number, item_id, ordered_quantity,
+      source_system, source_table, source_id, source_payload)
+      VALUES ($1, $2, $2, $3, 100, 'test', 'work_order', $2,
+        '{"requiredRmKg":10,"productionFloorCode":"cnc"}')`, [organizationId, jobCardNumber, itemId])
+    try {
+      const snapshot = () => pool.query(`SELECT to_jsonb(work_order) AS state
+        FROM manufacturing.work_orders work_order WHERE organization_id = $1 AND job_card_number = $2`,
+        [organizationId, jobCardNumber])
+      const before = (await snapshot()).rows
+      const input = { organizationId, productionFloorCode: "cnc" as const }
+      await expect(repository.updateWorkOrderRequiredRm({ ...input, rows: [
+        { jobCardNumber, requiredRmKg: 20 },
+        { jobCardNumber: jobCardNumber.toLowerCase(), requiredRmKg: 30 },
+      ] })).rejects.toThrow(/Conflicting Required RM/)
+      await expect(repository.updateWorkOrderRequiredRm({ ...input, rows: [
+        { jobCardNumber: `${jobCardNumber}-MISSING`, requiredRmKg: 20 },
+      ] })).rejects.toThrow(/No saved Work Orders match/)
+      expect((await snapshot()).rows).toEqual(before)
+    } finally {
+      await pool.query(`WITH removed_audit AS (DELETE FROM audit.events WHERE target_id IN (
+        SELECT id FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2))
+        DELETE FROM manufacturing.work_orders WHERE organization_id = $1 AND job_card_number = $2`,
+        [organizationId, jobCardNumber])
+    }
+  })
+
   test("cancels an RM-received work order and releases its active setup", async () => {
     const jobCardNumber = `JC-CANCEL-${suffix}`
     const machineNumber = `MC-CANCEL-${suffix}`
@@ -132,6 +334,7 @@ describe("dashboard planning writes", () => {
       sourcePayload: {
         jcNo: jobCardNumber,
         orderKg: 100,
+        requiredRmKg: 100,
         orderPcs: 10_000,
         partCode: itemUid,
         productionFloorCode: "cnc",
@@ -285,6 +488,7 @@ describe("dashboard planning writes", () => {
       sourcePayload: {
         jcNo: jobCardNumber,
         orderKg: 100,
+        requiredRmKg: 100,
         orderPcs: 10_000,
         partCode: itemUid,
         productionFloorCode: "cnc",
@@ -318,6 +522,9 @@ describe("dashboard planning writes", () => {
       rejectionScope: "partial",
       usableKgAfter: 50,
     })
+    expect(await dashboard.rawMaterialInwardTemplateRows(organizationId, "cnc")).toContainEqual(
+      expect.objectContaining({ jcNo: jobCardNumber })
+    )
 
     await expect(repository.recordRawMaterialRejection({
       jobCardNumber,
@@ -1038,11 +1245,40 @@ describe("dashboard planning writes", () => {
     })
     await repository.selectRoute({ jobCardNumber: changedJobCard, organizationId,
       productionFloorCode: "cnc", routeCode: "OLD" })
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+         organization_id, work_order_id, route_option_id, operation_setup_id,
+         machine_id, stage, active, source_system, source_table, source_id
+       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
+         'operator_started', true, 'test', 'old-route-state', $2
+       FROM manufacturing.work_orders work_order
+       JOIN manufacturing.route_options route
+         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
+       JOIN manufacturing.operation_setups setup
+         ON setup.route_option_id = route.id AND setup.setup_number = 2
+       JOIN catalog.machines machine
+         ON machine.organization_id = $1 AND machine.machine_number = $3
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
+      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+    )
     await repository.recordRouteChange({
       jobCardNumber: changedJobCard, organizationId, newRouteCode: "NEW",
       productionFloorCode: "cnc",
       reason: "Use revised route", remainingSetups: [{ setupNumber: 2, plan: true, quantity: 20 }],
     })
+    const released = await pool.query<{ stage: string; active: boolean }>(
+      `SELECT state.stage, state.active FROM manufacturing.shop_floor_setup_state state
+       JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $2`,
+      [organizationId, changedJobCard]
+    )
+    expect(released.rows).toEqual([{ stage: "planned", active: false }])
+    const source = await readCanonicalDashboardSource(pool, organizationId)
+    expect(source.routeChanges.find((row) => row.jobCardNumber === changedJobCard)?.partCode).toBe(changedItem)
+    const live = await readDirectDashboardFacts(pool, organizationId, "cnc", [], ["routeChanges"])
+    expect(live.productionControl.plannerActionLog).toEqual(expect.arrayContaining([
+      expect.objectContaining({ jobCardNumber: changedJobCard, partCode: changedItem }),
+    ]))
     const saved = await repository.recordPlanOverride({
       assignmentMode: "add_parallel_machine", jobCardNumber: changedJobCard,
       organizationId, productionFloorCode: "cnc", reason: "Use new route setup", setupNumber: 2,
@@ -1069,20 +1305,9 @@ describe("dashboard planning writes", () => {
     expect(reference.rows[0]?.detail_setup_id).toBe(reference.rows[0]?.expected_setup_id)
 
     await pool.query(
-      `INSERT INTO manufacturing.shop_floor_setup_state (
-         organization_id, work_order_id, route_option_id, operation_setup_id,
-         machine_id, stage, active, source_system, source_table, source_id
-       ) SELECT $1, work_order.id, route.id, setup.id, machine.id,
-         'operator_started', true, 'test', 'old-route-state', $2
-       FROM manufacturing.work_orders work_order
-       JOIN manufacturing.route_options route
-         ON route.item_id = work_order.item_id AND route.route_code = 'OLD'
-       JOIN manufacturing.operation_setups setup
-         ON setup.route_option_id = route.id AND setup.setup_number = 2
-       JOIN catalog.machines machine
-         ON machine.organization_id = $1 AND machine.machine_number = $3
-       WHERE work_order.organization_id = $1 AND work_order.job_card_number = $4`,
-      [organizationId, `old-route-state:${suffix}`, staleMachine, changedJobCard]
+      `UPDATE manufacturing.shop_floor_setup_state SET stage = 'operator_started', active = true
+       WHERE organization_id = $1 AND source_id = $2`,
+      [organizationId, `old-route-state:${suffix}`]
     )
     await expect(repository.recordMachineConstraint({
       interruptedSetups: [{ jobCardNumber: changedJobCard, machineNumber: staleMachine, setupNumber: 2 }],

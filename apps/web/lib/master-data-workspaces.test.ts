@@ -32,6 +32,8 @@ describe("master data workspaces", () => {
     ])
     expect(operationalDataEntryTypes).toEqual([
       "work_order",
+      "rework_received",
+      "rework_rejected",
       "rm_inward",
       "software_raw",
     ])
@@ -80,6 +82,9 @@ describe("master data workspaces", () => {
         productionOutputRows: [output],
       })
     ).toEqual([output])
+    expect(operationalEntryRows("rework_received", {}, { workOrders: [
+      { isRevision: true, disposition: "replacement", orderPcs: 8, returnQuantity: 20, requiredRmKg: 2, rmPoNo: "NEW-RM" },
+    ] })).toMatchObject([{ quantity: 8, returnQuantity: 20, replacementQuantity: 8, replacementRequiredRmKg: 2, replacementRmPoNo: "NEW-RM" }])
   })
 
   it("preserves the existing identity when a master is opened for editing", () => {

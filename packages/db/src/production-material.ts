@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg"
-import { calculateRequiredRawMaterialKg } from "./job-card-workspace"
+import { readRequiredRawMaterialKg } from "./job-card-workspace"
 import { productionFloorCodeForRecord } from "./production-floors"
 
 export async function readJobCardMaterialBalances(
@@ -9,13 +9,12 @@ export async function readJobCardMaterialBalances(
   workOrderId?: string
 ) {
   const result = await client.query<{
-    id: string; jobCardNumber: string; partCode: string; orderedQuantity: string
-    blankWeight: string | null; receivedKg: string; rejectedKg: string
+    id: string; jobCardNumber: string; partCode: string
+    receivedKg: string; rejectedKg: string
     sourcePayload: Record<string, unknown>; rowVersion: string
     acceptanceRecorded: boolean
   }>(`SELECT work_order.id, work_order.job_card_number AS "jobCardNumber",
-      item.uid AS "partCode", work_order.ordered_quantity AS "orderedQuantity",
-      item.casting AS "blankWeight", work_order.source_payload AS "sourcePayload",
+      item.uid AS "partCode", work_order.source_payload AS "sourcePayload",
       work_order.row_version::text AS "rowVersion",
       EXISTS (SELECT 1 FROM audit.events event WHERE event.target_id = work_order.id
         AND event.organization_id = $1 AND event.event_type = 'production.rm_short.accepted'
@@ -31,19 +30,20 @@ export async function readJobCardMaterialBalances(
       AND ($2::uuid IS NULL OR work_order.id = $2)
     ORDER BY work_order.job_card_number`, [organizationId, workOrderId ?? null])
   return result.rows.filter(row => !floor || productionFloorCodeForRecord(row) === floor).map(row => {
-    const requiredKg = calculateRequiredRawMaterialKg(Number(row.orderedQuantity), Number(row.blankWeight))
+    const requiredKg = readRequiredRawMaterialKg(row.sourcePayload?.requiredRmKg)
     const receivedKg = Number(row.receivedKg)
     const rejectedKg = Number(row.rejectedKg)
     const usableKg = Math.max(receivedKg - rejectedKg, 0)
     const pendingKg = requiredKg === null ? null : Math.max(requiredKg - usableKg, 0)
+    const receiptSufficient = requiredKg !== null && usableKg + 0.000001 >= requiredKg * 0.95
     const acceptance = row.sourcePayload?.rmShortAcceptance
     const accepted = typeof acceptance === "object" && acceptance !== null && !Array.isArray(acceptance)
       ? acceptance as Record<string, unknown> : null
     const shortAccepted = row.acceptanceRecorded && accepted !== null && requiredKg !== null
       && Number(accepted.requiredKg) === requiredKg && usableKg >= Number(accepted.usableKg)
-    return { id: row.id, jobCardNumber: row.jobCardNumber, partCode: row.partCode,
+    return { id: row.id, jobCardNumber: row.jobCardNumber, partCode: row.partCode, isRework: row.sourcePayload?.isRework === true,
       rowVersion: Number(row.rowVersion), requiredKg, receivedKg, rejectedKg, usableKg,
-      pendingKg, shortAccepted, acceptance: shortAccepted ? accepted : null }
+      pendingKg, receiptSufficient, shortAccepted, acceptance: shortAccepted ? accepted : null }
   })
 }
 

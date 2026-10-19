@@ -103,7 +103,7 @@ export async function readDirectDashboardFacts(
        source.entry_type, source.source_kind, source.source_group,
        source.source_payload || COALESCE(jsonb_strip_nulls(jsonb_build_object(
          'jobCard', COALESCE(session.job_card_number_snapshot, work_order.job_card_number),
-         'partCode', COALESCE(session.part_code_snapshot, item.uid),
+         'partCode', COALESCE(session.part_code_snapshot, item.uid, history_item.uid),
          'optionNumber', COALESCE(session.option_number_snapshot, route.route_code),
          'setupNo', COALESCE(session.setup_number_snapshot, setup.setup_number::text),
          'machine', session.machine_number_snapshot, 'quantityGood', production.quantity_good
@@ -129,6 +129,21 @@ export async function readDirectDashboardFacts(
        ON source.source_group = 'routeChanges'
        AND route_change.organization_id = $1 AND route_change.source_id = source.source_id
        AND route_change.reversed_at IS NULL
+     LEFT JOIN manufacturing.planner_priority_events history_priority
+       ON source.source_group = 'plannerPriorities'
+       AND history_priority.organization_id = $1 AND history_priority.source_id = source.source_id
+       AND history_priority.reversed_at IS NULL
+     LEFT JOIN manufacturing.plan_override_events history_override
+       ON source.source_group = 'planOverrides'
+       AND history_override.organization_id = $1 AND history_override.source_id = source.source_id
+       AND history_override.reversed_at IS NULL
+     LEFT JOIN manufacturing.work_orders history_work_order
+       ON history_work_order.id = COALESCE(route_change.work_order_id,
+         (SELECT detail.work_order_id
+          FROM manufacturing.planner_priority_event_details detail
+          WHERE detail.planner_priority_event_id = history_priority.id
+          ORDER BY detail.sequence, detail.id LIMIT 1), history_override.work_order_id)
+     LEFT JOIN catalog.items history_item ON history_item.id = history_work_order.item_id
      LEFT JOIN LATERAL (
        SELECT previous.to_route_option_id
        FROM manufacturing.route_change_events previous

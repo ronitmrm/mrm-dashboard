@@ -456,15 +456,10 @@ export async function executePostgresOperationalEntry(
           )
         }
         for (const phase of plan.phases) {
-          const attribution = phase.input.phase === "start"
-            ? {
-                startedBy: settingMachinist?.name,
-                startedByEmployeeCode: settingMachinist?.code || null,
-              }
-            : {
-                endedBy: settingMachinist?.name,
-                endedByEmployeeCode: settingMachinist?.code || null,
-              }
+          const attribution = {
+            endedBy: settingMachinist?.name,
+            endedByEmployeeCode: settingMachinist?.code || null,
+          }
           const settingInput = {
             ...phase.input,
             completedBy: settingMachinist?.name,
@@ -479,7 +474,9 @@ export async function executePostgresOperationalEntry(
         if (!result) {
           throw new OperationalEntryError(
             400,
-            "The setup checklist does not contain any recorded values."
+            payload.phase === "start"
+              ? "Use the Setting checklist. Pre Setting is no longer a separate workflow step."
+              : "The setup checklist does not contain any recorded values."
           )
         }
         return result

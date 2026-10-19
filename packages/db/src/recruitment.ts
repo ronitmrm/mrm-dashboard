@@ -199,6 +199,7 @@ export type RecruitmentOfferOutcomeRow = {
   applicationId: string
   candidateId: string
   candidateName: string
+  candidatePhone: string
   jobId: string
   jobNumber: string
   jobTitle: string
@@ -315,6 +316,7 @@ export type RecruitmentJobWorkspace = {
 }
 
 export type RecruitmentCandidateEventRow = {
+  interviewHref?: string | null
   candidateId: string
   candidateName: string
   candidatePhone: string
@@ -1712,22 +1714,94 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         notes: string | null
         occurred_at: string
         title: string
+        interview_href: string | null
       }>(
         `
+          WITH interview_history AS (
+            SELECT interview.*, application.candidate_id, application.job_post_id
+            FROM recruitment.interviews interview
+            JOIN recruitment.applications application
+              ON application.id = interview.application_id
+              AND application.organization_id = interview.organization_id
+            WHERE interview.organization_id = $1
+              AND ($2::uuid IS NULL OR application.candidate_id = $2::uuid)
+          ), interview_events AS (
+            SELECT interview.id::text || ':schedule' AS id,
+              interview.candidate_id, interview.job_post_id,
+              'Interview Scheduled'::text AS event_type,
+              interview.round_name AS title,
+              'Scheduled for ' || to_char(COALESCE((SELECT scheduling.metadata->>'previousScheduledAt'
+                FROM audit.events scheduling WHERE scheduling.organization_id = $1
+                  AND scheduling.event_type = 'recruitment.interview.scheduled'
+                  AND scheduling.metadata->>'interviewId' = interview.id::text
+                ORDER BY scheduling.occurred_at, scheduling.id LIMIT 1), interview.scheduled_at::text)::timestamptz AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH24:MI') || ' IST' AS notes,
+              interview.created_at AS occurred_at,
+              '/hr/jobs/' || interview.job_post_id::text || '#interview-' || interview.id::text AS interview_href
+            FROM interview_history interview
+            WHERE interview.scheduled_at IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM audit.events scheduling
+              WHERE scheduling.organization_id = $1
+                AND scheduling.event_type = 'recruitment.interview.scheduled'
+                AND scheduling.metadata->>'interviewId' = interview.id::text
+                AND scheduling.metadata->>'rescheduled' = 'false'
+            )
+            UNION ALL
+            SELECT scheduling.id::text, interview.candidate_id, interview.job_post_id,
+              CASE WHEN scheduling.metadata->>'rescheduled' = 'true'
+                THEN 'Interview Rescheduled' ELSE 'Interview Scheduled' END,
+              interview.round_name,
+              'Scheduled for ' || to_char((scheduling.metadata->>'scheduledAt')::timestamptz AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH24:MI') || ' IST',
+              scheduling.occurred_at,
+              '/hr/jobs/' || interview.job_post_id::text || '#interview-' || interview.id::text
+            FROM interview_history interview
+            JOIN audit.events scheduling ON scheduling.organization_id = interview.organization_id
+              AND scheduling.event_type = 'recruitment.interview.scheduled'
+              AND scheduling.metadata->>'interviewId' = interview.id::text
+              AND (scheduling.metadata->>'previousScheduledAt')::timestamptz
+                IS DISTINCT FROM (scheduling.metadata->>'scheduledAt')::timestamptz
+            UNION ALL
+            SELECT interview.id::text || ':outcome', interview.candidate_id, interview.job_post_id,
+              'Interview Outcome', interview.round_name || ' — ' || interview.status,
+              CASE WHEN interview.interviewer_name IS NOT NULL
+                THEN 'Interviewer: ' || interview.interviewer_name ELSE NULL END,
+              COALESCE((SELECT min(recorded.occurred_at) FROM audit.events recorded
+                WHERE recorded.organization_id = $1 AND recorded.target_id = interview.id
+                  AND recorded.event_type = 'recruitment.interview.recorded'), interview.updated_at),
+              '/hr/jobs/' || interview.job_post_id::text || '#interview-' || interview.id::text
+            FROM interview_history interview WHERE interview.status <> 'Scheduled'
+            UNION ALL
+            SELECT correction.id::text, interview.candidate_id, interview.job_post_id,
+              'Interview Updated', interview.round_name,
+              CASE WHEN correction.before_state->>'scheduled_at' IS DISTINCT FROM correction.after_state->>'scheduled_at'
+                THEN 'Rescheduled for ' || to_char((correction.after_state->>'scheduled_at')::timestamptz AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH24:MI') || ' IST'
+                ELSE 'Outcome updated: ' || (correction.after_state->>'status') END,
+              correction.occurred_at,
+              '/hr/jobs/' || interview.job_post_id::text || '#interview-' || interview.id::text
+            FROM interview_history interview
+            JOIN audit.events correction ON correction.organization_id = interview.organization_id
+              AND correction.target_schema = 'recruitment' AND correction.target_table = 'interviews'
+              AND correction.target_id = interview.id AND correction.event_type = 'recruitment.interview.updated'
+            WHERE correction.before_state->>'scheduled_at' IS DISTINCT FROM correction.after_state->>'scheduled_at'
+               OR correction.before_state->>'status' IS DISTINCT FROM correction.after_state->>'status'
+          ), history AS (
+            SELECT event.id::text, event.candidate_id, event.job_post_id, event.event_type,
+              event.title, event.notes, event.occurred_at, NULL::text AS interview_href
+            FROM recruitment.candidate_events event WHERE event.organization_id = $1
+              AND ($2::uuid IS NULL OR event.candidate_id = $2::uuid)
+            UNION ALL SELECT * FROM interview_events
+          )
           SELECT event.id, event.candidate_id,
             candidate.name AS candidate_name,
             candidate.phone AS candidate_phone,
             department.name AS department,
             event.event_type, event.title, event.notes,
-            event.occurred_at::text, job.job_number
-          FROM recruitment.candidate_events event
+            event.occurred_at::text, job.job_number, event.interview_href
+          FROM history event
           JOIN recruitment.candidates candidate
             ON candidate.id = event.candidate_id
           LEFT JOIN recruitment.departments department
             ON department.id = candidate.preferred_department_id
           LEFT JOIN recruitment.job_posts job ON job.id = event.job_post_id
-          WHERE event.organization_id = $1
-            AND ($2::uuid IS NULL OR event.candidate_id = $2::uuid)
           ORDER BY event.occurred_at DESC, event.id DESC
           LIMIT 1000
         `,
@@ -1744,6 +1818,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         notes: row.notes,
         occurredAt: row.occurred_at,
         title: row.title,
+        interviewHref: row.interview_href ?? null,
       }))
     },
 
@@ -3349,6 +3424,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         application_id: string
         candidate_id: string
         candidate_name: string
+        candidate_phone: string
         job_id: string
         job_number: string
         job_title: string
@@ -3363,7 +3439,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         willing_to_join: boolean | null
       }>(
         `SELECT application.id AS application_id, candidate.id AS candidate_id,
-           candidate.name AS candidate_name, job.id AS job_id,
+           candidate.name AS candidate_name, candidate.phone AS candidate_phone, job.id AS job_id,
            job.job_number, job.title AS job_title,
            offer.id AS offer_id, offer.reference_number AS offer_reference,
            offer.issued_on::text AS offer_issued_on,
@@ -3403,6 +3479,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         applicationId: row.application_id,
         candidateId: row.candidate_id,
         candidateName: row.candidate_name,
+        candidatePhone: row.candidate_phone,
         jobId: row.job_id,
         jobNumber: row.job_number,
         jobTitle: row.job_title,
@@ -5099,7 +5176,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           ]
         )
         const updatedApplication = result.rows[0]!
-        await client.query(
+        const scheduledInterview = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.interviews (
               organization_id, application_id, round_name, status,
@@ -5118,6 +5195,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
               row_version = recruitment.interviews.row_version + 1
+            RETURNING id
           `,
           [
             input.organizationId,
@@ -5131,6 +5209,21 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.scheduled",
+          metadata: {
+            interviewId: scheduledInterview.rows[0]?.id,
+            scheduledAt: interviewAt,
+            previousScheduledAt:
+              historyResult.rows.find(
+                (row) =>
+                  canonicalRecruitmentInterviewRound(row.round_name) ===
+                  nextRound.name
+              )?.scheduled_at ?? null,
+            rescheduled: historyResult.rows.some(
+              (row) =>
+                canonicalRecruitmentInterviewRound(row.round_name) ===
+                nextRound.name
+            ),
+          },
           targetId: updatedApplication.id,
           targetTable: "applications",
         })

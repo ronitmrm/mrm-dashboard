@@ -34,7 +34,7 @@ describe("scoped operational entry access", () => {
       "cnc"
     )
     expect(view.dataEntry.rows).toEqual([selected])
-    expect(view.productionControl).toEqual({ rmInwardRows: [selected] })
+    expect(view.productionControl).toEqual({ rmInwardRows: [selected], jobCardActivityOptions: [{ jcNo: "private" }] })
     expect(view).not.toHaveProperty("employeeMaster")
   })
 

@@ -148,8 +148,10 @@ export function MasterDataCsvImportButton({
 export function MasterDataCsvClientImportButton({
   onFile,
   disabled = false,
+  label = "Upload CSV",
 }: {
   disabled?: boolean
+  label?: string
   onFile: (file: File) => Promise<void>
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -196,7 +198,7 @@ export function MasterDataCsvClientImportButton({
         onClick={() => inputRef.current?.click()}
       >
         <Upload className="size-4" />
-        {pending ? "Importing CSV..." : "Upload CSV"}
+        {pending ? "Importing CSV..." : label}
       </Button>
     </>
   )

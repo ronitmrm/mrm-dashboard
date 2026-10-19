@@ -14,6 +14,8 @@ test("counts every Job Card in one summary bucket, including readiness and parti
       rows={[
         { jcNo: "AWAITING" },
         { jcNo: "READY", rmStatus: "Received" },
+        { jcNo: "READY · Rev 1 · Rework", rootJobCardNumber: "READY", revisionNumber: 1, orderPcs: 12, rmStatus: "Received" },
+        { jcNo: "READY · Rev 1 · Replacement", rootJobCardNumber: "READY", revisionNumber: 1, orderPcs: 8, rmStatus: "Waiting" },
         { jcNo: "READINESS", rmStatus: "Received", routeStatus: "Missing route" },
         { jcNo: "ACTIVE", rawRows: 1 },
         { jcNo: "PARTIAL", dispatchStatus: "Partially dispatched" },
@@ -24,10 +26,11 @@ test("counts every Job Card in one summary bucket, including readiness and parti
   )
   const summary = markup.match(/data-slot="metric-summary"[\s\S]*?<\/section>/)?.[0].replace(/<[^>]*>/g, "")
   expect(summary).toContain("Job Cards8")
-  expect(summary).toContain("Awaiting RM1")
-  expect(summary).toContain("In Production4")
+  expect(summary).toContain("Awaiting RM2")
+  expect(summary).toContain("In Production3")
   expect(summary).toContain("Production Complete1")
   expect(summary).toContain("Dispatched2")
+  expect(markup).toContain("Rev 1 · 2 revisions")
 })
 
 test("shows the saved finish and changing current forecast for the matching Job Card and part", () => {

@@ -2,6 +2,34 @@ import { describe, expect, test } from "vitest"
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
 
+test("rework waits for manual sole-route selection while normal work auto-selects", () => {
+  const createdAt = "2026-10-19T04:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const, productionEntries: [],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1", partCode: "PART", orderPcs: 100, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+      entry("work_order", { jcNo: "P1/RW1", partCode: "PART", orderPcs: 20, isRework: true, isRevision: true, revisionNumber: 1, rootJobCardNumber: "P1", originalJobCardNumber: "P1", receivedOn: "2026-10-19" }),
+      entry("route", { partNo: "PART", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
+      entry("cycle", { partNo: "PART", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "PART", optionNumber: "1", setupNo: "1" }),
+      entry("route", { partNo: "PART", optionNumber: "RW-PRIVATE", setupNo: "1", machineType: "CNC", machineFamily: "HX", reworkJobCardNumber: "ANOTHER-REVISION" }),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
+    ],
+  }
+  const control = buildLegacyDashboardSnapshot(input).productionControl
+  expect(control).toMatchObject({ summary: { workOrders: 1, totalOrderQty: 100 } })
+  expect(control.workOrders.find(row => row.jcNo === "P1")).toMatchObject({ optionNumber: "1", optionSource: "Auto single route" })
+  expect(control.workOrders.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionSource: "Planner required", materialPlanningReady: true })
+  expect(control).toMatchObject({ masterGaps: [expect.objectContaining({ jcNo: "P1/RW1", routeSelectionMissing: true })] })
+  expect(control.machinePlanDetailRows.some(row => row.jcNo === "P1/RW1")).toBe(false)
+  expect("routeMasterRows" in control && control.routeMasterRows).toHaveLength(1)
+  expect(control.workOrders.find(row => row.jcNo === "P1/RW1")?.availableOptions).toHaveLength(1)
+  const planned = buildLegacyDashboardSnapshot({ ...input, routeSelections: [{ jobCardNumber: "P1/RW1", routeCode: "1", createdAt }] }).productionControl
+  expect(planned).toMatchObject({ masterGaps: [] })
+  expect(planned.machinePlanDetailRows.find(row => row.jcNo === "P1/RW1")).toMatchObject({ orderPcs: 20, optionNumber: "1" })
+})
+
 test("reopened setup retains output without a missing-start exception or machine ownership", () => {
   const createdAt = "2026-10-08T17:53:50Z"
   const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
@@ -518,12 +546,18 @@ describe("legacy dashboard route selections", () => {
           jcNo: "JC-MULTI-RM",
           rmInwardDate: "2026-09-18",
           rmInwardKg: 40,
+          rmLocation: "Rack A3",
         }, "2026-09-18T09:00:00.000Z"),
         entry("rm_inward", {
           jcNo: "JC-MULTI-RM",
           rmInwardDate: "2026-09-20",
           rmInwardKg: 60,
+          rmLocation: "Rack B2",
         }, "2026-09-20T09:00:00.000Z"),
+        entry("route", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "RM-FAMILY" }, "2026-09-18T08:00:00.000Z"),
+        entry("cycle", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1", cycleTime: 60 }, "2026-09-18T08:00:00.000Z"),
+        entry("tooling", { partNo: "PART-MULTI-RM", optionNumber: "1", setupNo: "1" }, "2026-09-18T08:00:00.000Z"),
+        entry("machine_master", { machineNo: "CNC-RM", machineType: "CNC", machineFamily: "RM-FAMILY", status: "Active" }, "2026-09-18T08:00:00.000Z"),
       ],
     })
 
@@ -532,8 +566,10 @@ describe("legacy dashboard route selections", () => {
         jcNo: "JC-MULTI-RM",
         rmInwardDate: "2026-09-18",
         rmInwardKg: 100,
+        rmLocation: "Rack A3 · Rack B2",
         rmStatus: "Received",
       }],
+      machinePlanDetailRows: [expect.objectContaining({ jcNo: "JC-MULTI-RM", rmLocation: "Rack A3 · Rack B2" })],
     })
   })
 

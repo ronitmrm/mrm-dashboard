@@ -1,6 +1,8 @@
 import { assertToolingAvailable } from "./tooling-availability"
+import { readJobCardRevisions, readJobCardRevisionHistory } from "./job-card-revisions"
 import { randomUUID } from "node:crypto"
 import { materialWaitPending, readJobCardMaterialBalances } from "./production-material"
+import { readMaterialMovementWaits } from "./material-movement-waits"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
 import type { PoolClient } from "pg"
@@ -41,7 +43,7 @@ import {
   buildMaterialYield,
   buildPlannerMovementRecord,
   buildSetupTiming,
-  calculateRequiredRawMaterialKg,
+  readRequiredRawMaterialKg,
   normalizeDeliveryTargets,
   normalizePlannerMovementActionType,
 } from "./job-card-workspace"
@@ -410,7 +412,7 @@ async function writeRawMaterialReceipt(
     "Job card"
   )
   if (!(input.quantityKg > 0)) {
-    throw new Error("Raw-material receipt quantity must be positive.")
+    throw new ShopFloorConflictError("Raw-material receipt quantity must be positive.")
   }
 
   const workOrderResult = await client.query<RawMaterialWorkOrder>(
@@ -432,27 +434,27 @@ async function writeRawMaterialReceipt(
   )
   const workOrder = workOrderResult.rows[0]
   if (!workOrder) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
     )
   }
-  if (workOrder.status === "Cancelled") {
-    throw new Error(
-      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is cancelled.`
+  if (["Cancelled", "Rejected"].includes(workOrder.status)) {
+    throw new ShopFloorConflictError(
+      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" is ${workOrder.status.toLowerCase()}.`
     )
   }
   if (input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
   }
   if (!workOrder.rm_po_number) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" has no RM PO Number.`
     )
   }
 
   const requestedRmPo = payloadText(input.payload, "rmPoNo")
   if (requestedRmPo && !sameIdentifier(requestedRmPo, workOrder.rm_po_number)) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: RM PO Number "${requestedRmPo}" does not match Work Order "${workOrder.rm_po_number}" for Job Card "${workOrder.job_card_number}".`
     )
   }
@@ -461,7 +463,7 @@ async function writeRawMaterialReceipt(
     requestedPartCode &&
     !sameIdentifier(requestedPartCode, workOrder.part_code)
   ) {
-    throw new Error(
+    throw new ShopFloorConflictError(
       `RM receipt rejected: Part Code "${requestedPartCode}" does not match Work Order "${workOrder.part_code}" for Job Card "${workOrder.job_card_number}".`
     )
   }
@@ -499,13 +501,13 @@ async function writeRawMaterialReceipt(
     (!sameIdentifier(existing.rows[0].receipt_number, receiptNumber) ||
       !sameIdentifier(existing.rows[0].job_card_number, workOrder.job_card_number))
   ) {
-    throw new Error("RM receipt source identity already belongs to another receipt.")
+    throw new ShopFloorConflictError("RM receipt source identity already belongs to another receipt.")
   }
   if (existing.rows[0] && input.requiredProductionFloorCode && productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode) {
     throw new ProductionUnitAccessError("This raw-material receipt belongs to another Production Unit.")
   }
   if (existing.rows[0]?.reversed_at) {
-    throw new Error("This RM Inward row was deleted. Correct the row before uploading it again.")
+    throw new ShopFloorConflictError("This RM Inward row was deleted. Correct the row before uploading it again.")
   }
   return existing.rows[0] ?? (
     await client.query<{ id: string }>(
@@ -568,7 +570,7 @@ async function workOrderContext(
         JOIN manufacturing.production_floors floor
           ON floor.id = route.production_floor_id
         WHERE route.organization_id = work_order.organization_id
-          AND route.item_id = work_order.item_id AND route.active
+          AND route.item_id = work_order.item_id AND route.active AND route.work_order_id IS NULL
           AND floor.code = $3
           AND (lower(route.route_code) = lower(imported.route_code)
             OR lower(COALESCE(route.legacy_option_number, '')) = lower(imported.route_code))
@@ -590,9 +592,10 @@ async function workOrderContext(
           ON floor.id = route.production_floor_id
         WHERE route.organization_id = work_order.organization_id
           AND route.item_id = work_order.item_id
-          AND route.active
+          AND route.active AND route.work_order_id IS NULL
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
+        AND COALESCE(work_order.source_payload->>'isRevision', 'false') <> 'true'
         AND imported.route_code IS NULL
         AND route_change.to_route_option_id IS NULL
       WHERE work_order.organization_id = $1
@@ -606,8 +609,11 @@ async function workOrderContext(
     ]
   )
   if (!result.rows[0]) throw new Error("Production work order was not found.")
-  if (result.rows[0].status === "Cancelled") {
-    throw new Error("Cancelled Work Order lines cannot receive production activity.")
+  if (["Cancelled", "Rejected"].includes(result.rows[0].status)) {
+    throw new Error(`${result.rows[0].status} Work Order lines cannot receive production activity.`)
+  }
+  if (objectRecord(result.rows[0].source_payload).isRevision === true && !result.rows[0].route_option_id) {
+    throw new Error("Select the rework route in Part Readiness before recording production activity.")
   }
   return result.rows[0]
 }
@@ -772,7 +778,8 @@ async function requiredActiveEmployeeIdFor(
         )
         SELECT $1, employee_code, employee_name, department_name,
           designation_name, true, joining_date, last_working_date, $4, $4,
-          'mrm-dashboard', 'recruitment.posts', id::text,
+          -- Posts are reused for replacements; retain a distinct source identity per worker.
+          'mrm-dashboard', 'recruitment.posts', id::text || ':employee:' || lower(employee_code),
           jsonb_build_object(
             'postId', id,
             'departmentCode', department_code,
@@ -1049,6 +1056,10 @@ async function lockProductionSessionMachine(
   client: PoolClient,
   input: { organizationId: string; sessionId: string }
 ) {
+  const workOrder = await client.query<{ status: string }>(`SELECT work_order.status
+    FROM manufacturing.work_orders work_order JOIN manufacturing.production_sessions session ON session.work_order_id = work_order.id
+    WHERE session.id = $1 AND session.organization_id = $2 FOR UPDATE OF work_order`, [input.sessionId, input.organizationId])
+  if (workOrder.rows[0]?.status === "Rejected") throw new ShopFloorConflictError("Failed rework is closed. Its trial records are retained with the replacement revision.")
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(machine_id::text))
      FROM manufacturing.production_sessions
@@ -1060,11 +1071,12 @@ async function lockProductionSessionMachine(
 async function assertMaterialCompletion(client: PoolClient, organizationId: string, workOrderId: string) {
   await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE", [workOrderId, organizationId])
   const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
+  if (material?.isRework) return
   if (!material || material.requiredKg === null) {
-    throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before marking Item Complete.")
+    throw new ShopFloorConflictError("Enter Required RM (kg) in the Work Order before marking Item Complete.")
   }
-  if (Number(material.pendingKg) > 0.000001 && !material.shortAccepted) {
-    throw new ShopFloorConflictError(`RM is pending for ${material.jobCardNumber}. Receive the balance or ask the planner to Accept short RM before marking any setup Item Complete.`)
+  if (!material.receiptSufficient && !material.shortAccepted) {
+    throw new ShopFloorConflictError(`RM is pending for ${material.jobCardNumber}. Usable RM must reach 95% of the requirement, or the planner must Accept short RM before marking any setup Item Complete.`)
   }
 }
 
@@ -1282,6 +1294,90 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     upsertRawMaterialReceipts,
+
+    async updateRawMaterialLocations(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      rows: { jobCardNumber: string; receivedOn: string; location: string }[]
+    }) {
+      const rows = input.rows.filter(row => row.location.trim()).map((row, index) => ({
+        request_index: index + 1,
+        job_card: requiredText(row.jobCardNumber, "Job Card").toLowerCase(),
+        received_on: row.receivedOn,
+        location: row.location.trim(),
+      }))
+      if (!rows.length) throw new ShopFloorConflictError("No RM locations entered. Fill RM Location in the downloaded receipt CSV.")
+      const locations = new Map<string, string>()
+      for (const row of rows) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(row.received_on)) {
+          throw new ShopFloorConflictError("Location update requires the original receipt date.")
+        }
+        const key = JSON.stringify([row.job_card, row.received_on])
+        if (locations.has(key) && locations.get(key) !== row.location) {
+          throw new ShopFloorConflictError(`Conflicting RM locations for Job Card "${row.job_card}" on ${row.received_on}. No locations saved.`)
+        }
+        locations.set(key, row.location)
+      }
+      return transaction(pool, async client => {
+        const matched = await client.query<{
+          id: string
+          request_index: number
+          location: string
+          current_location: string | null
+          before_state: Record<string, unknown>
+        }>(
+          `SELECT receipt.id, requested.request_index,
+             requested.location, receipt.source_payload->>'rmLocation' AS current_location,
+             to_jsonb(receipt) AS before_state
+           FROM jsonb_to_recordset($2::jsonb) AS requested(
+             request_index integer, job_card text, received_on date, location text
+           )
+           JOIN manufacturing.raw_material_receipts receipt
+             ON receipt.organization_id = $1
+             AND lower(receipt.job_card_number) = requested.job_card
+             AND receipt.received_on = requested.received_on
+             AND receipt.reversed_at IS NULL
+             AND derived.dashboard_production_floor_code(receipt.source_payload) = $3
+           ORDER BY receipt.id
+           FOR UPDATE OF receipt`,
+          [input.organizationId, JSON.stringify(rows), input.productionFloorCode]
+        )
+        const matchedIndexes = new Set(matched.rows.map(row => row.request_index))
+        const missing = rows.findIndex((_row, index) => !matchedIndexes.has(index + 1))
+        if (missing !== -1) {
+          const row = rows[missing]!
+          throw new ShopFloorConflictError(`No saved receipt matches Job Card "${row.job_card}" on ${row.received_on} in this Production Unit. Keep the original Job Card and date. No locations saved.`)
+        }
+        const changes = [...new Map(matched.rows
+          .filter(row => (row.current_location ?? "") !== row.location)
+          .map(row => [row.id, row])).values()]
+        if (!changes.length) return { updated: 0 }
+        const updated = await client.query<{ id: string; after_state: Record<string, unknown> }>(
+          `UPDATE manufacturing.raw_material_receipts receipt
+           SET source_payload = receipt.source_payload || jsonb_build_object('rmLocation', change.location),
+             updated_at = now(), updated_by_user_id = $3, row_version = receipt.row_version + 1
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, location text)
+           WHERE receipt.organization_id = $1 AND receipt.id = change.id
+           RETURNING receipt.id, to_jsonb(receipt) AS after_state`,
+          [input.organizationId, JSON.stringify(changes.map(row => ({ id: row.id, location: row.location }))), input.actorUserId ?? null]
+        )
+        const beforeById = new Map(changes.map(row => [row.id, row.before_state]))
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
+           ) SELECT $1, 'raw_material_receipt.location_updated', 'manufacturing',
+             'raw_material_receipts', change.id, $3, 'RM location CSV update',
+             change.before_state, change.after_state, 'mrm-dashboard', 'rm_location', change.id::text
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, before_state jsonb, after_state jsonb)`,
+          [input.organizationId, JSON.stringify(updated.rows.map(row => ({
+            id: row.id, before_state: beforeById.get(row.id), after_state: row.after_state,
+          }))), input.actorUserId ?? null]
+        )
+        return { updated: updated.rows.length }
+      })
+    },
 
     async reverseRawMaterialReceipt(input: {
       actorUserId?: string | null
@@ -2491,9 +2587,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (current.status !== "open") {
           throw new Error("Production session is already closed.")
         }
-        if (closedByRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can close production sessions only in CNC.")
-        }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
@@ -2768,9 +2861,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!current || Number(current.row_version) !== input.expectedRowVersion) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start count.")
         }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
-        }
         if (current.measurement_method !== "counter") {
           throw new Error("Start count can be corrected only for a machine-counter session.")
         }
@@ -2858,9 +2948,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const current = result.rows[0]
         if (!current || Number(current.row_version) !== input.expectedRowVersion) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting the start.")
-        }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
         }
         if (current.ended_at && startedAt > current.ended_at) {
           throw new Error("Session start cannot be after session end.")
@@ -3012,9 +3099,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         if (input.downtimeCorrection && input.expectedRowVersion !== Number(current.row_version)) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting downtime.")
-        }
-        if (enteredRole === "quality" && current.production_floor_code !== "cnc") {
-          throw new Error("Quality can correct production sessions only in CNC.")
         }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
@@ -3340,9 +3424,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const workOrder = workOrderResult.rows[0]
         if (!workOrder) throw new Error("Job card was not found.")
-        if (workOrder.status === "Cancelled") {
+        if (["Cancelled", "Rejected"].includes(workOrder.status)) {
           throw new Error(
-            "Cancelled Work Order lines cannot change delivery targets."
+            `${workOrder.status} Work Order lines cannot change delivery targets.`
           )
         }
 
@@ -3379,9 +3463,18 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       jobCardNumber: string
       organizationId: string
       productionFloorCode?: string
+      revisionReference?: string
     }) {
-      const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const revisions = await readJobCardRevisions(pool, { ...input,
+        jobCardNumber: requiredText(input.jobCardNumber, "Job card"), productionFloorCode: floorCode })
+      const selectedReference = input.revisionReference === "all" ? input.jobCardNumber
+        : input.revisionReference || input.jobCardNumber
+      const revision = revisions.find(row => row.jobCardNumber.toLowerCase() === selectedReference.toLowerCase())
+      if (!revision) throw new Error("Job Card revision was not found in this Production Unit.")
+      const jobCardNumber = revision.jobCardNumber
+      const revisionHistory = input.revisionReference === "all"
+        ? await readJobCardRevisionHistory(pool, input.organizationId, floorCode, revisions) : []
       const workOrderResult = await pool.query<Record<string, unknown>>(
         `
           SELECT work_order.id, work_order.job_card_number AS "jobCardNumber",
@@ -3440,18 +3533,18 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $1 AND route.item_id = $2
-            AND floor.code = $3
+            AND floor.code = $3 AND (route.work_order_id IS NULL OR route.work_order_id = $4)
           ORDER BY route.active DESC, route.revision DESC, route.route_code
         `,
-        [input.organizationId, jobCard.itemId, floorCode]
+        [input.organizationId, jobCard.itemId, floorCode, jobCard.id]
       )
       const activeRoutes = routesResult.rows.filter((route) => route.active === true)
       const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
       const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
-        ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
+        ?? (objectRecord(jobCard.workOrderSource).isRevision !== true && activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
-      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult] = await Promise.all([
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult, materialMovementWaits] = await Promise.all([
         pool.query<Record<string, unknown>>(
           `
             SELECT setup.id, setup.setup_number::text AS "setupNumber",
@@ -3803,6 +3896,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `SELECT receipt_number AS "receiptNumber", received_on AS "receivedOn",
               quantity_kg AS "quantityKg", remaining_quantity_kg AS "remainingQuantityKg",
               heat_number AS "heatNumber", supplier_name AS "supplierName",
+              source_payload->>'rmLocation' AS "rmLocation",
               source_payload AS "sourcePayload"
            FROM manufacturing.raw_material_receipts
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
@@ -3816,7 +3910,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               setup.operation_code AS "operationCode",
               setup.operation_name AS "operationName",
               cycle.setup_time_minutes AS "targetSetupMinutes",
-              stage."settingStartedAt", stage."settingCompletedAt",
+              COALESCE(stage."settingStartedAt", checklist."settingStartedAt") AS "settingStartedAt",
+              stage."settingCompletedAt",
               stage."qualityApprovedAt", production."productionStartedAt"
             FROM manufacturing.operation_setups setup
             LEFT JOIN LATERAL (
@@ -3839,6 +3934,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 ON event.setup_state_id = state.id AND event.reversed_at IS NULL
               WHERE state.work_order_id = $2 AND state.operation_setup_id = setup.id
             ) stage ON true
+            LEFT JOIN LATERAL (
+              SELECT min(session.started_at) AS "settingStartedAt"
+              FROM quality.setup_checklist_sessions session
+              WHERE session.work_order_id = $2
+                AND session.operation_setup_id = setup.id
+                AND session.reversed_at IS NULL
+            ) checklist ON true
             LEFT JOIN LATERAL (
               SELECT min(session.started_at) AS "productionStartedAt"
               FROM manufacturing.production_sessions session
@@ -3908,6 +4010,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
            ORDER BY "checkedAt" DESC, id DESC`,
           [input.organizationId, jobCard.id, floorCode]
         ),
+        readMaterialMovementWaits(pool, input.organizationId, floorCode, jobCardNumber),
       ])
 
       const productionControl = objectRecord(snapshotResult.rows[0]?.payload)
@@ -3937,7 +4040,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
       const material = rawMaterialSummary(
         receiptsResult.rows,
-        calculateRequiredRawMaterialKg(Number(jobCard.orderedQuantity ?? 0), blankPieceWeightGrams)
+        readRequiredRawMaterialKg(workOrderSource.requiredRmKg)
       )
       const [materialBalance] = await readJobCardMaterialBalances(pool, input.organizationId, undefined, String(jobCard.id))
       const setupTimings = setupTimingsResult.rows.map((row) => ({
@@ -4121,6 +4224,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           rejectedKg: materialBalance?.rejectedKg ?? 0,
           usableKg: materialBalance?.usableKg ?? material.receivedKg,
           pendingKg: materialBalance?.pendingKg ?? null,
+          receiptSufficient: materialBalance?.receiptSufficient ?? false,
           shortAccepted: materialBalance?.shortAccepted ?? false,
           acceptance: materialBalance?.acceptance ?? null,
         },
@@ -4168,6 +4272,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
       return {
         analytics,
+        rootJobCardNumber: revision.rootJobCardNumber,
+        selectedRevisionReference: jobCardNumber,
+        revisions,
+        revisionHistory,
         dashboardSummary,
         events: eventLog,
         jobCard: {
@@ -4188,6 +4296,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         productionFloorCode: floorCode,
         qualityRecords: qualityRecordsResult.rows,
         rawMaterialReceipts: receiptsResult.rows,
+        materialMovementWaits,
         routes: routesResult.rows.map((route) => ({
           ...route,
           selected: route.id === selectedRoute?.id,
@@ -4902,10 +5011,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             machineId,
           })
         }
-        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "presetting") {
-          throw new Error("CNC uses Setting only. Refresh the task and complete Setting.")
+        if (stage === "presetting") {
+          throw new ShopFloorConflictError("Use Setting only. Refresh the task and complete Setting.")
         }
-        if (normalizeProductionFloorCode(input.productionFloorCode) === "cnc" && stage === "setting") {
+        if (stage === "setting") {
           const checklist = await client.query<{ id: string; template_id: string }>(
             `SELECT session.id, session.template_id
              FROM quality.setup_checklist_sessions session
@@ -4918,7 +5027,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
           await assertSettingChecklistComplete(client, checklist.rows[0].template_id, checklist.rows[0].id)
         }
-        if (["presetting", "setting", "quality_approval", "operator_started"].includes(stage)) {
+        if (["setting", "quality_approval", "operator_started"].includes(stage)) {
           await assertToolingAvailable(client, { organizationId: input.organizationId,
             setupId, workOrderId: workOrder.work_order_id, machineId,
             floorCode: normalizeProductionFloorCode(input.productionFloorCode) })
@@ -5235,7 +5344,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
       const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
-      return { rows: rows.filter(row => row.requiredKg === null || Number(row.pendingKg) > 0.000001) }
+      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient) }
     },
 
     async acceptShortRawMaterial(input: {
@@ -5247,8 +5356,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const order = await workOrderContext(client, input.organizationId, input.jobCardNumber, input.productionFloorCode)
         const [material] = await readJobCardMaterialBalances(client, input.organizationId, input.productionFloorCode, order.work_order_id)
         if (!material || material.rowVersion !== input.expectedRowVersion) throw new ShopFloorConflictError("Job Card changed. Refresh and review the current RM balance.")
-        if (material.requiredKg === null) throw new ShopFloorConflictError("Set Blank Piece Weight in Product Master before accepting short RM.")
-        if (!(Number(material.pendingKg) > 0.000001)) throw new ShopFloorConflictError("Full RM is already received. Refresh the RM balance.")
+        if (material.requiredKg === null) throw new ShopFloorConflictError("Enter Required RM (kg) in the Work Order before accepting short RM.")
+        if (material.receiptSufficient) throw new ShopFloorConflictError("RM is already within the 5% shortage allowance. Refresh the RM balance.")
         const acceptance = { requiredKg: material.requiredKg, usableKg: material.usableKg,
           acceptedAt: new Date().toISOString(), acceptedBy: input.actorUserId ?? null, reason }
         await client.query(`UPDATE manufacturing.work_orders
@@ -5283,7 +5392,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           AND session.operation_setup_id = state.operation_setup_id AND session.machine_id = state.machine_id
           AND session.status = 'open' AND session.reversed_at IS NULL
         WHERE state.organization_id = $1 AND floor.code = $2 AND state.active
-          AND state.stage <> 'item_complete' AND work_order.status <> 'Cancelled'
+          AND state.stage <> 'item_complete' AND work_order.status NOT IN ('Cancelled', 'Rejected')
         ORDER BY work_order.job_card_number, setup.sequence, machine.machine_number`, [input.organizationId, input.productionFloorCode])
       return { rows: result.rows }
     },
@@ -5389,7 +5498,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         WHERE state.organization_id = $1 AND floor.code = $2
           AND state.stage = 'item_complete' AND NOT state.active
           AND ($3::uuid IS NULL OR state.id = $3)
-          AND work_order.status <> 'Cancelled' AND NOT dispatch.legacy_terminal
+          AND work_order.status NOT IN ('Cancelled', 'Rejected') AND NOT dispatch.legacy_terminal
           AND NOT EXISTS (
             SELECT 1 FROM manufacturing.operation_setups later
             WHERE later.route_option_id = route.id AND later.active AND later.sequence > setup.sequence

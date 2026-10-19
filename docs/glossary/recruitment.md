@@ -1,5 +1,16 @@
 # Recruitment
 
+## Candidate communication history
+
+Conversation History includes interview scheduling, rescheduling and recorded
+outcomes automatically, in the company register and candidate profile. Interview
+events are read-only projections of interview records and their audit events;
+they are not copied into manual conversation logs. Each links to its interview
+record in the Job Workspace. Scheduling details and outcomes are shown without
+scores or internal assessment comments; the interview page retains its own access
+checks. Historical records without detailed scheduling audits show one saved
+schedule rather than invented earlier appointments.
+
 ## Employee Master CSV import
 
 Completed employee rows default to Joined, for employees already working.

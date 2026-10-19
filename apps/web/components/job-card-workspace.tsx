@@ -4,11 +4,13 @@ import { MetricSummary, RecordDetails } from "@/components/ui/golden-patterns"
 
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
-import { Badge } from "@workspace/ui/components/badge"
+import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ArrowLeft, ChevronDown, Factory, History, RefreshCw, Route, Save, Settings2, Truck } from "lucide-react"
 import Link from "next/link"
@@ -22,6 +24,10 @@ import { JobCardQualityRecords, SetupProduction } from "./job-card-workspace-sec
 
 type Row = Record<string, unknown>
 type Workspace = {
+  rootJobCardNumber?: string
+  selectedRevisionReference?: string
+  revisions?: Row[]
+  revisionHistory?: Row[]
   analytics?: Row
   dashboardSummary?: Row | null
   events?: Row[]
@@ -31,6 +37,7 @@ type Workspace = {
   qualityRecords?: Row[]
   productionFloorCode?: string
   rawMaterialReceipts?: Row[]
+  materialMovementWaits?: Row[]
   routes?: Row[]
   sessions?: Row[]
   setups?: Row[]
@@ -69,8 +76,9 @@ const date = (input: unknown, includeTime = false) => {
   return includeTime ? formatIstDateTime(text(input)) : formatIstDate(text(input))
 }
 
-async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode) {
-  const response = await fetch(`/api/job-cards/${encodeURIComponent(jobCardNumber)}?floor=${encodeURIComponent(floor)}`, {
+async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode, revisionReference: string) {
+  const params = new URLSearchParams({ floor, ...(revisionReference ? { revision: revisionReference } : {}) })
+  const response = await fetch(`/api/job-cards/${encodeURIComponent(jobCardNumber)}?${params}`, {
     cache: "no-store",
     credentials: "same-origin",
   })
@@ -99,8 +107,8 @@ function PatternBars({ emptyText, rows, valueKey = "minutes" }: { emptyText: str
   })}</div>
 }
 
-function EventTable({ emptyText, rows, rejectionColumns = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean }) {
- return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}><TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={rejectionColumns ? 8 : 6} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
+function EventTable({ emptyText, rows, rejectionColumns = false, showRevision = false }: { emptyText: string; rows: Row[]; rejectionColumns?: boolean; showRevision?: boolean }) {
+ return <div className="rounded-md border min-w-0"><OperationalTable containerClassName="max-h-[32rem]" excelFilters><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{showRevision ? <TableHead>Revision / Activity</TableHead> : null}<TableHead>Time</TableHead><TableHead>Event</TableHead><TableHead>Setup / Machine</TableHead><TableHead>Entered By</TableHead>{rejectionColumns ? <><TableHead>Rejection Type</TableHead><TableHead>Rejection Reason</TableHead><TableHead>Defect</TableHead></> : <TableHead>Detail</TableHead>}<TableHead className="text-right">Value</TableHead></TableRow></TableHeader><TableBody>{rows.length ? rows.map((row, index) => <TableRow key={`${text(row.eventTime)}-${text(row.eventType)}-${index}`}>{showRevision ? <TableCell>{display(row.revisionLabel)}</TableCell> : null}<TableCell className="whitespace-nowrap">{date(row.eventTime, true)}</TableCell><TableCell><Badge variant={text(row.eventType) === "rejection" ? "destructive" : "outline"}>{title(row.eventType)}</Badge></TableCell><TableCell>{display(row.setupNumber)} / {display(row.machineNumber)}</TableCell><TableCell>{display(row.enteredByName)}<span className="block text-xs text-muted-foreground">{title(row.enteredRole)}</span></TableCell>{rejectionColumns ? <><TableCell>{display(row.rejectionTypeName)}</TableCell><TableCell>{display(row.rejectionReasonName)}</TableCell><TableCell>{display(row.defectName)}</TableCell></> : <TableCell>{display(row.reasonName || row.detail)}</TableCell>}<TableCell className="text-right tabular-nums">{row.quantity ? `${quantity(row.quantity)} pcs` : row.durationMinutes ? `${quantity(row.durationMinutes)} min` : "-"}</TableCell></TableRow>) : <TableRow><TableCell colSpan={(rejectionColumns ? 8 : 6) + (showRevision ? 1 : 0)} className="py-10 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}</TableBody></OperationalTable></div>
 }
 
 function SetupMaster({ setup }: { setup: Row }) {
@@ -119,6 +127,7 @@ function SetupMaster({ setup }: { setup: Row }) {
 }
 
 export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFloorCode; jobCardNumber: string }) {
+  const [revisionReference, setRevisionReference] = useState("")
   const [activeTab, setActiveTab] = useState<TabKey>("overview")
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [error, setError] = useState("")
@@ -127,15 +136,19 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const [overrideDays, setOverrideDays] = useState("")
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
-  const loadingRef = useRef(false)
+  const loadingReferenceRef = useRef<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const load = useCallback(async (silent = false) => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+    const reference = `${floor}|${jobCardNumber}|${revisionReference}`
+    if (loadingReferenceRef.current === reference) return
+    loadingReferenceRef.current = reference
+    const requestId = ++requestIdRef.current
     if (!silent) setLoading(true)
     setError("")
     try {
-      const next = await loadWorkspace(jobCardNumber, floor)
+      const next = await loadWorkspace(jobCardNumber, floor, revisionReference)
+      if (requestId !== requestIdRef.current) return
       setWorkspace(next)
       if (!silent) {
         const target = record(record(next.analytics).deliveryTarget)
@@ -143,12 +156,14 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
         setOverrideDays(text(target.jobCardOverrideWorkingDays))
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Job Card could not be loaded.")
+      if (requestId === requestIdRef.current) setError(reason instanceof Error ? reason.message : "Job Card could not be loaded.")
     } finally {
-      loadingRef.current = false
-      if (!silent) setLoading(false)
+      if (requestId === requestIdRef.current) {
+        loadingReferenceRef.current = null
+        if (!silent) setLoading(false)
+      }
     }
-  }, [floor, jobCardNumber])
+  }, [floor, jobCardNumber, revisionReference])
 
   useEffect(() => { queueMicrotask(() => void load()) }, [load])
   useEffect(() => {
@@ -165,14 +180,20 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
   const analytics = workspace?.analytics ?? {}
   const jobCard = workspace?.jobCard ?? {}
+  const rework = record(jobCard.workOrderSource)
+  const isRework = rework.isRework === true
+  const isRevision = rework.isRevision === true
   const sessions = workspace?.sessions ?? emptyRows
-  const events = workspace?.events ?? emptyRows
+  const allRevisions = revisionReference === "all"
+  const events = (allRevisions ? workspace?.revisionHistory : workspace?.events) ?? emptyRows
+  const revisions = workspace?.revisions ?? emptyRows
   const routes = workspace?.routes ?? emptyRows
   const setups = workspace?.setups ?? emptyRows
   const setupTimings = workspace?.setupTimings ?? list(analytics.setupTimings)
   const planRows = workspace?.planRows ?? emptyRows
   const plannerMovements = workspace?.plannerMovements ?? emptyRows
   const receipts = workspace?.rawMaterialReceipts ?? emptyRows
+  const materialMovements = workspace?.materialMovementWaits ?? emptyRows
   const delivery = record(analytics.delivery)
   const deliveryTarget = record(analytics.deliveryTarget)
   const material = record(analytics.material)
@@ -185,7 +206,17 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
   const selectedRoute = routes.find((row) => row.selected === true)
   const downtimeEvents = events.filter((row) => text(row.eventType).startsWith("downtime"))
   const rejectionEvents = events.filter((row) => text(row.eventType) === "rejection")
-  const currentStage = jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows })
+  const currentStage = jobCard.status === "Rejected" ? "Rejected — Remake Required" : jobCardCurrentStage({ analytics, sessions, setupTimings, selectedRoute, receipts, planRows,
+    materialReady: isRework ? true : isRevision ? Boolean(material.receiptSufficient || material.shortAccepted) : undefined })
+
+  function selectRevision(reference: string) {
+    if (reference === revisionReference || (!revisionReference && reference === workspace?.selectedRevisionReference)) return
+    requestIdRef.current += 1
+    setWorkspace(null)
+    setSaveMessage("")
+    setRevisionReference(reference)
+    setActiveTab(reference === "all" ? "log" : "overview")
+  }
 
   async function saveDeliveryTarget() {
     setSaving(true)
@@ -193,7 +224,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
     try {
       const response = await fetch("/api/job-card-delivery-target", {
         body: JSON.stringify({
-          jcNo: jobCardNumber,
+          jcNo: workspace?.selectedRevisionReference ?? jobCardNumber,
           jobCardOverrideWorkingDays: overrideDays || null,
           productDefaultWorkingDays: productDays || null,
           productionFloorCode: floor,
@@ -215,16 +246,41 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
   return <main className="grid gap-4 p-4 md:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex items-start gap-3"><Button asChild size="icon" variant="outline"><Link href={dashboardTabHref("jobCardStatusTab", floor)} aria-label="Back to Job Cards"><ArrowLeft /></Link></Button><div><p className="text-sm text-muted-foreground">Job Card · {title(floor)}</p><h1 className="text-2xl font-semibold">{jobCardNumber}</h1><p className="text-sm text-muted-foreground">{display(jobCard.partCode)} · {display(jobCard.description)}</p></div></div>
-      <div className="flex items-center gap-2"><Badge variant={(completion ?? 0) >= 100 ? "default" : "secondary"}>{currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
+      <div className="flex items-start gap-3"><Button asChild size="icon" variant="outline"><Link href={dashboardTabHref("jobCardStatusTab", floor)} aria-label="Back to Job Cards"><ArrowLeft /></Link></Button><div><p className="text-sm text-muted-foreground">Job Card · {title(floor)}</p><h1 className="text-2xl font-semibold">{workspace?.rootJobCardNumber ?? jobCardNumber}</h1><p className="text-sm text-muted-foreground">{display(jobCard.partCode)} · {display(jobCard.description)}</p></div></div>
+      <div className="flex items-center gap-2"><Badge variant={(completion ?? 0) >= 100 ? "default" : "secondary"}>{allRevisions ? "All Revisions · History" : currentStage}</Badge><Button disabled={loading} variant="outline" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button></div>
     </div>
 
     {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
     {loading && !workspace ? <div className="rounded-md border p-10 text-center text-sm text-muted-foreground">Loading Job Card…</div> : null}
     {workspace ? <>
-      <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
+      <SectionCard><CardHeader><CardTitle>Job Card Revisions</CardTitle><CardDescription>Each selection has its own planning, RM, sessions, inspection reports and dispatch. Original production stays separate.</CardDescription></CardHeader><CardContent className="grid gap-3">
+        <div className="grid max-w-md gap-2"><Label htmlFor="job-card-revision">Revision / Activity</Label><SearchableSelect id="job-card-revision" value={allRevisions ? "all" : workspace.selectedRevisionReference} disabled={loading} onChange={event => selectRevision(event.target.value)}>
+          {revisions.map(row => <option key={text(row.jobCardNumber)} value={text(row.jobCardNumber)}>{text(row.revisionLabel)}</option>)}
+          <option value="all">All Revisions — History</option>
+        </SearchableSelect></div>
+        <OperationalTable filterStorageKey={`job-card-revisions-${floor}-${workspace.rootJobCardNumber}`} containerClassName="max-h-72 rounded-lg border"><TableHeader><TableRow><TableHead>Revision / Activity</TableHead><TableHead>Quantity</TableHead><TableHead>Status</TableHead><TableHead>Reason</TableHead><TableHead>Received</TableHead><TableHead>First Session</TableHead><TableHead>Latest Session</TableHead></TableRow></TableHeader><TableBody>{revisions.map(row => <TableRow key={text(row.jobCardNumber)} data-row-id={text(row.jobCardNumber)}>
+          <TableCell><Button variant="link" disabled={loading} onClick={() => selectRevision(text(row.jobCardNumber))}>{text(row.revisionLabel)}</Button></TableCell><TableCell>{quantity(row.quantity)}</TableCell><TableCell><StatusBadge value={text(row.status)} /></TableCell><TableCell>{text(row.reason)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{date(row.firstSessionAt, true)}</TableCell><TableCell>{date(row.latestSessionAt, true)}</TableCell>
+        </TableRow>)}</TableBody></OperationalTable>
+        <StatusBadge tone="information" value={allRevisions ? "All Revisions · History only" : text(revisions.find(row => row.jobCardNumber === workspace.selectedRevisionReference)?.revisionLabel)} />
+      </CardContent></SectionCard>
+      {!allRevisions ? <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav> : null}
 
       {activeTab === "overview" ? <section className="grid gap-4">
+        {isRevision ? <SectionCard><CardHeader><CardTitle>Return Receipt</CardTitle></CardHeader><CardContent><RecordDetails items={[
+          { label: "Original Job Card", value: <Link className="underline" href={`/dashboard/job-cards/${encodeURIComponent(text(rework.originalJobCardNumber))}?floor=${floor}`}>{text(rework.originalJobCardNumber)}</Link> },
+          { label: "Returned Pieces", value: quantity(rework.quantity) },
+          { label: "Receipt Date", value: date(rework.receivedOn) },
+          { label: "Return Reference", value: display(rework.receiptReference) },
+          { label: "Reason", value: display(rework.reason) },
+        ]} /></CardContent></SectionCard> : null}
+        {isRework && rework.reworkRejectedQuantity ? <SectionCard><CardHeader><CardTitle>Rework Rejected</CardTitle></CardHeader><CardContent><RecordDetails items={[
+          { label: "Rejected Batch", value: `${quantity(rework.reworkRejectedQuantity)} pcs` },
+          { label: "Trial Rejects Already Recorded", value: `${quantity(rework.trialRejectedQuantity)} pcs` },
+          { label: "Additional Batch Rejection", value: `${quantity(rework.additionalBatchRejectedQuantity)} pcs` },
+          { label: "Rejection Date", value: date(rework.reworkRejectedOn) },
+          { label: "Reason", value: display(rework.reworkRejectionReason) },
+          { label: "Replacement Revision", value: <Link className="underline" href={`/dashboard/job-cards/${encodeURIComponent(text(rework.replacementJobCardNumber))}?floor=${floor}`}>{text(rework.replacementJobCardNumber)}</Link> },
+        ]} /></CardContent></SectionCard> : null}
         <MetricSummary
           scope="Current Job Card · Job Complete"
           items={[
@@ -322,7 +378,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
             },
           ]}
         />
- <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Required RM = ordered pieces × blank piece weight (g) ÷ 1,000. Material yield uses received and remaining kilograms.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Required RM" value={material.requiredKg == null ? "Blank piece weight required" : `${quantity(material.requiredKg, 3)} kg`} /></div></CardContent></SectionCard>
+ {!isRework ? <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Required RM is entered in the Work Order. Material yield uses received and remaining kilograms with Blank Piece Weight.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Required RM" value={material.requiredKg == null ? "Not entered in Work Order" : `${quantity(material.requiredKg, 3)} kg`} /></div></CardContent></SectionCard> : null}
  <SectionCard><CardHeader><CardTitle>Production Sessions</CardTitle><CardDescription>Setup-level machine and operator entries. Output before the final setup is WIP.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Session</TableHead><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Operator</TableHead><TableHead>Started</TableHead><TableHead>Ended</TableHead><TableHead className="text-right">Setup Output</TableHead><TableHead className="text-right">Setup Rejected</TableHead><TableHead className="text-right">Setup Good</TableHead></TableRow></TableHeader><TableBody>{sessions.length ? sessions.map((row) => <TableRow key={text(row.id)}><TableCell><Link className="font-medium text-primary underline underline-offset-4" href={`/dashboard/production-sessions?${new URLSearchParams({ floor, session: text(row.id) })}`}>{display(row.session_reference)}</Link><Badge className="ml-2" variant={text(row.status) === "open" ? "default" : "outline"}>{title(row.status)}</Badge></TableCell><TableCell>{display(row.machine_number)}</TableCell><TableCell>{display(row.setup_number)}</TableCell><TableCell>{display(row.operator_code)}</TableCell><TableCell>{date(row.started_at, true)}</TableCell><TableCell>{date(row.ended_at, true)}</TableCell><TableCell className="text-right">{quantity(row.total_pieces)}</TableCell><TableCell className="text-right">{quantity(row.quantity_rejected)}</TableCell><TableCell className="text-right">{quantity(row.quantity_good)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No production sessions recorded.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Planner Movement History</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Decision Time</TableHead><TableHead>Action</TableHead><TableHead>Setup</TableHead><TableHead>Machine Movement</TableHead><TableHead>Reason</TableHead><TableHead>Session Settlement</TableHead><TableHead className="text-right">Good Output</TableHead><TableHead>Planner</TableHead></TableRow></TableHeader><TableBody>{plannerMovements.length ? plannerMovements.map((row, index) => {
           const references = Array.isArray(row.sessionReferences) ? row.sessionReferences.map(String).filter(Boolean) : []
@@ -378,18 +434,53 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
 
       {activeTab === "rm" ? <section className="grid gap-4">
-        <SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM uses ordered pieces and Product Master Blank Piece Weight.</CardDescription></CardHeader>
+        <SectionCard>
+          <CardHeader><CardTitle>Floor Material Movement</CardTitle><CardDescription>Working wait starts when material, the planned date and the assigned machine are ready. Earlier unrecorded waits remain unknown.</CardDescription></CardHeader>
+          <CardContent><OperationalTable filterStorageKey={`material-movement-${floor}-${jobCardNumber}`} containerClassName="max-h-96 rounded-md border">
+            <TableHeader><TableRow><TableHead>Setup / Option</TableHead><TableHead>Machine</TableHead><TableHead>Ready Since</TableHead><TableHead>Arrival / End</TableHead><TableHead>Working Wait</TableHead><TableHead>Status</TableHead><TableHead>Recorded By / Reason</TableHead></TableRow></TableHeader>
+            <TableBody>{materialMovements.length ? materialMovements.map(row => <TableRow key={text(row.id)}>
+              <TableCell>{display(row.setupNumber)} / {display(row.optionNumber)}</TableCell>
+              <TableCell>{display(row.machineNumber)}</TableCell>
+              <TableCell>{date(row.readyAt, true)}</TableCell>
+              <TableCell>{date(row.endedAt, true)}</TableCell>
+              <TableCell>{row.workingMinutes == null ? "—" : `${Math.floor(number(row.workingMinutes) / 60)}h ${number(row.workingMinutes) % 60}m`}</TableCell>
+              <TableCell><StatusBadge tone={row.outcome === "arrived" ? "positive" : row.outcome ? "inactive" : "information"} value={row.outcome === "arrived" ? "At machine" : row.outcome === "blocked" ? "Readiness withdrawn" : row.outcome === "corrected" ? "Arrival corrected" : row.outcome === "unrecorded" ? "Arrival unrecorded" : "Awaiting floor"} /></TableCell>
+              <TableCell>{display(row.recordedBy)}<div>{text(row.reason)}</div></TableCell>
+            </TableRow>) : <TableRow><TableCell colSpan={7}>No material movement wait recorded yet.</TableCell></TableRow>}</TableBody>
+          </OperationalTable></CardContent>
+        </SectionCard>
+        {!isRework ? <><SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM is entered in the Work Order.</CardDescription></CardHeader>
           <CardContent><RecordDetails items={[
             { label: "Material / Grade", value: display(jobCard.materialGrade) },
             { label: "Rod Type / Size", value: [display(jobCard.rodType), display(jobCard.rodSize)].join(" / ") },
-            { label: "Required RM", value: material.requiredKg == null ? "Blank piece weight required" : quantity(material.requiredKg, 3) + " kg" },
+            { label: "Required RM", value: material.requiredKg == null ? "Not entered in Work Order" : quantity(material.requiredKg, 3) + " kg" },
             { label: "Received RM", value: quantity(material.receivedKg, 3) + " kg" },
             { label: "Rejected RM", value: quantity(material.rejectedKg, 3) + " kg" },
-            { label: "Pending RM", value: material.pendingKg == null ? "Blank piece weight required" : quantity(material.pendingKg, 3) + " kg" },
-            { label: "RM Status", value: material.shortAccepted ? "Short RM accepted by planner" : material.pendingKg == null ? "Requirement unavailable" : number(material.pendingKg) > 0.000001 ? "Balance awaited" : "Fully received" },
+            { label: "Pending RM", value: material.pendingKg == null ? "Not entered in Work Order" : quantity(material.pendingKg, 3) + " kg" },
+            { label: "RM Status", value: material.pendingKg == null ? "Requirement unavailable"
+              : number(material.pendingKg) <= 0.000001 ? "Fully received"
+              : material.receiptSufficient ? "Within 5% allowance"
+              : material.shortAccepted ? "Short RM accepted by planner" : "Balance awaited" },
           ]} /></CardContent>
         </SectionCard>
-        <SectionCard><CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable><TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Received Kg</TableHead><TableHead className="text-right">Remaining Kg</TableHead></TableRow></TableHeader><TableBody>{receipts.length ? receipts.map((row, index) => <TableRow key={`${text(row.receiptNumber)}-${index}`}><TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell><TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell><TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell><TableCell className="text-right">{quantity(row.remainingQuantityKg, 3)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
+        <SectionCard>
+          <CardHeader><CardTitle>Raw Material Receipts</CardTitle><CardDescription>Each receipt adds to this Job Card’s received RM total. Pending RM above shows the amount still to be received.</CardDescription></CardHeader>
+          <CardContent><div className="rounded-md border min-w-0"><OperationalTable>
+            <TableHeader><TableRow>
+              <TableHead>Receipt</TableHead><TableHead>Date</TableHead><TableHead>Heat No.</TableHead>
+              <TableHead>Supplier</TableHead><TableHead>RM Location</TableHead>
+              <TableHead className="text-right">Received Kg</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{receipts.length ? receipts.map((row, index) => (
+              <TableRow key={`${text(row.receiptNumber)}-${index}`}>
+                <TableCell>{display(row.receiptNumber)}</TableCell><TableCell>{date(row.receivedOn)}</TableCell>
+                <TableCell>{display(row.heatNumber)}</TableCell><TableCell>{display(row.supplierName)}</TableCell>
+                <TableCell>{display(row.rmLocation)}</TableCell>
+                <TableCell className="text-right">{quantity(row.quantityKg, 3)}</TableCell>
+              </TableRow>
+            )) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody>
+          </OperationalTable></div></CardContent>
+        </SectionCard></> : <StandardState title="Returned pieces available" description={`${quantity(rework.quantity)} pieces received for rework. Follow the selected setup sequence with first-piece and in-process inspection.`} />}
       </section> : null}
 
  {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary
@@ -422,7 +513,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
    ]}
  /><SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Delivery Target</CardTitle><CardDescription>Working days after full RM receipt. Closed Fridays and holidays follow the Universal Planning Calendar.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="grid gap-4 md:grid-cols-2"><div className="grid gap-2"><Label htmlFor="product-delivery-days">Product Master default</Label><Input id="product-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={productDays} onChange={(event) => setProductDays(event.target.value)} placeholder="e.g. 20" /><p className="text-xs text-muted-foreground">Applies to Job Cards for {display(jobCard.partCode)} unless overridden.</p></div><div className="grid gap-2"><Label htmlFor="job-card-delivery-days">This Job Card override</Label><Input id="job-card-delivery-days" inputMode="numeric" min={1} max={365} type="number" value={overrideDays} onChange={(event) => setOverrideDays(event.target.value)} placeholder="Leave blank to use Product Master" /><p className="text-xs text-muted-foreground">Optional. Leave blank to use the Product Master default.</p></div></div><div className="flex flex-wrap items-center gap-3"><Button disabled={saving || !productDays} onClick={() => void saveDeliveryTarget()}><Save /> {saving ? "Saving…" : "Save Target"}</Button>{saveMessage ? <p className="text-sm text-muted-foreground" role="status">{saveMessage}</p> : null}</div></CardContent></SectionCard></section> : null}
 
- {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} /></CardContent></SectionCard> : null}
+ {activeTab === "log" ? <SectionCard><CardHeader><CardTitle className="flex items-center gap-2"><History className="size-4" /> Complete Job Card Log</CardTitle></CardHeader><CardContent><EventTable emptyText="No Job Card events recorded." rows={events} showRevision={allRevisions} /></CardContent></SectionCard> : null}
     </> : null}
   </main>
 }

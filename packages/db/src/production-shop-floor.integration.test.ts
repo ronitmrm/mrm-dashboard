@@ -10,6 +10,8 @@ import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
+import { readJobCardMaterialBalances } from "./production-material"
+import { syncMaterialMovementWaits } from "./material-movement-waits"
 import { createQualityRepository } from "./quality"
 import { createRejectionRepository } from "./rejections"
 
@@ -110,6 +112,7 @@ beforeAll(async () => {
         jcNo: jobCardNumber,
         partCode: itemUid,
         rmPoNo: rmPoNumber,
+        requiredRmKg: 1,
       },
       workOrderNumber: `FLOOR-WO-${suffix}-${index + 1}`,
     })
@@ -131,6 +134,7 @@ beforeAll(async () => {
     sourcePayload: {
       productionFloorCode: "cnc",
       jcNo: cncJobCard,
+      requiredRmKg: 11,
       partCode: itemUid,
       rmPoNo: rmPoNumber,
     },
@@ -184,8 +188,8 @@ afterAll(async () => {
 })
 
 async function acceptShortRmFixture(jobCardNumber: string, productionFloorCode = "conventional") {
-  const material = (await repository.readRawMaterialReviews({ organizationId, productionFloorCode })).rows
-    .find(row => row.jobCardNumber === jobCardNumber);
+  const material = (await readJobCardMaterialBalances(pool, organizationId, productionFloorCode))
+    .find(row => row.jobCardNumber === jobCardNumber && row.requiredKg !== null && !row.receiptSufficient);
   if (material && !material.shortAccepted) await repository.acceptShortRawMaterial({ organizationId, productionFloorCode,
     jobCardNumber, expectedRowVersion: material.rowVersion, reason: "Test fixture: planner accepted the short RM." });
 }
@@ -248,7 +252,7 @@ describe("production and shop-floor workflows", () => {
     })
 
     expect(workspace.jobCard.casting).toBe("5.58")
-    expect(workspace.analytics.material.requiredKg).toBeCloseTo(0.5022)
+    expect(workspace.analytics.material.requiredKg).toBe(1)
     const setupId = workspace.setups[0]!.id
     await pool.query(`INSERT INTO quality.first_piece_inspections (
       organization_id, work_order_id, operation_setup_id, inspected_at, status,
@@ -452,6 +456,42 @@ describe("production and shop-floor workflows", () => {
       raw_material_receipt_id: receipt.id,
       rm_received_on: "2026-07-20",
     }])
+  })
+
+  test("updates historical receipt locations atomically without receiving stock or queuing planning", async () => {
+    const sourceId = `test:rm-location:${suffix}`
+    const receipt = await repository.upsertRawMaterialReceipt({
+      organizationId, payload: { jcNo: fourthJobCard }, quantityKg: 31.25,
+      receiptNumber: rmPoNumber, receivedOn: "2026-10-14", sourceId,
+    })
+    await pool.query("UPDATE manufacturing.raw_material_receipts SET remaining_quantity_kg = 12.5 WHERE id = $1", [receipt.id])
+    const stock = () => pool.query(`SELECT id, quantity_kg, remaining_quantity_kg, received_on,
+      source_payload - 'rmLocation' AS payload FROM manufacturing.raw_material_receipts
+      WHERE organization_id = $1 ORDER BY id`, [organizationId])
+    const jobs = () => pool.query("SELECT id FROM derived.refresh_jobs WHERE organization_id = $1 ORDER BY id", [organizationId])
+    const beforeStock = await stock()
+    const beforeJobs = await jobs()
+    const row = { jobCardNumber: fourthJobCard, receivedOn: "2026-10-14", location: "001" }
+    const input = { organizationId, productionFloorCode: "conventional" as const, rows: [row] }
+    await pool.query("UPDATE manufacturing.work_orders SET status = 'Cancelled' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
+    try {
+      await expect(repository.updateRawMaterialLocations({ ...input, rows: [row, { ...row, receivedOn: "2026-10-15" }] }))
+        .rejects.toThrow(/No saved receipt matches/)
+      expect((await pool.query("SELECT source_payload->>'rmLocation' AS location FROM manufacturing.raw_material_receipts WHERE id = $1", [receipt.id])).rows[0].location).toBeNull()
+      expect(await repository.updateRawMaterialLocations(input)).toEqual({ updated: 1 })
+      expect(await repository.updateRawMaterialLocations(input)).toEqual({ updated: 0 })
+      expect((await stock()).rows).toEqual(beforeStock.rows)
+      expect((await jobs()).rows).toEqual(beforeJobs.rows)
+      const audit = await pool.query(`SELECT before_state->'source_payload'->>'rmLocation' AS before,
+        after_state->'source_payload'->>'rmLocation' AS after FROM audit.events
+        WHERE target_id = $1 AND event_type = 'raw_material_receipt.location_updated'`, [receipt.id])
+      expect(audit.rows).toEqual([{ before: null, after: "001" }])
+    } finally {
+      await pool.query("UPDATE manufacturing.work_orders SET status = 'Open' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
+      await pool.query("DELETE FROM audit.events WHERE target_id = $1", [receipt.id])
+      await pool.query("DELETE FROM manufacturing.job_card_finish_baselines WHERE raw_material_receipt_id = $1", [receipt.id])
+      await pool.query("DELETE FROM manufacturing.raw_material_receipts WHERE id = $1", [receipt.id])
+    }
   })
 
   test("reverses one mistaken RM receipt without removing its audit history", async () => {
@@ -706,7 +746,7 @@ describe("production and shop-floor workflows", () => {
     await expect(repository.recordShopFloorStage({
       organizationId, productionFloorCode: "cnc", jobCardNumber: cncJobCard,
       machineNumber: cncMachine, operationSetupCode: "1", stage: "presetting", payload: {},
-    })).rejects.toThrow("CNC uses Setting only")
+    })).rejects.toThrow("Use Setting only")
     await repository.recordShopFloorStage({
       jobCardNumber: cncJobCard,
       machineNumber: cncMachine,
@@ -766,6 +806,7 @@ describe("production and shop-floor workflows", () => {
     const workspace = await repository.readJobCardWorkspace({
       organizationId, jobCardNumber: cncJobCard, productionFloorCode: "cnc",
     })
+    expect(workspace.setupTimings[0]?.machinistSetupMinutes).toBeGreaterThanOrEqual(0)
     expect(workspace.events.filter((event) => event.eventType === "rejection"))
       .toEqual([expect.objectContaining({
         rejectionTypeName: "In-process", rejectionReasonName: "Segregated",
@@ -1099,7 +1140,7 @@ describe("production and shop-floor workflows", () => {
       `,
       [organizationId, randomUUID()]
     )
-    await pool.query(
+    const post = await pool.query<{ id: string }>(
       `
         INSERT INTO recruitment.posts (
           organization_id, department_id, designation_id, vacancy_number,
@@ -1107,6 +1148,7 @@ describe("production and shop-floor workflows", () => {
           source_system, source_table, source_id
         ) VALUES ($1, $2, $3, '1', $4, $4, 'HR Operator', $5,
           'Occupied', 'test', 'posts', $6)
+        RETURNING id
       `,
       [
         organizationId,
@@ -1116,6 +1158,14 @@ describe("production and shop-floor workflows", () => {
         hrOperator,
         randomUUID(),
       ]
+    )
+    // The replaced worker may still own the legacy, post-only source identity.
+    const previousWorker = await pool.query<{ id: string }>(
+      `INSERT INTO workforce.employees (
+         organization_id, employee_code, name, source_system, source_table, source_id
+       ) VALUES ($1, $2, 'Previous Worker', 'mrm-dashboard', 'recruitment.posts', $3)
+       RETURNING id`,
+      [organizationId, `${hrOperator}-previous`, post.rows[0]!.id]
     )
     await repository.recordShopFloorStage({
       jobCardNumber: firstJobCard,
@@ -1150,6 +1200,12 @@ describe("production and shop-floor workflows", () => {
 
     expect(session.id).toBeTruthy()
     expect(projected.rows[0]).toEqual({ active: true, employee_code: hrOperator })
+    expect((await pool.query(
+      `SELECT employee_code, name, source_id FROM workforce.employees WHERE id = $1`,
+      [previousWorker.rows[0]!.id]
+    )).rows[0]).toEqual({
+      employee_code: `${hrOperator}-previous`, name: 'Previous Worker', source_id: post.rows[0]!.id,
+    })
     const pending = await repository.closeProductionSession({
       endedAt: "2026-08-15T09:30:00+05:30",
       endReason: "shift_end",
@@ -1352,7 +1408,7 @@ describe("production and shop-floor workflows", () => {
     const jobCardNumber = `FLOOR-JC-${suffix}-START-CORRECT`
     const machineNumber = `FLOOR-MC-${suffix}-START-CORRECT`
     await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
-      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber })
+      sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 1 }, workOrderNumber: jobCardNumber })
     await acceptShortRmFixture(jobCardNumber)
     await planning.upsertMachine({ machineNumber, organizationId })
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId,
@@ -1365,6 +1421,7 @@ describe("production and shop-floor workflows", () => {
     const original = await read(first.id)
     const correct = async (sessionId: string, startedAt: string) => repository.correctProductionSessionStart({
       organizationId, productionFloorCode: "conventional", sessionId, startedAt,
+      enteredRole: "quality",
       expectedRowVersion: Number((await read(sessionId)).rowVersion),
       correctionReason: "Start date/time was entered incorrectly.",
     })
@@ -1374,7 +1431,7 @@ describe("production and shop-floor workflows", () => {
       goodPieces: 0, shift: "General" })
     expect((open.startedAt as Date).toISOString()).toBe("2026-08-14T03:00:00.000Z")
     await repository.closeProductionSession({ sessionId: first.id, organizationId, grossWeightKg: 0.154,
-      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop" })
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop", enteredRole: "quality" })
     const second = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
     expect((await read(second.id)).sessionReference).toBe(`${machineNumber.toUpperCase()}-20260815-02`)
     await repository.recordProductionSessionDowntime({ sessionId: second.id, organizationId,
@@ -1913,7 +1970,7 @@ describe("production and shop-floor workflows", () => {
       JOIN catalog.items item ON item.id=route.item_id
       WHERE item.uid=$3 AND route.route_code='1' AND setup.setup_number=1`, [organizationId,code,itemUid])
     const start = (jobCardNumber: string, machineNumber: string) => repository.recordShopFloorStage({
-      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, stage: "presetting", payload: {},
+      jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, stage: "operator_started", payload: {},
     })
     await start(jobs[0]!, machines[0]!)
     await expect(start(jobs[1]!, machines[1]!)).rejects.toThrow("1 allocated to this department, 1 occupied")
@@ -2084,18 +2141,21 @@ test("material review blocks completion, releases only selected setups, and clea
   const jobCardNumber = 'RM-WAIT-' + suffix;
   const routeCode = 'RM-WAIT-' + suffix;
   const machines = [1, 2, 3].map(n => 'RM-WAIT-' + suffix + '-' + n);
-  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
-    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber });
+  const workOrder = { itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber }, workOrderNumber: jobCardNumber };
+  await planning.upsertWorkOrder(workOrder);
   await planning.upsertRouteOption({ itemUid, organizationId, routeCode,
     setups: [1, 2, 3].map(n => ({ operationCode: 'WAIT-' + n, sequence: n, setupNumber: n })) });
   await planning.selectRoute({ jobCardNumber, organizationId, routeCode });
-  const receipt = (sourceId: string, quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
-    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
+  const receipt = (sourceId: string, quantityKg: number, rmLocation?: string) => repository.upsertRawMaterialReceipt({ organizationId,
+    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber, rmLocation }, quantityKg, receiptNumber: rmPoNumber,
     receivedOn: '2026-10-12', sourceId });
-  await receipt('rm-wait-first-' + suffix, 25.11);
   const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
-  expect(await review()).toMatchObject([{ requiredKg: 50.22, receivedKg: 25.11, pendingKg: 25.11, shortAccepted: false }]);
+  expect(await review()).toEqual([]);
+  await receipt('rm-wait-first-' + suffix, 50, 'Rack A3');
+  expect((await repository.readJobCardWorkspace({ organizationId, jobCardNumber })).analytics.material.requiredKg).toBeNull();
+  expect(await review()).toEqual([]);
   for (const [index, machineNumber] of machines.entries()) {
     await planning.upsertMachine({ machineNumber, organizationId });
     await repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: String(index + 1),
@@ -2107,6 +2167,9 @@ test("material review blocks completion, releases only selected setups, and clea
   }
   const complete = (index: number) => repository.recordSetupCompletion({ organizationId, jobCardNumber,
     machineNumber: machines[index], operationSetupCode: String(index + 1), completedBy: 'Planner' });
+  await expect(complete(2)).rejects.toThrow('Enter Required RM (kg) in the Work Order');
+  await planning.upsertWorkOrder({ ...workOrder, sourcePayload: { ...workOrder.sourcePayload, requiredRmKg: 100 } });
+  expect(await review()).toMatchObject([{ requiredKg: 100, receivedKg: 50, pendingKg: 50, shortAccepted: false }]);
   await expect(complete(2)).rejects.toThrow('RM is pending');
   const setups = (await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
@@ -2122,12 +2185,105 @@ test("material review blocks completion, releases only selected setups, and clea
   const [short] = await review();
   await repository.acceptShortRawMaterial({ organizationId, productionFloorCode: 'conventional', jobCardNumber,
     expectedRowVersion: short!.rowVersion, reason: 'Customer accepts the available material.' });
-  expect(await review()).toMatchObject([{ shortAccepted: true, pendingKg: 25.11 }]);
+  expect(await review()).toMatchObject([{ shortAccepted: true, pendingKg: 50 }]);
   await complete(2);
-  await receipt('rm-wait-second-' + suffix, 25.11);
+  await receipt('rm-wait-second-' + suffix, 50);
   expect(await review()).toEqual([]);
   const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber });
-  expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receivedKg: 50.22, pendingKg: 0 });
+  expect(workspace.analytics.material).toMatchObject({ requiredKg: 100, receivedKg: 100, pendingKg: 0 });
   expect(workspace.rawMaterialReceipts).toHaveLength(2);
+  expect(workspace.rawMaterialReceipts).toMatchObject([{ rmLocation: 'Rack A3' }, { rmLocation: null }]);
   expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
 });
+
+test("RM shortage flag and completion blocker clear at 95% usable receipt", async () => {
+  const jobCardNumber = `RM-ALLOWANCE-${suffix}`
+  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 50.22 }, workOrderNumber: jobCardNumber })
+  await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+  const receipt = (quantityKg: number) => repository.upsertRawMaterialReceipt({ organizationId,
+    payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber }, quantityKg, receiptNumber: rmPoNumber,
+    receivedOn: "2026-10-12", sourceId: randomUUID() })
+  const review = async () => (await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
+    .rows.filter(row => row.jobCardNumber === jobCardNumber)
+  const complete = () => repository.recordSetupCompletion({ organizationId, jobCardNumber,
+    operationSetupCode: "2", completedBy: "Planner" })
+
+  await receipt(47.708)
+  expect(await review()).toMatchObject([{ requiredKg: 50.22, usableKg: 47.708, shortAccepted: false }])
+  await expect(complete()).rejects.toThrow("RM is pending")
+  await receipt(0.001)
+  expect(await review()).toEqual([])
+  await expect(complete()).resolves.toMatchObject({ ok: true })
+  const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber })
+  expect(workspace.analytics.material).toMatchObject({ requiredKg: 50.22, receiptSufficient: true, shortAccepted: false })
+  expect(workspace.analytics.material.receivedKg).toBeCloseTo(47.709, 6)
+  expect(workspace.analytics.material.pendingKg).toBeCloseTo(2.511, 6)
+})
+
+test("records floor material wait only while ready and preserves working-time history at arrival", async () => {
+  const movementWorkerPool = new Pool({ connectionString, max: 1, options: "-c role=mrmpl_worker" })
+  vi.useFakeTimers({ toFake: ["Date"] })
+  try {
+    vi.setSystemTime(new Date("2026-10-15T09:00:00+05:30"))
+    const jobCardNumber = `RM-MOVEMENT-${suffix}`
+    const machineNumber = `RM-MOVE-${suffix}`
+    await planning.upsertMachine({ organizationId, machineNumber })
+    await planning.upsertWorkOrder({ organizationId, itemUid, jobCardNumber, orderedQuantity: 10000,
+      workOrderNumber: jobCardNumber, sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber } })
+    await planning.selectRoute({ organizationId, jobCardNumber, routeCode: "1" })
+    await pool.query(`INSERT INTO manufacturing.production_break_schedules (organization_id, production_floor_id, breaks)
+      SELECT $1, id, '[{"startTime":"12:00","endTime":"12:15"}]'::jsonb
+      FROM manufacturing.production_floors WHERE organization_id = $1 AND code = 'conventional'
+      ON CONFLICT (organization_id, production_floor_id) DO UPDATE SET breaks = EXCLUDED.breaks`, [organizationId])
+    const publish = async () => {
+      await pool.query(`INSERT INTO derived.dashboard_read_models (organization_id, version, payload, source_watermark)
+        VALUES ($1, (SELECT COALESCE(max(version), 0) + 1 FROM derived.dashboard_read_model_heads WHERE organization_id = $1), $2, '{}')`,
+      [organizationId, { productionFloorSnapshots: { conventional: { productionControl: {
+        planningCalendar: { holidayDates: [], workingDates: [] }, machinePlanDetailRows: [{
+          jcNo: jobCardNumber, partCode: itemUid, machine: machineNumber, optionNumber: "1", setupNo: "1",
+          pendingGoodQty: 10000, shopFloorStage: "planned", shopFloorTaskReady: true,
+          plannedProductionStartDate: "15 Oct 2026",
+        }],
+      } } } }])
+      await syncMaterialMovementWaits(movementWorkerPool, organizationId)
+    }
+    const waits = async () => (await repository.readJobCardWorkspace({ organizationId, jobCardNumber }))
+      .materialMovementWaits.filter(row => row.outcome === null)
+    await publish()
+    expect(await waits()).toEqual([]) // A ready-looking plan cannot bypass absent RM.
+    await repository.upsertRawMaterialReceipt({ organizationId, quantityKg: 25.11, receiptNumber: rmPoNumber,
+      receivedOn: "2026-10-15", sourceId: randomUUID(), payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber } })
+    await publish()
+    const first = (await waits())[0]!
+    expect(await repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" }))
+      .not.toHaveProperty("movementWaits")
+    vi.setSystemTime(new Date("2026-10-15T10:00:00+05:30"))
+    await publish()
+    expect(await waits()).toMatchObject([{ id: first.id, readyAt: first.readyAt, workingMinutes: 60 }])
+    const busy = await pool.query<{ id: string }>(`INSERT INTO manufacturing.shop_floor_setup_state
+      (organization_id, work_order_id, route_option_id, operation_setup_id, machine_id, stage, active,
+        source_system, source_table, source_id, source_payload)
+      SELECT $1, wait.work_order_id, setup.route_option_id, setup.id, wait.machine_id, 'operator_started', true,
+        'test', 'material-wait', $2, '{}' FROM manufacturing.material_movement_waits wait
+      JOIN manufacturing.operation_setups setup ON setup.id = wait.operation_setup_id WHERE wait.id = $3 RETURNING id`,
+    [organizationId, randomUUID(), first.id])
+    await publish()
+    expect(await waits()).toEqual([])
+    vi.setSystemTime(new Date("2026-10-15T11:00:00+05:30"))
+    await pool.query("UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false WHERE id = $1", [busy.rows[0]!.id])
+    await publish()
+    vi.setSystemTime(new Date("2026-10-17T10:00:00+05:30"))
+    await repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber, operationSetupCode: "1",
+      stage: "raw_material_at_machine", payload: { completedAt: new Date().toISOString(), doneBy: "Floor Worker", remark: "Material delivered." } })
+    expect(await waits()).toEqual([])
+    const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber })
+    expect(workspace.materialMovementWaits).toMatchObject([
+      { outcome: "arrived", workingMinutes: 615, recordedBy: "Floor Worker", reason: "Material delivered." },
+      { id: first.id, outcome: "blocked", workingMinutes: 60 },
+    ])
+  } finally {
+    vi.useRealTimers()
+    await movementWorkerPool.end()
+  }
+})

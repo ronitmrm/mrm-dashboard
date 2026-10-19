@@ -31,6 +31,7 @@ function jobCardProgress(row: Row) {
 }
 
 function jobCardStage(row: Row) {
+  if (text(row.status) === "Rejected") return "Rejected — Remake Required"
   const progress = jobCardProgress(row)
   const dispatch = first(row, ["dispatchStatus", "status"]).toLowerCase()
   if (dispatch === "partially dispatched") return "Partially dispatched"
@@ -68,7 +69,7 @@ export function JobCardRegister({
       const good = numeric(row.actualQty) || Math.max(numeric(row.outputQty) - numeric(row.rejectQty), 0)
       goodBySetup.set(setupKey, (goodBySetup.get(setupKey) ?? 0) + good)
     }
-    return rows.map((row) => {
+    const executions = rows.map<Row>((row) => {
       const part = first(row, ["partCode", "itemCode", "PART CODE"])
       const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
       const option = first(row, ["optionNumber", "selectedOption"])
@@ -93,6 +94,32 @@ export function JobCardRegister({
         productionProgressPercent: progress.completionPercent,
         productionSetupCount: progress.setupCount,
         completedProductionSetupCount: progress.completedSetupCount,
+      }
+    })
+    const families = new Map<string, Row[]>()
+    for (const row of executions) {
+      const root = text(row.rootJobCardNumber) || first(row, ["jcNo", "JobCardNo", "jobCard"])
+      const family = families.get(root) ?? []
+      family.push(row)
+      families.set(root, family)
+    }
+    return [...families.entries()].map(([rootJobCardNumber, family]) => {
+      const revisionNumber = Math.max(...family.map(row => numeric(row.revisionNumber)))
+      const current = family.filter(row => numeric(row.revisionNumber) === revisionNumber)
+      const priority = (row: Row) => jobCardStage(row) === "Awaiting RM" ? 0 : jobCardStage(row) === "Dispatched" ? 2 : 1
+      const representative = [...current].sort((left, right) => priority(left) - priority(right))[0]!
+      const quantity = current.reduce((sum, row) => sum + numeric(row.orderPcs), 0)
+      return { ...representative, rootJobCardNumber, revisionNumber,
+        mixedActivities: current.length > 1,
+        otherRevisionsActive: family.some(row => numeric(row.revisionNumber) < revisionNumber && !["Dispatched", "Rejected — Remake Required"].includes(jobCardStage(row))),
+        revisionLabel: revisionNumber ? `Rev ${revisionNumber}` : "Original",
+        revisionCount: new Set(family.map(row => numeric(row.revisionNumber))).size,
+        orderPcs: quantity,
+        productionProgressPercent: current.some(row => row.productionProgressPercent === null) ? null
+          : quantity > 0 ? current.reduce((sum, row) => sum + numeric(row.productionProgressPercent) * numeric(row.orderPcs), 0) / quantity : null,
+        productionSetupCount: current.reduce((sum, row) => sum + numeric(row.productionSetupCount), 0),
+        completedProductionSetupCount: current.reduce((sum, row) => sum + numeric(row.completedProductionSetupCount), 0),
+        finalSetupGoodPieces: current.reduce((sum, row) => sum + numeric(row.finalSetupGoodPieces), 0),
       }
     })
   }, [rows, routeRows, productionRows])
@@ -121,7 +148,7 @@ export function JobCardRegister({
           className="mb-4"
           scope="Selected production unit · before table filters"
           items={[
-            { label: "Job Cards", value: rows.length, tone: "information" },
+            { label: "Job Cards", value: progressRows.length, tone: "information" },
             {
               label: "Awaiting RM",
               value: counts.awaitingRm,
@@ -147,10 +174,10 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead>RM Received Date</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead title="Recorded Item Complete date of the final route setup">Actual Finish Date</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead>RM Received Date</TableHead><TableHead className="text-right">Current Revision Qty</TableHead><TableHead>Current Revision Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead title="Recorded Item Complete date of the final route setup">Actual Finish Date</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{progressRows.length ? progressRows.map((row) => {
-              const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
+              const jobCard = text(row.rootJobCardNumber) || first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
               const setupCount = numeric(row.productionSetupCount)
@@ -165,7 +192,7 @@ export function JobCardRegister({
               const plannedFinish = text(finishDates?.plannedDispatchDateAtRmReceipt)
               const actualFinish = text(finishDates?.actualFinishDate)
               return <TableRow key={jobCard}>
-                <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
+                <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link><div className="text-xs text-muted-foreground">{text(row.revisionLabel)}{numeric(row.revisionCount) > 1 ? ` · ${row.revisionCount} revisions` : ""}</div>{row.otherRevisionsActive ? <StatusBadge tone="information" value="Other revisions have open work" /> : null}</TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
                 <TableCell className="max-w-72 truncate">{first(row, ["description", "DESCRIPTION"])}</TableCell>
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
@@ -173,9 +200,9 @@ export function JobCardRegister({
                 <TableCell>{first(finishDates ?? {}, ["rmReceivedDate"])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{stage}</TableCell>
-                <TableCell>{plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
-                <TableCell>{formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
-                <TableCell>{actualFinish || <span className="text-muted-foreground">{dispatched || stage === "Production complete" ? "Not recorded" : "-"}</span>}</TableCell>
+                <TableCell>{row.mixedActivities ? "Select activity in details" : plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
+                <TableCell>{row.mixedActivities ? "Select activity in details" : formatPlanningFinish(finishDates?.currentProbableDispatchDate, finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
+                <TableCell>{row.mixedActivities ? "Select activity in details" : actualFinish || <span className="text-muted-foreground">{dispatched || stage === "Production complete" ? "Not recorded" : "-"}</span>}</TableCell>
                 <TableCell className="min-w-48">
                   {dispatched ? (
                     <div className="space-y-1.5 py-1">
@@ -202,7 +229,7 @@ export function JobCardRegister({
                     </div>
                   )}
                 </TableCell>
-                <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
+                <TableCell>{row.mixedActivities ? "Multiple activities" : first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
             }) : <TableRow><TableCell colSpan={14} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>

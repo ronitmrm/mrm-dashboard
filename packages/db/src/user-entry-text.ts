@@ -19,6 +19,7 @@ const preservedFieldNames = new Set([
   "foamtool",
   "formula",
   "inputtype",
+  "importmode",
   "jobcard",
   "kind",
   "locale",

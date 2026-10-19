@@ -1,5 +1,21 @@
 # Production Sessions
 
+## Production unit scope
+
+Shared production features and fixes apply to Conventional-01, Conventional-02,
+CNC-01 and Forging, including when a request is explained using a CNC example.
+A feature is unit-specific only when that restriction is explicitly requested
+and recorded in its lifecycle definition. Each unit retains its own records,
+masters, machines, permissions and configured production calendar.
+
+Production pages use the same layout and workflow across all four units, with
+CNC as the reference. Planning Control contains the shared RM status, session
+flag and workflow exception review; it has no unit-specific tool/fixture panel.
+All production rules use this same CNC reference, except each unit keeps its
+measurement methods and working hours. Masters and operational records remain
+scoped to their unit. Quality session closing and corrections follow the same
+rules in every unit, subject to that unit's recording permission.
+
 ## Work order job cards
 
 Each Job Card identifies one production order line. Multiple Job Cards may share
@@ -54,7 +70,7 @@ For points marked Required, either Yes or No satisfies a checkbox/Yes-No answer;
 an untouched/blank selection blocks completion. Optional points may stay blank.
 Numeric zero is a valid answer. Saving incomplete progress
 clears the checklist completion timestamp and leaves Setting Done locked.
-CNC Setting Done rechecks saved answers on the server, so a cached checklist
+Setting Done rechecks saved answers on the server in every production unit, so a cached checklist
 or an earlier Completed status cannot bypass this lock.
 
 An actual shop-floor setup remains visible and locked to its physical machine
@@ -65,15 +81,17 @@ state; its cycle time may be entered when that setup's real session starts.
 The saved setup stage is available to the next Shop Floor, Machinist, or Quality
 task immediately; a pending planning recalculation does not delay that handoff.
 
-CNC-01 has no Pre Setting stage. Its workflow is RM at Machine → Setting →
-Quality Approval → Machine Start. The six CNC checklist points are completed at
-Setting, without requiring an earlier checklist session. Historical Pre Setting
-evidence remains recorded; it does not complete Setting or block the next action.
-Other production units retain their existing Pre Setting workflow.
+All four production units use RM at Machine → Setting → Quality Approval →
+Machine Start, with no separate Pre Setting stage. Each unit's own checklist
+points are completed during Setting, without requiring an earlier checklist
+session. Required points previously labelled Pre Setting also require their own
+Setting answers. Historical Pre Setting evidence remains recorded; it does not
+complete Setting or block the next action. New Pre Setting events and checklist
+start-phase submissions are rejected in every unit.
 
 The task's permission in the selected Production Unit controls who may record
-Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine, Pre
-Setting, Setting, Quality Approval, Machine Start, first-piece inspection, and
+Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine,
+Setting, Quality Approval, Machine Start, first-piece inspection, and
 dispatch approval record the signed-in performer's active linked Employee ID and
 name when available, or their signed-in account name otherwise. A user cannot
 record these actions for another employee. Machine Start separately assigns an
@@ -126,9 +144,10 @@ Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job 
 
 Choosing **Item Complete** closes the Production Session and marks that machine's
 active setup Item Complete in the same transaction, which releases the machine.
-Every setup requires full usable RM receipt or a Planner's explicit short-RM
-acceptance on its Job Card before Item Complete can be saved, including corrections
-and other setup-completion entry paths. See Job Cards → RM review and short receipt
+Every setup requires usable RM of at least 95% of its requirement (the 5% shortage
+allowance), or a Planner's explicit acceptance of a larger shortage on its Job Card,
+before Item Complete can be saved, including corrections and other setup-completion
+entry paths. See Job Cards → RM review and short receipt
 acceptance. Manual Stop records output without completing the setup; the Planner's
 Release machine action can then release only the selected assignment awaiting input.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
@@ -413,7 +432,9 @@ Planner Actions never accept a second produced-quantity figure. When a planner d
 Saving an approved machine move, parallel-machine target stop, priority stop, or machine-constraint move also releases each stopped setup's active machine ownership in the same transaction. Its workflow returns to Planned without marking the setup complete, the planner history retains the stop evidence, and the destination machine can immediately accept the approved setup.
 
 The released Planned assignment remains in history without locking its former
-machine. Shop Floor may prepare the setup on its newly planned machine after
+machine. A stopped source stream with no remaining pieces preserves its recorded
+production dates and output; it reserves no future machine time or idle-gap slot.
+Shop Floor may prepare the setup on its newly planned machine after
 recalculation. Once that setup becomes active there, its old inactive assignment
 does not authorize another simultaneous start on the former machine; that still
 requires a current Planner move or parallel-machine approval. A later release

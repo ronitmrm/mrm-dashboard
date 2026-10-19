@@ -14,6 +14,7 @@ const autoRefreshActionPaths = new Set([
   "work-order-cancellation",
   "route-change",
   "route-selection",
+  "rework-route",
   "mark-complete",
   "master-delete",
   "rm-inward-delete",
@@ -22,6 +23,8 @@ const autoRefreshActionPaths = new Set([
 const autoRefreshDataEntryTypes = new Set([
   ...productionMasterTableEntryTypes,
   "work_order",
+  "rework_received",
+  "rework_rejected",
   "rm_inward",
   "production_session_close",
   "production_session_correct",
@@ -48,6 +51,8 @@ const autoRefreshTargetTables = new Set([
 ]);
 
 export function shouldQueuePlanningRefresh(path: string, body: Record<string, unknown> = {}) {
+  if (path === "data-import" && body.entryType === "rm_inward" && body.importMode === "update_locations") return false;
+  if (path === "data-import" && body.entryType === "work_order" && body.importMode === "update_required_rm") return false;
   if (autoRefreshActionPaths.has(path)) return true;
   if (path === "data-entry" || path === "data-import") {
     return shouldQueueDataEntryPlanningRefresh(body);
@@ -59,6 +64,8 @@ export function shouldQueuePlanningRefresh(path: string, body: Record<string, un
 }
 
 export function planningRefreshStatusMessage(autoRefresh: boolean, path = "", body: Record<string, unknown> = {}) {
+  if (path === "data-import" && body.entryType === "rm_inward" && body.importMode === "update_locations") return "Planning recalculation not required.";
+  if (path === "data-import" && body.entryType === "work_order" && body.importMode === "update_required_rm") return "Planning recalculation not required.";
   if (path === "quality-measuring-program" || path === "production-session-efficiency-flag-close") return "Planning recalculation not required.";
   if (autoRefresh && productionMasterTableEntryTypes.some((entry) => entry === text(body.entryType))) return "Master table refresh queued.";
   if (autoRefresh) return "Planning recalculation queued.";

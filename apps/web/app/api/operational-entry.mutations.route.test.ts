@@ -13,8 +13,11 @@ const dependencies = vi.hoisted(() => ({
   organizationIdForCode: vi.fn(),
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
+  updateRawMaterialLocations: vi.fn(),
   reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
+  upsertWorkOrder: vi.fn(),
+  updateWorkOrderRequiredRm: vi.fn(),
   startProductionSession: vi.fn(),
   closeProductionSession: vi.fn(),
   correctProductionSessionStart: vi.fn(),
@@ -46,6 +49,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
+    updateRawMaterialLocations: dependencies.updateRawMaterialLocations,
     reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
@@ -59,6 +63,8 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     close: dependencies.close,
     organizationIdForCode: dependencies.organizationIdForCode,
     upsertCycleStandard: dependencies.upsertCycleStandard,
+    upsertWorkOrder: dependencies.upsertWorkOrder,
+    updateWorkOrderRequiredRm: dependencies.updateWorkOrderRequiredRm,
   }),
 }))
 
@@ -523,12 +529,13 @@ describe("production entry mutation API authorization", () => {
     const saved = await post("data-entry", {
       entryType: "rm_inward",
       productionFloorCode: "cnc",
-      payload: { rmPoNo: "RM-1", rmInwardKg: 12, rmInwardDate: "2026-09-09" },
+      payload: { rmPoNo: "RM-1", rmInwardKg: 12, rmInwardDate: "2026-09-09", rmLocation: "Rack A3" },
     })
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({ ok: true, rowsUpdated: 1 })
     expect(dependencies.upsertRawMaterialReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
+        payload: expect.objectContaining({ rmLocation: "Rack A3" }),
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
         quantityKg: 12,
@@ -539,17 +546,90 @@ describe("production entry mutation API authorization", () => {
       "entries.cnc.rm_inward.read",
       "entries.cnc.rm_inward.import",
     ])
-    const imported = await post("data-import", importBody())
+    const imported = await post("data-import", importBody('Rm Po No.,Rm Inward Kg,Rm Inward Date,RM Location\nRM-1,"1,015.90",09-09-2026,001\n'))
     expect(imported.status).toBe(200)
     expect(await imported.json()).toMatchObject({ ok: true, inserted: 1 })
     expect(dependencies.upsertRawMaterialReceipts).toHaveBeenCalledWith([
       expect.objectContaining({
+        payload: expect.objectContaining({ rmLocation: "001" }),
         productionFloorCode: "cnc",
         requiredProductionFloorCode: "cnc",
-        quantityKg: 12,
+        quantityKg: 1015.9,
         sourceId: expect.stringMatching(/^csv:/),
       }),
     ])
+    dependencies.upsertRawMaterialReceipts.mockClear()
+    dependencies.requestRefresh.mockClear()
+    dependencies.updateRawMaterialLocations.mockResolvedValue({ updated: 1 })
+    const locations = await post("data-import", { ...importBody('Jc No.,Rm Inward Kg,Rm Inward Date,RM Location\nP1479,"1,015.90",09-09-2026,001\n'), importMode: "update_locations" })
+    expect(locations.status).toBe(200)
+    expect(await locations.json()).toMatchObject({ ok: true, rowsUpdated: 1 })
+    expect(dependencies.updateRawMaterialLocations).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", productionFloorCode: "cnc",
+      rows: [{ jobCardNumber: "P1479", receivedOn: "2026-09-09", location: "001" }],
+    })
+    expect(dependencies.upsertRawMaterialReceipts).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+    dependencies.upsertRawMaterialReceipts.mockRejectedValue(new ShopFloorConflictError('RM receipt rejected: Work Order for Job Card "P1479" is cancelled.'))
+    const cancelled = await post("data-import", importBody())
+    expect(cancelled.status).toBe(409)
+    expect(await cancelled.json()).toMatchObject({ error: expect.stringContaining('P1479" is cancelled') })
+  })
+
+  it("saves entered Work Order required RM from the form and CSV", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      "entries.cnc.work_order.save", "entries.cnc.work_order.import",
+    ])
+    dependencies.upsertWorkOrder.mockResolvedValue({ id: "work-order-1" })
+    const saved = await post("data-entry", {
+      entryType: "work_order", productionFloorCode: "cnc",
+      payload: { jcNo: "JC-1", partCode: "P-1", orderPcs: 1000, requiredRmKg: 125.5 },
+    })
+    expect(saved.status).toBe(200)
+    expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
+      sourcePayload: expect.objectContaining({ requiredRmKg: 125.5 }),
+    }))
+    const body = { entryType: "work_order", productionFloorCode: "cnc", fileName: "work_order.csv",
+      fileBase64: Buffer.from('Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-2,P-1,"1,000","1,300.25"\n').toString("base64") }
+    expect((await post("data-import", body)).status).toBe(200)
+    expect(dependencies.upsertWorkOrder).toHaveBeenLastCalledWith(expect.objectContaining({
+      sourcePayload: expect.objectContaining({ requiredRmKg: 1300.25 }),
+    }))
+    dependencies.upsertWorkOrder.mockClear()
+    const invalid = await post("data-import", { ...body,
+      fileBase64: Buffer.from("Jc No.,Part Code,Order Pcs,Required RM (kg)\nJC-3,P-1,1000,125\nJC-4,P-1,1000,-1\n").toString("base64") })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+  })
+
+  it("updates only Required RM for existing Work Orders without planning or full saves", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.work_order.import"])
+    dependencies.updateWorkOrderRequiredRm.mockResolvedValue({ updated: 1, unchanged: 0, skipped: 1 })
+    const body = { entryType: "work_order", productionFloorCode: "cnc", importMode: "update_required_rm",
+      fileName: "work_order.csv", fileBase64: Buffer.from('Jc No.,Required RM (kg)\nP1479,"1,300.25"\nUNKNOWN,20\nBLANK,\n').toString("base64") }
+    const response = await post("data-import", body)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, rowsUpdated: 1, rowsUnchanged: 0, rowsSkipped: 1 })
+    expect(dependencies.updateWorkOrderRequiredRm).toHaveBeenCalledWith({
+      actorUserId: "entry-writer", organizationId: "organization-1", productionFloorCode: "cnc",
+      rows: [{ jobCardNumber: "P1479", requiredRmKg: 1300.25 }, { jobCardNumber: "UNKNOWN", requiredRmKg: 20 }],
+    })
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+
+    dependencies.updateWorkOrderRequiredRm.mockClear()
+    const invalid = await post("data-import", { ...body,
+      fileBase64: Buffer.from("Jc No.,Required RM (kg)\nP1479,12\nP0556,-1\n").toString("base64") })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ error: expect.stringContaining("CSV row 3: Required RM (kg) must be a positive number.") })
+    expect(dependencies.updateWorkOrderRequiredRm).not.toHaveBeenCalled()
+    expect(dependencies.upsertWorkOrder).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
+
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.work_order.save"])
+    expect((await post("data-import", body)).status).toBe(403)
+    expect(dependencies.updateWorkOrderRequiredRm).not.toHaveBeenCalled()
   })
 
   it("rejects a different unit inside manual and imported payloads", async () => {

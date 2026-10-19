@@ -211,6 +211,7 @@ test("offer register keeps a joined outcome after the post changes", async () =>
   const query = vi.fn().mockResolvedValue({ rows: [{
     application_id: "application-1", candidate_id: "candidate-1",
     candidate_name: "Employee One", job_id: "job-1", job_number: "JOB-1",
+    candidate_phone: "9876543210",
     job_title: "Operator", offer_id: "letter-1", offer_reference: "OL-1",
     offer_issued_on: "2026-09-01", offer_file_available: true,
     planned_joining_on: "2026-09-05", joined_on: "2026-09-05",
@@ -218,9 +219,10 @@ test("offer register keeps a joined outcome after the post changes", async () =>
   }] })
   const repository = createRecruitmentRepository({ pool: { query } as unknown as Pool })
   await expect(repository.listOfferOutcomes("org-1")).resolves.toMatchObject([
-    { applicationId: "application-1", outcome: "Joined", joinedOn: "2026-09-05" },
+    { applicationId: "application-1", candidatePhone: "9876543210", outcome: "Joined", joinedOn: "2026-09-05" },
   ])
   expect(query.mock.calls[0]?.[0]).toContain("recruitment.employee_post_assignments")
+  expect(query.mock.calls[0]?.[0]).toContain("candidate.phone AS candidate_phone")
   expect(query.mock.calls[0]?.[1]).toEqual(["org-1"])
 })
 
@@ -1396,7 +1398,7 @@ describe("candidate conversation logs", () => {
   const organizationId = "00000000-0000-4000-8000-000000000010"
   const eventId = "00000000-0000-4000-8000-000000000011"
 
-  test("includes the candidate department in conversation rows", async () => {
+  test("includes department and a linked interview event without copying conversation logs", async () => {
     const query = vi.fn(async (statement: string) => {
       if (statement.includes("FROM recruitment.candidate_events event")) {
         return {
@@ -1413,6 +1415,19 @@ describe("candidate conversation logs", () => {
               occurred_at: "2026-08-10T10:00:00.000Z",
               title: "Follow-up",
             },
+            {
+              candidate_id: "00000000-0000-4000-8000-000000000012",
+              candidate_name: "Candidate",
+              candidate_phone: "9999999999",
+              department: "Quality",
+              event_type: "Interview Outcome",
+              id: "interview:outcome",
+              job_number: "JOB-1",
+              notes: "Interviewer: HR",
+              occurred_at: "2026-08-10T11:00:00.000Z",
+              title: "Screening Round — Approved",
+              interview_href: "/hr/jobs/job-1#interview-round-1",
+            },
           ],
         }
       }
@@ -1425,6 +1440,9 @@ describe("candidate conversation logs", () => {
     const events = await repository.listCandidateEvents(organizationId)
 
     expect(events[0]?.department).toBe("Quality")
+    expect(events[0]?.interviewHref).toBeNull()
+    expect(events[1]?.interviewHref).toBe("/hr/jobs/job-1#interview-round-1")
+    expect(query).toHaveBeenCalledTimes(1)
     expect(query.mock.calls[0]?.[0]).toContain(
       "department.id = candidate.preferred_department_id"
     )

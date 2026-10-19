@@ -21,6 +21,8 @@ import {
 import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
 import { ShopFloorConflictError } from "./production-shop-floor"
 import { rawMaterialRejectionBalance } from "./rejection-domain"
+import { readRequiredRawMaterialKg } from "./job-card-workspace"
+import { createJobReworkRoute, rejectJobRework, type ReworkRouteSetup } from "./job-card-rework"
 import {
   normalizeProductionFloorCode,
   ProductionUnitAccessError,
@@ -266,8 +268,8 @@ async function workOrderFor(
     [organizationId, requiredText(jobCardNumber, "Job card")]
   )
   if (!result.rows[0]) throw new Error("Planning work order was not found.")
-  if (result.rows[0].status === "Cancelled") {
-    throw new Error("Cancelled Work Order lines cannot receive planner actions.")
+  if (["Cancelled", "Rejected"].includes(result.rows[0].status)) {
+    throw new Error(`${result.rows[0].status} Work Order lines cannot receive planner actions.`)
   }
   return result.rows[0]
 }
@@ -298,7 +300,7 @@ async function currentPlanningRouteOptionId(
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $2 AND route.item_id = $3
-            AND route.active AND floor.code = $5
+            AND route.active AND floor.code = $5 AND route.work_order_id IS NULL
             AND (lower(route.route_code) = lower($4)
               OR lower(COALESCE(route.legacy_option_number, '')) = lower($4))
           ORDER BY route.revision DESC LIMIT 1)
@@ -306,15 +308,15 @@ async function currentPlanningRouteOptionId(
          (SELECT route_option_id FROM manufacturing.route_selections
           WHERE work_order_id = $1 AND reversed_at IS NULL
           ORDER BY selected_at DESC, id DESC LIMIT 1),
-         (SELECT CASE WHEN count(*) = 1 THEN (array_agg(route.id))[1] END
+         (SELECT CASE WHEN count(*) = 1 AND NOT $6::boolean THEN (array_agg(route.id))[1] END
           FROM manufacturing.route_options route
           JOIN manufacturing.production_floors floor
             ON floor.id = route.production_floor_id
           WHERE route.organization_id = $2 AND route.item_id = $3
-            AND route.active AND floor.code = $5)
+            AND route.active AND floor.code = $5 AND route.work_order_id IS NULL)
        ) END
      ) AS route_option_id`,
-    [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode]
+    [input.workOrderId, input.organizationId, input.itemId, importedOption, floorCode, payload.isRevision === true]
   )
   return result.rows[0]?.route_option_id ?? null
 }
@@ -478,7 +480,7 @@ async function releasePlannerInterruptedSetups(
   input: {
     actorUserId?: string | null
     decisionId: string
-    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections"
+    decisionSource: "planOverrides" | "plannerPriorities" | "machineConstraints" | "rawMaterialRejections" | "routeChanges"
     interruptions: Array<InterruptedSetupInput & { operationSetupId?: string }>
     organizationId: string
     reason: string
@@ -741,7 +743,8 @@ async function routeFor(
   organizationId: string,
   itemId: string,
   routeCode: string,
-  productionFloorCode: ProductionFloorCode
+  productionFloorCode: ProductionFloorCode,
+  workOrderId: string | null = null
 ) {
   const result = await client.query<{ id: string }>(
     `
@@ -754,7 +757,7 @@ async function routeFor(
           OR lower(COALESCE(route.legacy_option_number, '')) = lower($3)
         )
         AND floor.code = $4
-        AND route.active
+        AND route.active AND (route.work_order_id IS NULL OR route.work_order_id = $5)
       ORDER BY route.revision DESC
       LIMIT 1
       FOR UPDATE
@@ -764,6 +767,7 @@ async function routeFor(
       itemId,
       requiredText(routeCode, "Route option"),
       productionFloorCode,
+      workOrderId,
     ]
   )
   if (!result.rows[0]) throw new Error("Route option was not found.")
@@ -1052,6 +1056,142 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
+    async createReworkRoute(input: { actorUserId?: string | null; organizationId: string; productionFloorCode: ProductionFloorCode; jobCardNumber: string; setups: ReworkRouteSetup[] }) {
+      return transaction(pool, async client => {
+        const result = await createJobReworkRoute(client, input)
+        await queueDashboardRefresh(client, input.organizationId)
+        return result
+      })
+    },
+
+    async rejectRework(input: { actorUserId?: string | null; organizationId: string; productionFloorCode: ProductionFloorCode;
+      jobCardNumber: string; quantity: number; rejectedOn: string; reason: string; replacementRequiredRmKg: number; replacementRmPoNo?: string }) {
+      return transaction(pool, async client => {
+        const result = await rejectJobRework(client, input)
+        await queueDashboardRefresh(client, input.organizationId)
+        return result
+      })
+    },
+
+    async receiveRework(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      originalJobCardNumber: string
+      quantity: number
+      replacementQuantity?: number
+      replacementRequiredRmKg?: number
+      replacementRmPoNo?: string
+      receivedOn: string
+      reason: string
+    }) {
+      return transaction(pool, async client => {
+        const original = input.originalJobCardNumber.trim()
+        const reason = input.reason.trim()
+        if (!original || !reason) throw new ShopFloorConflictError("Job Card and reason are required.")
+        if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
+          throw new ShopFloorConflictError("Returned quantity must be a positive whole number.")
+        }
+        const replacementQuantity = input.replacementQuantity ?? 0
+        if (!Number.isSafeInteger(replacementQuantity) || replacementQuantity < 0 || replacementQuantity > input.quantity) {
+          throw new ShopFloorConflictError("Replacement quantity must be a whole number between zero and returned quantity.")
+        }
+        const replacementRequiredRmKg = readRequiredRawMaterialKg(input.replacementRequiredRmKg)
+        if (replacementQuantity > 0 && replacementRequiredRmKg === null) {
+          throw new ShopFloorConflictError("Enter positive Required RM (kg) for the replacement quantity.")
+        }
+        const receivedOn = input.receivedOn.trim()
+        const date = new Date(`${receivedOn}T00:00:00Z`)
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedOn) || !Number.isFinite(date.getTime())
+          || date.toISOString().slice(0, 10) !== receivedOn || receivedOn > today) {
+          throw new ShopFloorConflictError("Enter a valid receipt date that is not in the future.")
+        }
+        const parent = await client.query<{
+          id: string; item_id: string; job_card_number: string
+          work_order_number: string; source_payload: Record<string, unknown>; status: string
+        }>(`SELECT id, item_id, job_card_number, work_order_number, source_payload, status
+           FROM manufacturing.work_orders WHERE organization_id = $1
+             AND lower(job_card_number) = lower($2) FOR UPDATE`, [input.organizationId, original])
+        const order = parent.rows[0]
+        if (!order || productionFloorCodeForRecord({ sourcePayload: order.source_payload }) !== input.productionFloorCode) {
+          throw new ShopFloorConflictError("Original Job Card was not found in this Production Unit.")
+        }
+        if (order.status === "Cancelled") throw new ShopFloorConflictError("Cancelled Job Cards cannot receive rework.")
+        const replacementRmPoNo = input.replacementRmPoNo?.trim()
+          || String(sourcePayloadRecord(order.source_payload).rmPoNo ?? sourcePayloadRecord(order.source_payload)["RM PO NO."] ?? "").trim()
+        if (replacementQuantity > 0 && !replacementRmPoNo) throw new ShopFloorConflictError("Enter the RM PO Number for replacement material.")
+        const rootId = String(sourcePayloadRecord(order.source_payload).revisionRootWorkOrderId ?? order.id)
+        const root = await client.query<{ job_card_number: string }>(
+          "SELECT job_card_number FROM manufacturing.work_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE",
+          [rootId, input.organizationId])
+        if (!root.rows[0]) throw new ShopFloorConflictError("Original Job Card was not found.")
+        const rootJobCardNumber = root.rows[0].job_card_number
+        const dispatch = await client.query<{ quantity: string; legacy: boolean }>(
+          `SELECT COALESCE(sum(quantity), 0)::text AS quantity, COALESCE(bool_or(quantity IS NULL), false) AS legacy
+           FROM manufacturing.dispatch_approval_events WHERE organization_id = $1 AND work_order_id = $2
+             AND decision = 'approved' AND reversed_at IS NULL`, [input.organizationId, order.id])
+        if (dispatch.rows[0]!.legacy) {
+          throw new ShopFloorConflictError("Record the actual dispatched quantity for this Job Card before receiving rework. Order quantity cannot be used for returns.")
+        }
+        const dispatched = Number(dispatch.rows[0]!.quantity)
+        if (dispatched <= 0) throw new ShopFloorConflictError("Only a dispatched Job Card can receive rework.")
+        const prior = await client.query<{ ordered_quantity: string }>(
+          `SELECT ordered_quantity::text FROM manufacturing.work_orders
+           WHERE organization_id = $1 AND source_payload->>'reworkOfWorkOrderId' = $2`, [input.organizationId, order.id])
+        const returned = prior.rows.reduce((total, row) => total + Number(row.ordered_quantity), 0)
+        const maximumReturn = Math.floor(dispatched * 105 / 100)
+        if (input.quantity > maximumReturn - returned) {
+          throw new ShopFloorConflictError(`Only ${Math.max(maximumReturn - returned, 0)} pieces remain available to return, including the 5% weight-conversion allowance.`)
+        }
+        const revisions = await client.query<{ revision: number }>(
+          `SELECT COALESCE(max((source_payload->>'revisionNumber')::integer), 0) AS revision
+           FROM manufacturing.work_orders WHERE organization_id = $1
+             AND source_payload->>'revisionRootWorkOrderId' = $2`, [input.organizationId, rootId])
+        const revisionNumber = Number(revisions.rows[0]!.revision) + 1
+        const reference = `RET-${rootJobCardNumber}-R${revisionNumber}`
+        const item = await client.query<{ uid: string; description: string }>("SELECT uid, description FROM catalog.items WHERE id = $1", [order.item_id])
+        const activities = [
+          { disposition: "rework", quantity: input.quantity - replacementQuantity },
+          { disposition: "replacement", quantity: replacementQuantity },
+        ].filter(activity => activity.quantity > 0)
+        const savedActivities = []
+        for (const activity of activities) {
+          const label = activity.disposition === "rework" ? "Rework" : "Replacement"
+          // Existing work-order IDs scope execution; the public number stays rootJobCardNumber.
+          const jobCardNumber = `${rootJobCardNumber} · Rev ${revisionNumber} · ${label}`
+          await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
+          const sourcePayload = {
+            isRevision: true, isRework: activity.disposition === "rework", disposition: activity.disposition,
+            revisionNumber, revisionRootWorkOrderId: rootId, rootJobCardNumber,
+            reworkOfWorkOrderId: order.id, originalJobCardNumber: order.job_card_number,
+            jcNo: jobCardNumber, partCode: item.rows[0]!.uid, description: item.rows[0]!.description,
+            fgPoNo: sourcePayloadRecord(order.source_payload).fgPoNo ?? order.work_order_number,
+            orderPcs: activity.quantity, quantity: activity.quantity, returnQuantity: input.quantity,
+            ...(activity.disposition === "replacement" ? { requiredRmKg: replacementRequiredRmKg, rmPoNo: replacementRmPoNo } : {}),
+            receivedOn, receiptReference: reference, reason,
+            productionFloorCode: input.productionFloorCode, receivedByUserId: input.actorUserId ?? null,
+            receivedAt: new Date().toISOString(),
+          }
+          const saved = await client.query<{ id: string }>(
+            `INSERT INTO manufacturing.work_orders (organization_id, work_order_number, job_card_number,
+              item_id, ordered_quantity, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id, source_payload)
+             VALUES ($1, $2, $3, $4, $5, $6, $6, 'mrm-dashboard', 'work_order', $7, $8) RETURNING id`,
+            [input.organizationId, order.work_order_number, jobCardNumber, order.item_id, activity.quantity,
+              input.actorUserId ?? null, randomUUID(), sourcePayload])
+          await client.query(`INSERT INTO audit.events (organization_id, actor_user_id, event_type, target_schema,
+            target_table, target_id, before_state, after_state, source_system, source_table, source_id)
+            VALUES ($1, $2, 'production.rework.received', 'manufacturing', 'work_orders', $3, NULL, $4,
+              'mrm-dashboard', 'rework_received', $5)`,
+            [input.organizationId, input.actorUserId ?? null, saved.rows[0]!.id, sourcePayload, randomUUID()])
+          savedActivities.push({ id: saved.rows[0]!.id, jobCardNumber, disposition: activity.disposition, quantity: activity.quantity })
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { rootJobCardNumber, revisionNumber, receiptReference: reference, activities: savedActivities }
+      })
+    },
+
     async upsertWorkOrder(input: {
       actorUserId?: string | null
       dueDate?: string | null
@@ -1065,8 +1205,14 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
     }) {
       return transaction(pool, async (client) => {
         const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+        if (["isRework", "isRevision", "revisionRootWorkOrderId", "revisionNumber", "rootJobCardNumber"]
+          .some(key => sourcePayloadRecord(input.sourcePayload)[key])) throw new Error("Use Rework Received to create Job Card revisions.")
         if (input.orderedQuantity < 0) {
           throw new Error("Ordered quantity cannot be negative.")
+        }
+        const requiredRmKg = sourcePayloadRecord(input.sourcePayload).requiredRmKg
+        if (String(requiredRmKg ?? "").trim() && readRequiredRawMaterialKg(requiredRmKg) === null) {
+          throw new Error("Required RM (kg) must be a positive number.")
         }
         await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
         const planningItem = await ensureWorkOrderItemId(
@@ -1099,6 +1245,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           productionFloorCodeForRecord({ sourcePayload: existing.rows[0].source_payload }) !== input.requiredProductionFloorCode
         ) {
           throw new ProductionUnitAccessError("This Job Card belongs to another Production Unit.")
+        }
+        if (sourcePayloadRecord(existing.rows[0]?.source_payload).isRevision === true) {
+          throw new Error("Rework receipt quantities and identity cannot be overwritten through Work Order entry.")
         }
         if (existing.rows[0]?.status === "Cancelled") {
           throw new Error(
@@ -1180,6 +1329,91 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
+    async updateWorkOrderRequiredRm(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      rows: { jobCardNumber: string; requiredRmKg: number }[]
+    }) {
+      const requirements = new Map<string, { job_card: string; required_rm_kg: number }>()
+      for (const [index, row] of input.rows.entries()) {
+        const jobCardNumber = row.jobCardNumber.trim()
+        if (!jobCardNumber) {
+          throw new ShopFloorConflictError(`Row ${index + 2}: Job Card is required. No Required RM saved.`)
+        }
+        if (!Number.isFinite(row.requiredRmKg) || row.requiredRmKg <= 0) {
+          throw new ShopFloorConflictError(`Row ${index + 2}: Required RM (kg) must be a positive number. No Required RM saved.`)
+        }
+        const key = jobCardNumber.toLowerCase()
+        const previous = requirements.get(key)
+        if (previous && previous.required_rm_kg !== row.requiredRmKg) {
+          throw new ShopFloorConflictError(`Conflicting Required RM for Job Card "${jobCardNumber}". No Required RM saved.`)
+        }
+        requirements.set(key, { job_card: key, required_rm_kg: row.requiredRmKg })
+      }
+      if (!requirements.size) {
+        throw new ShopFloorConflictError("No Required RM entered. Fill Required RM (kg) in the downloaded Work Order CSV.")
+      }
+      return transaction(pool, async client => {
+        const matched = await client.query<{
+          id: string
+          required_rm_kg: number
+          current_required_rm_kg: unknown
+          before_state: Record<string, unknown>
+        }>(
+          `SELECT work_order.id, requested.required_rm_kg,
+             work_order.source_payload->'requiredRmKg' AS current_required_rm_kg,
+             to_jsonb(work_order) AS before_state
+           FROM jsonb_to_recordset($2::jsonb) AS requested(job_card text, required_rm_kg float8)
+           JOIN manufacturing.work_orders work_order
+             ON work_order.organization_id = $1
+             AND lower(work_order.job_card_number) = requested.job_card
+             AND derived.dashboard_production_floor_code(work_order.source_payload) = $3
+           ORDER BY work_order.id
+           FOR UPDATE OF work_order`,
+          [input.organizationId, JSON.stringify([...requirements.values()]), input.productionFloorCode]
+        )
+        if (!matched.rows.length) {
+          throw new ShopFloorConflictError("No saved Work Orders match these Job Cards in this Production Unit. Use the original Job Card numbers. No Required RM saved.")
+        }
+        const changes = matched.rows.filter(row =>
+          readRequiredRawMaterialKg(row.current_required_rm_kg) !== row.required_rm_kg
+        )
+        const counts = {
+          updated: changes.length,
+          unchanged: matched.rows.length - changes.length,
+          skipped: requirements.size - matched.rows.length,
+        }
+        if (!changes.length) return counts
+        const updated = await client.query<{ id: string; after_state: Record<string, unknown> }>(
+          `UPDATE manufacturing.work_orders work_order
+           SET source_payload = jsonb_set(COALESCE(work_order.source_payload, '{}'::jsonb),
+               '{requiredRmKg}', to_jsonb(change.required_rm_kg)),
+             updated_at = now(), updated_by_user_id = $3, row_version = work_order.row_version + 1
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, required_rm_kg numeric)
+           WHERE work_order.organization_id = $1 AND work_order.id = change.id
+           RETURNING work_order.id, to_jsonb(work_order) AS after_state`,
+          [input.organizationId, JSON.stringify(changes.map(row => ({
+            id: row.id, required_rm_kg: row.required_rm_kg,
+          }))), input.actorUserId ?? null]
+        )
+        const beforeById = new Map(changes.map(row => [row.id, row.before_state]))
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
+           ) SELECT $1, 'manufacturing.work_order.required_rm_updated', 'manufacturing',
+             'work_orders', change.id, $3, 'Required RM CSV update',
+             change.before_state, change.after_state, 'mrm-dashboard', 'work_order_required_rm', gen_random_uuid()::text
+           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, before_state jsonb, after_state jsonb)`,
+          [input.organizationId, JSON.stringify(updated.rows.map(row => ({
+            id: row.id, before_state: beforeById.get(row.id), after_state: row.after_state,
+          }))), input.actorUserId ?? null]
+        )
+        return counts
+      })
+    },
+
     async upsertRouteOption(input: {
       rejectDuplicates?: boolean
       recordId?: string
@@ -1233,6 +1467,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               )
               AND floor.code = $3
               AND route.revision = 1
+              AND route.work_order_id IS NULL
             FOR UPDATE
           `,
           [itemId, routeCode, productionFloorCode]
@@ -1273,7 +1508,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           // Materialize the old automatic choice before introducing another option.
           const sole = await client.query<{ id: string; route_code: string }>(
             `SELECT id, route_code FROM manufacturing.route_options
-             WHERE item_id = $1 AND production_floor_id = $2 AND active`, [itemId, productionFloorId]
+             WHERE item_id = $1 AND production_floor_id = $2 AND active AND work_order_id IS NULL`, [itemId, productionFloorId]
           )
           if (sole.rows.length === 1) {
             const jobs = await client.query<{ id: string; job_card_number: string; source_payload: Record<string, unknown> | null }>(
@@ -1283,6 +1518,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                FOR UPDATE`, [itemId, input.organizationId]
             )
             for (const job of jobs.rows) {
+              if (job.source_payload?.isRevision === true) continue
               if (productionFloorCodeForRecord({ sourcePayload: job.source_payload }) !== productionFloorCode) continue
               await client.query(
                 `INSERT INTO manufacturing.route_selections
@@ -1776,12 +2012,21 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           input.jobCardNumber
         )
+        if (workOrder.source_payload?.isRework === true) {
+          if (productionFloorCodeForRecord({ sourcePayload: workOrder.source_payload }) !== normalizeProductionFloorCode(input.productionFloorCode))
+            throw new Error("Select a Rework activity in this Production Unit.")
+          const used = await client.query(`SELECT 1 FROM manufacturing.production_sessions WHERE work_order_id = $1 AND reversed_at IS NULL
+            UNION ALL SELECT 1 FROM manufacturing.production_entries WHERE work_order_id = $1 AND reversed_at IS NULL
+            UNION ALL SELECT 1 FROM manufacturing.shop_floor_setup_state WHERE work_order_id = $1 AND active AND stage <> 'planned' LIMIT 1`, [workOrder.id])
+          if (used.rows.length) throw new Error("The rework route cannot be replaced after execution starts.")
+        }
         const routeOptionId = await routeFor(
           client,
           input.organizationId,
           workOrder.item_id,
           input.routeCode,
-          normalizeProductionFloorCode(input.productionFloorCode)
+          normalizeProductionFloorCode(input.productionFloorCode),
+          workOrder.id
         )
         const current = await client.query<{ id: string }>(
           `
@@ -2191,10 +2436,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             "Rejected kilograms cannot exceed the usable Raw Material balance."
           )
         }
-        const orderedKg = sourcePayloadNumber(
+        const requiredRmKg = sourcePayloadNumber(
           workOrder.source_payload,
-          "orderKg",
-          "ORD. KG."
+          "requiredRmKg"
         )
         const orderedPieces = sourcePayloadNumber(
           workOrder.source_payload,
@@ -2202,7 +2446,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           "ORD. PCS."
         )
         const rejectionBalance = rawMaterialRejectionBalance({
-          orderKg: orderedKg,
+          requiredRmKg,
           orderPcs: orderedPieces,
           rejectedKg,
           usableKgBefore,
@@ -2228,7 +2472,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const sourceId = randomUUID()
         const sourcePayload = {
           jcNo: jobCardNumber,
-          orderedKg,
+          requiredRmKg,
           partCode: workOrder.item_uid,
           planningAction,
           productionFloorCode,
@@ -2265,7 +2509,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             sourcePayload,
           ]
         )
-        if (planningAction === "wait_for_replacement" && !(orderedKg > 0 && usableKgAfter >= orderedKg)) {
+        if (planningAction === "wait_for_replacement" && !(requiredRmKg > 0 && usableKgAfter >= requiredRmKg)) {
           const assignments = await client.query<{ machine_number: string; setup_number: number }>(
             `SELECT machine.machine_number, setup.setup_number
              FROM manufacturing.shop_floor_setup_state state
@@ -2904,7 +3148,30 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           workOrder.item_id,
           input.newRouteCode,
-          normalizeProductionFloorCode(input.productionFloorCode)
+          normalizeProductionFloorCode(input.productionFloorCode),
+          workOrder.id
+        )
+        const activeSetups = await client.query<{
+          machine_number: string
+          setup_number: number
+        }>(
+          `SELECT machine.machine_number, setup.setup_number
+           FROM manufacturing.shop_floor_setup_state state
+           JOIN catalog.machines machine ON machine.id = state.machine_id
+           JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+           WHERE state.organization_id = $1 AND state.work_order_id = $2
+             AND state.active AND state.stage <> 'item_complete'
+           FOR UPDATE OF state`,
+          [input.organizationId, workOrder.id]
+        )
+        const interruptedSetups = await settledPlannerInterruptions(
+          client,
+          input.organizationId,
+          activeSetups.rows.map((setup) => ({
+            jobCardNumber: input.jobCardNumber,
+            machineNumber: setup.machine_number,
+            setupNumber: setup.setup_number,
+          }))
         )
         const created = await client.query<{ id: string }>(
           `
@@ -2925,9 +3192,17 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             requiredText(input.reason, "Route-change reason"),
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            { ...input, interruptedSetups },
           ]
         )
+        await releasePlannerInterruptedSetups(client, {
+          actorUserId: input.actorUserId,
+          decisionId: created.rows[0]!.id,
+          decisionSource: "routeChanges",
+          interruptions: interruptedSetups,
+          organizationId: input.organizationId,
+          reason: requiredText(input.reason, "Route-change reason"),
+        })
         for (const [sequence, remaining] of (
           input.remainingSetups ?? []
         ).entries()) {

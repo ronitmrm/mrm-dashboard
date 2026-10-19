@@ -156,7 +156,12 @@ their weight and Product Base roll up from those components. Direct registration
 does not invent a Design approval or drawing release. Product-level costing can
 be saved/completed independently and does not advance Customer Costing, create a
 Customer price, or rewrite sent quotations. Design creation and Product Costing
-permissions continue to govern their respective operations.
+permissions continue to govern their respective operations. Master Data → Universal
+→ Products also provides direct entry and CSV import under separate read, create
+and import grants. Imports accept only product fields, reuse direct-entry validation,
+never overwrite existing UIDs, and save the entire batch or none. Preview validates
+without persisting products. Components must exist already or precede their parent
+in the CSV. Pricing rules, calculation logic and the RFQ workflow remain unchanged.
 _Avoid_: Sending Design users to Pricing, exposing prices and formula inputs,
 showing another Customer's un-ordered quoted Products, displaying Rod Size as
 Product Size, package-context component duplicates.

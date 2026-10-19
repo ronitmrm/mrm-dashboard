@@ -544,7 +544,7 @@ export async function readCanonicalDashboardSource(
             ELSE jsonb_build_object('optionNumber', production_route.route_code)
             END || CASE WHEN prior_route.id IS NULL THEN '{}'::jsonb
             ELSE jsonb_build_object('fromRouteCode', prior_route.route_code)
-            END AS source_payload,
+            END || jsonb_strip_nulls(jsonb_build_object('partCode', history_item.uid)) AS source_payload,
           source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code, counts.available
@@ -592,6 +592,21 @@ export async function readCanonicalDashboardSource(
           AND route_change.organization_id = $1
           AND route_change.source_id = source.source_id
           AND route_change.reversed_at IS NULL
+        LEFT JOIN manufacturing.planner_priority_events history_priority
+          ON source.source_group = 'plannerPriorities'
+          AND history_priority.organization_id = $1 AND history_priority.source_id = source.source_id
+          AND history_priority.reversed_at IS NULL
+        LEFT JOIN manufacturing.plan_override_events history_override
+          ON source.source_group = 'planOverrides'
+          AND history_override.organization_id = $1 AND history_override.source_id = source.source_id
+          AND history_override.reversed_at IS NULL
+        LEFT JOIN manufacturing.work_orders history_work_order
+          ON history_work_order.id = COALESCE(route_change.work_order_id,
+            (SELECT detail.work_order_id
+          FROM manufacturing.planner_priority_event_details detail
+          WHERE detail.planner_priority_event_id = history_priority.id
+          ORDER BY detail.sequence, detail.id LIMIT 1), history_override.work_order_id)
+        LEFT JOIN catalog.items history_item ON history_item.id = history_work_order.item_id
         LEFT JOIN LATERAL (
           SELECT previous.to_route_option_id
           FROM manufacturing.route_change_events previous
@@ -918,8 +933,7 @@ async function buildDashboardReadModel(
       floorCorrections
     )
     const input: LegacyDashboardInput = {
-      includeToolFixtureNumbers:
-        floorCode === "conventional" || floorCode === "conventional-02",
+      includeToolFixtureNumbers: false,
       productionFloorCode: floorCode,
       currentShopFloorStatusRows: currentShopFloorStates.rows
         .filter((row) => row.production_floor_code === floorCode)

@@ -83,6 +83,30 @@ test("keeps a future CNC plan blocked during the preceding overnight shift", () 
   })
 })
 
+test("releases a moved setup's zero-remaining source machine for the next ready job", () => {
+  const fixture = inputFor(179)
+  fixture.dataEntries = fixture.dataEntries.filter(row => row.payload.setupNo !== "2")
+  fixture.dataEntries.find(row => row.entryType === "shop_floor_status")!.payload.stage = "planned"
+  const input: Parameters<typeof buildLegacyDashboardSnapshot>[0] = fixture
+  input.planOverrides = [{ jobCardNumber: "A", setupNumber: 1, fromMachineNumber: "CNC-1", toMachineNumber: "CNC-2", status: "Active", createdAt: "2026-09-20T12:00:00Z",
+    interruptedSetups: [{ jobCardNumber: "A", setupNumber: 1, machineNumber: "CNC-1", finishedQuantity: 179 }], reason: "Move remaining work" }]
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt: "2026-09-20T06:00:00Z" })
+  fixture.dataEntries.push(
+    entry("work_order", { jcNo: "B", partCode: "NEXT", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-09-20", rmInwardKg: 1 }),
+    entry("route", { partNo: "NEXT", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }),
+    entry("cycle", { partNo: "NEXT", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+  )
+  input.previousMachinePlanDetailRows = [{ jcNo: "B", partCode: "NEXT", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" }]
+  const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
+  expect(rows.find(row => row.jcNo === "A" && row.machine === "CNC-1")).toMatchObject({ rawActualQty: 179, pendingGoodQty: 0, runningStatus: "Planner stopped", machineUnavailableSplitRole: "produced_on_unavailable_machine", plannedProductionEndDate: "20-Sept-26" })
+  expect(rows.find(row => row.jcNo === "A" && row.machine === "CNC-2")).toMatchObject({ pendingGoodQty: 9821 })
+  expect(rows.find(row => row.jcNo === "B")).toMatchObject({ machine: "CNC-1", setupPlannedDate: "21-Sept-26", shopFloorTaskReady: true })
+  input.previousMachinePlanDetailRows = rows
+  vi.setSystemTime(new Date("2026-09-22T06:00:00Z"))
+  expect(buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows.find(row => row.jcNo === "B"))
+    .toMatchObject({ machine: "CNC-1", setupPlannedDate: "22-Sept-26", shopFloorTaskReady: true })
+})
+
 test("scopes shift holidays and reduces only the affected CNC production capacity", () => {
   const input = inputFor(0)
   input.productionEntries = []

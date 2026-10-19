@@ -12,6 +12,16 @@ import {
 import { parseTemplateUpload } from "./template-upload"
 
 describe("planning master CSV imports", () => {
+  it("recognises exported Work Order headings including Required RM (kg)", () => {
+    const csv = 'Jc No.,Part Code,Fg Po No.,Rm Po No.,Po Date,Order Pcs,Order Kg,Required RM (kg)\nJC-1,P-1,FG-1,RM-1,2026-09-02,"1,000","1,200","1,30,000.25"\n'
+    expect(parseTemplateUpload(
+      "work_order", "work-order-all-rows.csv", Buffer.from(csv).toString("base64"),
+      new Set(["work_order"])
+    ).rows).toEqual([
+      { jcNo: "JC-1", partCode: "P-1", fgPoNo: "FG-1", rmPoNo: "RM-1", poDate: "2026-09-02", orderPcs: 1000, orderKg: 1200, requiredRmKg: 130000.25 },
+    ])
+  })
+
   it("reads CR-separated routes with quoted multiline cells and CRLF endings", () => {
     const csv = 'partNo,optionNumber,setupNo,setupName\rM855,1,1,1/2-14 NPTF OD THREAD\rM855,1,2,"\n3/4-16 UNF OD THREAD"\r\n'
     const batch = parseTemplateUpload("route", "route.csv", Buffer.from(csv).toString("base64"), new Set(["route"]))

@@ -652,7 +652,7 @@ function ActionSheet({ action, target, floor, shift, signedInPerson, signedInSta
     action === "downtime" || action === "accident" ||
     action === "lateDowntime" ||
     candidate === "shop_floor" ||
-    (floor === "cnc" && candidate === "quality")
+    candidate === "quality"
   )
   const allowedRoles = signedInPerson && !departmentRoles.length
     ? ["authorized_staff" as const]

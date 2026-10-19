@@ -1,5 +1,82 @@
 # Job Cards
 
+## Rework received
+
+Operational Entries → Rework Received records returned pieces against a previously
+dispatched Job Card in the same Production Unit. Record a positive whole-piece
+quantity, receipt date and reason. The system generates a unique Return Reference
+on save: `RET-<base Job Card>-R<revision number>`. Both activities of a mixed return
+share this reference in their records and history.
+Partial and full returns are supported. Weight-converted piece quantities allow
+a 5% excess: cumulative returns against the dispatched activity cannot exceed
+105% of its recorded dispatch quantity, rounded down to whole pieces. Ordered
+quantity is never used as a substitute. If any approved dispatch has no piece
+quantity, its actual dispatched quantity must be recorded before receiving a
+return. The allowance applies once to the total, not separately to each receipt.
+Smaller partial returns remain valid; there is no 95% minimum.
+
+The Job Card number stays the same. Original production is **Original** (revision
+0); returns create **Rev 1**, **Rev 2**, etc. A return records the quantity that
+can be reworked and the quantity rejected beyond rework. These add to the total
+return quantity. Rejected pieces require replacement production and a separately
+entered positive Required RM (kg). One mixed return creates one revision with
+separate Rework and Replacement activity records. Each activity's reference
+includes the base Job Card, revision and disposition so operational tasks, reports
+and sessions remain unambiguous. References identify activity, not new orders.
+
+Revision numbering is shared by the entire Job Card family. A repeat return must
+identify the original or revised activity that dispatched those pieces. Quantities
+already returned against that activity cannot be returned again. Original orders,
+output, dates and dispatch remain unchanged; revised output never increases the
+original order's recorded fulfilment.
+
+Reworkable pieces start in Part Readiness. Replacement pieces await new RM
+received against their own revision/activity; earlier RM receipts cannot satisfy
+them. Both activities require explicit planner route selection, even for a sole
+route, and are flagged in Planning Control. Only reworkable pieces bypass the
+new-RM requirement. Original Job Cards retain automatic sole-route selection.
+Existing per-setup first-piece/in-process inspection, production, completion and
+partial/full dispatch rules apply independently to each activity.
+
+The register shows one row per base Job Card and the current revision's status.
+Its quantity and progress describe the current revision; mixed-activity dates
+are viewed on the selected activity rather than blended. Earlier open work is
+flagged. Original order totals exclude revised quantities.
+The detail workspace lists all revisions with reason, quantity, status and dates.
+Selecting an activity scopes every tab, report, session, RM balance and dispatch
+to that activity. **All Revisions** is a labelled history, never combined progress
+or fulfilment. No selected revision may inherit completed work or inspection from
+another revision.
+
+### Job-specific rework routes
+
+In Part Readiness the planner can explicitly select an existing route or create
+a route for the selected Rework activity. Its ordered operations, machine
+families, setup/cycle times, tooling and inspection requirements belong only to
+that activity. They are excluded from shared Route, Cycle, Tooling, Setup Name
+and Quality Parameter masters and from other Job Cards' route choices. Existing
+per-setup first-piece and in-process inspections still apply. There is no copy
+from previous rework route feature. Once execution has started, the route remains
+immutable so its sessions and reports retain the instructions used.
+
+### Rework rejected
+
+Operational Entries → Rework Rejected records that the entire selected Rework
+activity cannot be salvaged. Close all its Production Sessions first. Record the
+batch quantity, rejection date, reason and positive fresh RM requirement. The
+activity must be undispatched and cannot be rejected twice. Trial rejections are
+included in the rejected batch total; only the additional unreported balance
+appears as batch rejection, without inventing production output.
+
+Saving atomically marks the activity Rejected — Remake Required, removes its
+pending planning and machine ownership, and creates a Replacement activity in the
+next revision of the same base Job Card. Replacement quantity equals the rejected
+batch quantity. This is a disposition of the existing return; it does not consume
+another dispatch-return allowance. The original Return Reference and the failed
+activity remain linked. Historical sessions, inspections, timings and reports
+are retained. Replacement awaits its own fresh RM and explicit full-route
+selection, starting with Setup 1; it does not inherit the correction route.
+
 ## Job Card Register
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
@@ -170,7 +247,11 @@ downstream work does not reserve a machine or bypass actual-WIP readiness withou
 the Planner's early Setup 2 decision. The whole-job finish cannot precede the
 upstream supply needed by that setup.
 An approved route change sets the selected route and the remaining setup
-quantities for future planning. A saved route with zero remaining setup quantity
+quantities for future planning. Settle open Production Sessions first. Saving
+the change releases unfinished active setups from their machines and returns
+them to Planned; the new route requires RM at Machine, Setting, Quality Approval
+and Machine Start again. Recorded production and the old route remain historical.
+A saved route with zero remaining setup quantity
 still exists; it does not create a Route Master gap or new machine work. An
 explicit remaining-setup plan with no positive planned quantity creates no machine
 plan or finish forecast; completed production and workflow remain historical.
@@ -259,27 +340,62 @@ machine would start the same unstarted setup later, after accounting for its
 queue and unavailable dates. A lighter machine queue alone is not a reason to
 delay that setup.
 
-- Machinist setup time: Pre Setting start to Setting complete.
+- Machinist setup time: the first saved Setting checklist start to Setting
+  complete. Existing historical Pre Setting start evidence remains the start
+  for older setups when present.
 - QC wait: Setting complete to QC approval.
 - Machine-start wait: QC approval to the first Production Session start.
 - Setup variance: machinist setup time minus the Setup Time target in Cycle Master.
 
 Missing timestamps remain unknown and are never treated as zero minutes.
 
+### Floor material movement wait
+
+The floor's clock starts when the published Shop Floor task is ready: its planned
+date is due, usable RM (or physical WIP for a later setup) is available, and its
+assigned machine is free. Only the next task on that machine starts a clock.
+Partial RM does not have to reach the shortage-review threshold to be moved.
+
+Readiness is recorded when the system processes the confirming planning publication, without
+backdating earlier unobserved waits. Recalculations of the same ready assignment
+retain that start time.
+The existing **RM at machine** action ends the wait and records the performer and
+remark. The Job Card RM tab shows current waits and retains their history.
+Floor material waits are not shown in Planning Control or Planning Review.
+These are elapsed waits, with no additional completion blocker or grace-period rule.
+
+Count scheduled working time, excluding weekly offs, Planning Calendar holidays,
+out-of-shift hours and configured breaks. CNC uses its 06:00 production-day
+boundary. Preserve the calendar and break schedule with each recorded interval.
+If readiness is withdrawn, close that interval; a later ready task starts a new
+interval, including after an RM/WIP release. Machine moves and parallel machines
+have their own intervals. Earlier activity without a recorded ready time remains
+unknown; an arrival correction is labelled corrected rather than delivered.
+
 ## Material Yield
 
 ### RM review and short receipt acceptance
 
-Planning Control shows one RM row per active Job Card with required kilograms,
-total received kilograms, rejected kilograms where applicable, and pending usable
-balance. Receipts update the same row; full usable receipt removes it automatically.
-An unknown requirement is shown as missing Blank Piece Weight, never as complete.
-The Job Card's RM tab shows its material specification, totals and receipt ledger.
+Planning Control shows one RM shortage row per active Job Card only after some RM
+has been received and usable received RM is below 95% of a known required quantity.
+A shortage of up to 5% is allowed, including exactly 95% received. Use usable RM
+after rejections for this comparison. No receipt means no RM shortage flag; excess
+RM does not raise a shortage flag. The row shows required, received, rejected where
+applicable, and pending kilograms. Receipts update the same row; reaching the 95%
+threshold removes it automatically. Required, received and pending kilograms retain
+their exact values. The Job Card's RM tab shows its material specification, totals,
+receipt ledger and whether a remaining balance is within the 5% allowance. An
+unknown requirement is shown there as not entered in the Work Order, never as complete.
+The receipt ledger shows received kilograms. **Pending RM** in the Job Card
+summary is the amount still due against the requirement after rejections. A
+receipt's saved remaining-stock quantity is not an outstanding receipt balance
+and is omitted from this ledger to avoid confusing the two.
 
-Item Complete on any setup requires full usable RM receipt or an explicit Planner
-**Accept short RM** decision with a reason. Acceptance retains the person, time and
-reviewed material balance; it changes neither receipts nor original order quantity.
-It remains visible as accepted while RM is short. A higher required quantity or a
+Item Complete on any setup requires usable RM of at least 95% of the requirement
+or an explicit Planner **Accept short RM** decision for a larger shortage, with a
+reason. Acceptance retains the person, time and reviewed material balance; it
+changes neither receipts nor original order quantity. It remains visible as
+accepted while RM is below the 95% threshold. A higher required quantity or a
 reduced usable balance requires review again. Releasing a machine is not acceptance.
 
 ### Release a setup awaiting material
@@ -295,12 +411,32 @@ work returns to normal planning and readiness checks. No future receipt date is
 invented. Original setup targets remain unchanged; actual output reduces remaining
 work. A running downstream setup may retain its machine while waiting for WIP.
 
-Required RM (kg) is ordered pieces × Product Master Blank Piece Weight (grams)
-÷ 1,000. For example, 10,000 pieces × 15 grams requires 150 kg. The Work Order
-template's ordered kilograms represent approximate finished-goods weight, not
-raw material required. The workspace compares cumulative RM receipts against
-the calculated requirement when identifying the complete-RM date. Missing blank
-piece weight leaves the requirement and complete-RM date unavailable.
+Required RM (kg) is entered on the Work Order form or in the CSV's `requiredRmKg`
+column. Work Order uploads recognise template field names and downloaded record
+headings, including `Required RM (kg)`, before validating the entered values.
+It is never calculated from ordered pieces, Blank Piece Weight or ordered
+finished-goods kilograms. The value must be positive when entered. Existing Work
+Orders remain blank until someone enters it; no calculated amount is copied in.
+The entered requirement supplies the RM summary, shortage flag, 5% completion
+allowance, planner short-RM acceptance, replacement balance and complete-RM date.
+Without it, the requirement and complete-RM date are unavailable and Item Complete
+requires the Work Order value to be entered first. Ordered kilograms remain the
+approximate finished-goods weight. Blank Piece Weight still supplies the separate
+material-yield estimates below.
+
+For existing Work Orders, **Update Required RM CSV** reads Job Card and Required
+RM (kg) from the same downloaded CSV. It updates only the entered requirement
+on matching Job Cards in the selected Production Unit, including cancelled
+orders, without reopening them. Blank requirements are ignored; unmatched Job
+Cards are reported as skipped and never created. Invalid or conflicting values
+stop the batch without saving changes. Repeating an unchanged value does not
+create another change. Updates retain an audit record.
+
+This action preserves quantities, dates, routes, planner decisions, receipts and
+setup history. It does not queue planning recalculation or change the published
+machine plan. Material checks use the updated requirement; a later normal
+recalculation uses the current requirement. Normal **Upload CSV** remains the
+full Work Order import and can queue planning.
 
 Finished Good excludes final-setup rejections. Final Setup Total includes good
 and rejected output from that final setup; they match only when none is rejected.
@@ -317,10 +453,22 @@ Blank Piece Weight and remain estimates until remaining RM is maintained accurat
 Each RM inward entry is append-only for normal receiving; later inward entries add
 to the Job Card total instead of replacing the previous receipt. An exact import
 retry reuses its receipt identity so the tally is not duplicated.
+Each receipt may record an optional **RM Location**, entered in the RM Inward
+form or the CSV's `rmLocation` column. It describes where that receipt's material
+is stored and appears in RM Inward records and the Job Card RM receipt ledger.
+Locations belong to individual receipts; earlier receipts without one remain blank.
+Shop Floor Status and Shop Floor Tasks show the Job Card's saved RM locations
+beside a pending material-placement task. Multiple receipt locations are listed
+together; if none was entered, they show **Not recorded**. The location disappears
+from that task after **RM at machine** is recorded. This is receipt storage
+information, not a record of downstream WIP location or stock transfers.
 RM Inward CSV uploads require a valid `DD-MM-YYYY` date on every row. A file with
 an invalid date is rejected before any receipt is saved, with the failed row
 number and required format shown to the uploader. Saved RM Inward dates display
 in that same format, including earlier entries stored in other formats.
+The uploader recognises both template field names (`rmInwardDate`, `rmLocation`)
+and downloaded record headings (`Rm Inward Date`, `RM Location`). Repeated
+headings that identify the same field are rejected. RM Location remains optional.
 A mistaken receipt can be deleted with a reason, even after production starts.
 Deletion reverses that receipt for current RM totals, availability and unlocked
 planning while preserving the receipt, audit trail and recorded production
@@ -379,7 +527,8 @@ cumulatively from preserved production history and the normal WIP rules.
 
 The Product Master stores the default working days after full RM receipt. A Job
 Card can optionally override that default. Full RM receipt is the first receipt
-date when cumulative received kilograms reach ordered RM kilograms. Closed Fridays
+date when cumulative received kilograms reach the Work Order's entered Required
+RM (kg). It stays unavailable while that requirement is blank. Closed Fridays
 and holidays follow the Universal Planning Calendar; Working Fridays count normally.
 
 - A: on or before target.
