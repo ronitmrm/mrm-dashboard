@@ -1,5 +1,26 @@
 # Job Cards
 
+## Rework received
+
+Operational Entries → Rework Received records returned pieces against a previously
+dispatched Job Card in the same Production Unit. Record a positive whole-piece
+quantity, receipt date, unique return reference and reason. Partial and full
+returns are supported. Total returns against that card cannot exceed its recorded
+dispatch quantity (ordered quantity for historical quantity-less dispatches).
+
+Each receipt creates a linked Job Card (`original/RW1`, `original/RW2`, …) for
+exactly the returned quantity. Original orders, output, completion dates and
+dispatch history remain unchanged. Rework output and redispatch belong only to
+the linked card and do not add to original order fulfilment. A repeat return can
+reference the dispatched rework card.
+
+Rework starts in Part Readiness with **Rework — Route Selection Required** in
+Planning Control. Only the planner's explicit route selection releases it for
+planning, even when one route exists. Normal Job Cards retain automatic sole-route
+selection. Returned pieces supply the rework material; no new RM receipt or
+Required RM weight is needed. Existing per-setup first-piece and in-process
+inspection, production, completion and partial/full dispatch rules apply.
+
 ## Job Card Register
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.

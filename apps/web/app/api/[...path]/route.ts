@@ -2321,6 +2321,20 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
+      if (entryType === "rework_received") {
+        const payload = plainRecord(body.payload)
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const result = await withPlanningRepository(request, scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.receiveRework({
+            actorUserId, organizationId, productionFloorCode: scope.floor,
+            originalJobCardNumber: text(payload.originalJobCardNumber), quantity: Number(payload.quantity),
+            receivedOn: text(payload.receivedOn), receiptReference: text(payload.receiptReference), reason: text(payload.reason),
+          }))
+        return json(await withPlanningRefresh(request, path, body, {
+          ...result, ok: true, rowsUpdated: 1,
+          savedText: `Rework received as ${result.jobCardNumber}. Select its route in Part Readiness.`,
+        }))
+      }
       if (postgresMasterEntryTypes.has(entryType)) {
         const rawPayload = plainRecord(body.payload)
         const payload =

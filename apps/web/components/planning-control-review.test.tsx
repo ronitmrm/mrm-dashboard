@@ -29,6 +29,7 @@ import { PlanningControlReview } from "./planning-control-review"
 test("combines RM, session and workflow flags with their actions in one filterable table", () => {
   const markup = renderToStaticMarkup(<PlanningControlReview
     floor="cnc"
+    reworkRows={[{ jcNo: "P1200/RW1", originalJobCardNumber: "P1200", partCode: "PART", orderPcs: 20, receivedOn: "2026-10-19" }]}
     workflowRows={[{ machine: "CNC-12", jcNo: "P2266", partCode: "M2164B", optionNumber: "2",
       setupNo: "1", rawRows: 2, rawOutputQty: 100, rawActualQty: 95 }]}
     onClose={async () => {}}
@@ -41,6 +42,8 @@ test("combines RM, session and workflow flags with their actions in one filterab
   expect(markup).toContain("Required: 100 kg")
   expect(markup).toContain("Pending: 60 kg")
   expect(markup).toContain("Accept short RM")
+  expect(markup).toContain("Rework — Route Selection Required")
+  expect(markup).toContain("Select route in Part Readiness")
   expect(markup).not.toContain("Floor material wait")
   expect(markup).not.toContain("Working wait:")
   expect(markup).not.toContain("P1201")

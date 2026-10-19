@@ -594,6 +594,7 @@ async function workOrderContext(
           AND route.active
           AND floor.code = $3
       ) automatic_route ON selection.route_option_id IS NULL
+        AND COALESCE(work_order.source_payload->>'isRework', 'false') <> 'true'
         AND imported.route_code IS NULL
         AND route_change.to_route_option_id IS NULL
       WHERE work_order.organization_id = $1
@@ -609,6 +610,9 @@ async function workOrderContext(
   if (!result.rows[0]) throw new Error("Production work order was not found.")
   if (result.rows[0].status === "Cancelled") {
     throw new Error("Cancelled Work Order lines cannot receive production activity.")
+  }
+  if (objectRecord(result.rows[0].source_payload).isRework === true && !result.rows[0].route_option_id) {
+    throw new Error("Select the rework route in Part Readiness before recording production activity.")
   }
   return result.rows[0]
 }
@@ -1061,6 +1065,7 @@ async function lockProductionSessionMachine(
 async function assertMaterialCompletion(client: PoolClient, organizationId: string, workOrderId: string) {
   await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE", [workOrderId, organizationId])
   const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
+  if (material?.isRework) return
   if (!material || material.requiredKg === null) {
     throw new ShopFloorConflictError("Enter Required RM (kg) in the Work Order before marking Item Complete.")
   }
@@ -3522,7 +3527,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
       const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
-        ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
+        ?? (objectRecord(jobCard.workOrderSource).isRework !== true && activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
       const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult, materialMovementWaits] = await Promise.all([
         pool.query<Record<string, unknown>>(

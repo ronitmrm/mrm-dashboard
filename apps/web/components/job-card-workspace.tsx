@@ -6,6 +6,7 @@ import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { formatPlanningFinish } from "@workspace/db/planning-rules"
 import { Badge, StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import { SectionCard, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -166,6 +167,8 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
 
   const analytics = workspace?.analytics ?? {}
   const jobCard = workspace?.jobCard ?? {}
+  const rework = record(jobCard.workOrderSource)
+  const isRework = rework.isRework === true
   const sessions = workspace?.sessions ?? emptyRows
   const events = workspace?.events ?? emptyRows
   const routes = workspace?.routes ?? emptyRows
@@ -227,6 +230,13 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
       <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
 
       {activeTab === "overview" ? <section className="grid gap-4">
+        {isRework ? <SectionCard><CardHeader><CardTitle>Rework Received</CardTitle></CardHeader><CardContent><RecordDetails items={[
+          { label: "Original Job Card", value: <Link className="underline" href={`/dashboard/job-cards/${encodeURIComponent(text(rework.originalJobCardNumber))}?floor=${floor}`}>{text(rework.originalJobCardNumber)}</Link> },
+          { label: "Returned Pieces", value: quantity(rework.quantity) },
+          { label: "Receipt Date", value: date(rework.receivedOn) },
+          { label: "Return Reference", value: display(rework.receiptReference) },
+          { label: "Reason", value: display(rework.reason) },
+        ]} /></CardContent></SectionCard> : null}
         <MetricSummary
           scope="Current Job Card · Job Complete"
           items={[
@@ -324,7 +334,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
             },
           ]}
         />
- <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Required RM is entered in the Work Order. Material yield uses received and remaining kilograms with Blank Piece Weight.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Required RM" value={material.requiredKg == null ? "Not entered in Work Order" : `${quantity(material.requiredKg, 3)} kg`} /></div></CardContent></SectionCard>
+ {!isRework ? <SectionCard><CardHeader><CardTitle>Material Yield & Shortfall</CardTitle><CardDescription>Required RM is entered in the Work Order. Material yield uses received and remaining kilograms with Blank Piece Weight.</CardDescription></CardHeader><CardContent className="grid gap-3">{material.available === false ? <div className="rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm">Set Blank Piece Weight in Product Master to calculate material capacity and process loss.</div> : null}<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><Field label="Expected From Received RM" value={piecesEstimate(material.expectedPiecesFromMaterial)} /><Field label="Rejected" value={`${quantity(material.rejectedPieces)} pcs`} /><Field label="Unexplained Process Loss" value={piecesEstimate(material.unexplainedLossPieces)} /><Field label="Order Short" value={`${quantity(material.orderShortPieces)} pcs`} /><Field label="RM Capacity Short" value={piecesEstimate(material.materialCapacityShortPieces)} /><Field label="Received RM" value={`${quantity(material.receivedKg, 3)} kg`} /><Field label="Required RM" value={material.requiredKg == null ? "Not entered in Work Order" : `${quantity(material.requiredKg, 3)} kg`} /></div></CardContent></SectionCard> : null}
  <SectionCard><CardHeader><CardTitle>Production Sessions</CardTitle><CardDescription>Setup-level machine and operator entries. Output before the final setup is WIP.</CardDescription></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Session</TableHead><TableHead>Machine</TableHead><TableHead>Setup</TableHead><TableHead>Operator</TableHead><TableHead>Started</TableHead><TableHead>Ended</TableHead><TableHead className="text-right">Setup Output</TableHead><TableHead className="text-right">Setup Rejected</TableHead><TableHead className="text-right">Setup Good</TableHead></TableRow></TableHeader><TableBody>{sessions.length ? sessions.map((row) => <TableRow key={text(row.id)}><TableCell><Link className="font-medium text-primary underline underline-offset-4" href={`/dashboard/production-sessions?${new URLSearchParams({ floor, session: text(row.id) })}`}>{display(row.session_reference)}</Link><Badge className="ml-2" variant={text(row.status) === "open" ? "default" : "outline"}>{title(row.status)}</Badge></TableCell><TableCell>{display(row.machine_number)}</TableCell><TableCell>{display(row.setup_number)}</TableCell><TableCell>{display(row.operator_code)}</TableCell><TableCell>{date(row.started_at, true)}</TableCell><TableCell>{date(row.ended_at, true)}</TableCell><TableCell className="text-right">{quantity(row.total_pieces)}</TableCell><TableCell className="text-right">{quantity(row.quantity_rejected)}</TableCell><TableCell className="text-right">{quantity(row.quantity_good)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No production sessions recorded.</TableCell></TableRow>}</TableBody></OperationalTable></div></CardContent></SectionCard>
  <SectionCard><CardHeader><CardTitle>Planner Movement History</CardTitle></CardHeader><CardContent><div className="rounded-md border min-w-0"><OperationalTable excelFilters><TableHeader><TableRow><TableHead>Decision Time</TableHead><TableHead>Action</TableHead><TableHead>Setup</TableHead><TableHead>Machine Movement</TableHead><TableHead>Reason</TableHead><TableHead>Session Settlement</TableHead><TableHead className="text-right">Good Output</TableHead><TableHead>Planner</TableHead></TableRow></TableHeader><TableBody>{plannerMovements.length ? plannerMovements.map((row, index) => {
           const references = Array.isArray(row.sessionReferences) ? row.sessionReferences.map(String).filter(Boolean) : []
@@ -395,7 +405,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
             </TableRow>) : <TableRow><TableCell colSpan={7}>No material movement wait recorded yet.</TableCell></TableRow>}</TableBody>
           </OperationalTable></CardContent>
         </SectionCard>
-        <SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM is entered in the Work Order.</CardDescription></CardHeader>
+        {!isRework ? <><SectionCard><CardHeader><CardTitle>Raw Material</CardTitle><CardDescription>Required RM is entered in the Work Order.</CardDescription></CardHeader>
           <CardContent><RecordDetails items={[
             { label: "Material / Grade", value: display(jobCard.materialGrade) },
             { label: "Rod Type / Size", value: [display(jobCard.rodType), display(jobCard.rodSize)].join(" / ") },
@@ -426,7 +436,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
               </TableRow>
             )) : <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No linked raw material receipts.</TableCell></TableRow>}</TableBody>
           </OperationalTable></div></CardContent>
-        </SectionCard>
+        </SectionCard></> : <StandardState title="Returned pieces available" description={`${quantity(rework.quantity)} pieces received for rework. Follow the selected setup sequence with first-piece and in-process inspection.`} />}
       </section> : null}
 
  {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary

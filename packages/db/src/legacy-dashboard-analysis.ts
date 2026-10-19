@@ -1330,7 +1330,8 @@ function buildProductionControl({
     const partKey = canonicalKey(partCode);
     const availableOptions = routeOptionsByPart.get(partKey) ?? [];
     const optionNumbers = availableOptions.map((option) => rowText(option, "optionNumber"));
-    const effectiveOption = routeChangeOption || optionNumber || selectedOptionNumber || (optionNumbers.length === 1 ? optionNumbers[0]! : "");
+    const isRework = rowValue(row, "isRework") === true;
+    const effectiveOption = routeChangeOption || (isRework ? "" : optionNumber) || selectedOptionNumber || (!isRework && optionNumbers.length === 1 ? optionNumbers[0]! : "");
     const allSelectedRoutes = routeGroups.get([partKey, effectiveOption].join("|")) ?? [];
     const selectedRoutes = routeChangeRemainingSetups.length
       ? allSelectedRoutes.filter((route) => {
@@ -1340,8 +1341,8 @@ function buildProductionControl({
       : allSelectedRoutes;
     const rmInward = rmInwardByJc.get(canonicalKey(jcNo));
     const rawMaterialRejection = rawMaterialRejectionByJc.get(canonicalKey(jcNo));
-    const routeStatus = !effectiveOption && optionNumbers.length > 1
-      ? "Select option"
+    const routeStatus = !effectiveOption && (optionNumbers.length > 1 || isRework && optionNumbers.length > 0)
+      ? (isRework ? "Rework — Route Selection Required" : "Select option")
       : allSelectedRoutes.length
         ? (routeChange ? "Route change plan" : (optionNumber || selectedOptionNumber ? "Ready" : "Auto single option"))
         : "Route master missing";
@@ -1386,14 +1387,14 @@ function buildProductionControl({
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const orderKg = safeNumber(rowValue(row, "ORD. KG.", "orderKg"));
     const requiredRmKg = readRequiredRawMaterialKg(rowValue(row, "requiredRmKg"));
-    const rmReceived = isRmReceived(row, rmInward);
+    const rmReceived = isRework || isRmReceived(row, rmInward);
     const rmInwardKg = safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg"))
       || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg"));
     const rmRejectedKg = rawMaterialRejection?.rejectedKg ?? 0;
     const rmUsableKg = Math.max(rmInwardKg - rmRejectedKg, 0);
     const rmPlanningAction = rawMaterialRejection?.planningAction ?? "";
     const rejectionBalanceRestored = Boolean(rawMaterialRejection && requiredRmKg !== null && rmUsableKg >= requiredRmKg);
-    const originalRmInwardDate = rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate")
+    const originalRmInwardDate = (isRework ? rowText(row, "receivedOn") : "") || rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate")
       || rowText(row, "RM I/W DATE", "rmInwardDate");
     const rmInwardDate = rejectionBalanceRestored && requiredRmKg !== null
       ? rawMaterialBalanceDate(rmInward, requiredRmKg + rmRejectedKg) || originalRmInwardDate
@@ -1442,6 +1443,12 @@ function buildProductionControl({
       }));
     const outputRow = {
       jcNo,
+      isRework,
+      originalJobCardNumber: rowText(row, "originalJobCardNumber"),
+      receivedOn: rowText(row, "receivedOn"),
+      receiptReference: rowText(row, "receiptReference"),
+      reason: rowText(row, "reason"),
+      quantity: isRework ? orderPcs : 0,
       fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
       poDate: rowText(row, "PO DATE", "poDate"),
@@ -1525,7 +1532,7 @@ function buildProductionControl({
     const readinessSetupGaps = readinessSetupGapsByWorkOrder.get(row) ?? [];
     const workOrderRow = row;
     const planningItemMissing = row.planningItemPending;
-    const routeSelectionMissing = row.optionSource === "Planner required" && row.availableOptions.length > 1;
+    const routeSelectionMissing = row.optionSource === "Planner required" && (row.availableOptions.length > 1 || row.isRework && row.availableOptions.length > 0);
     const routeMasterMissing = row.routeStatus === "Route master missing";
     const workOrderGapRows = planningItemMissing || routeSelectionMissing || routeMasterMissing
       ? [{

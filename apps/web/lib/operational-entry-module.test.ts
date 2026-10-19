@@ -100,6 +100,7 @@ describe("operational entry module selection", () => {
       )
     ).toEqual([
       { id: "work_order", label: "Work Order" },
+      { id: "rework_received", label: "Rework Received" },
       { id: "rm_inward", label: "RM Inward" },
       { id: "software_raw", label: "Software Production Output" },
     ])

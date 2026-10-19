@@ -22,6 +22,7 @@ const autoRefreshActionPaths = new Set([
 const autoRefreshDataEntryTypes = new Set([
   ...productionMasterTableEntryTypes,
   "work_order",
+  "rework_received",
   "rm_inward",
   "production_session_close",
   "production_session_correct",

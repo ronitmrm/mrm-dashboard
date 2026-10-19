@@ -19,6 +19,7 @@ export const masterDataEntryTypes = [
 
 export const operationalDataEntryTypes = [
   "work_order",
+  "rework_received",
   "rm_inward",
   "software_raw",
 ] as const
@@ -61,6 +62,9 @@ export function operationalEntryRows(
   dataEntry: Record<string, unknown>,
   productionControl: Record<string, unknown>
 ) {
+  if (entryType === "rework_received") {
+    return recordRows(productionControl.workOrders).filter(row => row.isRework === true).map<Record<string, unknown>>(row => ({ ...row, quantity: row.orderPcs }))
+  }
   const projectedRows = recordRows(
     productionControl[operationalRowSourceByEntryType[entryType] ?? ""]
   )

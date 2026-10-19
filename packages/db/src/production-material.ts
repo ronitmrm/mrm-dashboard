@@ -41,7 +41,7 @@ export async function readJobCardMaterialBalances(
       ? acceptance as Record<string, unknown> : null
     const shortAccepted = row.acceptanceRecorded && accepted !== null && requiredKg !== null
       && Number(accepted.requiredKg) === requiredKg && usableKg >= Number(accepted.usableKg)
-    return { id: row.id, jobCardNumber: row.jobCardNumber, partCode: row.partCode,
+    return { id: row.id, jobCardNumber: row.jobCardNumber, partCode: row.partCode, isRework: row.sourcePayload?.isRework === true,
       rowVersion: Number(row.rowVersion), requiredKg, receivedKg, rejectedKg, usableKg,
       pendingKg, receiptSufficient, shortAccepted, acceptance: shortAccepted ? accepted : null }
   })
