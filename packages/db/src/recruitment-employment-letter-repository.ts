@@ -39,6 +39,48 @@ type Context = {
   organizationId: string
 }
 
+async function combinedOfferIdentity(
+  client: PoolClient,
+  organizationId: string,
+  applicationId: string
+) {
+  const result = await client.query<{
+    designation: string
+    department: string
+  }>(
+    `SELECT designation.name AS designation,
+       coalesce(department.name, '') AS department
+     FROM recruitment.applications application
+     JOIN recruitment.job_posts job ON job.id = application.job_post_id
+       AND job.organization_id = application.organization_id
+     JOIN recruitment.posts post ON post.id = job.post_id
+       AND post.organization_id = application.organization_id
+     JOIN recruitment.combined_roles combined ON combined.id = post.combined_role_id
+       AND combined.organization_id = application.organization_id
+       AND combined.status = 'Active' AND combined.vacancy_code = job.vacancy_code
+     JOIN recruitment.combined_role_posts link ON link.combined_role_id = combined.id
+     JOIN recruitment.posts member ON member.id = link.post_id
+       AND member.organization_id = application.organization_id
+       AND member.status <> 'Inactive'
+     JOIN recruitment.designations designation ON designation.id = member.designation_id
+     LEFT JOIN recruitment.departments department ON department.id = member.department_id
+     WHERE application.id = $1 AND application.organization_id = $2
+     ORDER BY link.is_primary DESC, member.post_code, member.id`,
+    [applicationId, organizationId]
+  )
+  if (!result.rows.length) return null
+  return {
+    designation: result.rows
+      .map(({ designation, department }) =>
+        department ? `${designation} (${department})` : designation
+      )
+      .join(" & "),
+    department: [...new Set(result.rows.map((row) => row.department))]
+      .filter(Boolean)
+      .join(" & "),
+  }
+}
+
 export async function insertOfferRevision(
   client: PoolClient,
   input: Context & {
@@ -72,6 +114,11 @@ export async function insertOfferRevision(
       "The offer has changed. Refresh and reopen Edit Appointment & Offer."
     )
   }
+  const combinedIdentity = await combinedOfferIdentity(
+    client,
+    input.organizationId,
+    input.applicationId
+  )
   const sequence = await client.query<{ value: string }>(
     "SELECT nextval('recruitment.employment_letter_reference_seq')::text AS value"
   )
@@ -82,8 +129,8 @@ export async function insertOfferRevision(
     identity: {
       employeeName: previous.employee_name,
       employeeCode: null,
-      department: previous.department,
-      designation: previous.designation,
+      department: combinedIdentity?.department ?? previous.department,
+      designation: combinedIdentity?.designation ?? previous.designation,
       joiningDate: input.joiningDate,
     },
     details: input.details,
@@ -467,6 +514,11 @@ export function createRecruitmentEmploymentLetterRepository(
           postId = row.post_id
           sourceId = `${input.organizationId}:offer:${applicationId}`
           const currentReference = await existingReference(client, sourceId)
+          const combinedIdentity = await combinedOfferIdentity(
+            client,
+            input.organizationId,
+            applicationId
+          )
           request = {
             applicationStatus: row.application_status,
             details: {
@@ -479,8 +531,8 @@ export function createRecruitmentEmploymentLetterRepository(
               ),
             },
             identity: {
-              department: row.department,
-              designation: row.designation,
+              department: combinedIdentity?.department ?? row.department,
+              designation: combinedIdentity?.designation ?? row.designation,
               employeeCode: null,
               employeeName: row.candidate_name,
               joiningDate: row.joining_date,
