@@ -3865,7 +3865,8 @@ function initializeMachinePlanDetails(
         const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
         const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started")
           || shopFloorStatus?.hasRecordedStart === true;
-        const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted && taskWorkflowStage !== "planned");
+        const hasCanonicalWorkflow = Boolean(taskWorkflowStage && typeof shopFloorStatus?.hasRecordedStart === "boolean");
+        const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted && taskWorkflowStage !== "planned" && !hasCanonicalWorkflow);
         const effectiveStage = effectiveShopFloorStage(shopFloorStatus, productionActual);
         const effectiveStageLabel = setupLifecycleStageLabel(effectiveStage);
         const settingDone = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("setting");
@@ -6754,8 +6755,9 @@ function effectiveShopFloorStage(
   productionActual: { rows: number } | undefined,
 ): SetupLifecycleStage | "" {
   const savedStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
-  // A released or previously started setup's current state outranks historical output.
-  if (savedStage === "planned" || shopFloorStatus?.hasRecordedStart === true) return savedStage;
+  // Canonical workflow remains authoritative while a reset setup advances again.
+  // Historical output may belong to the previous route or setup attempt.
+  if (savedStage === "planned" || (savedStage && typeof shopFloorStatus?.hasRecordedStart === "boolean")) return savedStage;
   const candidates: Array<SetupLifecycleStage | ""> = [
     savedStage,
     productionActual?.rows ? "operator_started" : "",

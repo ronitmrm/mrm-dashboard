@@ -251,6 +251,8 @@ quantities for future planning. Settle open Production Sessions first. Saving
 the change releases unfinished active setups from their machines and returns
 them to Planned; the new route requires RM at Machine, Setting, Quality Approval
 and Machine Start again. Recorded production and the old route remain historical.
+As the new setup advances, its saved workflow stage remains authoritative;
+historical output must not imply that Machine Start has already happened.
 A saved route with zero remaining setup quantity
 still exists; it does not create a Route Master gap or new machine work. An
 explicit remaining-setup plan with no positive planned quantity creates no machine
