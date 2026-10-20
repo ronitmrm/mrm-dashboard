@@ -431,7 +431,7 @@ export function calculateProposal(
   const nativeDate = (value: unknown) => {
     if (typeof value !== "string") return ""
     const date = iso(value)
-    return inDateEra(date) && (value === date || value === Number(date.slice(8, 10)) + "-" + nativeMonths[Number(date.slice(5, 7)) - 1] + "-" + date.slice(2, 4)) ? date : ""
+    return inDateEra(date) && (value === date || value === formatCalendarDate(date) || value === Number(date.slice(8, 10)) + "-" + nativeMonths[Number(date.slice(5, 7)) - 1] + "-" + date.slice(2, 4)) ? date : ""
   }
   type FailureSnapshot = { references: Set<string>; windows: Map<string, Reservation[]> }
   const snapshots = new WeakMap<Schedule, FailureSnapshot | null>()
@@ -450,7 +450,7 @@ export function calculateProposal(
       return Object.hasOwn(row, "plannedProductionStartDate") && Object.hasOwn(row, "plannedProductionEndDate") && !!start && !!end && start <= end && includeEnd(end)
     }
     // Covers the native 5,000-date finish loop plus calendar shifts. Its
-    // two-digit date labels must still round-trip within 2000–2049.
+    // date labels must still round-trip within the certified 2000–2049 era.
     if (!Array.isArray(target.plans) || !Array.isArray(target.reservations) || !target.plans.every(row => row && typeof row === "object" && !Array.isArray(row) && validPlan(row))
       || !target.reservations.every(row => row && typeof row === "object" && typeof row.machine === "string" && !!key(row.machine) && inDateEra(row.start) && inDateEra(row.end) && row.start <= row.end && includeEnd(row.end))
       || !inDateEra(addDays(bound, 7000 + context.holidays.length))) {

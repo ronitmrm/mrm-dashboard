@@ -5453,7 +5453,8 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   } else if (prepared) {
     byMachine.clear();
     for (const row of details) {
-      const machine = rowText(row, "machine"); if (!machine) continue;
+      const machine = rowText(row, "machine");
+      if (!machine || shopFloorRowIsProducedHistory(row)) continue;
       const rows = byMachine.get(machine) ?? []; rows.push(row); byMachine.set(machine, rows);
     }
   }

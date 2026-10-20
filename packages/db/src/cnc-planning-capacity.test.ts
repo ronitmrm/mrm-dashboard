@@ -64,13 +64,13 @@ test("uses 22.5 productive hours per day only for CNC-01 cycle-based planning", 
   }
 
   expect(planFor("cnc")).toMatchObject({
-    plannedProductionStartDate: "21-Sept-26",
-    plannedProductionEndDate: "21-Sept-26",
+    plannedProductionStartDate: "21/09/2026",
+    plannedProductionEndDate: "21/09/2026",
     planningAssumption: expect.stringContaining("22.5 hrs/day"),
   })
   expect(planFor("conventional")).toMatchObject({
-    plannedProductionStartDate: "21-Sept-26",
-    plannedProductionEndDate: "22-Sept-26",
+    plannedProductionStartDate: "21/09/2026",
+    plannedProductionEndDate: "22/09/2026",
     planningAssumption: expect.stringContaining("8 hrs/day"),
   })
 })
@@ -219,10 +219,10 @@ test("planner-added first-position parallel work is ready today ahead of older u
     }],
   }).productionControl.machinePlanDetailRows
   const added = rows.find(row => row.jcNo === "P2132" && row.machine === "CNC-39")
-  expect(added).toMatchObject({ plannedProductionStartDate: "22-Sept-26", shopFloorTaskReady: true })
+  expect(added).toMatchObject({ plannedProductionStartDate: "22/09/2026", shopFloorTaskReady: true })
   expect(rows.find(row => row.jcNo === "P2132" && row.machine === "CNC-40"))
     .toMatchObject({ runningStatus: "Running", shopFloorStage: "operator_started" })
-  expect(rows.find(row => row.jcNo === "P2275")?.plannedProductionStartDate).toBe("27-Sept-26")
+  expect(rows.find(row => row.jcNo === "P2275")?.plannedProductionStartDate).toBe("27/09/2026")
 })
 
 test("move setup honors first position when its source interruption has no output", () => {
@@ -254,7 +254,7 @@ test("move setup honors first position when its source interruption has no outpu
     }],
   }).productionControl.machinePlanDetailRows
   const moved = rows.find((row) => row.jcNo === "P2262")
-  expect(moved).toMatchObject({ machine: "CNC-2", plannedProductionStartDate: "28-Sept-26", shopFloorTaskReady: true })
+  expect(moved).toMatchObject({ machine: "CNC-2", plannedProductionStartDate: "28/09/2026", shopFloorTaskReady: true })
   expect(rows.filter((row) => row.machine === "CNC-2").sort((a, b) =>
     String(a.plannedProductionStartDate).localeCompare(String(b.plannedProductionStartDate))
   )[0]?.jcNo).toBe("P2262")
@@ -362,11 +362,11 @@ test("revised cycle time forecasts only the remaining quantity after recorded pr
       setupNo: "1",
       rawActualQty: 5_000,
       pendingGoodQty: 5_000,
-      plannedProductionEndDate: "8-Sept-26",
+      plannedProductionEndDate: "08/09/2026",
     }),
     expect.objectContaining({
       setupNo: "2",
-      plannedProductionStartDate: "7-Sept-26",
+      plannedProductionStartDate: "07/09/2026",
     }),
   ]))
 })
