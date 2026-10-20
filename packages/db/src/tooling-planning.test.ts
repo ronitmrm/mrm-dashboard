@@ -32,7 +32,7 @@ test("department tooling capacity sequences shared resources and refreshes after
     expect(second.machineAssignment).toBe("Same-part machine continuity")
     expect(second.toolingPlanStatus).toContain("Waiting for tooling release")
     expect(second.toolingAvailability).toContain("5 usable total / 4 in Store / 1 allocated / 1 occupied / 0 free")
-    const day = (value: unknown) => new Date(String(value)).getTime()
+    const day = (value: unknown) => new Date(String(value).split("/").reverse().join("-")).getTime()
     expect(day(second.plannedProductionStartDate)).toBeGreaterThan(day(first.plannedProductionEndDate))
     const waiting = rows.filter(row => row.jcNo === "B")
     expect(waiting.every(row => row.shopFloorTaskReady === false)).toBe(true)
