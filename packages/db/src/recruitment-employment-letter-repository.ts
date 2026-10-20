@@ -80,6 +80,7 @@ async function combinedEmploymentIdentity(
   )
   if (!result.rows.length) return null
   return {
+    combinedPosts: true as const,
     designation: result.rows
       .map(({ designation, department }) =>
         department ? `${designation} (${department})` : designation
@@ -137,6 +138,7 @@ export async function insertOfferRevision(
     applicationStatus: "Approved",
     willingToJoin: true,
     identity: {
+      combinedPosts: combinedIdentity?.combinedPosts,
       employeeName: previous.employee_name,
       employeeCode: null,
       department: combinedIdentity?.department ?? previous.department,
@@ -541,6 +543,7 @@ export function createRecruitmentEmploymentLetterRepository(
               ),
             },
             identity: {
+              combinedPosts: combinedIdentity?.combinedPosts,
               department: combinedIdentity?.department ?? row.department,
               designation: combinedIdentity?.designation ?? row.designation,
               employeeCode: null,
@@ -594,6 +597,7 @@ export function createRecruitmentEmploymentLetterRepository(
           const common = {
             details: input.details,
             identity: {
+              combinedPosts: combinedIdentity?.combinedPosts,
               department: combinedIdentity?.department ?? row.department,
               designation: combinedIdentity?.designation ?? row.designation,
               employeeCode: row.employee_code,

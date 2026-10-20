@@ -694,10 +694,17 @@ export async function generateEmploymentLetterAction(formData: FormData) {
                 formData,
                 "confirmation_effective_date"
               ),
+              dutyStartTime: value(formData, "duty_start_time"),
+              dutyEndTime: value(formData, "duty_end_time"),
               grossMonthlySalary: Number(
                 value(formData, "gross_monthly_salary")
               ),
+              minimumWeeklyHours: Number(value(formData, "minimum_weekly_hours")),
+              postalAddress: value(formData, "postal_address"),
               probationCompletedOn: value(formData, "probation_completed_on"),
+              probationLength: Number(value(formData, "probation_length")),
+              probationUnit:
+                value(formData, "probation_unit") === "days" ? "days" : "months",
               reportsTo: value(formData, "reports_to"),
               signatoryDesignation: value(
                 formData,

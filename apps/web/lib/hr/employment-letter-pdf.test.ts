@@ -47,6 +47,12 @@ describe("employment letter PDF", () => {
       {
         details: {
           confirmationEffectiveDate: "2026-02-23",
+          postalAddress: "42 Test Road\nJamnagar, Gujarat - 361120",
+          probationLength: 2,
+          probationUnit: "months",
+          dutyStartTime: "09:15",
+          dutyEndTime: "18:45",
+          minimumWeeklyHours: 60,
           grossMonthlySalary: 24500,
           probationCompletedOn: "2026-02-22",
           reportsTo: "Ronit Khattar",
@@ -56,6 +62,7 @@ describe("employment letter PDF", () => {
         },
         identity: {
           ...identity,
+          combinedPosts: true,
           designation:
             "HOD (Ppac Conventional-02 Planner) & HOD (Ppac Forging Planner)",
           department: "Ppac Conventional-02 Planner & Ppac Forging Planner",
@@ -99,7 +106,8 @@ describe("employment letter PDF", () => {
       expect(pdf.getTitle()).toContain(letter.identity.employeeName)
       expect(pdf.getSubject()).toContain(`${type}`)
       if (type === "offer" || type === "appointment") {
-        const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs")
+        const { getDocument, OPS } =
+          await import("pdfjs-dist/legacy/build/pdf.mjs")
         const document = await getDocument({
           data: bytes,
           useSystemFonts: true,
@@ -109,20 +117,12 @@ describe("employment letter PDF", () => {
             [1, 2].map(async (number) => {
               const page = await document.getPage(number)
               const content = await page.getTextContent()
-              if (type === "appointment") {
-                for (const prefix of ["+91", "info@", "CIN:"]) {
-                  const contact = content.items.find(
-                    (item) => "str" in item && item.str.startsWith(prefix)
-                  )
-                  expect(contact).toBeDefined()
-                  if (contact && "str" in contact) {
-                    expect(contact.transform[4] + contact.width).toBeCloseTo(
-                      595.28 - 48,
-                      1
-                    )
-                  }
-                }
-              }
+              const operators = await page.getOperatorList()
+              expect(
+                operators.fnArray.filter(
+                  (operation) => operation === OPS.paintImageXObject
+                )
+              ).toHaveLength(2)
               return content.items
                 .flatMap((item) => ("str" in item ? [item.str] : []))
                 .join(" ")
@@ -145,6 +145,19 @@ describe("employment letter PDF", () => {
             expect(firstPage).toContain(
               `Subject: Appointment for the Position of ${letter.identity.designation}`
             )
+            expect(firstPage).toContain("42 Test Road")
+            for (const text of [
+              "23/02/2026",
+              "2 months",
+              "09:15 to 18:45",
+              "60 hours per week",
+              "Rs. 24,500.00",
+              "annual bonus in April",
+              "Ronit Khattar",
+              "Star Venus",
+            ]) {
+              expect(pages[1]?.replace(/\s+/g, " ")).toContain(text)
+            }
             expect(firstPage).toContain(
               `confirm your appointment as ${letter.identity.designation} at Mayank Raw Mint Pvt. Ltd.`
             )
@@ -152,7 +165,7 @@ describe("employment letter PDF", () => {
           for (const text of [
             "Acknowledged and Accepted by:",
             letter.identity.employeeName,
-            "Date: ____________________",
+            "Date:",
           ]) {
             expect(pages[1]?.replace(/\s+/g, " ")).toContain(text)
           }
