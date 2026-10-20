@@ -49,6 +49,8 @@ import {
 } from "./job-card-workspace"
 import { calculateCasting } from "./pricing-calculation"
 
+const firstReworkReleaseBlockedReason = "The first rework setup cannot wait for fresh RM. Use Move Setup to change machines, or Rework Rejected if the batch cannot be reworked."
+
 export class ShopFloorConflictError extends Error {
   readonly status = 409
 }
@@ -5378,9 +5380,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const result = await pool.query<{
         id: string; rowVersion: string; jobCardNumber: string; partCode: string
         optionNumber: string; setupNumber: number; machineNumber: string; openSessionId: string | null
+        releaseBlockedReason: string | null
       }>(`SELECT state.id, state.row_version::text AS "rowVersion", work_order.job_card_number AS "jobCardNumber",
           item.uid AS "partCode", route.route_code AS "optionNumber", setup.setup_number AS "setupNumber",
-          machine.machine_number AS "machineNumber", session.id AS "openSessionId"
+          machine.machine_number AS "machineNumber", session.id AS "openSessionId",
+          CASE WHEN work_order.source_payload->>'isRework' = 'true' AND NOT EXISTS (
+            SELECT 1 FROM manufacturing.operation_setups previous
+            WHERE previous.route_option_id = setup.route_option_id AND previous.active AND previous.sequence < setup.sequence
+          ) THEN $3::text END AS "releaseBlockedReason"
         FROM manufacturing.shop_floor_setup_state state
         JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
         JOIN catalog.items item ON item.id = work_order.item_id
@@ -5393,7 +5400,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           AND session.status = 'open' AND session.reversed_at IS NULL
         WHERE state.organization_id = $1 AND floor.code = $2 AND state.active
           AND state.stage <> 'item_complete' AND work_order.status NOT IN ('Cancelled', 'Rejected')
-        ORDER BY work_order.job_card_number, setup.sequence, machine.machine_number`, [input.organizationId, input.productionFloorCode])
+        ORDER BY work_order.job_card_number, setup.sequence, machine.machine_number`, [input.organizationId, input.productionFloorCode, firstReworkReleaseBlockedReason])
       return { rows: result.rows }
     },
 
@@ -5433,6 +5440,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             AND status = 'open' AND reversed_at IS NULL`, [state.work_order_id, state.operation_setup_id, state.machine_id])
         if (session.rows.length) throw new ShopFloorConflictError("Close the Production Session with Manual Stop and record its output before releasing this machine.")
         const upstream = await upstreamGoodForSetup(client, state.work_order_id, state.operation_setup_id)
+        if (objectRecord(order.source_payload).isRework === true && !upstream) {
+          throw new ShopFloorConflictError(firstReworkReleaseBlockedReason)
+        }
         const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
         const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
           actionType: "Release machine", releasedAt: new Date().toISOString(), reason,

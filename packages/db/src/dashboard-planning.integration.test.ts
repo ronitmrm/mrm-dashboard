@@ -213,6 +213,16 @@ describe("dashboard planning writes", () => {
       jobReworkInspectionRows: expect.arrayContaining([expect.objectContaining({ parameterName: diameter, specification: "10", instrumentUsed: micrometer }), expect.objectContaining({ parameterName: thread })]) })
     await expect(repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: privateRoute.routeCode })).rejects.toThrow("Route option was not found")
     const setupId = String(custom.setups[0]!.id)
+    await jobCards.recordShopFloorStage({ organizationId, productionFloorCode: "cnc", jobCardNumber: failed.jobCardNumber,
+      machineNumber: `RW-MC-${suffix}`, operationSetupCode: "1", stage: "raw_material_at_machine",
+      payload: { jcNo: failed.jobCardNumber, partCode: part, optionNumber: privateRoute.routeCode, setupNo: "1", machine: `RW-MC-${suffix}` } })
+    const release = (await jobCards.readReleasableSetups({ organizationId, productionFloorCode: "cnc" }))
+      .rows.find(row => row.jobCardNumber === failed.jobCardNumber)!
+    expect(release.releaseBlockedReason).toContain("first rework setup")
+    await expect(jobCards.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: "cnc", setupStateId: release.id,
+      expectedRowVersion: Number(release.rowVersion), reason: "Cannot wait for fresh RM on returned pieces" })).rejects.toThrow("first rework setup")
+    expect((await jobCards.readReleasableSetups({ organizationId, productionFloorCode: "cnc" }))
+      .rows.some(row => row.id === release.id)).toBe(true)
     await pool.query(`INSERT INTO manufacturing.production_entries (organization_id, work_order_id, operation_setup_id,
       route_option_id, production_date, quantity_good, quantity_rejected, source_system, source_table, source_id)
       VALUES ($1,$2,$3,$4,'2026-10-02',0,2,'test','productionEntries',$5)`, [organizationId, failed.id, setupId, privateRoute.routeId, randomUUID()])

@@ -27,7 +27,7 @@ export function ReleaseSetupPlannerForm({ floor, onSave }: {
   const selected = rows.find(row => row.id === selectedId)
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selected || selected.openSessionId || !reason.trim() || saving) return
+    if (!selected || selected.openSessionId || selected.releaseBlockedReason || !reason.trim() || saving) return
     setSaving(true)
     setError("")
     setSaved("")
@@ -58,10 +58,12 @@ export function ReleaseSetupPlannerForm({ floor, onSave }: {
           </Field>
           <Field><FieldLabel htmlFor="release-reason">Reason</FieldLabel><Input id="release-reason" value={reason} onChange={event => setReason(event.target.value)} required disabled={saving} placeholder="Waiting for balance RM / upstream WIP" /></Field>
         </FieldGroup>
+        {selected?.releaseBlockedReason ? <StandardState title="Release unavailable for this setup"
+          description={selected.releaseBlockedReason} /> : null}
         {selected?.openSessionId ? <StandardState title="Close the Production Session first"
           description="Use Manual Stop and record actual output before releasing this machine."
           action={<Button asChild variant="outline"><Link href={`/dashboard/production-sessions?floor=${encodeURIComponent(floor)}&session=${encodeURIComponent(selected.openSessionId)}`}>Open session</Link></Button>} /> : null}
-        <Button type="submit" className="w-fit" disabled={!selected || Boolean(selected.openSessionId) || !reason.trim() || saving}>{saving ? "Releasing…" : "Release machine"}</Button>
+        <Button type="submit" className="w-fit" disabled={!selected || Boolean(selected.openSessionId) || Boolean(selected.releaseBlockedReason) || !reason.trim() || saving}>{saving ? "Releasing…" : "Release machine"}</Button>
       </> : null}
     </form>
   </FormSection>
