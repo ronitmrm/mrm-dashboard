@@ -96,7 +96,10 @@ include the `HH:mm` separator.
 Use shared `Input` with `type="date"` or `type="datetime-local"` for calendar
 entry. It displays and accepts `DD/MM/YYYY` (plus `HH:mm` for date/time), preserves
 required/range/step validation, and supplies ISO values to forms and change
-handlers. Format dates with `formatIstDate` / `formatIstDateTime`, or
+handlers. Slashes stay visible in the shared date field; typing two day digits
+advances to month, then two month digits advance to year. Deletion keeps the
+separators and paste fills the same day/month/year slots.
+Format dates with `formatIstDate` / `formatIstDateTime`, or
 `formatCalendarDate` for existing calendar-only values. Keep ISO dates and
 timestamps in storage and calculation; CSV calendar dates must pass the strict
 DD/MM/YYYY import validator before saving.

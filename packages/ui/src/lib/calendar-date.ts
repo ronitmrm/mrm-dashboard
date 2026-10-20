@@ -28,16 +28,19 @@ export function formatCalendarDate(value: unknown): string {
   const text = String(value).trim()
   let iso = isIsoCalendarDate(text) ? text : parseCalendarDateInput(text)
   if (!iso) {
-    // Existing workbook date columns use day/month/year, including two-digit years.
+    // Keep day/month order for ambiguous legacy values. Month-first values are
+    // identifiable only when the second number cannot be a month.
     const numeric = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/.exec(text)
     const named = /^(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{2}|\d{4})$/.exec(text)
     const match = numeric ?? named
     if (match) {
       const names = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
       const label = match[2]!.toLowerCase()
-      const month = numeric ? Number(match[2]) : names.findIndex((name) => name === label || name.slice(0, 3) === label || (name === "september" && label === "sept")) + 1
+      let day = Number(match[1])
+      let month = numeric ? Number(match[2]) : names.findIndex((name) => name === label || name.slice(0, 3) === label || (name === "september" && label === "sept")) + 1
+      if (numeric && month > 12 && day <= 12) [day, month] = [month, day]
       const year = Number(match[3]) + (match[3]!.length === 2 ? 2000 : 0)
-      iso = isoDate(year, month, Number(match[1]))
+      iso = isoDate(year, month, day)
     }
   }
   if (!iso) return text
