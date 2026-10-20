@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { calendarInputDisplay, parseCalendarInput } from "@workspace/ui/lib/calendar-date"
+import { calendarInputTemplate, editCalendarInput, maskCalendarInput } from "@workspace/ui/lib/calendar-input"
 
 /** Text entry has a fixed day/month/year presentation; submitted values stay ISO. */
 function CalendarInput({
@@ -11,6 +12,8 @@ function CalendarInput({
   defaultValue,
   onChange,
   onBlur,
+  onFocus,
+  onClick,
   name,
   form,
   ref,
@@ -21,17 +24,23 @@ function CalendarInput({
 }: React.ComponentProps<"input"> & { type: "date" | "datetime-local" }) {
   const withTime = type === "datetime-local"
   const initial = String(value ?? defaultValue ?? "")
-  const [entry, setEntry] = React.useState(() => ({ source: initial, draft: calendarInputDisplay(initial, withTime) }))
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [entry, setEntry] = React.useState(() => {
+    const text = calendarInputDisplay(initial, withTime)
+    return { source: initial, draft: maskCalendarInput(text, calendarInputTemplate(withTime, text, step)) }
+  })
   const source = value === undefined ? entry.source : String(value ?? "")
-  if (source !== entry.source) setEntry({ source, draft: calendarInputDisplay(source, withTime) })
-  const draft = source === entry.source ? entry.draft : calendarInputDisplay(source, withTime)
+  const template = calendarInputTemplate(withTime, source === entry.source ? entry.draft : calendarInputDisplay(source, withTime), step)
+  const display = (source: string) => maskCalendarInput(calendarInputDisplay(source, withTime), template)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const selectionRef = React.useRef<number | null>(null)
+  if (source !== entry.source) setEntry({ source, draft: display(source) })
+  const draft = source === entry.source ? entry.draft : display(source)
   const canonical = parseCalendarInput(draft, withTime) ?? ""
   const formatHint = withTime ? "DD/MM/YYYY HH:mm" : "DD/MM/YYYY"
 
   const validate = React.useCallback((input: HTMLInputElement, text: string) => {
-    if (!text) {
-      input.setCustomValidity("")
+    if (!/\d/.test(text)) {
+      input.setCustomValidity(props.required ? `Enter a date in ${formatHint} format.` : "")
       return
     }
     const parsed = parseCalendarInput(text, withTime)
@@ -54,7 +63,13 @@ function CalendarInput({
           ? `Enter a date at the permitted interval in ${formatHint} format.`
           : ""
     input.setCustomValidity(message)
-  }, [formatHint, max, min, step, type, withTime])
+  }, [formatHint, max, min, props.required, step, type, withTime])
+
+  React.useLayoutEffect(() => {
+    if (selectionRef.current === null) return
+    inputRef.current?.setSelectionRange(selectionRef.current, selectionRef.current)
+    selectionRef.current = null
+  })
 
   React.useEffect(() => {
     if (inputRef.current) validate(inputRef.current, draft)
@@ -65,11 +80,12 @@ function CalendarInput({
     const parent = inputRef.current?.form
     const reset = () => {
       const source = String(defaultValue ?? "")
-      setEntry({ source, draft: calendarInputDisplay(source, withTime) })
+      const text = calendarInputDisplay(source, withTime)
+      setEntry({ source, draft: maskCalendarInput(text, calendarInputTemplate(withTime, text, step)) })
     }
     parent?.addEventListener("reset", reset)
     return () => parent?.removeEventListener("reset", reset)
-  }, [defaultValue, value, withTime])
+  }, [defaultValue, step, value, withTime])
 
   return <>
     <input
@@ -81,12 +97,28 @@ function CalendarInput({
       }}
       form={form}
       type="text"
-      inputMode="text"
+      inputMode="numeric"
       placeholder={formatHint}
       title={`Date format: ${formatHint}`}
       value={draft}
+      onFocus={(event) => {
+        if (!/\d/.test(draft)) event.currentTarget.setSelectionRange(0, 0)
+        onFocus?.(event)
+      }}
+      onClick={(event) => {
+        if (!/\d/.test(draft)) event.currentTarget.setSelectionRange(0, 0)
+        onClick?.(event)
+      }}
       onChange={(event) => {
-        const text = event.currentTarget.value
+        const raw = event.currentTarget.value
+        const editTemplate = parseCalendarInput(raw, withTime) ? calendarInputTemplate(withTime, raw, step) : template
+        const edit = editCalendarInput(
+          maskCalendarInput(draft, editTemplate), raw,
+          event.currentTarget.selectionStart ?? 0, editTemplate,
+          (event.nativeEvent as InputEvent).inputType === "deleteContentBackward"
+        )
+        const text = edit.text
+        selectionRef.current = edit.caret
         const next = parseCalendarInput(text, withTime) ?? ""
         setEntry({ source: next, draft: text })
         validate(event.currentTarget, text)

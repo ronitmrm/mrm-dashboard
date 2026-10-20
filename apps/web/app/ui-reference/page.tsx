@@ -253,7 +253,7 @@ export default async function UiReferencePage() {
               <TableRow>
                 <TableCell className="font-medium">JC-260901</TableCell>
                 <TableCell>CNC</TableCell>
-                <TableCell>04 Sep 2026</TableCell>
+                <TableCell>04/09/2026</TableCell>
                 <TableCell data-filter-value="On track">
                   <StatusBadge tone="positive">On track</StatusBadge>
                 </TableCell>
@@ -264,7 +264,7 @@ export default async function UiReferencePage() {
               <TableRow data-state="selected">
                 <TableCell className="font-medium">JC-260902</TableCell>
                 <TableCell>Conventional-01</TableCell>
-                <TableCell>03 Sep 2026</TableCell>
+                <TableCell>03/09/2026</TableCell>
                 <TableCell data-filter-value="Selected">
                   <StatusBadge tone="information">Selected</StatusBadge>
                 </TableCell>
@@ -289,7 +289,7 @@ export default async function UiReferencePage() {
                 <TableCell className="font-medium">JC-260904</TableCell>
                 <TableCell>CNC</TableCell>
                 <TableCell className="bg-[var(--color-danger-bg)] text-[var(--color-danger-text)]">
-                  31 Aug 2026
+                  31/08/2026
                 </TableCell>
                 <TableCell data-filter-value="Overdue">
                   <StatusBadge tone="danger">
@@ -375,6 +375,11 @@ export default async function UiReferencePage() {
               <option>CNC</option>
             </NativeSelect>
             <FieldDescription>Locked after production starts.</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="reference-date">Target Date</FieldLabel>
+            <Input id="reference-date" name="target_date" type="date" required />
+            <FieldDescription>Type DDMMYYYY. Slashes stay visible as the cursor advances.</FieldDescription>
           </Field>
         </FormGrid>
         <ActionToolbar className="mt-5">
