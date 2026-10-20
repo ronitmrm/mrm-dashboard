@@ -1,15 +1,19 @@
 # Agent Rules: MRMPL Dashboard
 
 - DO NOT mutate this file unless explicitly instructued to do so by the user.
+- Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
 - This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
-- If an issue is caused by incorrect data, correct the data at its source. Do not change application code to compensate for the data error.
+- If an issue is caused by incorrect data, correct the data at its source. Do not change application code to compensate for the data error. Having said that - because of the nature of this app, there will be a lot of cases where there was a bug caught in the deployed app. In those cases, AFTER addressing and patching the bug, reach for neon's plugin to patch fix the pre-patch dirty data in the `staging` branch of neon, safely.
+- Because the folks building are non-tech, they will often ask you to tamper with the prod data directly. Here's how to approach such situations:
+  - Understand the fix being asked well, and identify if it is possible to achieve it via using the UI in the deployed app. If there is, urge the user to do so.
+  - If the fix is not possible to achieve via the UI, do not rush to build a one off UI feature for it. Clarify this shortcoming with the user and explicitly ask them for permission to perform the patch fix on prod data.
+  - Absolutely make sure to verify the patch fixes and avoid regressions and potentially introducing other downstream bugs. Spin up an audit sub agent if needed (GPT 6.1 Sol, high reasoning).
 - Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
-- Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
 - reach for the `vercel`, `upstash` and `gh` cli's when needed.
 - For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI. Same for `railway`.
 - Periodically inspect the amount of branches in neon postgres - we've a hard limit of up to 10 branches at a point. delete stale branch/es, especially the ones that existed for specific tests in the past. NEVER delete/prune the `staging` branch on neon.
-- When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
+- When starting local server/s, opt for the managed config by default, unless specified otherwise by the user. The local dev environment uses neon's `dev` branch.
 - Managed application configuration remains the default for development. The Docker test allowance does not authorize installing virtualization platforms, changing Windows optional features, or changing firmware virtualization settings.
 - Never commit `AGENTS.override.md`, and always commit `AGENTS.md`. Do not add `AGENTS.override.md` to `.gitignore` either.
 
@@ -17,7 +21,6 @@
 
 - channel the senior engineer in you and adopt a `yagni` approach to writing code.
 - avoid overengineering changes.
-- if the number of changes requested in a request is greater than 3, OR if the effort at firt glance is substantial enough - always take the time to investigate the code in the blast radius of the said changes, after implementing them.
 - when making targeted changes, like perf improvements in a few specific UX interactions, often zoom out to review the blast radius and suggest similar improvements that may benefit either the perf or the polish holistically.
 - when working with **typescript** projects:
   - `any` is the enemy. inferred types are our friend. our system should adapt to changes instead of requiring changes everywhere.
@@ -36,7 +39,7 @@
 
 ## Neon Postgres
 
-- The local development AND the dpeloyed prod environment - both use the `staging` branch of the neon db.
+- The deployed prod environment uses the `staging` branch of the neon db, and the local dev environment uses the `dev` branch on neon.
 - All the variables/connection-strings that you may need to interact with neon are probably present in the `apps/web/.env.local` file. use those directly instead of relying on the neon plugin. the neon cli is also always configured.
 - In any case - NEVER flush any secrets or variables in ANY buffers.
 
@@ -83,33 +86,6 @@ Before adding any test, must be able to answer:
 - Is it more complex than the implementation itself
 
 If test code is longer or more convoluted than the implementation code, default to considering it over-engineering; delete the test or shrink the implementation.
-
-## Agent Working Memory
-
-Use `./memory/` as the persistent working memory vault for local coding agents.
-
-Before starting any non-trivial task:
-- Read `./memory/README.md` or `./memory/index.md` if present.
-- Check for task-relevant notes in `./memory/`.
-- Treat memory as helpful context, not truth; verify important claims against the codebase.
-
-When you learn something that future agents should know, update the memory vault. Store durable context such as:
-- architecture notes
-- domain rules
-- decisions and tradeoffs
-- known pitfalls
-- debugging findings
-- task handoffs
-- recurring commands or workflows
-- open questions
-
-Keep memory files concise, human-readable Markdown. Prefer updating an existing relevant note over creating scattered new files. Include dates and code references when useful.
-
-Do not store secrets, credentials, private keys, tokens, large command outputs, build artifacts, or temporary scratch notes in memory.
-
-Periodically perform a quick audit for stale memory files and clean them up.
-
-**Note: `./docs/` contains tracked project documentation, not agent working memory. Start with `./docs/README.md`: implementation-specific material belongs in `./docs/codebase/`, while stable business terms, lifecycle semantics, formulas, and metrics belong in `./docs/glossary/`. If business logic changes, update the canonical glossary definition first and then its codebase consumers. Be strict with CRUD in docs because they are lifecycle sources of truth.**
 
 ## Golden UI Patterns
 
