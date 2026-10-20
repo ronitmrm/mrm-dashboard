@@ -110,27 +110,24 @@ function drawFooter(drawing: Drawing) {
     x: LEFT,
     y: 36,
   })
-  page.drawText("+91 96245 33303  |  +91 78787 87819", {
-    color: MUTED,
-    font: regular,
-    size: 6.7,
-    x: 350,
-    y: 58,
-  })
-  page.drawText("info@mayankrawmint.com  |  www.mayankrawmint.com", {
-    color: MUTED,
-    font: regular,
-    size: 6.7,
-    x: 315,
-    y: 46,
-  })
-  page.drawText("CIN: U27109GJ2002PTC041469", {
-    color: MUTED,
-    font: regular,
-    size: 6.7,
-    x: 378,
-    y: 36,
-  })
+  for (const [text, y] of [
+    ["+91 96245 33303  |  +91 78787 87819", 58],
+    ["info@mayankrawmint.com  |  www.mayankrawmint.com", 46],
+    ["CIN: U27109GJ2002PTC041469", 36],
+  ] as const) {
+    // drawText uses individual glyph advances without kerning.
+    const width = [...text].reduce(
+      (total, character) => total + regular.widthOfTextAtSize(character, 6.7),
+      0
+    )
+    page.drawText(text, {
+      color: MUTED,
+      font: regular,
+      size: 6.7,
+      x: LEFT + WIDTH - width,
+      y,
+    })
+  }
 }
 
 function drawTitle(drawing: Drawing, title: string) {
@@ -244,7 +241,7 @@ export async function buildEmploymentLetterPdf(
     line(first, `Dear ${letter.identity.employeeName},`, { gap: 10 })
     line(
       first,
-      `We are pleased to confirm your appointment as ${letter.identity.designation} in ${letter.identity.department} at Mayank Raw Mint Pvt. Ltd. following the successful completion of your probation period on ${dateLabel(letter.details.probationCompletedOn)}.`,
+      `We are pleased to confirm your appointment as ${letter.identity.designation} at Mayank Raw Mint Pvt. Ltd. following the successful completion of your probation period on ${dateLabel(letter.details.probationCompletedOn)}.`,
       { gap: 12 }
     )
     line(
