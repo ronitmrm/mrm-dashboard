@@ -42,6 +42,19 @@ function combinedOfferFixture() {
           },
         ],
       }
+    if (sql.includes("SELECT post.employee_name"))
+      return {
+        rows: [
+          {
+            employee_name: "Combined Candidate",
+            employee_code: "558",
+            status: "Occupied",
+            joining_date: "2026-09-17",
+            last_working_date: null,
+            ...members[0],
+          },
+        ],
+      }
     if (sql.includes("nextval")) return { rows: [{ value: "2" }] }
     if (sql.includes("INSERT INTO recruitment.employment_letters"))
       return { rows: [{ id: "letter-2" }] }
@@ -73,6 +86,30 @@ function combinedOfferFixture() {
 }
 
 describe("recruitment employment letter repository", () => {
+  it("includes both combined posts in a joined employee's appointment letter", async () => {
+    const { pool, identity } = combinedOfferFixture()
+    const repository = createRecruitmentEmploymentLetterRepository({ pool })
+    const record = await repository.issue({
+      organizationId: "organization-1",
+      postId: "post-1",
+      type: "appointment",
+      issuedOn: "2026-10-20",
+      details: {
+        confirmationEffectiveDate: "2026-10-18",
+        probationCompletedOn: "2026-10-17",
+        grossMonthlySalary: 30000,
+        reportsTo: "Ankit Khattar",
+        signatoryName: "Ankit Khattar",
+        signatoryDesignation: "Engineering Head",
+        workLocation: "Mrmpl-Forging",
+      },
+    })
+    expect(record.letter.identity).toMatchObject({
+      ...identity,
+      employeeCode: "558",
+    })
+  })
+
   it("includes both combined posts when issuing an offer with the same designation", async () => {
     const { pool, identity, details } = combinedOfferFixture()
     const repository = createRecruitmentEmploymentLetterRepository({ pool })
