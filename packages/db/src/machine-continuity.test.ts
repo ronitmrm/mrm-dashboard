@@ -52,23 +52,23 @@ test("allows setup starts on weekly and festive offs while finish forecasts skip
 
   vi.setSystemTime(new Date("2026-10-08T22:00:00+05:30"))
   const shiftFingerprint = floorSourceFingerprint(input, "shift-boundary", "cnc")
-  expect(plan()).toMatchObject({ plannedStartDate: "8-Oct-26", shopFloorTaskReady: true })
+  expect(plan()).toMatchObject({ plannedStartDate: "08/10/2026", shopFloorTaskReady: true })
   vi.setSystemTime(new Date("2026-10-09T05:59:59+05:30"))
   expect(floorSourceFingerprint(input, "shift-boundary", "cnc")).toBe(shiftFingerprint)
-  expect(plan()).toMatchObject({ plannedStartDate: "8-Oct-26", shopFloorTaskReady: true, shopFloorTaskBlocker: "" })
+  expect(plan()).toMatchObject({ plannedStartDate: "08/10/2026", shopFloorTaskReady: true, shopFloorTaskBlocker: "" })
   vi.setSystemTime(new Date("2026-10-09T06:00:00+05:30"))
   expect(floorSourceFingerprint(input, "shift-boundary", "cnc")).not.toBe(shiftFingerprint)
   // An unstarted setup is also available on the off; this is not a stage override.
   input.dataEntries = input.dataEntries.filter(row => row.entryType !== "shop_floor_status")
-  expect(plan()).toMatchObject({ plannedStartDate: "9-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "10-Oct-26" })
+  expect(plan()).toMatchObject({ plannedStartDate: "09/10/2026", shopFloorTaskReady: true, plannedProductionEndDate: "10/10/2026" })
   input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-10-10", reason: "Festive off" }, createdAt: "2026-10-08T06:00:00Z" })
-  expect(plan()).toMatchObject({ plannedStartDate: "9-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "11-Oct-26" })
+  expect(plan()).toMatchObject({ plannedStartDate: "09/10/2026", shopFloorTaskReady: true, plannedProductionEndDate: "11/10/2026" })
   input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-10-09", dayType: "Working Friday", reason: "Extra machining day" }, createdAt: "2026-10-08T06:00:00Z" })
-  expect(plan()).toMatchObject({ plannedStartDate: "9-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "9-Oct-26" })
+  expect(plan()).toMatchObject({ plannedStartDate: "09/10/2026", shopFloorTaskReady: true, plannedProductionEndDate: "09/10/2026" })
   input.dataEntries = input.dataEntries.filter(row => row.payload.dayType !== "Working Friday")
-  expect(plan()).toMatchObject({ plannedProductionEndDate: "11-Oct-26" })
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "11/10/2026" })
   vi.setSystemTime(new Date("2026-10-10T06:00:00+05:30"))
-  expect(plan()).toMatchObject({ plannedStartDate: "10-Oct-26", shopFloorTaskReady: true, plannedProductionEndDate: "11-Oct-26" })
+  expect(plan()).toMatchObject({ plannedStartDate: "10/10/2026", shopFloorTaskReady: true, plannedProductionEndDate: "11/10/2026" })
 })
 
 test("keeps a future CNC plan blocked during the preceding overnight shift", () => {
@@ -78,8 +78,8 @@ test("keeps a future CNC plan blocked during the preceding overnight shift", () 
   input.dataEntries.find(row => row.entryType === "work_order")!.payload.rmInwardDate = "2026-10-10"
   vi.setSystemTime(new Date("2026-10-09T05:59:59+05:30"))
   expect(buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]).toMatchObject({
-    plannedStartDate: "10-Oct-26", shopFloorTaskReady: false,
-    shopFloorTaskBlocker: "Planned date not due until 10-Oct-26",
+    plannedStartDate: "10/10/2026", shopFloorTaskReady: false,
+    shopFloorTaskBlocker: "Planned date not due until 10/10/2026",
   })
 })
 
@@ -98,13 +98,13 @@ test("releases a moved setup's zero-remaining source machine for the next ready 
   )
   input.previousMachinePlanDetailRows = [{ jcNo: "B", partCode: "NEXT", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" }]
   const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
-  expect(rows.find(row => row.jcNo === "A" && row.machine === "CNC-1")).toMatchObject({ rawActualQty: 179, pendingGoodQty: 0, runningStatus: "Planner stopped", machineUnavailableSplitRole: "produced_on_unavailable_machine", plannedProductionEndDate: "20-Sept-26" })
+  expect(rows.find(row => row.jcNo === "A" && row.machine === "CNC-1")).toMatchObject({ rawActualQty: 179, pendingGoodQty: 0, runningStatus: "Planner stopped", machineUnavailableSplitRole: "produced_on_unavailable_machine", plannedProductionEndDate: "20/09/2026" })
   expect(rows.find(row => row.jcNo === "A" && row.machine === "CNC-2")).toMatchObject({ pendingGoodQty: 9821 })
-  expect(rows.find(row => row.jcNo === "B")).toMatchObject({ machine: "CNC-1", setupPlannedDate: "21-Sept-26", shopFloorTaskReady: true })
+  expect(rows.find(row => row.jcNo === "B")).toMatchObject({ machine: "CNC-1", setupPlannedDate: "21/09/2026", shopFloorTaskReady: true })
   input.previousMachinePlanDetailRows = rows
   vi.setSystemTime(new Date("2026-09-22T06:00:00Z"))
   expect(buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows.find(row => row.jcNo === "B"))
-    .toMatchObject({ machine: "CNC-1", setupPlannedDate: "22-Sept-26", shopFloorTaskReady: true })
+    .toMatchObject({ machine: "CNC-1", setupPlannedDate: "22/09/2026", shopFloorTaskReady: true })
 })
 
 test("scopes shift holidays and reduces only the affected CNC production capacity", () => {
@@ -113,13 +113,13 @@ test("scopes shift holidays and reduces only the affected CNC production capacit
   input.dataEntries = input.dataEntries.filter(row => row.entryType !== "shop_floor_status" && row.payload.setupNo !== "2")
   Object.assign(input.dataEntries.find(row => row.entryType === "work_order")!.payload, { orderPcs: 1000, rmInwardDate: "2026-09-21" })
   const plan = () => buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows[0]
-  expect(plan()).toMatchObject({ plannedProductionEndDate: "21-Sept-26" })
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "21/09/2026" })
   for (const calendarScope of ["cnc", "factory", "conventional"]) {
     input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-09-21", calendarScope, shift: calendarScope === "conventional" ? "All" : "A", reason: "Shift holiday" }, createdAt: "2026-09-20T06:00:00Z" })
   }
-  expect(plan()).toMatchObject({ plannedProductionEndDate: "22-Sept-26", plannedProductionEndWorkingHours: 1.6667 })
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "22/09/2026", plannedProductionEndWorkingHours: 1.6667 })
   input.dataEntries.push({ entryType: "planning_holiday", payload: { date: "2026-09-22", shift: "All", reason: "Factory holiday" }, createdAt: "2026-09-20T06:00:00Z" })
-  expect(plan()).toMatchObject({ plannedProductionEndDate: "23-Sept-26" })
+  expect(plan()).toMatchObject({ plannedProductionEndDate: "23/09/2026" })
 })
 
 test("plans available WIP after an upstream setup completes below its order", () => {
@@ -131,7 +131,7 @@ test("plans available WIP after an upstream setup completes below its order", ()
   const unstarted = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
     .find(row => row.setupNo === "2")
   expect(unstarted).toMatchObject({
-    physicalWipQty: 992, plannedStartDate: "20-Sept-26",
+    physicalWipQty: 992, plannedStartDate: "20/09/2026",
     shopFloorTaskReady: true, shopFloorTaskBlocker: "",
   })
   input.dataEntries.push({
@@ -143,7 +143,7 @@ test("plans available WIP after an upstream setup completes below its order", ()
   const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
   expect(rows.find(row => row.setupNo === "2")).toMatchObject({
     physicalWipQty: 992, totalOrderPcs: 992, pendingGoodQty: 992, customerOrderPcs: 1_100,
-    plannedStartDate: "20-Sept-26",
+    plannedStartDate: "20/09/2026",
     shopFloorTaskReady: true, shopFloorTaskBlocker: "",
   })
 })
@@ -172,7 +172,7 @@ test("keeps a WIP-ready second setup on another machine when overlap finishes ea
   const second = rows.find(row => row.setupNo === "2")!
   expect(first).toMatchObject({ machine: "CNC-1", runningStatus: "Running" })
   expect(second.machine).toBe("CNC-2")
-  expect(new Date(String(second.plannedProductionStartDate)).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate)).getTime())
+  expect(new Date(String(second.plannedProductionStartDate).split("/").reverse().join("-")).getTime()).toBeLessThan(new Date(String(first.plannedProductionEndDate).split("/").reverse().join("-")).getTime())
 })
 
 test("releases a downstream setup when recorded WIP covers its buffer", () => {
@@ -185,7 +185,7 @@ test("releases a downstream setup when recorded WIP covers its buffer", () => {
   const second = rows.find(row => row.setupNo === "2")
   expect(second).toMatchObject({
     machine: "CNC-2", physicalWipQty: 4_218,
-    plannedStartDate: "6-Oct-26", shopFloorTaskReady: true, shopFloorTaskBlocker: "",
+    plannedStartDate: "06/10/2026", shopFloorTaskReady: true, shopFloorTaskBlocker: "",
   })
 })
 
@@ -273,9 +273,9 @@ test("keeps matching work next when completing a setup releases the next route s
   input.previousMachinePlanDetailRows.push({ jcNo: "B", partCode: "M5551", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" })
   const rows = buildLegacyDashboardSnapshot(input).productionControl.machinePlanDetailRows
   const next = rows.filter(row => row.machine === "CNC-1" && row.runningStatus === "Planned")
-    .sort((a, b) => new Date(String(a.plannedProductionStartDate)).getTime() - new Date(String(b.plannedProductionStartDate)).getTime())[0]
-  expect(next).toMatchObject({ jcNo: "B", setupNo: "1", plannedProductionStartDate: "24-Sept-26", shopFloorTaskReady: true })
+    .sort((a, b) => String(a.plannedProductionStartDate).split("/").reverse().join("").localeCompare(String(b.plannedProductionStartDate).split("/").reverse().join("")))[0]
+  expect(next).toMatchObject({ jcNo: "B", setupNo: "1", plannedProductionStartDate: "24/09/2026", shopFloorTaskReady: true })
   const repeated = buildLegacyDashboardSnapshot({ ...input, previousMachinePlanDetailRows: rows }).productionControl.machinePlanDetailRows
   expect(repeated.find(row => row.jcNo === "B" && row.setupNo === "1"))
-    .toMatchObject({ machine: "CNC-1", plannedProductionStartDate: "24-Sept-26", shopFloorTaskReady: true })
+    .toMatchObject({ machine: "CNC-1", plannedProductionStartDate: "24/09/2026", shopFloorTaskReady: true })
 })
