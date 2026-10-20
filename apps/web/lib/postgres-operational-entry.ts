@@ -1,5 +1,5 @@
 import { qualityParameterCode } from "@workspace/db/quality-parameter-code"
-import { hasNonNumericQualityTolerance, normalizeQualityParameterInputType } from "./quality-parameter-set"
+import { qualityParameterValuePlan } from "@workspace/db/quality-parameter-input"
 import { istDateValue } from "./date-time"
 
 type Payload = Record<string, unknown>
@@ -74,35 +74,15 @@ function itemKey(item: Payload) {
 }
 
 function parameterPlan(payload: Payload) {
-  const nominalValue = numberOrUndefined(payload.specification)
-  const plus = numberOrUndefined(payload.tolerancePlus)
-  const minus = numberOrUndefined(payload.toleranceMinus)
-  const inputType = normalizeQualityParameterInputType(payload.inputType)
-  if (inputType === "number" && hasNonNumericQualityTolerance(payload)) {
-    throw new Error("Text tolerances require Text or Ok / Not Ok input, not Number.")
-  }
-  const dataType =
-    inputType === "number"
-      ? "numeric"
-      : ["checkbox", "pass_fail", "boolean", "yes_no"].includes(inputType)
-        ? "boolean"
-        : "text"
-
   return {
     capability: "quality.parameters.manage",
     family: "quality",
     operation: "parameter",
     input: {
       active: activeStatus(payload.status),
-      dataType,
-      inputType,
+      ...qualityParameterValuePlan(payload),
       itemUid: text(payload.partNo || payload.partCode || payload.uid),
-      lowerLimit:
-        nominalValue !== undefined && minus !== undefined
-          ? nominalValue - Math.abs(minus)
-          : undefined,
       name: text(payload.parameterName || payload.description),
-      nominalValue,
       operationSetupCode: text(payload.setupNo),
       parameterCode: qualityParameterCode(payload),
       payload,
@@ -110,10 +90,6 @@ function parameterPlan(payload: Payload) {
       routeCode: text(payload.optionNumber) || "1",
       sequence: numberOrUndefined(payload.sequence) ?? 0,
       unit: optionalText(payload.unit),
-      upperLimit:
-        nominalValue !== undefined && plus !== undefined
-          ? nominalValue + Math.abs(plus)
-          : undefined,
     },
   } as const
 }

@@ -4,6 +4,7 @@ import { productionFloorCodeForRecord, type ProductionFloorCode } from "./produc
 import { machineTypeForFamily } from "./planning-rules"
 import { ShopFloorConflictError } from "./production-shop-floor"
 import { requiredToolingCodes } from "./tooling-availability"
+import { qualityParameterValuePlan } from "./quality-parameter-input"
 
 export type ReworkRouteSetup = {
   setupName: string
@@ -15,7 +16,15 @@ export type ReworkRouteSetup = {
   fixture?: string
   tooling?: string
   foamTool?: string
-  inspectionChecks: string[]
+  inspectionChecks: Array<{
+    parameterName: string
+    specification: string
+    instrumentUsed?: string
+    tolerancePlus?: string
+    toleranceMinus?: string
+    inputType?: string
+    remark?: string
+  }>
 }
 type ReworkContext = {
   organizationId: string
@@ -66,7 +75,7 @@ export async function createJobReworkRoute(client: PoolClient, input: ReworkCont
       || !Number.isFinite(setup.setupTimeMinutes) || setup.setupTimeMinutes < 0
       || !Number.isFinite(setup.stageWeight) || setup.stageWeight <= 0
       || (setup.operationWeight !== undefined && (!Number.isFinite(setup.operationWeight) || setup.operationWeight < 0))
-      || !setup.inspectionChecks.length || setup.inspectionChecks.some(check => !check.trim())) {
+      || !setup.inspectionChecks.length || setup.inspectionChecks.some(check => !check.parameterName.trim() || !check.specification.trim())) {
       throw new ShopFloorConflictError(`Complete setup ${index + 1}: name, machine family, positive cycle/piece weight, setup time and inspection checks.`)
     }
     const machines = await client.query<{ machineFamily: string; machineType: string; machine_type_id: string }>(
@@ -100,14 +109,33 @@ export async function createJobReworkRoute(client: PoolClient, input: ReworkCont
         VALUES ($1,$2,$3,$4,$4,'mrm-dashboard','rework_route',$5,$6)`,
       [input.organizationId, setupId, code, input.actorUserId ?? null, randomUUID(), payload])
     }
+    const combinations = new Set<string>()
     for (const [checkIndex, check] of setup.inspectionChecks.entries()) {
+      const parameter = await client.query<{ id: string; name: string }>(
+        `SELECT id, name FROM quality.parameter_names WHERE organization_id = $1 AND active
+          AND lower(btrim(name)) = lower(btrim($2))`, [input.organizationId, check.parameterName])
+      if (!parameter.rows[0]) throw new ShopFloorConflictError("Select an active Parameter from the Universal Parameter Master.")
+      const instrument = check.instrumentUsed?.trim() ? await client.query<{ id: string; name: string }>(
+        `SELECT id, name FROM quality.measuring_instruments WHERE organization_id = $1 AND active
+          AND lower(btrim(name)) = lower(btrim($2))`, [input.organizationId, check.instrumentUsed]) : null
+      if (check.instrumentUsed?.trim() && !instrument?.rows[0]) {
+        throw new ShopFloorConflictError("Select an active Measuring Instrument from the Universal Measuring Instrument Master.")
+      }
+      const combination = JSON.stringify([check.parameterName.trim().toLowerCase(), check.specification.trim().toLowerCase()])
+      if (combinations.has(combination)) throw new ShopFloorConflictError("A quality parameter with the same name and specification already exists for this setup.")
+      combinations.add(combination)
+      const values = qualityParameterValuePlan(check)
       const code = `RW-${routeId}-${index + 1}-${checkIndex + 1}`
       await client.query(`INSERT INTO quality.parameter_definitions (organization_id, item_id, route_option_id,
         operation_setup_id, parameter_code, name, data_type, sequence, created_by_user_id, updated_by_user_id,
-        source_system, source_table, source_id, source_payload)
-        VALUES ($1,$2,$3,$4,$5,$6,'boolean',$7,$8,$8,'mrm-dashboard','rework_route',$9,$10)`,
-      [input.organizationId, order.item_id, routeId, setupId, code, check.trim(), checkIndex + 1, input.actorUserId ?? null, randomUUID(),
-        { ...payload, code, parameterName: check.trim(), specification: check.trim(), required: "Yes", inputType: "pass_fail", status: "Active" }])
+        source_system, source_table, source_id, source_payload, parameter_name_id, measuring_instrument_id,
+        nominal_value, lower_limit, upper_limit)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,'mrm-dashboard','rework_route',$10,$11,$12,$13,$14,$15,$16)`,
+      [input.organizationId, order.item_id, routeId, setupId, code, parameter.rows[0].name, values.dataType,
+        checkIndex + 1, input.actorUserId ?? null, randomUUID(),
+        { ...payload, ...check, code, sequence: checkIndex + 1, parameterName: parameter.rows[0].name, specification: check.specification.trim(),
+          instrumentUsed: instrument?.rows[0]?.name ?? "", required: "Yes", inputType: values.inputType, status: "Active" },
+        parameter.rows[0].id, instrument?.rows[0]?.id ?? null, values.nominalValue, values.lowerLimit, values.upperLimit])
     }
   }
   await client.query("UPDATE manufacturing.route_selections SET reversed_at = now() WHERE work_order_id = $1 AND reversed_at IS NULL", [order.id])

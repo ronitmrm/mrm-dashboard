@@ -1178,7 +1178,12 @@ async function post(request: NextRequest, context: RouteContext) {
           cycleTimeSeconds: Number(setup.cycleTimeSeconds), setupTimeMinutes: Number(setup.setupTimeMinutes),
           stageWeight: Number(setup.stageWeight), operationWeight: optionalNumeric(setup.operationWeight),
           fixture: optionalText(setup.fixture), tooling: optionalText(setup.tooling), foamTool: optionalText(setup.foamTool),
-          inspectionChecks: Array.isArray(setup.inspectionChecks) ? setup.inspectionChecks.map(text) : [] }
+          inspectionChecks: Array.isArray(setup.inspectionChecks) ? setup.inspectionChecks.map(value => {
+            const check = plainRecord(value)
+            return { parameterName: text(check.parameterName), specification: text(check.specification),
+              instrumentUsed: text(check.instrumentUsed), tolerancePlus: text(check.tolerancePlus),
+              toleranceMinus: text(check.toleranceMinus), inputType: text(check.inputType), remark: text(check.remark) }
+          }) : [] }
       }) : []
       const result = await withPlanningRepository(request, "operations.route_selection.write",
         ({ actorUserId, organizationId, repository }) => repository.createReworkRoute({

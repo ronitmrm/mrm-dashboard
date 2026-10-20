@@ -31,6 +31,7 @@
     "./branding-domain": "./src/branding-domain.ts",
     "./document-control-domain": "./src/document-control-domain.ts",
     "./quality-parameter-code": "./src/quality-parameter-code.ts",
+    "./quality-parameter-input": "./src/quality-parameter-input.ts",
     ".": "./src/index.ts",
     "./commercial-design-domain": "./src/commercial-design-domain.ts",
     "./dashboard-analysis": "./src/legacy-dashboard-analysis.ts",
