@@ -3604,7 +3604,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND letter.letter_type = 'appointment'
              AND letter.employee_code = assignment.employee_code
              AND letter.pdf_bytes IS NOT NULL
-           ORDER BY letter.issued_on DESC LIMIT 1
+             AND NOT EXISTS (
+               SELECT 1 FROM recruitment.employment_letters revision
+               WHERE revision.organization_id = letter.organization_id
+                 AND revision.supersedes_letter_id = letter.id
+             )
+           ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1
          ) letter ON true
          WHERE assignment.organization_id = $1
          ORDER BY assignment.created_at DESC, assignment.id DESC`,

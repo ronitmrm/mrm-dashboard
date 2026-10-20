@@ -67,6 +67,7 @@ import {
 import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
+import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { employeeAssignmentForPost, employeeHandoverRows } from "@/lib/employee-handover-rows"
 import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
@@ -640,7 +641,7 @@ export function ApprovedPostsTable({
               </div>
               <div className="flex flex-wrap gap-2">
                 {selectedEmployeeLetters
-                  .filter((letter) => letter.fileAvailable)
+                  .filter((letter) => letter.fileAvailable && letter.letterType !== "appointment")
                   .map((letter) => (
                     <Button asChild key={letter.id} size="sm" variant="outline">
                       <AttachmentViewerLink
@@ -651,12 +652,16 @@ export function ApprovedPostsTable({
                         <FileText data-icon="inline-start" />
                         {letter.letterType === "offer"
                           ? "Offer"
-                          : letter.letterType === "appointment"
-                            ? "Appointment"
-                            : "Experience"}
+                          : "Experience"}
                       </AttachmentViewerLink>
                     </Button>
                   ))}
+                <EmployeeAppointmentLetters
+                  canEdit={employeeManagement}
+                  employeeCode={selectedEmployeePost.employeeCode}
+                  joiningDate={selectedEmployeePost.joiningDate}
+                  letters={employmentLetters}
+                />
                 {selectedEmployeePost.status === "Occupied" &&
                 !hasAppointmentLetter ? (
                   <EmployeeLetterDialog
