@@ -31,7 +31,6 @@ const coverageCases = [
   ["data_entry", "maintenance_task", 5000],
   ["data_entry", "planning_holiday", 1000],
   ["data_entry", "production_card", 5000],
-  ["data_entry", "quality_parameter_master", 2000],
   ["data_entry", "rejection_reason_master", 500],
   ["data_entry", "rejection_remark_master", 500],
   ["data_entry", "rejection_type_master", 500],
@@ -266,8 +265,9 @@ describe("canonical PostgreSQL dashboard read model", () => {
     }
   })
 
-  it("loads bounded floor-aware sources in one database statement", async () => {
+  it("loads complete quality masters and bounded floor-aware sources in one database statement", async () => {
     const client = await pool.connect()
+    await client.query("BEGIN")
     const statements: Array<{ parameters?: unknown[]; sql: string }> = []
     const countedClient = {
       query: async (sql: string, parameters?: unknown[]) => {
@@ -277,6 +277,17 @@ describe("canonical PostgreSQL dashboard read model", () => {
     }
 
     try {
+      await client.query(`
+        INSERT INTO derived.dashboard_source_records (
+          organization_id, source_schema, source_table, source_id,
+          source_kind, source_group, entry_type, changed_at, source_payload
+        )
+        SELECT $1, 'coverage_test', 'quality_parameters', ordinal::text,
+          'data_entry', 'dataEntries', 'quality_parameter_master', now(),
+          jsonb_build_object('productionFloorCode', 'cnc',
+            'entryType', 'quality_parameter_master', 'payload', '{}'::jsonb)
+        FROM generate_series(1, 2059) ordinal
+      `, [organizationId])
       const source = await readCanonicalDashboardSource(
         countedClient as never,
         organizationId
@@ -293,6 +304,9 @@ describe("canonical PostgreSQL dashboard read model", () => {
           productionFloorCode: "cnc",
         })
       )
+      expect(source.allDataEntries.filter(
+        (row) => row.entryType === "quality_parameter_master"
+      )).toHaveLength(2059)
       expect(source.sourceCoverage).toMatchObject({
         corrections: {
           limit: 5000,
@@ -318,31 +332,33 @@ describe("canonical PostgreSQL dashboard read model", () => {
             returned: 1,
             truncated: false,
           },
+          quality_parameter_master: {
+            available: 2059,
+            limit: 2059,
+            returned: 2059,
+            truncated: false,
+          },
         }
       )
 
-      await client.query("BEGIN")
-      try {
-        await client.query("SET LOCAL enable_seqscan = off")
-        await client.query("SET LOCAL enable_sort = off")
-        const plan = await client.query<{ "QUERY PLAN": string }>(
-          `EXPLAIN ${statements[0]!.sql}`,
-          statements[0]!.parameters
-        )
-        const planText = plan.rows.map((row) => row["QUERY PLAN"]).join("\n")
-        expect(planText).toContain(
-          "dashboard_source_records_entry_floor_read_idx"
-        )
-        expect(planText).toContain(
-          "dashboard_source_records_group_floor_read_idx"
-        )
-        expect(planText).toContain(
-          "dashboard_source_records_correction_floor_read_idx"
-        )
-      } finally {
-        await client.query("ROLLBACK")
-      }
+      await client.query("SET LOCAL enable_seqscan = off")
+      await client.query("SET LOCAL enable_sort = off")
+      const plan = await client.query<{ "QUERY PLAN": string }>(
+        `EXPLAIN ${statements[0]!.sql}`,
+        statements[0]!.parameters
+      )
+      const planText = plan.rows.map((row) => row["QUERY PLAN"]).join("\n")
+      expect(planText).toContain(
+        "dashboard_source_records_entry_floor_read_idx"
+      )
+      expect(planText).toContain(
+        "dashboard_source_records_group_floor_read_idx"
+      )
+      expect(planText).toContain(
+        "dashboard_source_records_correction_floor_read_idx"
+      )
     } finally {
+      await client.query("ROLLBACK")
       client.release()
     }
   })

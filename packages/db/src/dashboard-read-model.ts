@@ -183,7 +183,7 @@ const machinePlanContinuityFields = [
   "setupNo",
 ] as const
 
-const dataEntrySourceBudgets: Record<string, number> = {
+const dataEntrySourceBudgets: Record<string, number | null> = {
   setup_name_master: 1000,
   cycle: 5000,
   employee: 1000,
@@ -196,7 +196,8 @@ const dataEntrySourceBudgets: Record<string, number> = {
   maintenance_task: 5000,
   planning_holiday: 1000,
   production_card: 5000,
-  quality_parameter_master: 2000,
+  // Quality masters must be complete; PostgreSQL LIMIT NULL reads every row.
+  quality_parameter_master: null,
   parameter_master: 2000,
   measuring_instrument_master: 2000,
   rejection_reason_master: 500,
@@ -235,7 +236,7 @@ const correctionPhysicalSourceBudgets = {
   setupCompletions: physicalSourceBudgets.setupCompletions,
 } satisfies Record<string, number>
 
-function floorSourceBudgets(budgets: Record<string, number>) {
+function floorSourceBudgets(budgets: Record<string, number | null>) {
   return productionFloors.flatMap((floor) =>
     Object.entries(budgets).map(([category, limit]) => ({
       category,
@@ -320,16 +321,16 @@ function countRowsByEntryType(rows: JsonRecord[]) {
   return counts
 }
 
-function emptyCoverageFacts(limit: number): CoverageFacts {
-  return { available: 0, limit, returned: 0, truncated: false }
+function emptyCoverageFacts(limit: number | null): CoverageFacts {
+  return { available: 0, limit: limit ?? 0, returned: 0, truncated: false }
 }
 
 function emptyGroupedCoverage(
-  budgets: Record<string, number>
+  budgets: Record<string, number | null>
 ): GroupedSourceCoverage {
   return {
     ...emptyCoverageFacts(
-      Object.values(budgets).reduce((total, limit) => total + limit, 0)
+      Object.values(budgets).reduce<number>((total, limit) => total + (limit ?? 0), 0)
     ),
     groups: Object.fromEntries(
       Object.entries(budgets).map(([group, limit]) => [
@@ -370,6 +371,9 @@ function sourceCoverageByFloor(
     if (!facts) continue
     facts.available = Number(row.available)
     facts.returned += 1
+    if (row.source_kind === "data_entry" && dataEntrySourceBudgets[row.entry_type ?? ""] === null) {
+      facts.limit = facts.available
+    }
   }
 
   for (const floorCoverage of Object.values(coverage)) {
@@ -386,11 +390,13 @@ function sourceCoverageByFloor(
     ]) {
       groupedCoverage.returned = 0
       groupedCoverage.available = 0
+      groupedCoverage.limit = 0
       groupedCoverage.truncatedGroups = []
       for (const [group, facts] of Object.entries(groupedCoverage.groups)) {
         facts.truncated = facts.available > facts.returned
         groupedCoverage.returned += facts.returned
         groupedCoverage.available += facts.available
+        groupedCoverage.limit += facts.limit
         if (facts.truncated) groupedCoverage.truncatedGroups.push(group)
       }
       groupedCoverage.truncated = groupedCoverage.truncatedGroups.length > 0
