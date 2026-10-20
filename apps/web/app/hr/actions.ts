@@ -8,6 +8,7 @@ import {
   createMasterDataLifecycleRepository,
   createRecruitmentEmploymentLetterRepository,
   createRecruitmentRepository,
+  type AppointmentLetterDetails,
   type MasterDataKind,
   type PreparedEmploymentLetterRecord,
   recruitmentInterviewRound,
@@ -59,6 +60,28 @@ function values(formData: FormData, key: string) {
     .getAll(key)
     .map((entry) => entry.toString().trim())
     .filter(Boolean)
+}
+
+function appointmentLetterDetails(formData: FormData): AppointmentLetterDetails {
+  const probationUnit = value(formData, "probation_unit")
+  if (probationUnit !== "days" && probationUnit !== "months") {
+    throw new Error("Probation unit must be days or months.")
+  }
+  return {
+    confirmationEffectiveDate: value(formData, "confirmation_effective_date"),
+    dutyStartTime: value(formData, "duty_start_time"),
+    dutyEndTime: value(formData, "duty_end_time"),
+    grossMonthlySalary: Number(value(formData, "gross_monthly_salary")),
+    minimumWeeklyHours: Number(value(formData, "minimum_weekly_hours")),
+    postalAddress: value(formData, "postal_address"),
+    probationCompletedOn: value(formData, "probation_completed_on"),
+    probationLength: Number(value(formData, "probation_length")),
+    probationUnit,
+    reportsTo: value(formData, "reports_to"),
+    signatoryDesignation: value(formData, "letter_signatory_designation"),
+    signatoryName: value(formData, "letter_signatory_name"),
+    workLocation: value(formData, "work_location"),
+  }
 }
 
 function interviewAtValue(formData: FormData) {
@@ -689,30 +712,7 @@ export async function generateEmploymentLetterAction(formData: FormData) {
       type === "appointment"
         ? await repository.issue({
             ...context,
-            details: {
-              confirmationEffectiveDate: value(
-                formData,
-                "confirmation_effective_date"
-              ),
-              dutyStartTime: value(formData, "duty_start_time"),
-              dutyEndTime: value(formData, "duty_end_time"),
-              grossMonthlySalary: Number(
-                value(formData, "gross_monthly_salary")
-              ),
-              minimumWeeklyHours: Number(value(formData, "minimum_weekly_hours")),
-              postalAddress: value(formData, "postal_address"),
-              probationCompletedOn: value(formData, "probation_completed_on"),
-              probationLength: Number(value(formData, "probation_length")),
-              probationUnit:
-                value(formData, "probation_unit") === "days" ? "days" : "months",
-              reportsTo: value(formData, "reports_to"),
-              signatoryDesignation: value(
-                formData,
-                "letter_signatory_designation"
-              ),
-              signatoryName: value(formData, "letter_signatory_name"),
-              workLocation: value(formData, "work_location"),
-            },
+            details: appointmentLetterDetails(formData),
             issuedOn,
             postId,
             type,
@@ -754,6 +754,48 @@ export async function generateEmploymentLetterAction(formData: FormData) {
         error instanceof Error
           ? error.message
           : "The Employment Letter was not generated.",
+    }
+  } finally {
+    await Promise.all([recruitment.close(), repository.close()])
+  }
+  revalidatePath(hrPath)
+  const feedback = new URLSearchParams(outcome)
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
+}
+
+export async function reviseAppointmentLetterAction(formData: FormData) {
+  const path = hrReturnPath(formData)
+  const session = await requireCapability(
+    masterCapability("employee_assignments", "save"),
+    path
+  )
+  const connectionString = readAuthEnvironment().connectionString
+  const repository = createRecruitmentEmploymentLetterRepository({
+    connectionString,
+  })
+  const recruitment = createRecruitmentRepository({ connectionString })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    await repository.reviseAppointment({
+      actorUserId: session.user.id,
+      organizationId,
+      previousLetterId: value(formData, "previous_letter_id"),
+      issuedOn: value(formData, "letter_issued_on"),
+      details: appointmentLetterDetails(formData),
+      reason: value(formData, "reason"),
+      renderPdf: buildEmploymentLetterPdf,
+    })
+    outcome = {
+      success:
+        "Appointment Letter regenerated in the current format. Previous versions remain available.",
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The Appointment Letter was not regenerated.",
     }
   } finally {
     await Promise.all([recruitment.close(), repository.close()])

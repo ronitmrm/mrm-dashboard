@@ -1203,6 +1203,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
       return (
         <ProbationEndReminders
           assignments={props.employeeAssignments}
+          employmentLetters={props.employmentLetters}
           posts={props.posts}
           canManageEmployees={props.canManageEmployees}
           canViewOfferLetters={props.canViewOfferLetters}

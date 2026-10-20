@@ -32,6 +32,7 @@ export type RecruitmentEmploymentLetterRow = {
   postCode: string | null
   postId: string | null
   referenceNumber: string
+  supersedesLetterId: string | null
 }
 
 type Context = {
@@ -42,7 +43,11 @@ type Context = {
 async function combinedEmploymentIdentity(
   client: PoolClient,
   organizationId: string,
-  scope: { applicationId: string } | { postId: string }
+  scope: { applicationId: string } | {
+    postId: string
+    employeeCode?: string
+    joiningDate?: string
+  }
 ) {
   const scopeFilter =
     "applicationId" in scope
@@ -53,8 +58,10 @@ async function combinedEmploymentIdentity(
          WHERE application.id = $1 AND application.organization_id = post.organization_id
            AND job.post_id = post.id AND job.vacancy_code = combined.vacancy_code
        )`
-      : `post.id = $1 AND member.status = 'Occupied'
-       AND lower(btrim(member.employee_code)) = lower(btrim(post.employee_code))`
+      : `post.id = $1 AND post.status = 'Occupied' AND member.status = 'Occupied'
+       AND lower(btrim(member.employee_code)) = lower(btrim(post.employee_code))
+       AND ($3::text IS NULL OR lower(btrim(post.employee_code)) = lower(btrim($3)))
+       AND ($4::date IS NULL OR post.joining_date = $4::date)`
   const result = await client.query<{
     designation: string
     department: string
@@ -73,10 +80,9 @@ async function combinedEmploymentIdentity(
      LEFT JOIN recruitment.departments department ON department.id = member.department_id
      WHERE post.organization_id = $2 AND ${scopeFilter}
      ORDER BY link.is_primary DESC, member.post_code, member.id`,
-    [
-      "applicationId" in scope ? scope.applicationId : scope.postId,
-      organizationId,
-    ]
+    "applicationId" in scope
+      ? [scope.applicationId, organizationId]
+      : [scope.postId, organizationId, scope.employeeCode ?? null, scope.joiningDate ?? null]
   )
   if (!result.rows.length) return null
   return {
@@ -297,12 +303,13 @@ export function createRecruitmentEmploymentLetterRepository(
       post_code: string | null
       post_id: string | null
       reference_number: string
+      supersedes_letter_id: string | null
     }>(
       `SELECT letter.id, letter.letter_type, letter.application_id,
            letter.post_id, letter.employee_name, ${registerEmployeeCode} AS employee_code,
            letter.designation, letter.department, letter.joining_date::text,
            letter.last_working_date::text, letter.reference_number,
-           letter.issued_on::text, letter.details, post.post_code,
+           letter.issued_on::text, letter.details, letter.supersedes_letter_id, post.post_code,
            (letter.pdf_bytes IS NOT NULL) AS file_available
          FROM recruitment.employment_letters letter
          JOIN recruitment.applications application
@@ -334,6 +341,7 @@ export function createRecruitmentEmploymentLetterRepository(
       postCode: row.post_code,
       postId: row.post_id,
       referenceNumber: row.reference_number,
+      supersedesLetterId: row.supersedes_letter_id ?? null,
     }))
   }
 
@@ -387,12 +395,13 @@ export function createRecruitmentEmploymentLetterRepository(
         post_code: string | null
         post_id: string | null
         reference_number: string
+        supersedes_letter_id: string | null
       }>(
         `SELECT letter.id, letter.letter_type, letter.application_id,
            letter.post_id, letter.employee_name, ${registerEmployeeCode} AS employee_code,
            letter.designation, letter.department, letter.joining_date::text,
            letter.last_working_date::text, letter.reference_number,
-           letter.issued_on::text, letter.details, post.post_code,
+           letter.issued_on::text, letter.details, letter.supersedes_letter_id, post.post_code,
            (letter.pdf_bytes IS NOT NULL) AS file_available
          FROM recruitment.employment_letters letter
          LEFT JOIN recruitment.posts post ON post.id = letter.post_id
@@ -420,6 +429,7 @@ export function createRecruitmentEmploymentLetterRepository(
         postCode: row.post_code,
         postId: row.post_id,
         referenceNumber: row.reference_number,
+        supersedesLetterId: row.supersedes_letter_id ?? null,
       }))
     },
 
@@ -432,6 +442,140 @@ export function createRecruitmentEmploymentLetterRepository(
 
     listForJob(organizationId: string, jobId: string) {
       return listOffers(organizationId, { column: "job_post_id", id: jobId })
+    },
+
+    async reviseAppointment(
+      input: Context & {
+        previousLetterId: string
+        details: AppointmentLetterDetails
+        issuedOn: string
+        reason: string
+        renderPdf: (letter: PreparedEmploymentLetter) => Promise<Uint8Array>
+      }
+    ) {
+      const reason = required(input.reason, "Correction reason")
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{
+          id: string
+          post_id: string | null
+          employee_name: string
+          employee_code: string
+          department: string
+          designation: string
+          joining_date: string
+          last_working_date: string | null
+          reference_number: string
+          details: Record<string, unknown>
+          file_available: boolean
+        }>(
+          `SELECT id, post_id, employee_name, employee_code, department, designation,
+             joining_date::text, last_working_date::text, reference_number, details,
+             (pdf_bytes IS NOT NULL) AS file_available
+           FROM recruitment.employment_letters
+           WHERE id = $1 AND organization_id = $2 AND letter_type = 'appointment'
+           FOR UPDATE`,
+          [required(input.previousLetterId, "Appointment Letter"), input.organizationId]
+        )
+        const previous = result.rows[0]
+        if (!previous?.file_available) {
+          throw new Error("The issued Appointment Letter was not found.")
+        }
+        const successor = await client.query<{ id: string }>(
+          `SELECT id FROM recruitment.employment_letters
+           WHERE supersedes_letter_id = $1 AND organization_id = $2`,
+          [previous.id, input.organizationId]
+        )
+        if (successor.rows[0]) {
+          throw new Error("The Appointment Letter has changed. Refresh and reopen Edit Appointment Letter.")
+        }
+
+        // The original employee owns this letter even after the post is reassigned.
+        const combinedIdentity = previous.post_id
+          ? await combinedEmploymentIdentity(client, input.organizationId, {
+              postId: previous.post_id,
+              employeeCode: previous.employee_code,
+              joiningDate: previous.joining_date,
+            })
+          : null
+        const letter = prepareEmploymentLetter({
+          type: "appointment",
+          // Revising the historical joined letter does not depend on today's employment status.
+          postStatus: "Occupied",
+          identity: {
+            combinedPosts: combinedIdentity?.combinedPosts ??
+              (previous.details.combinedPosts === true ? true : undefined),
+            employeeName: previous.employee_name,
+            employeeCode: previous.employee_code,
+            department: combinedIdentity?.department ?? previous.department,
+            designation: combinedIdentity?.designation ?? previous.designation,
+            joiningDate: previous.joining_date,
+            lastWorkingDate: previous.last_working_date,
+          },
+          details: input.details,
+          issuedOn: input.issuedOn,
+          ordinal: await nextOrdinal(client),
+        })
+        const bytes = Buffer.from(await input.renderPdf(letter))
+        if (!bytes.length) {
+          throw new Error("The revised Appointment Letter PDF could not be generated.")
+        }
+        const sourceId = `${input.organizationId}:appointment:revision:${previous.id}`
+        const stored = await client.query<{ id: string }>(
+          `INSERT INTO recruitment.employment_letters (
+             organization_id, letter_type, post_id, employee_name, employee_code,
+             designation, department, joining_date, last_working_date, reference_number,
+             issued_on, details, pdf_bytes, pdf_file_name, pdf_sha256, generated_at,
+             created_by_user_id, updated_by_user_id, source_system, source_table,
+             source_id, supersedes_letter_id
+           ) VALUES ($1,'appointment',$2,$3,$4,$5,$6,$7::date,$8::date,$9,$10::date,$11,
+             $12,$13,$14,now(),$15,$15,'mrm-dashboard','employment_letters',$16,$17)
+           RETURNING id`,
+          [
+            input.organizationId,
+            previous.post_id,
+            letter.identity.employeeName,
+            letter.identity.employeeCode,
+            letter.identity.designation,
+            letter.identity.department,
+            letter.identity.joiningDate,
+            letter.identity.lastWorkingDate,
+            letter.reference,
+            letter.issuedOn,
+            JSON.stringify({
+              ...letter.details,
+              ...(letter.identity.combinedPosts ? { combinedPosts: true } : {}),
+              supersedesLetterId: previous.id,
+              supersedesReference: previous.reference_number,
+              correctionReason: reason,
+            }),
+            bytes,
+            `${letter.reference}-appointment-letter.pdf`,
+            createHash("sha256").update(bytes).digest("hex"),
+            input.actorUserId ?? null,
+            sourceId,
+            previous.id,
+          ]
+        )
+        const id = stored.rows[0]!.id
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table,
+             target_id, actor_user_id, reason, metadata, source_system, source_table, source_id
+           ) VALUES ($1, 'recruitment.employment_letter.appointment.revised',
+             'recruitment', 'employment_letters', $2, $3, $4, $5,
+             'mrm-dashboard', 'employment_letters', $6)`,
+          [
+            input.organizationId,
+            id,
+            input.actorUserId ?? null,
+            reason,
+            JSON.stringify({ reference: letter.reference, previousLetterId: previous.id,
+              previousReference: previous.reference_number }),
+            `${sourceId}:revised`,
+          ]
+        )
+        return { id, reference: letter.reference, previousReference: previous.reference_number }
+      })
     },
 
     async storePdf(
@@ -658,7 +802,10 @@ export function createRecruitmentEmploymentLetterRepository(
             letter.identity.lastWorkingDate,
             letter.reference,
             letter.issuedOn,
-            JSON.stringify(letter.details),
+            JSON.stringify({
+              ...letter.details,
+              ...(letter.identity.combinedPosts ? { combinedPosts: true } : {}),
+            }),
             input.actorUserId ?? null,
             sourceId,
           ]

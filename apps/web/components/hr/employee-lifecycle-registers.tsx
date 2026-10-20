@@ -2,7 +2,7 @@
 
 import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 
-import type { RecruitmentEmployeeAssignmentRow, RecruitmentPostRow } from "@workspace/db"
+import type { RecruitmentEmployeeAssignmentRow, RecruitmentEmploymentLetterRow, RecruitmentPostRow } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation"
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { EmployeeLetterForm } from "@/components/hr/employee-letter-dialog"
+import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
 import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
@@ -89,12 +90,14 @@ export function ProbationEndReminders({
   canManageEmployees,
   canViewOfferLetters,
   appointmentAssignmentId,
+  employmentLetters,
 }: {
   assignments: RecruitmentEmployeeAssignmentRow[]
   posts: RecruitmentPostRow[]
   canManageEmployees: boolean
   canViewOfferLetters: boolean
   appointmentAssignmentId?: string
+  employmentLetters: RecruitmentEmploymentLetterRow[]
 }) {
   const router = useRouter()
   const today = new Intl.DateTimeFormat("en-CA", {
@@ -227,6 +230,7 @@ export function ProbationEndReminders({
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
                   <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead><TableHead>Latest Remark</TableHead>
+                  {canViewOfferLetters || canManageEmployees ? <TableHead>Appointment Letter</TableHead> : null}
                 </TableRow></TableHeader>
                 <TableBody>
                   {completed.map((assignment) => <TableRow key={assignment.id}>
@@ -238,8 +242,20 @@ export function ProbationEndReminders({
                     <TableCell>{formatCalendarDate(assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—")}</TableCell>
                     <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
                     <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
+                    {canViewOfferLetters || canManageEmployees ? (
+                      <TableCell>
+                        <EmployeeAppointmentLetters
+                          canEdit={canManageEmployees}
+                          employeeCode={assignment.employeeCode}
+                          emptyLabel="—"
+                          joiningDate={assignment.joinedOn}
+                          letters={employmentLetters}
+                          returnPanel="probationRemindersPanel"
+                        />
+                      </TableCell>
+                    ) : null}
                   </TableRow>)}
-                  {!completed.length ? <TableRow><TableCell colSpan={8}>
+                  {!completed.length ? <TableRow><TableCell colSpan={canViewOfferLetters || canManageEmployees ? 9 : 8}>
                     <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
                   </TableCell></TableRow> : null}
                 </TableBody>

@@ -189,7 +189,7 @@ export default async function HrRecruitmentPage({
       panelId === "conversationLogsPanel"
         ? repository.listCandidateEvents(organizationId)
         : Promise.resolve(candidateEvents),
-      panelId === "employeeMasterPanel"
+      ["employeeMasterPanel", "probationRemindersPanel"].includes(panelId)
         ? letterRepository.list(organizationId)
         : Promise.resolve(employmentLetters),
       ["employeeMasterPanel", "employeeDataPanel", "probationRemindersPanel", "employeeAssignmentHistoryPanel"].includes(panelId)
