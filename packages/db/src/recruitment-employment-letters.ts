@@ -6,6 +6,7 @@ export const employmentLetterTypes = [
 export type EmploymentLetterType = (typeof employmentLetterTypes)[number]
 
 export type EmploymentLetterIdentity = {
+  combinedPosts?: true
   department: string
   designation: string
   employeeCode: string | null
@@ -27,8 +28,14 @@ export type OfferLetterDetails = Signatory & {
 }
 export type AppointmentLetterDetails = Signatory & {
   confirmationEffectiveDate: string
+  dutyStartTime: string
+  dutyEndTime: string
   grossMonthlySalary: number
+  minimumWeeklyHours: number
+  postalAddress: string
   probationCompletedOn: string
+  probationLength: number
+  probationUnit: "days" | "months"
   reportsTo: string
   workLocation: string
 }
@@ -96,7 +103,11 @@ function time(value: string, label: string) {
 function date(value: string, label: string) {
   const normalized = value.trim()
   const parsed = new Date(`${normalized}T00:00:00Z`)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized)
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(normalized) ||
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== normalized
+  )
     throw new Error(`${label} is required.`)
   return normalized
 }
@@ -114,6 +125,7 @@ function reference(
 
 function identity(value: EmploymentLetterIdentity) {
   return {
+    ...(value.combinedPosts ? { combinedPosts: true as const } : {}),
     department: text(value.department, "Department"),
     designation: text(value.designation, "Designation"),
     employeeCode: value.employeeCode?.trim() || null,
@@ -202,6 +214,11 @@ export function prepareEmploymentLetter(
       throw new Error(
         "Probation must be completed before issuing an Appointment Letter."
       )
+    if (
+      request.details.probationUnit !== "days" &&
+      request.details.probationUnit !== "months"
+    )
+      throw new Error("Probation unit must be days or months.")
     return {
       ...request,
       details: {
@@ -211,11 +228,22 @@ export function prepareEmploymentLetter(
           request.details.confirmationEffectiveDate,
           "Confirmation effective date"
         ),
+        dutyStartTime: time(request.details.dutyStartTime, "Duty start time"),
+        dutyEndTime: time(request.details.dutyEndTime, "Duty end time"),
         grossMonthlySalary: positive(
           request.details.grossMonthlySalary,
           "Gross monthly salary"
         ),
+        minimumWeeklyHours: positive(
+          request.details.minimumWeeklyHours,
+          "Minimum weekly working hours"
+        ),
+        postalAddress: text(request.details.postalAddress, "Postal address"),
         probationCompletedOn,
+        probationLength: positive(
+          request.details.probationLength,
+          "Probation period"
+        ),
         reportsTo: text(request.details.reportsTo, "Reports to"),
         workLocation: text(request.details.workLocation, "Work location"),
       },

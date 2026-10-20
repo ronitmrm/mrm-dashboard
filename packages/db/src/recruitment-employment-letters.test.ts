@@ -47,8 +47,14 @@ describe("employment letter lifecycle", () => {
       prepareEmploymentLetter({
         details: {
           confirmationEffectiveDate: "2026-02-01",
+          dutyStartTime: "09:15",
+          dutyEndTime: "18:45",
           grossMonthlySalary: 24500,
+          minimumWeeklyHours: 60,
+          postalAddress: "12 Test Road\nJamnagar, Gujarat - 361001",
           probationCompletedOn: "2026-03-01",
+          probationLength: 3,
+          probationUnit: "months",
           reportsTo: "Ronit Khattar",
           signatoryDesignation: "Director",
           signatoryName: "Ankit Khattar",
@@ -63,6 +69,43 @@ describe("employment letter lifecycle", () => {
     ).toThrow(
       "Probation must be completed before issuing an Appointment Letter."
     )
+  })
+
+  it("retains appointment terms and validates duty hours", () => {
+    const request = {
+      details: {
+        confirmationEffectiveDate: "2026-02-23",
+        dutyStartTime: "09:15",
+        dutyEndTime: "18:45",
+        grossMonthlySalary: 24500,
+        minimumWeeklyHours: 54,
+        postalAddress: " 12 Test Road\nJamnagar, Gujarat - 361001 ",
+        probationCompletedOn: "2026-02-22",
+        probationLength: 90,
+        probationUnit: "days" as const,
+        reportsTo: "Test Manager",
+        signatoryDesignation: "Director",
+        signatoryName: "Test Signatory",
+        workLocation: "Head Office",
+      },
+      identity,
+      issuedOn: "2026-02-23",
+      ordinal: 7,
+      postStatus: "Occupied",
+      type: "appointment" as const,
+    }
+    const letter = prepareEmploymentLetter(request)
+
+    expect(letter.details).toEqual({
+      ...request.details,
+      postalAddress: request.details.postalAddress.trim(),
+    })
+    expect(() =>
+      prepareEmploymentLetter({
+        ...request,
+        details: { ...request.details, dutyStartTime: "25:15" },
+      })
+    ).toThrow("Duty start time must be a valid time.")
   })
 
   it("rejects an experience letter before the recorded last working date", () => {

@@ -96,6 +96,12 @@ describe("recruitment employment letter repository", () => {
       issuedOn: "2026-10-20",
       details: {
         confirmationEffectiveDate: "2026-10-18",
+        postalAddress: "42 Test Road, Jamnagar",
+        probationLength: 1,
+        probationUnit: "months",
+        dutyStartTime: "09:00",
+        dutyEndTime: "20:00",
+        minimumWeeklyHours: 60,
         probationCompletedOn: "2026-10-17",
         grossMonthlySalary: 30000,
         reportsTo: "Ankit Khattar",

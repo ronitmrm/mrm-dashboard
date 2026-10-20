@@ -14,11 +14,15 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { TimeInput } from "@workspace/ui/components/time-input"
 import { FilePlus2 } from "lucide-react"
 import { useId } from "react"
 
 import { generateEmploymentLetterAction } from "@/app/hr/actions"
-import { StandardDialogContent } from "@/components/ui/golden-patterns"
+import {
+  FormGrid,
+  StandardDialogContent,
+} from "@/components/ui/golden-patterns"
 
 type EmployeeLetterFormProps = {
   post: Pick<
@@ -69,7 +73,7 @@ export function EmployeeLetterForm({
       <input name="panel" type="hidden" value={returnPanel} />
       <input name="post_id" type="hidden" value={post.id} />
       <input name="letter_type" type="hidden" value={type} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FormGrid className="xl:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${id}-issued-on`}>Letter Date</FieldLabel>
           <Input
@@ -83,10 +87,49 @@ export function EmployeeLetterForm({
           <FieldLabel htmlFor={`${id}-location`}>Work Location</FieldLabel>
           <Input id={`${id}-location`} name="work_location" required />
         </Field>
-      </div>
+      </FormGrid>
       {appointment ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor={`${id}-address`}>
+              Employee Postal Address
+            </FieldLabel>
+            <Textarea
+              id={`${id}-address`}
+              name="postal_address"
+              placeholder="House / Street&#10;City, District&#10;State - PIN"
+              required
+              rows={3}
+            />
+          </Field>
+          <FormGrid className="xl:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor={`${id}-probation-length`}>
+                Probation Period
+              </FieldLabel>
+              <Input
+                id={`${id}-probation-length`}
+                min="1"
+                name="probation_length"
+                required
+                type="number"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-probation-unit`}>
+                Probation Unit
+              </FieldLabel>
+              <NativeSelect
+                id={`${id}-probation-unit`}
+                name="probation_unit"
+                required
+              >
+                <NativeSelectOption value="months">Months</NativeSelectOption>
+                <NativeSelectOption value="days">Days</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+          </FormGrid>
+          <FormGrid className="xl:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`${id}-probation-completed`}>
                 Probation Completed On
@@ -110,8 +153,44 @@ export function EmployeeLetterForm({
                 type="date"
               />
             </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          </FormGrid>
+          <FormGrid className="xl:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor={`${id}-duty-start`}>
+                Duty Start Time
+              </FieldLabel>
+              <TimeInput
+                aria-label="Duty start time"
+                id={`${id}-duty-start`}
+                name="duty_start_time"
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-duty-end`}>Duty End Time</FieldLabel>
+              <TimeInput
+                aria-label="Duty end time"
+                id={`${id}-duty-end`}
+                name="duty_end_time"
+                required
+              />
+            </Field>
+          </FormGrid>
+          <Field>
+            <FieldLabel htmlFor={`${id}-weekly-hours`}>
+              Minimum Weekly Working Hours
+            </FieldLabel>
+            <Input
+              defaultValue="60"
+              id={`${id}-weekly-hours`}
+              min="0.01"
+              name="minimum_weekly_hours"
+              required
+              step="0.01"
+              type="number"
+            />
+          </Field>
+          <FormGrid className="xl:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`${id}-salary`}>
                 Gross Monthly Salary (₹)
@@ -129,11 +208,11 @@ export function EmployeeLetterForm({
               <FieldLabel htmlFor={`${id}-reports-to`}>Reports To</FieldLabel>
               <Input id={`${id}-reports-to`} name="reports_to" required />
             </Field>
-          </div>
+          </FormGrid>
         </>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FormGrid className="xl:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`${id}-title`}>Title</FieldLabel>
               <NativeSelect id={`${id}-title`} name="title" required>
@@ -154,7 +233,7 @@ export function EmployeeLetterForm({
                 </NativeSelectOption>
               </NativeSelect>
             </Field>
-          </div>
+          </FormGrid>
           <Field>
             <FieldLabel htmlFor={`${id}-responsibilities`}>
               Key Responsibilities Or Functions
@@ -168,7 +247,7 @@ export function EmployeeLetterForm({
           </Field>
         </>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FormGrid className="xl:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${id}-signatory-name`}>
             Signatory Name
@@ -190,7 +269,7 @@ export function EmployeeLetterForm({
             required
           />
         </Field>
-      </div>
+      </FormGrid>
       <DialogFooter>
         <Button type="submit">Generate And Store Letter</Button>
       </DialogFooter>

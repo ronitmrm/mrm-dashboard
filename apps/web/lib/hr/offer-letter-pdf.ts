@@ -1,140 +1,117 @@
-import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
-import { readFile } from "node:fs/promises"
-import path from "node:path"
-import fontkit from "@pdf-lib/fontkit"
 import type { PreparedEmploymentLetter } from "@workspace/db"
-import { PDFDocument, rgb } from "pdf-lib"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+
+import {
+  createEmploymentLetterPdf,
+  LETTER_BODY_WIDTH,
+  LETTER_GREEN,
+  LETTER_LEFT,
+} from "./employment-letter-layout"
 
 type Offer = Extract<PreparedEmploymentLetter, { type: "offer" }>
 
-const GREEN = rgb(0, 0.42, 0.29)
-const BLACK = rgb(0, 0, 0)
-const WIDTH = 595.28
-const HEIGHT = 841.89
-
-function date(value: string) {
-  return formatCalendarDate(value)
-}
-
 export async function buildOfferLetterPdf(letter: Offer) {
-  const pdf = await PDFDocument.create()
-  pdf.registerFontkit(fontkit)
-  // Keep tracing on these exact assets: a dynamic lib path also bundles the
-  // unrelated Branding fonts into the shared server-action function.
-  const [regularBytes, boldBytes, headerBytes, footerBytes] = await Promise.all(
-    [
-      readFile(
-        path.join(process.cwd(), "lib/pricing/assets/Outfit-Regular.ttf")
-      ),
-      readFile(
-        path.join(process.cwd(), "lib/pricing/assets/Outfit-Medium.ttf")
-      ),
-      readFile(path.join(process.cwd(), "lib/hr/assets/offer-header.png")),
-      readFile(path.join(process.cwd(), "lib/hr/assets/offer-footer.png")),
-    ]
+  const { doc, addPage, finish } = await createEmploymentLetterPdf(
+    "offer",
+    letter.identity.employeeName
   )
-  const regular = await pdf.embedFont(regularBytes, { subset: true })
-  const bold = await pdf.embedFont(boldBytes, { subset: true })
-  const header = await pdf.embedPng(headerBytes)
-  const footer = await pdf.embedPng(footerBytes)
-  pdf.setTitle(`${letter.identity.employeeName} Offer Letter`)
-  pdf.setSubject("offer employment letter")
-  pdf.setCreator("MRM Dashboard")
-  pdf.setProducer("MRM Dashboard")
+  const lineHeight = 13.5
+  let y = 0
 
-  let page = pdf.addPage([WIDTH, HEIGHT])
-  let y = 625
-  function footerOnPage() {
-    page.drawImage(footer, {
-      x: WIDTH * 0.065,
-      y: HEIGHT * 0.019,
-      width: WIDTH * 0.88,
-      height: HEIGHT * 0.106,
-    })
-  }
   function text(
     value: string,
     options: {
-      bold?: boolean
+      font?: "regular" | "medium" | "title"
       size?: number
       x?: number
+      width?: number
       gap?: number
-      center?: boolean
-      green?: boolean
+      align?: "left" | "center" | "right"
+      color?: string
     } = {}
   ) {
-    const font = options.bold ? bold : regular
     const size = options.size ?? 10
-    const x = options.x ?? 59.5
-    const maxWidth = WIDTH - 59.5 - x
-    const lines: string[] = []
-    for (const paragraph of value.split(/\r?\n/)) {
-      let current = ""
-      for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-        const next = current ? `${current} ${word}` : word
-        if (current && font.widthOfTextAtSize(next, size) > maxWidth) {
-          lines.push(current)
-          current = word
-        } else current = next
-      }
-      lines.push(current)
-    }
-    for (const content of lines) {
-      if (y < 112)
-        throw new Error(
-          "Offer letter content exceeds the two-page format. Shorten the address or appointment details."
-        )
-      page.drawText(content, {
-        x: options.center
-          ? (WIDTH - font.widthOfTextAtSize(content, size)) / 2
-          : x,
-        y,
-        font,
-        size,
-        color: options.green ? GREEN : BLACK,
+    doc.font(options.font ?? "regular").fontSize(size)
+    const lineGap = lineHeight - doc.currentLineHeight()
+    doc
+      .fillColor(options.color ?? "#000000")
+      .text(value, options.x ?? LETTER_LEFT, y, {
+        width: options.width ?? LETTER_BODY_WIDTH,
+        lineGap,
+        align: options.align ?? "left",
       })
-      y -= 13.5
-    }
-    y -= options.gap ?? 0
+    y = doc.y + (options.gap ?? 0)
   }
-  footerOnPage()
-  page.drawImage(header, {
-    x: WIDTH * 0.065,
-    y: HEIGHT * 0.89,
-    width: WIDTH * 0.875,
-    height: HEIGHT * 0.082,
-  })
-  y = 680
+
+  addPage()
+  y = 130.85
   text("OFFER LETTER", {
-    bold: true,
+    font: "title",
     size: 25,
-    center: true,
-    green: true,
-    gap: 20,
+    align: "center",
+    color: LETTER_GREEN,
   })
+  y = 173.4
   text(`Ref: ${letter.reference}`, {
-    bold: true,
+    font: "medium",
     size: 14,
-    center: true,
-    green: true,
-    gap: 11,
+    align: "center",
+    color: LETTER_GREEN,
   })
-  text(date(letter.issuedOn), { bold: true, gap: 14 })
-  text("To,", { gap: 4 })
-  text(letter.identity.employeeName, { bold: true, gap: 4 })
-  text(letter.details.postalAddress, { gap: 25 })
+  y = 201.25
+  text(formatCalendarDate(letter.issuedOn), { font: "medium" })
+  y = 230.3
+  text("To,")
+  y = 247.75
+  text(letter.identity.employeeName, { font: "medium", gap: 4 })
+  text(letter.details.postalAddress)
+
+  // Address and combined-post names can wrap; preserve the sample's spacing
+  // while leaving the signing area clear for longer employee details.
+  y = Math.max(338.95, y + 33)
   text(`Subject: Offer of Employment - ${letter.identity.designation}`, {
-    bold: true,
+    font: "medium",
     gap: 14,
   })
-  text(`Dear ${letter.identity.employeeName},`, { gap: 14 })
-  text(
-    `With reference to your application and the subsequent interviews, we are pleased to offer you the position of ${letter.identity.designation} at Mayank Raw Mint Pvt. Ltd. Your joining date will be ${date(letter.identity.joiningDate)}.`,
-    { gap: 14 }
-  )
+  text(`Dear ${letter.identity.employeeName},`, { gap: 13.5 })
+  const introduction = [
+    {
+      value:
+        "With reference to your application and the subsequent interviews, we are pleased to offer you the position of ",
+      font: "regular",
+    },
+    { value: letter.identity.designation, font: "medium" },
+    { value: " at ", font: "regular" },
+    {
+      value: "Mayank Raw Mint Pvt. Ltd.",
+      font: "medium",
+      color: LETTER_GREEN,
+    },
+    { value: " Your joining date will be ", font: "regular" },
+    {
+      value: `${formatCalendarDate(letter.identity.joiningDate)}.`,
+      font: "medium",
+    },
+  ] as const
+  for (const [index, run] of introduction.entries()) {
+    doc
+      .font(run.font)
+      .fontSize(10)
+      .fillColor("color" in run ? run.color : "#000000")
+    const options = {
+      width: LETTER_BODY_WIDTH,
+      lineGap: lineHeight - doc.currentLineHeight(),
+      continued: index < introduction.length - 1,
+    }
+    if (index === 0) doc.text(run.value, LETTER_LEFT, y, options)
+    else doc.text(run.value, options)
+  }
+  y = doc.y + 13.5
   text(
     "Please bring xerox copies of the following documents on the day of joining:",
-    { gap: 14 }
+    {
+      gap: 13.5,
+    }
   )
   for (const [index, item] of [
     "Adhar Card",
@@ -144,23 +121,33 @@ export async function buildOfferLetterPdf(letter: Offer) {
     "Educational Qualification Certificates",
     "Previous Employment Experience Letter (if applicable)",
   ].entries()) {
-    text(`${index + 1}. ${item}`, { x: 67 })
+    text(`${index + 1}. ${item}`, {
+      x: 67,
+      width: LETTER_BODY_WIDTH - (67 - LETTER_LEFT),
+    })
   }
-  y -= 14
+  y += 13.5
   text("Please turn over for detailed terms and conditions.")
   text(
     "We look forward to welcoming you and wish you a successful association with us.",
-    { gap: 14 }
+    {
+      gap: 13.5,
+    }
   )
-  text("Warm Regards,", { bold: true, gap: 48 })
-  text(letter.details.signatoryName, { bold: true, gap: 6 })
-  text(letter.details.signatoryDesignation)
+  text("Warm Regards,", { font: "medium" })
+  y = Math.max(678.95, y + 25)
+  text(letter.details.signatoryName, { font: "medium", gap: 6.75 })
+  text(letter.details.signatoryDesignation, { font: "medium" })
+  if (y > 729) {
+    throw new Error(
+      "Offer letter content exceeds the two-page format. Shorten the address or appointment details."
+    )
+  }
 
-  page = pdf.addPage([WIDTH, HEIGHT])
-  footerOnPage()
-  y = 817
-  text("Continuation of Offer Letter", { bold: true, gap: 7 })
-  text(`Ref: ${letter.reference}`, { bold: true, gap: 16 })
+  addPage()
+  y = 120
+  text("Continuation of Offer Letter", { font: "medium", gap: 7.5 })
+  text(`Ref: ${letter.reference}`, { font: "medium", gap: 16 })
   const amount = (value: number) =>
     `Rs. ${value.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`
   const clauses = [
@@ -202,13 +189,30 @@ export async function buildOfferLetterPdf(letter: Offer) {
     ],
   ] as const
   for (const [index, [heading, body]] of clauses.entries()) {
-    text(`${index + 1}.  ${heading}`, { bold: true, x: 77 })
-    text(body, { x: 90, gap: 10 })
+    text(`${index + 1}.`, {
+      font: "medium",
+      x: 75.5,
+      width: 9.1,
+      align: "right",
+    })
+    y -= lineHeight
+    text(heading, { font: "medium", x: 90, width: 446 })
+    text(body, { x: 90, width: 446, gap: 7.75 })
   }
-  text("Acknowledged and Accepted by:", { bold: true, gap: 28 })
+  text("Acknowledged and Accepted by:", { font: "medium" })
+  if (y > 697) {
+    throw new Error(
+      "Offer letter content exceeds the two-page format. Shorten the probation details."
+    )
+  }
+  y = Math.max(704.25, y + 20)
   const acceptanceY = y
-  text(letter.identity.employeeName, { bold: true })
+  text(letter.identity.employeeName, { font: "medium", width: 320 })
   y = acceptanceY
-  text("Date: ____________________", { bold: true, x: 370 })
-  return pdf.save()
+  text("Date: ____________________", {
+    font: "medium",
+    x: 370,
+    width: 166,
+  })
+  return finish()
 }
