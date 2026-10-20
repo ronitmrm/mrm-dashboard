@@ -10388,6 +10388,8 @@ function WorkOrderGapRow({
           {row.isRework === true ? <ReworkRouteEditor jobCardNumber={jcNo}
             machineFamilies={machineFamilyOptions(asArray(productionControl.machinePlanningRows))}
             toolingCodes={Array.isArray(productionControl.toolingAssetCodes) ? productionControl.toolingAssetCodes.filter((value): value is string => typeof value === "string") : []}
+            parameterNames={asArray(productionControl.parameterMasterRows).filter(row => str(row.status).toLowerCase() !== "inactive").map(row => str(row.name))}
+            instrumentNames={asArray(productionControl.measuringInstrumentMasterRows).filter(row => str(row.status).toLowerCase() !== "inactive").map(row => str(row.name))}
             submitAction={submitAction} /> : null}
           <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing && row.isRework !== true ? (

@@ -1,22 +1,12 @@
+import { hasNonNumericQualityTolerance, normalizeQualityParameterInputType } from "@workspace/db/quality-parameter-input"
+export { hasNonNumericQualityTolerance, normalizeQualityParameterInputType } from "@workspace/db/quality-parameter-input"
+
 type QualityParameterCombination = {
   parameterName: unknown
   specification: unknown
 }
 
 type QualityInspectionParameterRow = Record<string, unknown>
-
-export function hasNonNumericQualityTolerance(row: Record<string, unknown>) {
-  return [row.tolerancePlus, row.toleranceMinus].some((value) => {
-    const text = String(value ?? "").trim()
-    return text !== "" && !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(text)
-  })
-}
-
-export function normalizeQualityParameterInputType(value: unknown) {
-  const inputType = String(value ?? "").trim().toLowerCase()
-  if (["pass_fail", "pass/fail", "ok/not ok", "ok / not ok", "checkbox", "boolean", "yes_no"].includes(inputType)) return "pass_fail"
-  return inputType === "text" ? "text" : "number"
-}
 
 export function qualityInspectionParameterInputType(
   row: QualityInspectionParameterRow

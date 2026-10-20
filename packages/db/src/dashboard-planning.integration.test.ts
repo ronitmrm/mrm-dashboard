@@ -10,6 +10,7 @@ import { createDashboardReadModelRepository } from "./dashboard-read-model-repos
 import { migrateDatabase } from "./migrate"
 import { createProductionShopFloorRepository } from "./production-shop-floor"
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
+import { createQualityRepository } from "./quality"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -176,14 +177,32 @@ describe("dashboard planning writes", () => {
     const failed = atLimit.activities[0]!
     await repository.upsertMachine({ organizationId, machineNumber: `RW-MC-${suffix}`, productionFloorCode: "cnc",
       sourcePayload: { machineFamily: "HX", machineType: "CNC" } })
+    const quality = createQualityRepository({ pool })
+    const diameter = `Rework diameter ${suffix}`
+    const thread = `Rework thread ${suffix}`
+    const micrometer = `Rework micrometer ${suffix}`
+    for (const name of [diameter, thread]) await quality.upsertQualityReference({ organizationId, kind: "parameter_master", name, active: true, payload: {} })
+    await quality.upsertQualityReference({ organizationId, kind: "measuring_instrument_master", name: micrometer, active: true, payload: {} })
     const routeInput = { organizationId, productionFloorCode: "cnc" as const, jobCardNumber: failed.jobCardNumber,
       setups: [{ setupName: "Thread correction", machineFamily: "HX", cycleTimeSeconds: 30, setupTimeMinutes: 10,
-        stageWeight: 5, inspectionChecks: ["Thread gauge passes freely"] }] }
+        stageWeight: 5, inspectionChecks: [
+          { parameterName: diameter, specification: "10", instrumentUsed: micrometer, tolerancePlus: "0.2", toleranceMinus: "0.1", inputType: "number" },
+          { parameterName: thread, specification: "Thread gauge passes freely", inputType: "pass_fail" },
+        ] }] }
     const privateRoute = await repository.createReworkRoute(routeInput)
     const custom = await read(failed.jobCardNumber)
     expect(custom.jobCard.effectiveRouteSource).toBe("planner_selected")
     expect(custom.setups).toEqual([expect.objectContaining({ operationName: "Thread correction", cycleTimeSeconds: "30.00000000",
-      qualityParameters: [expect.objectContaining({ name: "Thread gauge passes freely" })] })])
+      qualityParameters: [expect.objectContaining({ name: diameter }), expect.objectContaining({ name: thread })] })])
+    const parameters = await pool.query(`SELECT name, data_type, nominal_value::float8 AS nominal,
+      lower_limit::float8 AS lower, upper_limit::float8 AS upper,
+      source_payload->>'specification' AS specification, source_payload->>'instrumentUsed' AS instrument,
+      source_payload->>'tolerancePlus' AS plus, source_payload->>'toleranceMinus' AS minus
+      FROM quality.parameter_definitions WHERE route_option_id = $1 ORDER BY sequence`, [privateRoute.routeId])
+    expect(parameters.rows).toEqual([
+      { name: diameter, data_type: "numeric", nominal: 10, lower: 9.9, upper: 10.2, specification: "10", instrument: micrometer, plus: "0.2", minus: "0.1" },
+      { name: thread, data_type: "boolean", nominal: null, lower: null, upper: null, specification: "Thread gauge passes freely", instrument: "", plus: null, minus: null },
+    ])
     expect((await read(original)).routes).not.toContainEqual(expect.objectContaining({ id: privateRoute.routeId }))
     const source = await readCanonicalDashboardSource(pool, organizationId)
     const control = buildLegacyDashboardSnapshot({ workbookName: "PostgreSQL", productionFloorCode: "cnc",
@@ -191,7 +210,7 @@ describe("dashboard planning writes", () => {
     expect(control).toMatchObject({ routeMasterRows: [expect.objectContaining({ optionNumber: "1" })],
       cycleMasterRows: [], toolingMasterRows: [], qualityParameterMasterRows: [],
       jobReworkRouteRows: [expect.objectContaining({ reworkJobCardNumber: failed.jobCardNumber })],
-      jobReworkInspectionRows: [expect.objectContaining({ parameterName: "Thread gauge passes freely" })] })
+      jobReworkInspectionRows: expect.arrayContaining([expect.objectContaining({ parameterName: diameter, specification: "10", instrumentUsed: micrometer }), expect.objectContaining({ parameterName: thread })]) })
     await expect(repository.selectRoute({ organizationId, productionFloorCode: "cnc", jobCardNumber: rework.jobCardNumber, routeCode: privateRoute.routeCode })).rejects.toThrow("Route option was not found")
     const setupId = String(custom.setups[0]!.id)
     await pool.query(`INSERT INTO manufacturing.production_entries (organization_id, work_order_id, operation_setup_id,
