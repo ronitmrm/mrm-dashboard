@@ -57,6 +57,9 @@ test("reopened setup retains output without a missing-start exception or machine
   const resumed = buildLegacyDashboardSnapshot({ ...input, currentShopFloorStatusRows: [{ ...input.currentShopFloorStatusRows[0]!, stage: "raw_material_at_machine", active: true }] }).productionControl
   expect(resumed).toMatchObject({ workflowExceptionRows: [] })
   expect(resumed.machinePlanDetailRows.find((row) => row.jcNo === "P1413")).toMatchObject({ shopFloorStage: "raw_material_at_machine", runningStatus: "Planned", rawActualQty: 7336 })
+  const restarted = buildLegacyDashboardSnapshot({ ...input, currentShopFloorStatusRows: [{ ...input.currentShopFloorStatusRows[0]!, stage: "raw_material_at_machine", active: true, hasRecordedStart: false }] }).productionControl
+  expect(restarted).toMatchObject({ workflowExceptionRows: [] })
+  expect(restarted.machinePlanDetailRows.find((row) => row.jcNo === "P1413")).toMatchObject({ shopFloorStage: "raw_material_at_machine", runningStatus: "Planned", rawActualQty: 7336 })
   expect(buildLegacyDashboardSnapshot({ ...input, currentShopFloorStatusRows: input.currentShopFloorStatusRows.slice(1) }).productionControl).toMatchObject({ workflowExceptionRows: [
     expect.objectContaining({ jcNo: "P1413", rawProductionWithoutWorkflow: true }),
   ] })
