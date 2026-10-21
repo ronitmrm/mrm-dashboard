@@ -269,6 +269,10 @@ waits at the selected position among future queued setups. Keeping the target
 setup running does not require closing its Production Session. An explicit Stop
 choice still requires settling that setup's session before releasing its machine.
 Running work on the source machine must also be settled before it is moved.
+For future queued work, the latest saved queue placement takes precedence over
+older placements, including earlier breakdown moves. A later priority decision
+uses its reviewed queue order and interruption permissions; an older placement
+must not put released work back ahead of it.
 Subsequent Planner Actions, Setup Checklists, Production Sessions, production
 entries, and dispatch resolve setup identity from the latest active Change Route
 before any earlier route choice. Interruption checks must inspect the session on
