@@ -260,6 +260,55 @@ test("move setup honors first position when its source interruption has no outpu
   )[0]?.jcNo).toBe("P2262")
 })
 
+test("newer first-position move takes precedence over an older breakdown placement", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-10-21T13:42:00Z"))
+  const createdAt = "2026-10-01T06:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input = {
+    productionFloorCode: "cnc" as const, workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      ...[
+        { jcNo: "P2288", partCode: "M870", orderPcs: 300, cycleTime: 70 },
+        { jcNo: "P2061", partCode: "R160", orderPcs: 800, cycleTime: 60 },
+      ].flatMap(({ cycleTime, ...job }) => [
+        entry("work_order", { ...job, optionNumber: "1", rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+        entry("route", { partNo: job.partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }),
+        entry("cycle", { partNo: job.partCode, optionNumber: "1", setupNo: "1", cycleTime }),
+      ]),
+      ...["CNC-1", "CNC-2"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "JT", status: "Active" })),
+    ],
+    previousMachinePlanDetailRows: [
+      { jcNo: "P2288", partCode: "M870", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-2" },
+      { jcNo: "P2061", partCode: "R160", optionNumber: "1", setupNo: "1", routeMachine: "JT", machine: "CNC-1" },
+    ],
+    plannerPriorities: [{ jcNo: "P2288", partCode: "M870", priority: "Urgent", approvalMode: "idle_queue_only", createdAt: "2026-10-21T12:58:00Z" }],
+    planOverrides: [{
+      jobCardNumber: "P2288", setupNumber: 1, fromMachineNumber: "CNC-2", toMachineNumber: "CNC-1", assignmentMode: "move", createdAt: "2026-10-21T12:35:00Z",
+      interruptedSetups: [{ jobCardNumber: "P2288", machineNumber: "CNC-2", setupNumber: 1, finishedQuantity: 0 }],
+      queuePlacements: [{ targetJobCardNumber: "P2288", targetPartCode: "M870", targetSetupNumber: 1, targetSourceMachineNumber: "CNC-2", targetMachineNumber: "CNC-1", queueBeforeSetups: [] }],
+    }],
+    machineConstraints: [{
+      machineNo: "CNC-11", unavailableFrom: "2026-09-22", unavailableTo: "2026-10-22", availableOn: "2026-09-29", status: "Available", rescheduleAction: "shift_all", createdAt: "2026-09-22T06:00:00Z",
+      queuePlacements: [{ targetJobCardNumber: "P2061", targetPartCode: "R160", targetSetupNumber: 1, targetSourceMachineNumber: "CNC-11", targetMachineNumber: "CNC-1", queueBeforeSetups: [] }],
+    }],
+  }
+  const plan = (prepared = false) => buildLegacyDashboardSnapshot({
+    ...input,
+    dataEntries: [...input.dataEntries, ...(prepared ? [entry("shop_floor_status", {
+      jcNo: "P2061", partCode: "R160", optionNumber: "1", setupNo: "1", machine: "CNC-1", stage: "raw_material_at_machine", completedAt: "2026-10-21T10:52:00Z",
+    })] : [])],
+  }).productionControl.machinePlanDetailRows.filter(row => row.machine === "CNC-1")
+
+  const rows = plan()
+  expect(rows.find(row => row.jcNo === "P2288")).toMatchObject({ plannedProductionStartDate: "21/10/2026", shopFloorTaskReady: true })
+  expect(rows.find(row => row.jcNo === "P2061")?.plannedProductionStartDate).toBe("22/10/2026")
+
+  const preparedRows = plan(true)
+  expect(preparedRows.find(row => row.jcNo === "P2061")).toMatchObject({ plannedProductionStartDate: "21/10/2026", shopFloorStage: "raw_material_at_machine" })
+  expect(preparedRows.find(row => row.jcNo === "P2288")?.plannedProductionStartDate).toBe("22/10/2026")
+})
+
 test("move setup honors a target machine after its past outage", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-10-03T11:27:00Z"))

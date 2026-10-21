@@ -147,6 +147,7 @@ type MachineUnavailableQueueBeforeSetup = {
 };
 
 type MachineUnavailableQueuePlacement = {
+  decisionAt: number;
   targetJcNo: string;
   targetPartCode: string;
   targetSetupNo: string;
@@ -3705,8 +3706,11 @@ function initializeMachinePlanDetails(
           partCode,
           setupNo: displaySetupNo,
         }))
-        .filter((placement): placement is MachineUnavailableQueuePlacement => Boolean(placement));
-      const queuePlacement = planOverridePlacement ?? machineUnavailablePlacement;
+        .filter((placement): placement is MachineUnavailableQueuePlacement => Boolean(placement))
+        .sort((left, right) => right.decisionAt - left.decisionAt);
+      const queuePlacement = [planOverridePlacement, machineUnavailablePlacement]
+        .filter((placement) => placement !== undefined)
+        .sort((left, right) => right.decisionAt - left.decisionAt)[0];
       const queuePlacementOverride = queuePlacement?.targetMachine
         ? { toMachine: queuePlacement.targetMachine } as ActionRow
         : undefined;
@@ -3836,8 +3840,10 @@ function initializeMachinePlanDetails(
         const parallelAssignmentOverride = appliedParallelOverrides.find((parallelOverride) =>
           canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")) === machineKeyValue);
         const effectivePlanOverride = parallelAssignmentOverride ?? override ?? appliedParallelOverrides[0];
-        const assignmentQueuePlacement = parallelPlanOverridePlacements.find((placement) => placement.targetMachine === machineKeyValue)
-          ?? queuePlacement;
+        const assignmentQueuePlacement = [queuePlacement, ...parallelPlanOverridePlacements]
+          .filter((placement) => placement !== undefined)
+          .filter((placement) => placement.targetMachine === machineKeyValue)
+          .sort((left, right) => right.decisionAt - left.decisionAt)[0];
         const machineOrderPcs = assignment.orderPcs;
         const splitRole = assignment.role;
         const shopFloorStatus = splitRole === "remaining_delayed_on_same_machine" ? undefined : findShopFloorStatus(shopFloorStatusBySetup, {
@@ -4026,6 +4032,7 @@ function initializeMachinePlanDetails(
         machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
         machineUnavailableRemainingQty: splitRole ? unavailableSplitPlan?.remainingQty ?? 0 : 0,
         machineUnavailableQueueBeforeSetups,
+        machineUnavailableQueuePlacementAt: assignmentQueuePlacement?.decisionAt ?? 0,
         machineUnavailableQueuePlacementTarget: Boolean(assignmentQueuePlacement && assignmentQueuePlacement.targetMachine === canonicalKey(machine)),
         plannerParallelMachineAdded: Boolean(parallelAssignmentOverride),
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
@@ -6257,7 +6264,9 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
 }
 
 function applyMachineUnavailableQueuePlacementOrder(queue: Array<Record<string, unknown>>) {
-  const placementTargets = queue.filter(machineUnavailableHasQueuePlacement);
+  // Replay reviewed placements in decision order so the latest queue choice wins.
+  const placementTargets = queue.filter(machineUnavailableHasQueuePlacement)
+    .sort((left, right) => safeNumber(left.machineUnavailableQueuePlacementAt) - safeNumber(right.machineUnavailableQueuePlacementAt));
   let ordered = [...queue];
   for (const target of placementTargets) {
     const remaining = ordered.filter((row) => row !== target);
@@ -6272,10 +6281,36 @@ function machineUnavailableKeepsRowBefore(targetRow: Record<string, unknown>, bl
   return machineUnavailableQueueBeforeSetupsForSort(targetRow).some((queueBefore) => machineUnavailableQueueBeforeMatchesRow(queueBefore, blockingRow));
 }
 
+function reviewedMachineQueueOrder(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const aPlaced = machineUnavailableHasQueuePlacement(a);
+  const bPlaced = machineUnavailableHasQueuePlacement(b);
+  if (!aPlaced && !bPlaced) return undefined;
+  const aPlacementAt = aPlaced ? safeNumber(a.machineUnavailableQueuePlacementAt) : 0;
+  const bPlacementAt = bPlaced ? safeNumber(b.machineUnavailableQueuePlacementAt) : 0;
+  const placementAt = Math.max(aPlacementAt, bPlacementAt);
+  const aPriorityAt = Date.parse(rowText(a, "priorityDecisionAt")) || 0;
+  const bPriorityAt = Date.parse(rowText(b, "priorityDecisionAt")) || 0;
+  if (Math.max(aPriorityAt, bPriorityAt) > placementAt) {
+    const latest = aPriorityAt >= bPriorityAt ? a : b;
+    const other = latest === a ? b : a;
+    const direction = latest === a ? 1 : -1;
+    if (priorityKeepsRowBefore(latest, other)) return direction;
+    if (canPriorityPreempt(other, latest)) return -direction;
+    if (canPriorityPreempt(latest, other)) return direction;
+  }
+  if (aPlaced && (!bPlaced || aPlacementAt > bPlacementAt))
+    return machineUnavailableKeepsRowBefore(a, b) ? 1 : -1;
+  if (bPlaced && (!aPlaced || bPlacementAt > aPlacementAt))
+    return machineUnavailableKeepsRowBefore(b, a) ? -1 : 1;
+  return undefined;
+}
+
 function machineUnavailablePlacesRowBefore(targetRow: Record<string, unknown>, otherRow: Record<string, unknown>) {
   if (!machineUnavailableHasQueuePlacement(targetRow)) return false;
   if (scheduleRowKey(targetRow) === scheduleRowKey(otherRow)) return false;
   if (canonicalKey(rowText(targetRow, "machine", "machineNo")) !== canonicalKey(rowText(otherRow, "machine", "machineNo"))) return false;
+  const reviewedOrder = reviewedMachineQueueOrder(targetRow, otherRow);
+  if (reviewedOrder !== undefined) return reviewedOrder < 0;
   return !machineUnavailableKeepsRowBefore(targetRow, otherRow);
 }
 
@@ -6640,6 +6675,9 @@ function shouldReserveMachineQueueSlot(first: Record<string, unknown>, queue: Ar
 
 function shouldHoldMachineQueuePosition(ahead: Record<string, unknown>, candidate: Record<string, unknown>) {
   if (priorityQueueState(ahead) !== "idle") return true;
+  if (priorityQueueState(candidate) !== "idle") return false;
+  const reviewedOrder = reviewedMachineQueueOrder(ahead, candidate);
+  if (reviewedOrder !== undefined) return reviewedOrder < 0;
   if (machineUnavailableKeepsRowBefore(candidate, ahead)) return true;
   if (machineUnavailablePlacesRowBefore(candidate, ahead)) return false;
   // A reviewed placement ahead is also a barrier when filling an earlier gap.
@@ -7059,6 +7097,7 @@ function machineUnavailableQueuePlacements(row: Record<string, unknown>): Machin
           .filter((queueItem) => queueItem.jcNo && queueItem.setupNo && queueItem.machine)
         : [];
       return {
+        decisionAt: rowCreatedAtMs(row),
         targetJcNo: canonicalKey(rowText(item, "targetJobCardNumber", "targetJcNo", "jcNo", "JC NO", "jobCard")),
         targetPartCode: canonicalKey(rowText(item, "targetPartCode", "partCode", "PART CODE", "partNo")),
         targetSetupNo: canonicalKey(rowText(item, "targetSetupNumber", "targetSetupNo", "setupNo", "SETUP NO", "setup")),
@@ -7078,15 +7117,16 @@ function machineUnavailableQueuePlacementForSetup(
   const partKey = canonicalKey(target.partCode);
   const setupKey = plannerSetupKey(target.setupNo);
   if (!jcKey || !setupKey) return undefined;
+  let latest: MachineUnavailableQueuePlacement | undefined;
   for (const window of windows) {
     for (const placement of window.queuePlacements) {
       if (placement.targetJcNo !== jcKey) continue;
       if (placement.targetPartCode && partKey && placement.targetPartCode !== partKey) continue;
       if (plannerSetupKey(placement.targetSetupNo) !== setupKey) continue;
-      return placement;
+      if (!latest || placement.decisionAt > latest.decisionAt) latest = placement;
     }
   }
-  return undefined;
+  return latest;
 }
 
 function machineUnavailableQueueBeforeSetupsForMachine(placement: MachineUnavailableQueuePlacement | undefined, machine: string) {
