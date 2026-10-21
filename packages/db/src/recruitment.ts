@@ -105,6 +105,7 @@ export type RecruitmentCombinedRoleRow = {
 }
 
 export type RecruitmentPostRow = {
+  appointedApplicationId?: string | null
   replacementAppointments?: ReplacementAppointment[]
   combinedRoleId: string | null
   combinedRoleName: string | null
@@ -1448,6 +1449,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async listPosts(organizationId: string): Promise<RecruitmentPostRow[]> {
       const result = await pool.query<{
+        appointed_application_id: string | null
         replacement_appointments: ReplacementAppointment[]
         combined_role_id: string | null
         combined_role_name: string | null
@@ -1469,7 +1471,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         vacancy_number: string
       }>(
         `
-          SELECT post.id, post.post_code, post.vacancy_code,
+          SELECT post.id, post.post_code, post.vacancy_code, post.appointed_application_id,
             COALESCE((SELECT jsonb_agg(jsonb_build_object(
               'id', replacement.id, 'applicationId', replacement.application_id,
               'employeeName', replacement.employee_name,
@@ -1526,6 +1528,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows.map((row) => ({
+        appointedApplicationId: row.appointed_application_id ?? null,
         replacementAppointments: row.replacement_appointments ?? [],
         combinedRoleId: row.combined_role_id,
         combinedRoleName: row.combined_role_name,

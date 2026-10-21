@@ -107,6 +107,7 @@ type RecruitmentPanelProps = {
   canLogCandidateEvent: boolean
   canEditTemplate: boolean
   canManageEmployees: boolean
+  canRecordDidNotJoin: boolean
   canViewOfferLetters: boolean
   canWrite: boolean
   candidateEvents: RecruitmentCandidateEventRow[]
@@ -674,6 +675,7 @@ function CombinedRolePanel({
 function EmployeePanel({
   canCreateJob,
   canManageEmployees,
+  canRecordDidNotJoin,
   masterControls,
   combinedRoles,
   employeeAssignments,
@@ -686,6 +688,7 @@ function EmployeePanel({
   RecruitmentPanelProps,
   | "canCreateJob"
   | "canManageEmployees"
+  | "canRecordDidNotJoin"
   | "masterControls"
   | "combinedRoles"
   | "employeeAssignments"
@@ -746,6 +749,7 @@ function EmployeePanel({
         <ApprovedPostsTable
           employeeView
           canCreateJob={canCreateJob}
+          canRecordDidNotJoin={canRecordDidNotJoin}
           combinedRoles={combinedRoles}
           employeeAssignments={employeeAssignments}
           employeeManagement={canManageEmployees}
@@ -1133,6 +1137,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
         <EmployeePanel
           canCreateJob={props.canCreateJob}
           canManageEmployees={props.canManageEmployees}
+          canRecordDidNotJoin={props.canRecordDidNotJoin}
           masterControls={props.masterControls}
           combinedRoles={props.combinedRoles}
           employeeAssignments={props.employeeAssignments}

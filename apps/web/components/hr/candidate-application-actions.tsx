@@ -54,6 +54,7 @@ export function CandidateApplicationActions({
   canWithdraw,
   defaultJoiningDate,
   appointmentDefaults,
+  masterView,
   panelId,
   returnJobId,
 }: {
@@ -64,6 +65,7 @@ export function CandidateApplicationActions({
   canWithdraw: boolean
   defaultJoiningDate: string | null
   appointmentDefaults?: CandidateAppointmentDefaults
+  masterView?: "dataEntry" | "masterTables"
   panelId?: string
   returnJobId?: string
 }) {
@@ -163,6 +165,12 @@ export function CandidateApplicationActions({
               ) : null}
               {panelId ? (
                 <input name="panel" type="hidden" value={panelId} />
+              ) : null}
+              {masterView ? (
+                <>
+                  <input name="master_view" type="hidden" value={masterView} />
+                  <input name="master_kind" type="hidden" value="employee-assignment" />
+                </>
               ) : null}
               {joiningDateIsFuture ? (
                 <p className="text-sm text-muted-foreground">

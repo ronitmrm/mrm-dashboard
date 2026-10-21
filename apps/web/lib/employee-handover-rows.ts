@@ -19,12 +19,13 @@ export function employeeHandoverRows(
 ): (RecruitmentPostRow & { sourcePostId?: string })[] {
   return posts.flatMap((post) => [
     post,
-    ...(post.replacementAppointments ?? []).flatMap((replacement) =>
+    ...(post.replacementAppointments ?? []).flatMap<RecruitmentPostRow & { sourcePostId?: string }>((replacement) =>
       replacement.status === "Pending"
         ? [{
             ...post,
             id: `pending:${replacement.id}`,
             sourcePostId: post.id,
+            appointedApplicationId: replacement.applicationId ?? null,
             employeeName: replacement.employeeName,
             employeeCode: replacement.employeeCode,
             joiningDate: replacement.joiningDate ?? null,
@@ -37,6 +38,7 @@ export function employeeHandoverRows(
         ? [{
             ...post,
             id: `outgoing:${replacement.id}`,
+            appointedApplicationId: null,
             employeeName: replacement.outgoingEmployeeName,
             employeeCode: replacement.outgoingEmployeeCode,
             joiningDate: replacement.outgoingJoiningDate ?? null,
