@@ -12,7 +12,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { useActionState } from "react"
+import { useActionState, useState } from "react"
 import { Pin, Check, LoaderCircle } from "lucide-react"
 import { pinQualityChart } from "@/app/home/actions"
 import { qualityCharts, type QualityChartId } from "@/lib/quality-reports"
@@ -25,6 +25,7 @@ const colors = {
   pending: "var(--color-warning)",
   time: "var(--color-info)",
   accent: "var(--chart-5)",
+  rejectionRate: "var(--chart-rejection-rate)",
 }
 const number = (value: number) =>
   value.toLocaleString("en-IN", { maximumFractionDigits: 2 })
@@ -126,6 +127,105 @@ function PinQualityChartButton({ chartId }: { chartId: QualityChartId }) {
   )
 }
 
+function HorizontalPlot({
+  rows,
+  series,
+  percentage,
+}: {
+  rows: PlotRow[]
+  series: Series[]
+  percentage: boolean
+}) {
+  const [page, setPage] = useState(0)
+  const pageSize = series.length > 1 ? 4 : 6
+  const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
+  const currentPage = Math.min(page, lastPage)
+  const visible = rows.slice(
+    currentPage * pageSize,
+    (currentPage + 1) * pageSize
+  )
+  const maximum = Math.max(
+    1,
+    ...rows.flatMap((row) => series.map((s) => row.values[s.key] ?? 0))
+  )
+  const chartName = series.map((s) => s.label).join(" / ")
+  return (
+    <div className="grid min-w-0 gap-3">
+      <div
+        className="grid h-80 content-start gap-4 overflow-y-auto pr-1"
+        role="img"
+        aria-label={visible
+          .map(
+            (row) =>
+              `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(", ")}`
+          )
+          .join("; ")}
+      >
+        {visible.map((row) => (
+          <div className="grid gap-1.5" key={row.label} title={row.detail}>
+            <span className="text-sm font-medium break-words">{row.label}</span>
+            {series.map((s) => (
+              <div
+                key={s.key}
+                className="flex min-w-0 items-center gap-3"
+                title={`${row.label}: ${s.label} ${number(row.values[s.key] ?? 0)}${percentage ? "%" : ""}`}
+              >
+                {series.length > 1 ? (
+                  <span className="w-12 shrink-0 text-xs text-muted-foreground">
+                    {s.label}
+                  </span>
+                ) : null}
+                <div className="h-2 min-w-0 flex-1 rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${((row.values[s.key] ?? 0) / maximum) * 100}%`,
+                      background: s.color,
+                    }}
+                  />
+                </div>
+                <span className="shrink-0 text-sm tabular-nums">
+                  {row.values[s.key] === null
+                    ? "No approvals"
+                    : `${number(row.values[s.key] ?? 0)}${percentage ? "%" : ""}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span role="status">
+          {currentPage * pageSize + 1}–
+          {Math.min((currentPage + 1) * pageSize, rows.length)} of {rows.length}
+        </span>
+        {lastPage > 0 ? (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`${chartName}: Previous entries`}
+              disabled={currentPage === 0}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`${chartName}: Next entries`}
+              disabled={currentPage === lastPage}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 /** Shared chart renderer used unchanged in reports and personal dashboards. */
 function Plot({
   rows,
@@ -147,6 +247,12 @@ function Plot({
         description="Choose another date range or unit."
       />
     )
+  if (horizontal)
+    return (
+      <HorizontalPlot rows={rows} series={series} percentage={percentage} />
+    )
+  const showBreakdown =
+    series[0]?.key === "approved" || series[0]?.key === "completed"
   const max = Math.max(
     1,
     ...rows.map((row) =>
@@ -163,10 +269,11 @@ function Plot({
     Math.ceil(Math.max(...rows.map((row) => row.percent ?? 0)))
   )
   const left = horizontal ? 180 : 58
-  const width = horizontal ? 760 : Math.max(650, rows.length * 62)
-  const height = horizontal ? Math.max(230, rows.length * 45 + 55) : 285
+  const categoryWidth = showBreakdown ? 110 : 62
+  const width = Math.max(650, rows.length * categoryWidth)
+  const height = showBreakdown ? 335 : 285
   const top = 22,
-    bottom = height - 45,
+    bottom = height - (showBreakdown ? 95 : 45),
     plotWidth = width - left - 58,
     plotHeight = bottom - top
   const band = (horizontal ? plotHeight : plotWidth) / rows.length
@@ -186,7 +293,7 @@ function Plot({
           style={{
             minWidth: horizontal
               ? "28rem"
-              : `${Math.max(360, rows.length * 62)}px`,
+              : `${Math.max(360, rows.length * categoryWidth)}px`,
             maxHeight: horizontal ? undefined : "20rem",
           }}
         >
@@ -257,7 +364,7 @@ function Plot({
                         height={horizontal ? thickness : size}
                         fill={s.color}
                       >
-                        <title>{`${row.label}: ${s.label} ${value === null ? "No approvals" : number(value ?? 0)}${percentage ? "%" : ""}${row.detail ? ` · ${row.detail}` : ""}`}</title>
+                        <title>{`${row.label}: ${series.map((item) => `${item.label} ${row.values[item.key] === null ? "No approvals" : number(row.values[item.key] ?? 0)}`).join(" · ")}${row.detail ? ` · ${row.detail}` : ""}`}</title>
                       </rect>
                       {horizontal && !grouped ? (
                         <text
@@ -274,6 +381,19 @@ function Plot({
                     </g>
                   )
                 })}
+                {showBreakdown
+                  ? series.map((s, index) => (
+                      <text
+                        key={`count-${s.key}`}
+                        x={center}
+                        y={bottom + 38 + index * 17}
+                        textAnchor="middle"
+                        fontSize="11"
+                        fontWeight="600"
+                        fill="var(--foreground)"
+                      >{`${s.key === "pending" ? "Pending" : s.label}: ${number(row.values[s.key] ?? 0)}`}</text>
+                    ))
+                  : null}
                 {!horizontal ? (
                   <text
                     x={center}
@@ -313,8 +433,8 @@ function Plot({
             <g>
               <polyline
                 fill="none"
-                stroke={colors.time}
-                strokeWidth="2"
+                stroke={colors.rejectionRate}
+                strokeWidth="3"
                 points={rows
                   .map(
                     (row, i) =>
@@ -330,7 +450,7 @@ function Plot({
                       bottom - ((row.percent ?? 0) / percentLimit) * plotHeight
                     }
                     r="3"
-                    fill={colors.time}
+                    fill={colors.rejectionRate}
                   />
                   <text
                     x={left + band * (i + 0.5)}
@@ -340,7 +460,7 @@ function Plot({
                       8
                     }
                     textAnchor="middle"
-                    fill={colors.time}
+                    fill={colors.rejectionRate}
                     fontSize="10"
                   >
                     {number(row.percent ?? 0)}%
@@ -373,7 +493,13 @@ function Plot({
           </span>
         ))}
         {rows.some((row) => row.percent !== undefined) ? (
-          <span>Rejection % (right axis)</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-0.5 w-4"
+              style={{ background: colors.rejectionRate }}
+            />
+            Rejection % (right axis)
+          </span>
         ) : null}
       </div>
     </div>
