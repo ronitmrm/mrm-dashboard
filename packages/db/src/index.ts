@@ -292,3 +292,4 @@ export {
 export { createOrderAcceptanceRepository } from "./order-acceptance"
 export { createRejectionRepository } from "./rejections"
 export { syncMaterialMovementWaits } from "./material-movement-waits"
+export { createQualityReportRepository } from "./quality-reports"

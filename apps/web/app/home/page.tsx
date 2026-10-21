@@ -20,13 +20,22 @@ import {
 } from "@/lib/personal-dashboard"
 
 import { savePersonalDashboard } from "./actions"
+import {
+  QualityChartGrid,
+  QualityReportFilters,
+} from "@/components/dashboard/quality-report-charts"
+import { isQualityChartId } from "@/lib/quality-reports"
+import {
+  loadQualityReports,
+  type QualityReportQuery,
+} from "@/lib/quality-report-data"
 
 export const dynamic = "force-dynamic"
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string }>
+  searchParams: Promise<QualityReportQuery & { saved?: string }>
 }) {
   const session = await requireAuthenticatedSession("/home")
   const repository = createUserDashboardRepository({
@@ -69,18 +78,37 @@ export default async function HomePage({
   const metrics = await loadPersonalDashboardMetrics(dataWidgets)
   const metricValues = dashboardMetricValues(metrics)
   const query = await searchParams
+  const chartIds = selectedWidgets
+    .map((widget) => widget.id)
+    .filter(isQualityChartId)
+  const quality = chartIds.length
+    ? await loadQualityReports(access, query)
+    : null
 
   return (
-    <PersonalDashboard
-      analytics={analytics}
-      availableWidgets={availableWidgets}
-      availableMetricIds={availableMetricIds}
-      metrics={metrics}
-      metricValues={metricValues}
-      onSave={savePersonalDashboard}
-      saved={query.saved === "1"}
-      selectedWidgetIds={selectedWidgets.map(({ id }) => id)}
-      userName={session.user.name}
-    />
+    <div className="grid gap-6">
+      <PersonalDashboard
+        analytics={analytics}
+        availableWidgets={availableWidgets}
+        availableMetricIds={availableMetricIds}
+        metrics={metrics}
+        metricValues={metricValues}
+        onSave={savePersonalDashboard}
+        saved={query.saved === "1"}
+        selectedWidgetIds={selectedWidgets.map(({ id }) => id)}
+        userName={session.user.name}
+      >
+        {quality ? (
+          <section className="grid gap-4" aria-label="My quality charts">
+            <QualityReportFilters {...quality} />
+            <QualityChartGrid
+              ids={chartIds}
+              data={quality.data}
+              pinnable={false}
+            />
+          </section>
+        ) : null}
+      </PersonalDashboard>
+    </div>
   )
 }

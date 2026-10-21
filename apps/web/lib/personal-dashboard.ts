@@ -1,8 +1,15 @@
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
 import type { DashboardTabId } from "./unified-navigation"
 import { isProductionFloorTab } from "./auth/production-floor-capabilities"
+import {
+  qualityCharts,
+  qualityReportFloors,
+  isQualityChartId,
+  type QualityChartId,
+} from "./quality-reports"
 
 export type PersonalDashboardWidgetId =
+  | QualityChartId
   | "access-administration"
   | "commercial-costing"
   | "commercial-customer-bulk-revision"
@@ -59,6 +66,15 @@ export type PersonalDashboardWidget = {
 }
 
 const widgetCatalog: readonly PersonalDashboardWidget[] = [
+  ...(Object.keys(qualityCharts) as QualityChartId[]).map((id) => ({
+    id,
+    title: qualityCharts[id].title,
+    description: "Quality chart with shared date and unit filters.",
+    href: `/home/quality/${qualityCharts[id].group}`,
+    module: "Production" as const,
+    scope: "operations" as const,
+    summary: "none" as const,
+  })),
   {
     id: "commercial-overview",
     title: "Commercial Overview",
@@ -419,6 +435,8 @@ export function availablePersonalDashboardWidgets(
 ) {
   return widgetCatalog
     .filter((widget) => {
+      if (isQualityChartId(widget.id))
+        return qualityReportFloors(access).length > 0
       if (widget.scope === "administration") return access.administration
       if (widget.scope === "operations") {
         if (widget.id === "master-data")
