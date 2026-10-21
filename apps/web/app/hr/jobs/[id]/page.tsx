@@ -30,6 +30,7 @@ import { ArrowLeft, BriefcaseBusiness, Download, UserPlus } from "lucide-react"
 
 import { JobTemplatePreviewLink, JobTemplatePreviewProvider } from "@/components/hr/job-template-preview"
 import { InterviewRoundEditDialog } from "@/components/hr/interview-round-edit-dialog"
+import { InterviewRescheduleDialog } from "@/components/hr/interview-reschedule-dialog"
 import { JobInterviewActions } from "@/components/hr/job-interview-actions"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
@@ -105,6 +106,7 @@ export default async function JobWorkspacePage({
   const canViewOfferLetters = grants.includes("masters.universal.employee_assignments.read")
   const canCloseJob = grants.includes(hrTaskCapabilities.closeJob)
   const canDeleteJob = grants.includes(hrTaskCapabilities.deleteJob)
+  const canScheduleInterview = grants.includes(hrTaskCapabilities.scheduleInterview)
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -457,6 +459,19 @@ export default async function JobWorkspacePage({
                       <TableCell>{formatCalendarDate(interview.joiningDate ?? "—")}</TableCell>
                       {canWrite ? (
                         <TableCell className="text-right">
+                          {canScheduleInterview && interview.status === "Scheduled" &&
+                          applications.some((application) =>
+                            application.id === interview.applicationId &&
+                            application.scoreableRound === recruitmentInterviewRound(interview.roundName)?.name
+                          ) ? (
+                            <InterviewRescheduleDialog
+                              applicationId={interview.applicationId}
+                              candidateName={interview.candidateName}
+                              roundName={interview.roundName}
+                              scheduledAt={interview.scheduledAt}
+                              returnJobId={job.id}
+                            />
+                          ) : null}
                           <InterviewRoundEditDialog
                             interview={interview}
                             interviewerOptions={interviewerOptions}
