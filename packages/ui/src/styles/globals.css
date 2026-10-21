@@ -163,6 +163,7 @@
   --chart-3: #5e9c74;
   --chart-4: var(--mrm-tennis);
   --chart-5: var(--mrm-jungle);
+  --chart-rejection-rate: #7c3aed;
   --radius: var(--radius-app-md);
   --sidebar: var(--color-logo-surface);
   --sidebar-foreground: var(--mrm-green);
@@ -230,6 +231,7 @@
   --chart-3: #7fbd99;
   --chart-4: var(--mrm-tennis);
   --chart-5: #9aa69c;
+  --chart-rejection-rate: #c4b5fd;
   --sidebar: var(--color-chrome);
   --sidebar-foreground: var(--color-on-chrome);
   --sidebar-primary: var(--color-accent);
