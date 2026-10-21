@@ -1,4 +1,25 @@
-import type { RecruitmentEmployeeAssignmentRow, RecruitmentPostRow } from "@workspace/db"
+import type { RecruitmentEmployeeAssignmentRow, RecruitmentEmploymentLetterRow, RecruitmentPostRow } from "@workspace/db"
+
+export function employeeLettersForPost<T extends Pick<RecruitmentEmploymentLetterRow,
+  "applicationId" | "employeeCode" | "employeeName" | "joiningDate" | "letterType" | "postId"
+>>(
+  post: Pick<RecruitmentPostRow, "appointedApplicationId" | "employeeCode" | "employeeName" | "id" | "joiningDate" | "status"> | null,
+  letters: T[]
+) {
+  if (!post || !["Appointed", "Occupied", "Resigned"].includes(post.status)) return []
+  const employeeCode = post.employeeCode?.trim().toLowerCase()
+  return letters.filter((letter) => {
+    if (letter.letterType === "offer" && post.appointedApplicationId) {
+      return letter.applicationId === post.appointedApplicationId
+    }
+    if (!post.joiningDate || letter.joiningDate !== post.joiningDate) return false
+    if (employeeCode && letter.employeeCode) {
+      return letter.employeeCode.trim().toLowerCase() === employeeCode
+    }
+    return letter.postId === post.id && Boolean(post.employeeName?.trim()) &&
+      letter.employeeName.trim().toLowerCase() === post.employeeName?.trim().toLowerCase()
+  })
+}
 
 export function employeeAssignmentForPost<T extends Pick<
   RecruitmentEmployeeAssignmentRow, "employeeCode" | "endedOn" | "joinedOn" | "postCode"

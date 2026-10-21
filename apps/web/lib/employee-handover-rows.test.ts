@@ -1,6 +1,31 @@
 import { expect, it } from "vitest"
 import type { RecruitmentPostRow } from "@workspace/db"
-import { employeeAssignmentForPost, employeeHandoverRows } from "./employee-handover-rows"
+import { employeeAssignmentForPost, employeeHandoverRows, employeeLettersForPost } from "./employee-handover-rows"
+
+const letterPost = {
+  id: "post", appointedApplicationId: "current-application", status: "Appointed",
+  employeeName: "Current Employee", employeeCode: null, joiningDate: "2026-10-22",
+}
+const currentOffer = {
+  applicationId: letterPost.appointedApplicationId, postId: letterPost.id,
+  employeeName: letterPost.employeeName, employeeCode: null,
+  joiningDate: letterPost.joiningDate, letterType: "offer" as const,
+}
+
+it("shows only the current appointment's offers and joined term's letters", () => {
+  const formerOffer = { ...currentOffer, applicationId: "former-application", employeeName: "Former Employee" }
+  const appointment = { ...currentOffer, employeeCode: "100", letterType: "appointment" as const }
+  const earlierTerm = { ...appointment, joiningDate: "2024-01-01" }
+  expect(employeeLettersForPost(letterPost, [formerOffer, currentOffer])).toEqual([currentOffer])
+  expect(employeeLettersForPost(
+    { ...letterPost, employeeCode: "100", status: "Occupied" },
+    [earlierTerm, appointment, currentOffer]
+  )).toEqual([appointment, currentOffer])
+})
+
+it("shows no employment letters when the post is vacant", () => {
+  expect(employeeLettersForPost({ ...letterPost, status: "Vacant" }, [currentOffer])).toEqual([])
+})
 
 it("matches Employee Data and probation to the displayed joined term", () => {
   const post = { postCode: "HR-AS-1", employeeCode: "65", joiningDate: "2026-09-01", lastWorkingDate: null, status: "Occupied" }

@@ -70,7 +70,7 @@ import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
 import { MetricSummary, StandardDialogContent } from "@/components/ui/golden-patterns"
-import { employeeAssignmentForPost, employeeHandoverRows } from "@/lib/employee-handover-rows"
+import { employeeAssignmentForPost, employeeHandoverRows, employeeLettersForPost } from "@/lib/employee-handover-rows"
 import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 
 type TemplateOption = Pick<
@@ -166,14 +166,7 @@ export function ApprovedPostsTable({
   })
   const hasFilters = table.hasFilters
   const filteredPosts = table.visibleRows
-  const selectedEmployeeLetters = selectedEmployeePost
-    ? employmentLetters.filter(
-        (letter) =>
-          letter.postId === selectedEmployeePost.id ||
-          (letter.employeeCode &&
-            letter.employeeCode === selectedEmployeePost.employeeCode)
-      )
-    : []
+  const selectedEmployeeLetters = employeeLettersForPost(selectedEmployeePost, employmentLetters)
   const hasAppointmentLetter = selectedEmployeeLetters.some(
     (letter) => letter.letterType === "appointment" && letter.fileAvailable
   )
@@ -677,7 +670,7 @@ export function ApprovedPostsTable({
                   canEdit={employeeManagement}
                   employeeCode={selectedEmployeePost.employeeCode}
                   joiningDate={selectedEmployeePost.joiningDate}
-                  letters={employmentLetters}
+                  letters={selectedEmployeeLetters}
                 />
                 {selectedEmployeePost.status === "Occupied" &&
                 !hasAppointmentLetter ? (
