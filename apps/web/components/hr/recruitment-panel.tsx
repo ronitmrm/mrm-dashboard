@@ -108,6 +108,7 @@ type RecruitmentPanelProps = {
   canEditTemplate: boolean
   canManageEmployees: boolean
   canRecordDidNotJoin: boolean
+  canScheduleInterview: boolean
   canViewOfferLetters: boolean
   canWrite: boolean
   candidateEvents: RecruitmentCandidateEventRow[]
@@ -1075,17 +1076,19 @@ function CandidateSearchPanel({
 }
 
 function InterviewsPanel({
+  canScheduleInterview,
   canWrite,
   interviews,
   selectedAppointmentApplicationId,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "interviews" | "selectedAppointmentApplicationId"
+  "canScheduleInterview" | "canWrite" | "interviews" | "selectedAppointmentApplicationId"
 >) {
   return (
     <>
       <InterviewScheduleBoard
         appointmentApplicationId={selectedAppointmentApplicationId}
+        canSchedule={canScheduleInterview}
         canWrite={canWrite}
         interviews={interviews}
       />
@@ -1187,6 +1190,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
     case "interviewsPanel":
       return (
         <InterviewsPanel
+          canScheduleInterview={props.canScheduleInterview}
           canWrite={props.canWrite}
           interviews={props.interviews}
           selectedAppointmentApplicationId={

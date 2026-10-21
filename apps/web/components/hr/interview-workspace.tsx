@@ -45,6 +45,7 @@ import { useMemo, useState } from "react"
 
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
+import { InterviewRescheduleDialog } from "@/components/hr/interview-reschedule-dialog"
 import { JobTemplatePreviewLink } from "@/components/hr/job-template-preview"
 import { MetricSummary } from "@/components/ui/golden-patterns"
 import {
@@ -70,10 +71,12 @@ function formatSalary(value: number | null) {
 
 export function InterviewScheduleBoard({
   appointmentApplicationId,
+  canSchedule,
   canWrite,
   interviews,
 }: {
   appointmentApplicationId?: string
+  canSchedule: boolean
   canWrite: boolean
   interviews: RecruitmentInterviewRow[]
 }) {
@@ -159,7 +162,7 @@ export function InterviewScheduleBoard({
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
                 <TableHead>Round</TableHead>
-                {canWrite ? (
+                {canWrite || canSchedule ? (
                   <TableHead className="text-right">Action</TableHead>
                 ) : null}
               </TableRow>
@@ -184,22 +187,34 @@ export function InterviewScheduleBoard({
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
                     <TableCell>{formatTime(row.interviewAt)}</TableCell>
                     <TableCell>{row.scoreableRound}</TableCell>
-                    {canWrite ? (
+                    {canWrite || canSchedule ? (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button asChild size="sm">
-                            <Link href={`/hr/jobs/${row.jobId}/interview?application=${encodeURIComponent(row.applicationId)}&source=interviews`}>
-                              Record Outcome
-                            </Link>
-                          </Button>
-                          <CandidateApplicationActions
-                            applicationId={row.applicationId}
-                            candidateName={row.candidateName}
-                            canCompleteAppointment={false}
-                            canWithdraw
-                            defaultJoiningDate={row.joiningDate}
-                            panelId="interviewsPanel"
-                          />
+                          {canSchedule && row.scoreableRound ? (
+                            <InterviewRescheduleDialog
+                              applicationId={row.applicationId}
+                              candidateName={row.candidateName}
+                              roundName={row.scoreableRound}
+                              scheduledAt={row.interviewAt}
+                            />
+                          ) : null}
+                          {canWrite ? (
+                            <>
+                              <Button asChild size="sm">
+                                <Link href={`/hr/jobs/${row.jobId}/interview?application=${encodeURIComponent(row.applicationId)}&source=interviews`}>
+                                  Record Outcome
+                                </Link>
+                              </Button>
+                              <CandidateApplicationActions
+                                applicationId={row.applicationId}
+                                candidateName={row.candidateName}
+                                canCompleteAppointment={false}
+                                canWithdraw
+                                defaultJoiningDate={row.joiningDate}
+                                panelId="interviewsPanel"
+                              />
+                            </>
+                          ) : null}
                         </div>
                       </TableCell>
                     ) : null}
@@ -209,7 +224,7 @@ export function InterviewScheduleBoard({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 7 : 6}
+                    colSpan={canWrite || canSchedule ? 7 : 6}
                   >
                     No Interviews Are Scheduled For This Date.
                   </TableCell>

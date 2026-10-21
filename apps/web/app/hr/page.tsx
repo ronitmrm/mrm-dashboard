@@ -315,6 +315,7 @@ export default async function HrRecruitmentPage({
         canEditTemplate={canEditTemplate}
         canManageEmployees={canManageEmployees}
         canRecordDidNotJoin={rawGrants.includes(hrTaskCapabilities.completeCandidateAppointment)}
+        canScheduleInterview={grants.includes(hrTaskCapabilities.scheduleInterview)}
         canWrite={canWrite}
         candidates={candidates}
         candidateEvents={candidateEvents}
