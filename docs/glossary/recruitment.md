@@ -151,6 +151,11 @@ An accepted candidate appointment that did not result in joining. HR records
 the non-joining date and a required reason against the Candidate Application.
 The date must be on or after the agreed joining date and cannot be in the future.
 
+Employee Master offers Did Not Join beside the joining action for candidate-linked
+Appointed rows, including pending replacements. The action uses the same date,
+reason and appointment-completion permission as the job's applicant actions and
+returns HR to Employee Master after saving.
+
 Only posts still reserved as Appointed for that exact application may be
 released. Joined employees, replaced assignments, and unrelated posts cannot
 be cleared by this action. All posts reserved for the same application,

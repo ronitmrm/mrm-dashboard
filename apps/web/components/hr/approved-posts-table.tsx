@@ -65,6 +65,7 @@ import {
   updatePostAction,
 } from "@/app/hr/actions"
 import { APPROVED_POST_FILTER_COLUMNS } from "@/components/hr/approved-post-filter-columns"
+import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { EmployeeLetterDialog } from "@/components/hr/employee-letter-dialog"
 import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
@@ -103,6 +104,7 @@ export function ApprovedPostsTable({
   canWrite = false,
   canDelete = false,
   canCreateJob = false,
+  canRecordDidNotJoin = false,
   combinedRoles = [],
   employeeAssignments = [],
   employeeManagement = false,
@@ -116,6 +118,7 @@ export function ApprovedPostsTable({
   canWrite?: boolean
   canDelete?: boolean
   canCreateJob?: boolean
+  canRecordDidNotJoin?: boolean
   combinedRoles?: RecruitmentCombinedRoleRow[]
   employeeAssignments?: RecruitmentEmployeeAssignmentRow[]
   employeeManagement?: boolean
@@ -139,7 +142,7 @@ export function ApprovedPostsTable({
       .filter((job) => job.status === "Open" && job.postCode)
       .map((job) => job.postCode)
   )
-  const showActions = canWrite || canDelete || canCreateJob || employeeManagement
+  const showActions = canWrite || canDelete || canCreateJob || employeeManagement || (employeeView && canRecordDidNotJoin)
   const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
   const rows: (RecruitmentPostRow & { sourcePostId?: string })[] =
     employeeView ? employeeHandoverRows(posts) : posts
@@ -377,6 +380,20 @@ export function ApprovedPostsTable({
                                     ? "Confirm Joining"
                                     : "Employee"}
                                 </Button>
+                              ) : null}
+                              {employeeView && canRecordDidNotJoin &&
+                              row.status === "Appointed" && row.appointedApplicationId &&
+                              (row.id.startsWith("pending:") || !row.employeeCode?.trim()) ? (
+                                <CandidateApplicationActions
+                                  applicationId={row.appointedApplicationId}
+                                  candidateName={row.employeeName ?? "Candidate"}
+                                  canCompleteAppointment={false}
+                                  canRecordDidNotJoin
+                                  canWithdraw={false}
+                                  defaultJoiningDate={row.joiningDate}
+                                  masterView={masterView}
+                                  panelId="employeeMasterPanel"
+                                />
                               ) : null}
                               {!row.id.startsWith("outgoing:") && !row.id.startsWith("pending:") && (canWrite || canDelete || canCreateJob) ? (
                                 <>
