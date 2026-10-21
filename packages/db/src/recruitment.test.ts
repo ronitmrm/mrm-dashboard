@@ -532,6 +532,7 @@ describe("assignEmployee", () => {
   test("reserves a replacement during notice without overwriting the outgoing employee", async () => {
     const post = {
       id: "00000000-0000-4000-8000-000000000001",
+      appointed_application_id: "outgoing-application",
       combined_role_id: null,
       employee_name: "Outgoing Employee",
       employee_code: "104",
@@ -593,6 +594,7 @@ describe("assignEmployee", () => {
     expect(
       (await repository.listPosts("00000000-0000-4000-8000-000000000010"))[0]
     ).toMatchObject({
+      appointedApplicationId: "outgoing-application",
       employeeName: "Outgoing Employee",
       employeeCode: "104",
       lastWorkingDate: "2099-09-26",
