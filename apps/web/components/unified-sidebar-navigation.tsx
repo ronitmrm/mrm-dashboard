@@ -49,6 +49,7 @@ import {
 import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { qualityReportNavigation, qualityReportFloors } from "@/lib/quality-reports"
 import { departmentStoreHref } from "@/lib/auth/department-store-capabilities"
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import { sidebarModuleLabels } from "@/lib/sidebar-module-labels"
@@ -113,6 +114,7 @@ function defaultExpandedSections(
       ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
     )
   return {
+    dashboard: pathname.startsWith("/home"),
     branding: pathname.startsWith("/branding"),
     qualityControl: pathname.startsWith("/quality-control"),
     costing:
@@ -384,7 +386,7 @@ export function UnifiedSidebarNavigation({
   )
   const dashboardMatchesSearch =
     !normalizedMenuSearch ||
-    "dashboard home my dashboard".includes(normalizedMenuSearch)
+    "dashboard home my dashboard quality inspector approvals machine rejection defects shift".includes(normalizedMenuSearch)
   useEffect(() => {
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -441,24 +443,42 @@ export function UnifiedSidebarNavigation({
       </div>
 
       {dashboardMatchesSearch ? (
-        <SidebarGroup className="px-3 py-0.5">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
+        <NavigationSection
+          icon={LayoutDashboard}
+          isActive={pathname.startsWith("/home")}
+          label="Dashboard"
+          open={normalizedMenuSearch ? true : expandedSections.dashboard}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("dashboard", open)
+          }}
+        >
+          {[
+            { href: personalDashboardNavigation.href, label: "My Dashboard" },
+            ...(qualityReportFloors(navigationAccess).length
+              ? qualityReportNavigation
+              : []),
+          ]
+            .filter(
+              (item) =>
+                !normalizedMenuSearch ||
+                item.label.toLowerCase().includes(normalizedMenuSearch) ||
+                "dashboard".includes(normalizedMenuSearch)
+            )
+            .map((item) => (
+              <SidebarMenuSubItem key={item.href}>
+                <SidebarMenuSubButton
                   asChild
-                  className={topLevelButtonClassName}
-                  isActive={pathname === personalDashboardNavigation.href}
+                  className={submoduleButtonClassName}
+                  isActive={pathname === item.href}
                 >
-                  <a href={personalDashboardNavigation.href}>
+                  <a href={item.href}>
                     <LayoutDashboard aria-hidden="true" />
-                    <span>{personalDashboardNavigation.label}</span>
+                    <span>{item.label}</span>
                   </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+        </NavigationSection>
       ) : null}
 
       {filteredMasterDataNavigation.length ? (

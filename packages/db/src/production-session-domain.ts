@@ -106,7 +106,7 @@ function nextDate(date: string) {
   return value.toISOString().slice(0, 10)
 }
 
-function productionShiftEndInstant(input: {
+export function productionShiftEndInstant(input: {
   productionDate: string
   productionFloorCode: string
   shift: string

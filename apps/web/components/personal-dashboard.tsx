@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { useFormStatus } from "react-dom"
 import Link from "next/link"
 import {
@@ -66,6 +66,7 @@ import type {
   PersonalDashboardWidgetId,
 } from "../lib/personal-dashboard"
 import type { PersonalDashboardMetrics } from "../lib/personal-dashboard-data"
+import { isQualityChartId } from "../lib/quality-reports"
 import {
   dashboardMetricCatalog,
   evaluateDashboardFormula,
@@ -99,6 +100,7 @@ const moduleTones: Record<PersonalDashboardWidget["module"], MetricCardTone> = {
 }
 
 export function PersonalDashboard({
+  children,
   analytics,
   availableWidgets,
   availableMetricIds,
@@ -109,6 +111,7 @@ export function PersonalDashboard({
   selectedWidgetIds,
   userName,
 }: {
+  children?: ReactNode
   analytics: DashboardAnalyticsConfiguration
   availableWidgets: PersonalDashboardWidget[]
   availableMetricIds: DashboardMetricId[]
@@ -268,6 +271,7 @@ export function PersonalDashboard({
         </Alert>
       ) : null}
 
+      {children}
       {analytics.widgets.length ? (
         <DashboardSection
           description="Pinned measures, comparisons, and your calculated KPIs."
@@ -291,13 +295,15 @@ export function PersonalDashboard({
       >
         {orderedSelection.length ? (
           <DashboardGrid columns="three">
-            {orderedSelection.map((widget) => (
-              <DashboardCard
-                key={widget.id}
-                metrics={metrics[widget.id]}
-                widget={widget}
-              />
-            ))}
+            {orderedSelection
+              .filter((widget) => !isQualityChartId(widget.id))
+              .map((widget) => (
+                <DashboardCard
+                  key={widget.id}
+                  metrics={metrics[widget.id]}
+                  widget={widget}
+                />
+              ))}
           </DashboardGrid>
         ) : (
           <DashboardEmptyState

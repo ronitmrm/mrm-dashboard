@@ -48,6 +48,7 @@
     "./recruitment-codes": "./src/recruitment-codes.ts",
     "./recruitment-domain": "./src/recruitment-domain.ts",
     "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",
-    "./user-entry-text": "./src/user-entry-text.ts"
+    "./user-entry-text": "./src/user-entry-text.ts",
+    "./quality-report-domain": "./src/quality-report-domain.ts"
   }
 }

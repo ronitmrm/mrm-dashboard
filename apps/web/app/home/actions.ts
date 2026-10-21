@@ -16,6 +16,43 @@ import {
   availablePersonalDashboardWidgets,
   resolvePersonalDashboardSelection,
 } from "@/lib/personal-dashboard"
+import { isQualityChartId } from "@/lib/quality-reports"
+
+export async function pinQualityChart(
+  _previous: { message: string; status: string },
+  formData: FormData
+) {
+  const session = await requireAuthenticatedSession("/home")
+  const access = await getUnifiedNavigationAccess(session.user.id)
+  const available = availablePersonalDashboardWidgets(access)
+  const id = String(formData.get("chartId") ?? "")
+  if (!isQualityChartId(id) || !available.some((widget) => widget.id === id))
+    return {
+      status: "error",
+      message: "This chart is not available for your account",
+    }
+  const repository = createUserDashboardRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  try {
+    const current = resolvePersonalDashboardSelection(
+      await repository.load(session.user.id),
+      available
+    ).map((widget) => widget.id)
+    if (current.includes(id))
+      return { status: "already-pinned", message: "Already on My Dashboard" }
+    if (current.length >= 24)
+      return {
+        status: "error",
+        message: "Remove a dashboard item first (24 item limit).",
+      }
+    await repository.save(session.user.id, [...current, id])
+    revalidatePath("/home")
+    return { status: "pinned", message: "Added to My Dashboard" }
+  } finally {
+    await repository.close()
+  }
+}
 
 export async function savePersonalDashboard(formData: FormData) {
   const session = await requireAuthenticatedSession("/home")

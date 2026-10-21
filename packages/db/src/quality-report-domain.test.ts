@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest"
+import {
+  buildQualityReport,
+  qualityHourlyCoverage,
+  type QualityReportSource,
+} from "./quality-report-domain"
+
+describe("quality reports", () => {
+  it("uses elapsed approvals, pending Not OK requests, and completed running hours with matched checks", () => {
+    const source: QualityReportSource = {
+      production: [
+        {
+          date: "2026-10-21",
+          shift: "A",
+          machine: "M1",
+          good: 970,
+          rejected: 30,
+        },
+      ],
+      requests: [
+        {
+          id: "approved",
+          requestedAt: "2026-10-20T20:00:00+05:30",
+          approvedAt: "2026-10-21T08:00:00+05:30",
+          inspector: "QC1",
+          shift: "B",
+        },
+        {
+          id: "not-ok",
+          requestedAt: "2026-10-21T09:00:00+05:30",
+          approvedAt: null,
+          inspector: null,
+          shift: "A",
+        },
+      ],
+      inspectors: ["QC1", "QC2"],
+      defects: [{ date: "2026-10-21", shift: "A", defect: "Burr", pieces: 30 }],
+      runs: [
+        {
+          id: "run",
+          machine: "M1",
+          workOrder: "J1",
+          setup: "S1",
+          shift: "A",
+          start: "2026-10-21T08:00:00+05:30",
+          end: "2026-10-21T18:20:00+05:30",
+          downtime: [],
+        },
+      ],
+      checks: [8, 9].map((h) => ({
+        machine: "M1",
+        workOrder: "J1",
+        setup: "S1",
+        date: "2026-10-21",
+        hour: `0${h}:00`,
+      })),
+    }
+    const result = buildQualityReport(
+      source,
+      "2026-10-21",
+      "2026-10-21",
+      "2026-10-21T20:00:00+05:30"
+    )
+    expect(result.daily[0]).toMatchObject({
+      good: 970,
+      rejected: 30,
+      pending: 1,
+      expected: 10,
+      completed: 2,
+      minutes: 720,
+      timed: 1,
+    })
+    expect(result).toMatchObject({
+      pendingBefore: 1,
+      pendingNow: 1,
+      approvals: 1,
+    })
+    expect(result.inspectors.find((row) => row.label === "QC2")?.approved).toBe(
+      0
+    )
+    expect(result.shifts.find((row) => row.label === "B")?.minutes).toBe(720)
+  })
+  it("does not use repeated checks in one hour to fill another hour or downtime", () => {
+    const run = {
+      id: "run",
+      machine: "M1",
+      workOrder: "J1",
+      setup: "S1",
+      shift: "A",
+      start: "2026-10-21T08:00:00+05:30",
+      end: "2026-10-21T11:20:00+05:30",
+      downtime: [
+        {
+          start: "2026-10-21T09:00:00+05:30",
+          end: "2026-10-21T10:00:00+05:30",
+        },
+      ],
+    }
+    const check = {
+      machine: "M1",
+      workOrder: "J1",
+      setup: "S1",
+      date: "2026-10-21",
+      hour: "08:00",
+    }
+    const result = qualityHourlyCoverage(
+      [run],
+      [check, check],
+      "2026-10-21",
+      "2026-10-21"
+    )
+    expect(result).toHaveLength(2)
+    expect(result.filter((row) => row.completed)).toHaveLength(1)
+  })
+})

@@ -29,6 +29,7 @@ import {
   useShellPageActions,
 } from "@/components/ui/page-actions"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { qualityReportNavigation } from "@/lib/quality-reports"
 import {
   administrationNavigation,
   brandingNavigation,
@@ -123,6 +124,7 @@ export function CommercialShell({
             : productionPage) ??
     [
       personalDashboardNavigation,
+      ...qualityReportNavigation,
       ...commercialNavigation,
       commercialMasterNavigation,
       ...hrMasterNavigation,
