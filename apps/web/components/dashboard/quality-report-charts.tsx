@@ -384,7 +384,7 @@ function Plot({
                 {!horizontal && !grouped && series.length > 1 ? (
                   <text
                     x={center}
-                    y={bottom - (sum / limit) * plotHeight - 9}
+                    y={bottom - (sum / limit) * plotHeight - 24}
                     textAnchor="middle"
                     fontSize="16"
                     fontWeight="700"
