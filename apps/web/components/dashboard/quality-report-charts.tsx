@@ -12,7 +12,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { useActionState, useState } from "react"
+import { useActionState } from "react"
 import { Pin, Check, LoaderCircle } from "lucide-react"
 import { pinQualityChart } from "@/app/home/actions"
 import { qualityCharts, type QualityChartId } from "@/lib/quality-reports"
@@ -36,6 +36,7 @@ type PlotRow = {
   label: string
   values: Record<string, number | null>
   detail?: string
+  annotation?: string
   percent?: number
 }
 
@@ -127,118 +128,32 @@ function PinQualityChartButton({ chartId }: { chartId: QualityChartId }) {
   )
 }
 
-function HorizontalPlot({
-  rows,
-  series,
-  percentage,
-}: {
-  rows: PlotRow[]
-  series: Series[]
-  percentage: boolean
-}) {
-  const [page, setPage] = useState(0)
-  const pageSize = series.length > 1 ? 4 : 6
-  const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
-  const currentPage = Math.min(page, lastPage)
-  const visible = rows.slice(
-    currentPage * pageSize,
-    (currentPage + 1) * pageSize
-  )
-  const maximum = Math.max(
-    1,
-    ...rows.flatMap((row) => series.map((s) => row.values[s.key] ?? 0))
-  )
-  const chartName = series.map((s) => s.label).join(" / ")
-  return (
-    <div className="grid min-w-0 gap-3">
-      <div
-        className="grid h-80 content-start gap-4 overflow-y-auto pr-1"
-        role="img"
-        aria-label={visible
-          .map(
-            (row) =>
-              `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(", ")}`
-          )
-          .join("; ")}
-      >
-        {visible.map((row) => (
-          <div className="grid gap-1.5" key={row.label} title={row.detail}>
-            <span className="text-sm font-medium break-words">{row.label}</span>
-            {series.map((s) => (
-              <div
-                key={s.key}
-                className="flex min-w-0 items-center gap-3"
-                title={`${row.label}: ${s.label} ${number(row.values[s.key] ?? 0)}${percentage ? "%" : ""}`}
-              >
-                {series.length > 1 ? (
-                  <span className="w-12 shrink-0 text-xs text-muted-foreground">
-                    {s.label}
-                  </span>
-                ) : null}
-                <div className="h-2 min-w-0 flex-1 rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${((row.values[s.key] ?? 0) / maximum) * 100}%`,
-                      background: s.color,
-                    }}
-                  />
-                </div>
-                <span className="shrink-0 text-sm tabular-nums">
-                  {row.values[s.key] === null
-                    ? "No approvals"
-                    : `${number(row.values[s.key] ?? 0)}${percentage ? "%" : ""}`}
-                </span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span role="status">
-          {currentPage * pageSize + 1}–
-          {Math.min((currentPage + 1) * pageSize, rows.length)} of {rows.length}
-        </span>
-        {lastPage > 0 ? (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={`${chartName}: Previous entries`}
-              disabled={currentPage === 0}
-              onClick={() => setPage(currentPage - 1)}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={`${chartName}: Next entries`}
-              disabled={currentPage === lastPage}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
+function axisLimit(maximum: number, fractional = false) {
+  if (maximum <= 0) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(maximum / 4))
+  const step = Math.ceil(maximum / 4 / magnitude) * magnitude
+  return Math.max(fractional ? 0 : 1, step) * 4
 }
 
-/** Shared chart renderer used unchanged in reports and personal dashboards. */
+/** Shared renderer: fixed chart proportions, readable values and bounded scrolling. */
 function Plot({
   rows,
   series,
   horizontal = false,
   grouped = false,
   percentage = false,
+  axisTitle = "Count",
+  share = false,
+  shiftProduction = false,
 }: {
   rows: PlotRow[]
   series: Series[]
   horizontal?: boolean
   grouped?: boolean
   percentage?: boolean
+  axisTitle?: string
+  share?: boolean
+  shiftProduction?: boolean
 }) {
   if (!rows.length)
     return (
@@ -247,114 +162,157 @@ function Plot({
         description="Choose another date range or unit."
       />
     )
-  if (horizontal)
-    return (
-      <HorizontalPlot rows={rows} series={series} percentage={percentage} />
-    )
-  const showBreakdown =
-    series[0]?.key === "approved" || series[0]?.key === "completed"
-  const max = Math.max(
-    1,
+  const maximum = Math.max(
+    0,
     ...rows.map((row) =>
-      grouped
-        ? Math.max(...Object.values(row.values).map((v) => v ?? 0))
-        : series.reduce((sum, s) => sum + (row.values[s.key] ?? 0), 0)
+      grouped || horizontal
+        ? Math.max(...series.map((s) => row.values[s.key] ?? 0))
+        : series.reduce((total, s) => total + (row.values[s.key] ?? 0), 0)
     )
   )
-  const magnitude = 10 ** Math.floor(Math.log10(max / 4))
-  const step = Math.max(1, Math.ceil(max / 4 / magnitude) * magnitude)
-  const limit = step * 4
-  const percentLimit = Math.max(
-    1,
-    Math.ceil(Math.max(...rows.map((row) => row.percent ?? 0)))
+  const limit = axisLimit(maximum * 1.12, percentage)
+  const rateLimit = axisLimit(
+    Math.max(...rows.map((row) => row.percent ?? 0)) * 1.2,
+    true
   )
-  const left = horizontal ? 180 : 58
-  const categoryWidth = showBreakdown ? 110 : 62
-  const width = Math.max(650, rows.length * categoryWidth)
-  const height = showBreakdown ? 335 : 285
-  const top = 22,
-    bottom = height - (showBreakdown ? 95 : 45),
-    plotWidth = width - left - 58,
-    plotHeight = bottom - top
+  const hasRate =
+    !shiftProduction && rows.some((row) => row.percent !== undefined)
+  const width = horizontal
+    ? 720
+    : Math.max(620, rows.length * (grouped ? 130 : 90))
+  const height = horizontal ? Math.max(250, rows.length * 48 + 60) : 250
+  const left = horizontal ? 165 : 64
+  const right = horizontal
+    ? rows.some((row) => row.annotation)
+      ? 190
+      : share
+        ? 135
+        : 105
+    : hasRate
+      ? 65
+      : 24
+  const top = 24
+  const bottom =
+    height - (horizontal ? 44 : series.length > 1 && !grouped ? 72 : 40)
+  const plotWidth = width - left - right
+  const plotHeight = bottom - top
   const band = (horizontal ? plotHeight : plotWidth) / rows.length
+  const total = rows.reduce((n, row) => n + (row.values.pieces ?? 0), 0)
+  const labelText = (row: PlotRow) =>
+    /^\d{2}\/\d{2}\/\d{4}$/.test(row.label) ? row.label.slice(0, 5) : row.label
+  const rowTitle = (row: PlotRow) =>
+    `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(" � ")}${row.detail ? ` � ${row.detail}` : ""}`
   return (
-    <div className="grid min-w-0 gap-3">
-      <div className="overflow-auto">
+    <div className="grid min-w-0 gap-2">
+      <div
+        className={horizontal ? "max-h-80 overflow-auto" : "overflow-x-auto"}
+        tabIndex={0}
+        role="region"
+        aria-label={`${axisTitle} chart; scroll to view all entries`}
+      >
         <svg
           role="img"
-          aria-label={rows
-            .map(
-              (row) =>
-                `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(", ")}${row.percent === undefined ? "" : `, rejection ${number(row.percent)}%`}`
-            )
-            .join("; ")}
+          aria-label={rows.map(rowTitle).join("; ")}
           viewBox={`0 0 ${width} ${height}`}
-          className="w-full"
+          className="block w-full"
           style={{
             minWidth: horizontal
-              ? "28rem"
-              : `${Math.max(360, rows.length * categoryWidth)}px`,
-            maxHeight: horizontal ? undefined : "20rem",
+              ? 520
+              : Math.max(420, rows.length * (grouped ? 110 : 75)),
           }}
         >
           {Array.from({ length: 5 }, (_, i) => {
             const ratio = i / 4
+            const x = left + plotWidth * ratio
+            const y = bottom - plotHeight * ratio
             return (
               <g key={i}>
                 <line
-                  x1={horizontal ? left + plotWidth * ratio : left}
-                  x2={horizontal ? left + plotWidth * ratio : width - 58}
-                  y1={horizontal ? top : bottom - plotHeight * ratio}
-                  y2={horizontal ? bottom : bottom - plotHeight * ratio}
+                  x1={horizontal ? x : left}
+                  x2={horizontal ? x : width - right}
+                  y1={horizontal ? top : y}
+                  y2={horizontal ? bottom : y}
                   stroke="var(--border)"
                 />
                 <text
-                  x={horizontal ? left + plotWidth * ratio : left - 8}
-                  y={horizontal ? bottom + 18 : bottom - plotHeight * ratio + 4}
+                  x={horizontal ? x : left - 10}
+                  y={horizontal ? bottom + 20 : y + 4}
                   textAnchor={horizontal ? "middle" : "end"}
+                  fontSize="12"
                   fill="var(--muted-foreground)"
-                  fontSize="11"
                 >
                   {number(limit * ratio)}
+                  {percentage ? "%" : ""}
                 </text>
               </g>
             )
           })}
-          {rows.map((row, index) => {
+          <line
+            x1={left}
+            x2={left}
+            y1={top}
+            y2={bottom}
+            stroke="var(--muted-foreground)"
+            opacity="0.5"
+          />
+          <line
+            x1={left}
+            x2={width - right}
+            y1={bottom}
+            y2={bottom}
+            stroke="var(--muted-foreground)"
+            opacity="0.5"
+          />
+          {share ? (
+            <text
+              x={width - 30}
+              y={15}
+              textAnchor="end"
+              fontSize="12"
+              fill="var(--muted-foreground)"
+            >
+              Share
+            </text>
+          ) : null}
+          {rows.map((row, i) => {
+            const center = (horizontal ? top : left) + band * (i + 0.5)
             let accumulated = 0
-            const center = (horizontal ? top : left) + band * (index + 0.5)
+            const sum = series.reduce((n, s) => n + (row.values[s.key] ?? 0), 0)
             return (
               <g key={row.label}>
-                <title>{row.detail || row.label}</title>
+                <title>{rowTitle(row)}</title>
                 <text
-                  x={horizontal ? left - 10 : center}
-                  y={horizontal ? center + 4 : bottom + 18}
+                  x={horizontal ? left - 12 : center}
+                  y={horizontal ? center + 4 : bottom + 19}
                   textAnchor={horizontal ? "end" : "middle"}
-                  fontSize="11"
+                  fontSize="12"
                   fill="var(--foreground)"
                 >
-                  {horizontal || !/^\d{2}\/\d{2}\/\d{4}$/.test(row.label)
-                    ? row.label
-                    : row.label.slice(0, 5)}
+                  {labelText(row)}
                 </text>
                 {series.map((s, si) => {
                   const value = row.values[s.key]
                   const size =
                     ((value ?? 0) / limit) *
                     (horizontal ? plotWidth : plotHeight)
-                  const thickness =
-                    Math.min(34, band * 0.65) / (grouped ? series.length : 1)
+                  const thickness = horizontal
+                    ? Math.min(30, band * 0.65)
+                    : Math.min(grouped ? 90 : 150, band * 0.55) /
+                      (grouped ? series.length : 1)
                   const base = accumulated
                   accumulated += size
-                  const shift = grouped
-                    ? si * thickness - (series.length * thickness) / 2
-                    : -thickness / 2
                   const x = horizontal
-                    ? left + (grouped ? 0 : base)
-                    : center + shift
+                    ? left
+                    : center -
+                      (thickness * (grouped ? series.length : 1)) / 2 +
+                      (grouped ? si * thickness : 0)
                   const y = horizontal
-                    ? center + shift
+                    ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
+                  const inside = !horizontal && !grouped && size >= 22
+                  // Small stacked segments get their own coloured label below the axis.
+                  const smallStack =
+                    !horizontal && !grouped && series.length > 1 && size < 22
                   return (
                     <g key={s.key}>
                       <rect
@@ -364,81 +322,96 @@ function Plot({
                         height={horizontal ? thickness : size}
                         fill={s.color}
                       >
-                        <title>{`${row.label}: ${series.map((item) => `${item.label} ${row.values[item.key] === null ? "No approvals" : number(row.values[item.key] ?? 0)}`).join(" · ")}${row.detail ? ` · ${row.detail}` : ""}`}</title>
+                        <title>{rowTitle(row)}</title>
                       </rect>
-                      {horizontal && !grouped ? (
-                        <text
-                          x={left + size + 6}
-                          y={center + 4}
-                          fontSize="11"
-                          fill="var(--foreground)"
-                        >
-                          {value === null
-                            ? "No approvals"
-                            : `${number(value ?? 0)}${percentage ? "%" : ""}`}
-                        </text>
-                      ) : null}
+                      <text
+                        x={
+                          horizontal
+                            ? left + size + 9
+                            : grouped
+                              ? x + thickness / 2
+                              : center
+                        }
+                        y={
+                          horizontal
+                            ? center + 4
+                            : inside
+                              ? y + size / 2 + 4
+                              : smallStack
+                                ? bottom + 35 + si * 14
+                                : y - 7
+                        }
+                        textAnchor={horizontal ? "start" : "middle"}
+                        fontSize="12"
+                        fontWeight="600"
+                        fill={
+                          inside
+                            ? "var(--background)"
+                            : smallStack
+                              ? s.color
+                              : "var(--foreground)"
+                        }
+                      >
+                        {smallStack
+                          ? `${s.key === "pending" ? "Pending" : s.label}: `
+                          : ""}
+                        {value === null
+                          ? "No approvals"
+                          : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ?? ""}`}
+                      </text>
                     </g>
                   )
                 })}
-                {showBreakdown
-                  ? series.map((s, index) => (
-                      <text
-                        key={`count-${s.key}`}
-                        x={center}
-                        y={bottom + 38 + index * 17}
-                        textAnchor="middle"
-                        fontSize="11"
-                        fontWeight="600"
-                        fill="var(--foreground)"
-                      >{`${s.key === "pending" ? "Pending" : s.label}: ${number(row.values[s.key] ?? 0)}`}</text>
-                    ))
-                  : null}
-                {!horizontal ? (
+                {!horizontal && !grouped && series.length > 1 ? (
                   <text
                     x={center}
-                    y={Math.max(
-                      12,
-                      bottom -
-                        ((grouped
-                          ? Math.max(
-                              ...Object.values(row.values).map((v) => v ?? 0)
-                            )
-                          : Object.values(row.values).reduce<number>(
-                              (s, v) => s + (v ?? 0),
-                              0
-                            )) /
-                          limit) *
-                          plotHeight -
-                        7
-                    )}
+                    y={bottom - (sum / limit) * plotHeight - 9}
                     textAnchor="middle"
-                    fontSize="11"
+                    fontSize="13"
+                    fontWeight="700"
                     fill="var(--foreground)"
                   >
-                    {Object.values(row.values).every((value) => value === null)
-                      ? "—"
-                      : number(
-                          Object.values(row.values).reduce<number>(
-                            (s, v) => s + (v ?? 0),
-                            0
-                          )
-                        )}
+                    {number(sum)}
+                  </text>
+                ) : null}
+                {horizontal && share ? (
+                  <text
+                    x={width - 30}
+                    y={center + 4}
+                    textAnchor="end"
+                    fontSize="12"
+                    fill="var(--foreground)"
+                  >
+                    {number(
+                      total ? ((row.values.pieces ?? 0) / total) * 100 : 0
+                    )}
+                    %
+                  </text>
+                ) : null}
+                {shiftProduction ? (
+                  <text
+                    x={center}
+                    y={bottom + 39}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fill="var(--muted-foreground)"
+                  >
+                    Rejection: {number(row.percent ?? 0)}%
                   </text>
                 ) : null}
               </g>
             )
           })}
-          {!horizontal && rows.some((row) => row.percent !== undefined) ? (
+          {hasRate ? (
             <g>
               <polyline
                 fill="none"
                 stroke={colors.rejectionRate}
-                strokeWidth="3"
+                strokeWidth="2.5"
                 points={rows
                   .map(
                     (row, i) =>
-                      `${left + band * (i + 0.5)},${bottom - ((row.percent ?? 0) / percentLimit) * plotHeight}`
+                      `${left + band * (i + 0.5)},${bottom - ((row.percent ?? 0) / rateLimit) * plotHeight}`
                   )
                   .join(" ")}
               />
@@ -446,62 +419,80 @@ function Plot({
                 <g key={row.label}>
                   <circle
                     cx={left + band * (i + 0.5)}
-                    cy={
-                      bottom - ((row.percent ?? 0) / percentLimit) * plotHeight
-                    }
-                    r="3"
+                    cy={bottom - ((row.percent ?? 0) / rateLimit) * plotHeight}
+                    r="4"
                     fill={colors.rejectionRate}
                   />
                   <text
                     x={left + band * (i + 0.5)}
                     y={
                       bottom -
-                      ((row.percent ?? 0) / percentLimit) * plotHeight -
-                      8
+                      ((row.percent ?? 0) / rateLimit) * plotHeight -
+                      10
                     }
                     textAnchor="middle"
+                    fontSize="12"
+                    fontWeight="600"
                     fill={colors.rejectionRate}
-                    fontSize="10"
                   >
                     {number(row.percent ?? 0)}%
                   </text>
                 </g>
               ))}
-              {[0, 25, 50, 75, 100].map((value) => (
+              {Array.from({ length: 5 }, (_, i) => (
                 <text
-                  key={value}
-                  x={width - 50}
-                  y={bottom - (value / 100) * plotHeight + 4}
-                  fontSize="10"
+                  key={i}
+                  x={width - right + 10}
+                  y={bottom - (i / 4) * plotHeight + 4}
+                  fontSize="11"
                   fill="var(--muted-foreground)"
                 >
-                  {number((value / 100) * percentLimit)}%
+                  {number((rateLimit * i) / 4)}%
                 </text>
               ))}
             </g>
           ) : null}
+          <text
+            x={horizontal ? left + plotWidth / 2 : 15}
+            y={horizontal ? height - 3 : top + plotHeight / 2}
+            transform={
+              horizontal ? undefined : `rotate(-90 15 ${top + plotHeight / 2})`
+            }
+            textAnchor="middle"
+            fontSize="12"
+            fill="var(--muted-foreground)"
+          >
+            {axisTitle}
+          </text>
         </svg>
       </div>
-      <div className="flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
-        {series.map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1.5">
-            <span
-              className="size-2.5 rounded-sm"
-              style={{ background: s.color }}
-            />
-            {s.label}
-          </span>
-        ))}
-        {rows.some((row) => row.percent !== undefined) ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              className="h-0.5 w-4"
-              style={{ background: colors.rejectionRate }}
-            />
-            Rejection % (right axis)
-          </span>
-        ) : null}
-      </div>
+      {!horizontal ? (
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+          {series.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-2">
+              <span
+                className="h-3 w-4 rounded-[2px]"
+                style={{ background: s.color }}
+              />
+              {s.label}
+            </span>
+          ))}
+          {hasRate ? (
+            <span className="inline-flex items-center gap-2">
+              <span
+                className="h-0.5 w-5"
+                style={{ background: colors.rejectionRate }}
+              />
+              Rejection %
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {horizontal && rows.length > 6 ? (
+        <p className="text-xs text-muted-foreground">
+          {rows.length} entries � Scroll within chart to view all
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -610,6 +601,7 @@ export function QualityReportChart({
           : row.approved,
       },
       detail: `${row.approved} approvals`,
+      annotation: time ? ` min (${number(row.approved)} approvals)` : undefined,
     }))
     summary = time
       ? `Average: ${fmtAvg(data.inspectors)} · Approvals: ${data.approvals}`
@@ -644,14 +636,11 @@ export function QualityReportChart({
     description =
       "All setup operations and rejection types; includes machines with production and zero rejection."
   } else if (id === "quality-shift-defects") {
-    horizontal = true
     grouped = true
     series = data.shifts.map((row, i) => ({
       key: row.label,
       label: row.label,
-      color: [colors.time, colors.pending, colors.accent, colors.rejected][
-        i % 4
-      ]!,
+      color: [colors.good, colors.time, colors.rejected, colors.accent][i % 4]!,
     }))
     rows = data.shiftDefects.map((row) => ({
       label: row.label,
@@ -675,12 +664,25 @@ export function QualityReportChart({
   }
   return (
     <ChartCard
+      compact
       title={qualityCharts[id].title}
       actions={pinnable ? <PinQualityChartButton chartId={id} /> : undefined}
       description={
         <>
-          <span className="block text-foreground tabular-nums">{summary}</span>
-          <span className="block text-xs">
+          <span className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums">
+            {summary.split(" · ").map((item) => {
+              const [name, ...value] = item.split(": ")
+              return (
+                <span key={name}>
+                  {name}:{" "}
+                  <strong className="font-semibold text-foreground">
+                    {value.join(": ")}
+                  </strong>
+                </span>
+              )
+            })}
+          </span>
+          <span className="sr-only">
             {description}
             {shift
               ? " First-piece status and approval time belong to the Setting Done shift."
@@ -695,6 +697,23 @@ export function QualityReportChart({
         horizontal={horizontal}
         grouped={grouped}
         percentage={percentage}
+        axisTitle={
+          horizontal
+            ? percentage
+              ? "Rejection %"
+              : id === "quality-inspector-time"
+                ? "Average approval time (minutes)"
+                : id === "quality-inspector-count"
+                  ? "Number of approvals"
+                  : "Rejected pieces"
+            : id.includes("time") || id === "quality-approval-trend"
+              ? "Minutes"
+              : id.includes("production")
+                ? "Pieces"
+                : "Count"
+        }
+        share={id === "quality-daily-defects"}
+        shiftProduction={id === "quality-shift-production"}
       />
     </ChartCard>
   )
