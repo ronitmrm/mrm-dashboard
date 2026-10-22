@@ -331,6 +331,15 @@ function Plot({
                   const y = horizontal
                     ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
+                  const valueText =
+                    value === null
+                      ? "No approvals"
+                      : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ? " min" : ""}`
+                  const labelWidth = valueText.length * 8.5 + 8
+                  const fitsInside =
+                    value !== null &&
+                    size >= (horizontal ? labelWidth : 22) &&
+                    thickness >= (horizontal ? 22 : labelWidth)
                   return (
                     <g key={s.key}>
                       <rect
@@ -345,32 +354,30 @@ function Plot({
                       <text
                         x={
                           horizontal
-                            ? value === null
-                              ? left + 8
-                              : left + size / 2
-                            : grouped
+                            ? fitsInside
+                              ? left + size / 2
+                              : left + size + 8
+                            : fitsInside
                               ? x + thickness / 2
-                              : center
+                              : x + thickness + 8
                         }
                         y={
                           horizontal
                             ? center + 4
                             : Math.min(bottom - 4, y + size / 2 + 4)
                         }
-                        textAnchor={
-                          horizontal && value === null ? "start" : "middle"
-                        }
+                        textAnchor={fitsInside ? "middle" : "start"}
                         fontSize="14"
                         fontWeight="600"
                         fill="#000000"
                       >
-                        {value === null
-                          ? "No approvals"
-                          : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ? " min" : ""}`}
+                        {valueText}
                       </text>
                       {horizontal && row.annotation && value !== null ? (
                         <text
-                          x={left + size + 9}
+                          x={
+                            left + size + 9 + (fitsInside ? 0 : labelWidth + 8)
+                          }
                           y={center + 4}
                           fontSize="13"
                           fill="var(--muted-foreground)"
