@@ -1796,6 +1796,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 payload.grossWeightKg ?? payload.grossWeight
               ),
               organizationId,
+              productionFloorCode: requiredProductionFloor(payload.productionFloorCode),
               sessionId: text(payload.sessionId),
             })
           }

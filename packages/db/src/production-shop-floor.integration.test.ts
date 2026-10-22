@@ -2171,11 +2171,24 @@ test("material review blocks completion, releases only selected setups, and clea
   await planning.upsertWorkOrder({ ...workOrder, sourcePayload: { ...workOrder.sourcePayload, requiredRmKg: 100 } });
   expect(await review()).toMatchObject([{ requiredKg: 100, receivedKg: 50, pendingKg: 50, shortAccepted: false }]);
   await expect(complete(2)).rejects.toThrow('RM is pending');
+  const parallelMachine = 'RM-WAIT-' + suffix + '-PARALLEL';
+  await planning.upsertMachine({ organizationId, machineNumber: parallelMachine });
+  await planning.recordPlanOverride({ organizationId, jobCardNumber, setupNumber: 1,
+    assignmentMode: 'add_parallel_machine', toMachineNumber: parallelMachine, reason: 'Run on both machines.' });
+  await repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: parallelMachine,
+    operationSetupCode: '1', stage: 'operator_started', payload: {} });
+  const parallelSession = await repository.startProductionSession({ organizationId, jobCardNumber,
+    machineNumber: parallelMachine, operationSetupCode: '1', operatorCode: secondOperator,
+    measurementMethod: 'weight', pieceWeightGrams: 1, cycleTimeSeconds: 60, startedAt: '2026-10-17T08:30:00+05:30' });
   const session = await repository.startProductionSession({ organizationId, jobCardNumber, machineNumber: machines[0]!,
     operationSetupCode: '1', operatorCode: firstOperator, measurementMethod: 'weight', pieceWeightGrams: 1,
     cycleTimeSeconds: 60, productionDate: '2026-10-17', shift: 'Day', startedAt: '2026-10-17T08:30:00+05:30' });
   const end = { organizationId, sessionId: session.id, endedAt: '2026-10-17T09:30:00+05:30',
     grossWeightKg: 0.01, crateCount: 0, crateWeightKg: 0, enteredRole: 'authorized_staff' };
+  await expect(repository.closeProductionSession({ ...end, productionFloorCode: 'cnc', endReason: 'awaiting_material' }))
+    .rejects.toThrow('belongs to another Production Unit');
+  expect((await repository.readProductionSessions({ organizationId, productionFloorCode: 'conventional',
+    sessionId: session.id })).rows[0]).toMatchObject({ status: 'open', goodPieces: 0 });
   await expect(repository.closeProductionSession({ ...end, endReason: 'item_complete' })).rejects.toThrow('RM is pending');
   await expect(repository.closeProductionSession({ organizationId, sessionId: session.id, endedAt: end.endedAt,
     endReason: 'awaiting_material' })).rejects.toThrow('Record the actual weight output');
@@ -2193,16 +2206,27 @@ test("material review blocks completion, releases only selected setups, and clea
   const released = await releasedState();
   expect(released).toMatchObject({ stage: 'planned', active: false,
     source_payload: { awaitingMaterial: { kind: 'rm', availableAtRelease: 50 } } });
+  const nextJobCard = 'RM-REUSE-' + suffix;
+  await planning.upsertWorkOrder({ ...workOrder, jobCardNumber: nextJobCard, workOrderNumber: nextJobCard,
+    sourcePayload: { ...workOrder.sourcePayload, jcNo: nextJobCard } });
+  await planning.selectRoute({ jobCardNumber: nextJobCard, organizationId, routeCode });
+  await repository.recordShopFloorStage({ organizationId, jobCardNumber: nextJobCard, machineNumber: machines[0]!,
+    operationSetupCode: '1', stage: 'operator_started', payload: {} });
+  const nextSession = await repository.startProductionSession({ organizationId, jobCardNumber: nextJobCard,
+    machineNumber: machines[0]!, operationSetupCode: '1', operatorCode: firstOperator, measurementMethod: 'weight',
+    pieceWeightGrams: 1, cycleTimeSeconds: 60, startedAt: '2026-10-17T10:00:00+05:30' });
   await repository.correctProductionSession({ ...end, endReason: 'awaiting_material', grossWeightKg: 0.011,
     correctionReason: 'Correct actual weighing.' });
   expect(await releasedState()).toEqual(released);
+  expect((await repository.readProductionSessions({ organizationId, productionFloorCode: 'conventional',
+    sessionId: nextSession.id })).rows[0]).toMatchObject({ status: 'open', jobCardNumber: nextJobCard });
   await expect(repository.correctProductionSession({ ...end, endReason: 'manual_stop', correctionReason: 'Change close reason.' }))
     .rejects.toThrow('Awaiting material cannot be added or removed');
   const secondSetup = setups.find(row => row.setupNumber === 2)!;
   await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: 'conventional',
     setupStateId: secondSetup.id, expectedRowVersion: Number(secondSetup.rowVersion), reason: 'Input exhausted; more material expected.' });
   expect((await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
-    .rows.filter(row => row.jobCardNumber === jobCardNumber)).toMatchObject([{ setupNumber: 3 }]);
+    .rows.filter(row => row.jobCardNumber === jobCardNumber && row.machineNumber !== parallelMachine)).toMatchObject([{ setupNumber: 3 }]);
   await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
     operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).rejects.toThrow('released awaiting material');
   const [short] = await review();
@@ -2212,6 +2236,16 @@ test("material review blocks completion, releases only selected setups, and clea
   await complete(2);
   await receipt('rm-wait-second-' + suffix, 50);
   expect(await review()).toEqual([]);
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
+    operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).rejects.toThrow(/still assigned|already locked/);
+  await repository.closeProductionSession({ organizationId, sessionId: nextSession.id,
+    endedAt: '2026-10-17T11:00:00+05:30', endReason: 'awaiting_material', grossWeightKg: 0.001,
+    crateCount: 0, crateWeightKg: 0, enteredRole: 'authorized_staff' });
+  await repository.closeProductionSession({ organizationId, sessionId: parallelSession.id,
+    endedAt: '2026-10-17T11:00:00+05:30', endReason: 'awaiting_material', grossWeightKg: 0,
+    crateCount: 0, crateWeightKg: 0, enteredRole: 'authorized_staff' });
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: parallelMachine,
+    operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).rejects.toThrow('released awaiting material');
   await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
     operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).resolves.toMatchObject({ ok: true });
   await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[1]!,

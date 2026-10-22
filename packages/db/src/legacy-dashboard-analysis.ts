@@ -3613,8 +3613,10 @@ function initializeMachinePlanDetails(
         && canonicalKey(rowText(status, "setupNo")) === canonicalKey(displaySetupNo)
         && rowText(status, "stage") === "planned" && status.awaitingMaterial);
       const releasedSetup = releasedStatuses.length > 0;
-      if (releasedSetup && !lockedShopFloorMachines.size && releasedStatuses.some(status => materialWaitPending(status,
-        safeNumber(rowValue(row, "rmUsableKg")), upstreamActual?.actualQty ?? 0))) {
+      const waitingReleasedStatuses = releasedStatuses.filter(status => materialWaitPending(status,
+        safeNumber(rowValue(row, "rmUsableKg")), upstreamActual?.actualQty ?? 0));
+      const awaitingMaterialMachines = new Set(waitingReleasedStatuses.map(status => canonicalKey(rowText(status, "machine", "machineNo"))));
+      if (releasedSetup && !lockedShopFloorMachines.size && waitingReleasedStatuses.length === releasedStatuses.length) {
         routePlanningBlocked = true;
         operationReadyCanPullForward = false;
         continue;
@@ -3733,6 +3735,7 @@ function initializeMachinePlanDetails(
           ? lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined
           : productionActualMachines.size ? productionActualMachines : undefined,
         lockedMachines: lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined,
+        awaitingMaterialMachines,
         previousMachines: !releasedSetup && previousMachines?.size ? previousMachines : undefined,
         planningCalendar,
       });
@@ -3759,10 +3762,12 @@ function initializeMachinePlanDetails(
           override: queuePlacementOverride ?? override,
           additionalMachines: parallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
           previousMachines: previousMachines?.size ? previousMachines : undefined,
+          awaitingMaterialMachines,
           planningCalendar,
         }).filter((machine) => canonicalKey(machine) !== canonicalKey(setupInterruption.machine));
         if (remainingMachines.length) assignedMachines = [setupInterruption.machine, ...remainingMachines];
       }
+      assignedMachines = assignedMachines.filter(machine => !awaitingMaterialMachines.has(canonicalKey(machine)));
       if (requiredTools.length && !override && !setupInterruption && !productionActualMachines.size && !lockedShopFloorMachines.size) {
         const capacity = Math.max(1, Math.min(...requiredTools.map(code => allocatedTooling.get(canonicalKey(code)) ?? 0)));
         assignedMachines = assignedMachines.slice(0, capacity);
@@ -3803,8 +3808,16 @@ function initializeMachinePlanDetails(
       const routeProductionEndDates: string[] = [];
       const routeProductionStreams: WipProductionStream[] = [];
       const routeProductionActuals: PlanningProductionActual[] = [];
+      // Keep recorded WIP from released machines without reserving their capacity.
+      for (const status of waitingReleasedStatuses) {
+        const machine = rowText(status, "machine", "machineNo");
+        const actual = rawBySetup.get(productionSetupKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: displaySetupNo, machine }))
+          ?? rawBySetup.get(productionSetupKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo, machine }));
+        if (actual?.rows) routeProductionActuals.push({ ...actual, machine });
+      }
       const resumedRemainingPerMachine = assignedMachineOrderPcs(setupRemainingQty, assignedMachines.length);
-      const releasedAssignments = releasedSetup ? [...new Set([...productionActualMachines, ...assignedMachines])].map(machine => {
+      const releasedAssignments = releasedSetup ? [...new Set([...productionActualMachines, ...assignedMachines])]
+        .filter(machine => !awaitingMaterialMachines.has(canonicalKey(machine))).map(machine => {
         const actual = rawBySetup.get(productionSetupKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: displaySetupNo, machine }))
           ?? rawBySetup.get(productionSetupKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo, machine }));
         const index = assignedMachines.indexOf(machine);
@@ -7484,6 +7497,7 @@ function assignedPhysicalMachines({
   additionalMachines,
   productionActualMachines,
   lockedMachines,
+  awaitingMaterialMachines,
   previousMachines,
   planningCalendar,
 }: {
@@ -7503,11 +7517,13 @@ function assignedPhysicalMachines({
   additionalMachines?: string[];
   productionActualMachines?: Set<string>;
   lockedMachines?: Set<string>;
+  awaitingMaterialMachines?: ReadonlySet<string>;
   previousMachines?: Set<string>;
   planningCalendar: PlanningCalendar;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
-  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty);
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty)
+    .filter(candidate => !awaitingMaterialMachines?.has(canonicalKey(candidate.machine)));
   const availableCandidates = candidates.filter((candidate) => candidateMachineAvailableForAssignment(candidate.machine, {
     readyDate,
     orderPcs,
