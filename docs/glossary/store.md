@@ -146,6 +146,19 @@ locations. Receipt or return to the default Store location leaves that Store's
 storage blank without clearing another Store's saved rack/bin.
 An active Gauge Set changes storage together through its Set Movement.
 
+Each Store's Stock Register offers **Download Location CSV** and, for users with
+movement permission, **Upload Locations CSV**. The download lists eligible existing
+Unit IDs and in-stock Consumable Asset Codes. Fill `location_code` with an active
+rack/bin code belonging to that Store; blank locations are skipped. Each row uses
+either `unit_id` for a Non Consumable or `asset_code` for a Consumable, with an
+optional `note`. Up to 500 assignments are accepted in one transaction; a bad or
+duplicate identifier rejects the complete upload with its row number. Location
+codes must already exist in Location Master. Gauge-set members use Set Movement.
+Unit rows update only that Store's storage entry. A Consumable row relocates all
+quantity held in that Store to the selected rack/bin using balanced, audited stock
+movements, preserving Store and company totals. Main Store request availability
+and fulfillment use its stock across racks, including after a location assignment.
+
 **Store Balance**: Unused quantity of one Consumable at one accountable store.
 An internal transfer decreases the source balance and increases the destination
 balance by the same amount. Available to issue is the local unreserved balance;

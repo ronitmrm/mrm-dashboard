@@ -3080,6 +3080,85 @@ describe("Store requests", () => {
     expect(cnc.id).not.toBe(main.id)
   })
 
+  test("bulk assigns existing units and consumables without changing holdings, and rolls back an invalid file", async () => {
+    await pool.query(
+      `INSERT INTO manufacturing.production_floors (organization_id, code, name)
+       VALUES ($1, 'cnc', 'CNC Production Floor')
+       ON CONFLICT (organization_id, code) DO NOTHING`, [organizationId]
+    )
+    const main = await departmentStore.getStoreByCode(organizationId, "MAIN")
+    const cnc = await departmentStore.getStoreByCode(organizationId, "cnc")
+    const source = await store.createLocation({
+      organizationId, storeCode: "cnc", code: `BULK-SOURCE-${suffix}`, locationType: "STORE",
+    })
+    await store.createLocation({
+      organizationId, storeCode: "cnc", code: `BULK-TARGET-${suffix}`, locationType: "STORE",
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Bulk Storage")), assetType: "CONSUMABLE",
+      identificationName: `Bulk Storage ${suffix}`, organizationId, unit: "Nos",
+    })
+    await store.receiveStock({
+      organizationId, locationId: main.defaultLocationId, quantity: 10,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 10, "100.00")).id,
+    })
+    for (const [quantity, destinationLocationId] of [[4.125, source.id], [2.875, cnc.defaultLocationId]] as const) {
+      await departmentStore.transferQuantity({
+        organizationId, sourceStoreCode: "MAIN", destinationStoreCode: "cnc",
+        itemTypeId: item.id, quantity, destinationLocationId,
+      })
+    }
+    const unitId = `BULK-UNIT-${suffix}`
+    await pool.query(
+      `INSERT INTO store.assets (organization_id, item_type_id, asset_code, identification_name,
+         accountable_store_id, current_holder_type, current_holder_reference, current_holder_name, status)
+       VALUES ($1, $2, $3, 'Bulk location unit', $4, 'DEPARTMENT', 'PPC-CNC', 'PPAC CNC-01', 'ASSIGNED')`,
+      [organizationId, legacyItemTypeId, unitId, main.id]
+    )
+    const unitBefore = await pool.query(`SELECT * FROM store.assets WHERE organization_id = $1 AND asset_code = $2`, [organizationId, unitId])
+    const rows = [
+      { unitId, locationCode: `BULK-TARGET-${suffix}` },
+      { typeCode: item.typeCode, locationCode: `BULK-TARGET-${suffix}` },
+    ]
+    await expect(departmentStore.assignStorageLocationsBulk({ organizationId, storeCode: "cnc", rows })).resolves.toEqual({ assigned: 2 })
+    expect((await pool.query(`SELECT * FROM store.assets WHERE organization_id = $1 AND asset_code = $2`, [organizationId, unitId])).rows).toEqual(unitBefore.rows)
+    const workspace = await departmentStore.listStoreWorkspace({ organizationId, storeCode: "cnc" })
+    expect(workspace.consumables.find((row) => row.itemTypeId === item.id)).toMatchObject({
+      availableQuantity: "7", companyQuantity: "10", storageLocations: `BULK-TARGET-${suffix}`,
+    })
+    expect((await departmentStore.listDepartmentAllocations({ organizationId, productionFloorCode: "cnc" }))
+      .find((row) => row.assetCode === unitId)?.storageLocation).toBe(`BULK-TARGET-${suffix}`)
+
+    const movementsBefore = (await pool.query(`SELECT * FROM store.stock_movements WHERE organization_id = $1 AND item_type_id = $2 ORDER BY id`, [organizationId, item.id])).rows
+    await expect(departmentStore.assignStorageLocationsBulk({
+      organizationId, storeCode: "cnc", rows: [
+        { unitId, locationCode: `BULK-SOURCE-${suffix}` },
+        { typeCode: item.typeCode, locationCode: `BULK-SOURCE-${suffix}` },
+        { unitId: "MISSING-UNIT", locationCode: `BULK-TARGET-${suffix}`, rowNumber: 8 },
+      ],
+    })).rejects.toThrow("Row 8:")
+    expect((await pool.query(`SELECT * FROM store.stock_movements WHERE organization_id = $1 AND item_type_id = $2 ORDER BY id`, [organizationId, item.id])).rows).toEqual(movementsBefore)
+    expect((await departmentStore.listDepartmentAllocations({ organizationId, productionFloorCode: "cnc" }))
+      .find((row) => row.assetCode === unitId)?.storageLocation).toBe(`BULK-TARGET-${suffix}`)
+
+    const request = await store.createRequisition({
+      organizationId, department: "Quality Control", itemTypeId: item.id,
+      locationId: main.defaultLocationId, quantity: 1, requestedBy: "Storekeeper",
+    })
+    await store.createLocation({
+      organizationId, storeCode: "MAIN", code: `BULK-MAIN-${suffix}`, locationType: "STORE",
+    })
+    await departmentStore.assignStorageLocationsBulk({
+      organizationId, storeCode: "MAIN",
+      rows: [{ typeCode: item.typeCode, locationCode: `BULK-MAIN-${suffix}` }],
+    })
+    expect((await store.listRequisitions({ organizationId })).rows
+      .find((row) => row.id === request.id)?.availableStock).toBe("3")
+    await expect(store.issueRequisition({
+      organizationId, requisitionId: request.id, quantity: 1,
+    })).resolves.toMatchObject({ status: "Fulfilled" })
+  })
+
   test("shows each Store leg and one consumption without double-debiting company stock", async () => {
     await pool.query(
       `INSERT INTO manufacturing.production_floors (organization_id, code, name)

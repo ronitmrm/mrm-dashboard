@@ -8,6 +8,7 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 
 import { DepartmentStoreForms, type DepartmentStoreAction } from "@/components/store/department-store-forms"
 import { DepartmentRepairCompletion } from "@/components/store/department-repair-completion"
+import { StoreLocationCsvControls } from "@/components/store/store-location-csv-controls"
 import { TableExcelDownloadButton } from "@/components/table-excel-download-button"
 import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { formatIstDateTime } from "@/lib/date-time"
@@ -53,9 +54,12 @@ export function DepartmentStoreRegister({ action, basePath, canRepair, canWrite,
     : selectMode === "calibration" ? "/department-store/calibration" : basePath
   return <div className="flex min-w-0 flex-col gap-6">
     <PageHeader
-      actions={view === "stock" ? <TableExcelDownloadButton
-        fileName={`${store.code.toLowerCase()}-store-stock-${today}.xlsx`}
-        tableId="department-store-stock" /> : undefined}
+      actions={view === "stock" ? <>
+        <TableExcelDownloadButton
+          fileName={`${store.code.toLowerCase()}-store-stock-${today}.xlsx`}
+          tableId="department-store-stock" />
+        <StoreLocationCsvControls canEdit={canWrite} storeCode={store.code} />
+      </> : undefined}
       description={view === "stock"
         ? store.kind === "PRODUCTION"
           ? `Stock accountable to ${store.name}, plus Unit IDs assigned to its departments.`
