@@ -2900,6 +2900,19 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [targetMachineId]
         )
+        const queuedAssignment = (assignmentMode === "move" || assignmentMode === "add_parallel_machine") && Boolean(
+          input.setupNumber && input.queuePlacements?.some((placement) =>
+            interruptionMatches({
+              jobCardNumber: placement.targetJobCardNumber,
+              machineNumber: placement.targetMachineNumber,
+              setupNumber: placement.targetSetupNumber,
+            }, {
+              jobCardNumber: input.jobCardNumber,
+              machineNumber: input.toMachineNumber,
+              setupNumber: input.setupNumber ?? 0,
+            })
+          )
+        )
         if (assignmentMode === "add_parallel_machine") {
           const activeTarget = targetLock.rows[0]
           if (activeTarget?.work_order_id === workOrder.id && activeTarget.setup_number === input.setupNumber) {
@@ -2914,7 +2927,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           )) {
             throw new Error("Only the active target machine setup can be stopped. Refresh the plan and review it again.")
           }
-          if (activeTarget && !interruptedSetups.some((interruption) =>
+          if (activeTarget && !queuedAssignment && !interruptedSetups.some((interruption) =>
             interruptionMatches(interruption, {
               jobCardNumber: activeTarget.job_card_number,
               machineNumber: input.toMachineNumber,
@@ -2927,23 +2940,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (assignmentMode === "early_downstream" && targetLock.rows[0]) {
           throw new Error("Target machine is not idle. Finish or move its active setup first.")
         }
-        const queuedMove = assignmentMode === "move" && Boolean(
-          input.setupNumber && input.queuePlacements?.some((placement) =>
-            interruptionMatches({
-              jobCardNumber: placement.targetJobCardNumber,
-              machineNumber: placement.targetMachineNumber,
-              setupNumber: placement.targetSetupNumber,
-            }, {
-              jobCardNumber: input.jobCardNumber,
-              machineNumber: input.toMachineNumber,
-              setupNumber: input.setupNumber ?? 0,
-            })
-          )
-        )
         if (
           targetLock.rows[0] &&
           targetLock.rows[0].work_order_id !== workOrder.id &&
-          !queuedMove &&
+          !queuedAssignment &&
           !interruptedSetups.some((interruption) =>
             interruptionMatches(interruption, {
               jobCardNumber: targetLock.rows[0]!.job_card_number,

@@ -1537,7 +1537,7 @@ describe("dashboard planning writes", () => {
     }))
   })
 
-  test("keeps queued move targets running and releases approved parallel or move interruptions", async () => {
+  test("keeps queued move and parallel targets running and releases approved interruptions", async () => {
     const moveItemUid = `MOVE-${suffix}`
     const movingJobCard = `MOVE-${suffix}-1`
     const blockingJobCard = `MOVE-${suffix}-2`
@@ -1686,6 +1686,26 @@ describe("dashboard planning writes", () => {
       [row.work_order_id, row.machine_id]
     )
     expect(targetAfterQueue.rows).toEqual(targetBeforeQueue.rows)
+
+    await repository.recordPlanOverride({
+      assignmentMode: "add_parallel_machine",
+      jobCardNumber: movingJobCard,
+      organizationId,
+      queuePlacements: [{
+        targetJobCardNumber: movingJobCard,
+        targetMachineNumber: targetMachine,
+        targetSetupNumber: 1,
+        queueBeforeSetups: [],
+      }],
+      reason: "Queue parallel work after the active target setup",
+      setupNumber: 1,
+      toMachineNumber: targetMachine,
+    })
+    const targetAfterParallelQueue = await pool.query(
+      "SELECT active, stage, row_version FROM manufacturing.shop_floor_setup_state WHERE work_order_id=$1 AND machine_id=$2",
+      [row.work_order_id, row.machine_id]
+    )
+    expect(targetAfterParallelQueue.rows).toEqual(targetBeforeQueue.rows)
 
     await repository.recordPlanOverride({
       fromMachineNumber: sourceMachine,
