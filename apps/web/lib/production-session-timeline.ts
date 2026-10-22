@@ -7,6 +7,7 @@ export const productionSessionEndReasons = [
   { label: "Item Complete", value: "item_complete" },
   { label: "Job / Setup Change", value: "job_change" },
   { label: "Manual Stop", value: "manual_stop" },
+  { label: "Awaiting material — release machine", value: "awaiting_material" },
 ] as const
 
 export function sessionTimelineDetail(row: Record<string, unknown>) {

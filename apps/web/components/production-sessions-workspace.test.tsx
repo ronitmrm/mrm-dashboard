@@ -26,6 +26,8 @@ test("shows the close reason and downtime end time in the session timeline", () 
     reasonCode: "item_complete",
     reasonName: "Production session closed",
   })).toBe("End reason: Item Complete")
+  expect(sessionTimelineDetail({ eventType: "session_closed", reasonCode: "awaiting_material" }))
+    .toBe("End reason: Awaiting material — release machine")
   expect(sessionTimelineDetail({
     eventType: "downtime", reasonName: "No Electricity",
     startedAt: "2026-10-15T12:39:00Z", endedAt: "2026-10-15T17:00:00Z",

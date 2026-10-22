@@ -140,7 +140,7 @@ tasks and their saved reports are opened from Quality Control; saved reports
 show their inspection readings and business identifiers, not internal database
 or composite keys.
 
-Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, and Manual Stop. Shift Ends is the default because it is the normal close path.
+Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, Manual Stop, and Awaiting material — release machine. Shift Ends is the default because it is the normal close path.
 
 Choosing **Item Complete** closes the Production Session and marks that machine's
 active setup Item Complete in the same transaction, which releases the machine.
@@ -150,6 +150,14 @@ before Item Complete can be saved, including corrections and other setup-complet
 entry paths. See Job Cards → RM review and short receipt
 acceptance. Manual Stop records output without completing the setup; the Planner's
 Release machine action can then release only the selected assignment awaiting input.
+**Awaiting material — release machine** saves the session's actual output and
+releases that setup's machine together, using the normal session-recording permission
+without a Planner action. The setup returns to Planned, inactive, and waits for more
+RM (first setup) or upstream good output (later setups). Order targets, recorded
+production and the RM shortage remain. Counter output or complete weight details
+are required; Weight Pending cannot use this close reason. The first rework setup
+cannot wait for fresh RM. Corrections may retain this reason to correct output or
+timing, but cannot change another close reason into it or undo the recorded release.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.

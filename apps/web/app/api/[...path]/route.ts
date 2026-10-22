@@ -1804,9 +1804,11 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(request, path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: result.outputPending
-              ? "Production session closed. Weight is pending."
-              : "Production session closed.",
+            savedText: text(payload.endReason) === "awaiting_material"
+              ? "Production session closed. Machine released awaiting material; remaining work stays open."
+              : result.outputPending
+                ? "Production session closed. Weight is pending."
+                : "Production session closed.",
           })
         )
       }
