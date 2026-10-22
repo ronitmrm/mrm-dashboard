@@ -12,7 +12,7 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
-import { useActionState } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import { Pin, Check, LoaderCircle } from "lucide-react"
 import { pinQualityChart } from "@/app/home/actions"
 import { qualityCharts, type QualityChartId } from "@/lib/quality-reports"
@@ -155,12 +155,25 @@ function Plot({
   share?: boolean
   shiftProduction?: boolean
 }) {
+  const container = useRef<HTMLDivElement>(null)
+  const [availableWidth, setAvailableWidth] = useState(620)
+  useEffect(() => {
+    const element = container.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setAvailableWidth(Math.floor(entry.contentRect.width))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   if (!rows.length)
     return (
-      <StandardState
-        title="No records in this range"
-        description="Choose another date range or unit."
-      />
+      <div ref={container}>
+        <StandardState
+          title="No records in this range"
+          description="Choose another date range or unit."
+        />
+      </div>
     )
   const maximum = Math.max(
     0,
@@ -177,21 +190,31 @@ function Plot({
   )
   const hasRate =
     !shiftProduction && rows.some((row) => row.percent !== undefined)
-  const width = horizontal
-    ? 720
-    : Math.max(620, rows.length * (grouped ? 130 : 90))
-  const height = horizontal ? Math.max(250, rows.length * 48 + 60) : 250
-  const left = horizontal ? 165 : 64
+  const width = Math.max(
+    availableWidth - (horizontal ? 20 : 0),
+    horizontal ? 420 : 480,
+    horizontal ? 0 : rows.length * (grouped ? 150 : 110)
+  )
+  const height = horizontal ? Math.max(280, rows.length * 52 + 70) : 290
+  const left = horizontal
+    ? Math.min(
+        175,
+        Math.max(
+          80,
+          Math.max(...rows.map((row) => row.label.length)) * 7.5 + 14
+        )
+      )
+    : 90
   const right = horizontal
     ? rows.some((row) => row.annotation)
       ? 190
       : share
         ? 135
-        : 105
+        : 70
     : hasRate
       ? 65
       : 24
-  const top = 24
+  const top = 34
   const bottom = height - (horizontal ? 44 : shiftProduction ? 65 : 40)
   const plotWidth = width - left - right
   const plotHeight = bottom - top
@@ -200,9 +223,13 @@ function Plot({
   const labelText = (row: PlotRow) =>
     /^\d{2}\/\d{2}\/\d{4}$/.test(row.label) ? row.label.slice(0, 5) : row.label
   const rowTitle = (row: PlotRow) =>
-    `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(" � ")}${row.detail ? ` � ${row.detail}` : ""}`
+    `${row.label}: ${series.map((s) => `${s.label} ${row.values[s.key] === null ? "No approvals" : number(row.values[s.key] ?? 0)}`).join(" | ")}${row.detail ? ` | ${row.detail}` : ""}`
   return (
-    <div className="grid min-w-0 gap-2">
+    <div
+      ref={container}
+      className="grid min-w-0 gap-3"
+      style={{ fontFamily: "Arial, sans-serif" }}
+    >
       <div
         className={horizontal ? "max-h-80 overflow-auto" : "overflow-x-auto"}
         tabIndex={0}
@@ -214,11 +241,7 @@ function Plot({
           aria-label={rows.map(rowTitle).join("; ")}
           viewBox={`0 0 ${width} ${height}`}
           className="block w-full"
-          style={{
-            minWidth: horizontal
-              ? 520
-              : Math.max(420, rows.length * (grouped ? 110 : 75)),
-          }}
+          style={{ width, minWidth: width, height }}
         >
           {Array.from({ length: 5 }, (_, i) => {
             const ratio = i / 4
@@ -237,7 +260,7 @@ function Plot({
                   x={horizontal ? x : left - 10}
                   y={horizontal ? bottom + 20 : y + 4}
                   textAnchor={horizontal ? "middle" : "end"}
-                  fontSize="12"
+                  fontSize="14"
                   fill="var(--muted-foreground)"
                 >
                   {number(limit * ratio)}
@@ -267,7 +290,7 @@ function Plot({
               x={width - 30}
               y={15}
               textAnchor="end"
-              fontSize="12"
+              fontSize="14"
               fill="var(--muted-foreground)"
             >
               Share
@@ -284,7 +307,7 @@ function Plot({
                   x={horizontal ? left - 12 : center}
                   y={horizontal ? center + 4 : bottom + 19}
                   textAnchor={horizontal ? "end" : "middle"}
-                  fontSize="12"
+                  fontSize="14"
                   fill="var(--foreground)"
                 >
                   {labelText(row)}
@@ -308,10 +331,11 @@ function Plot({
                   const y = horizontal
                     ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
-                  const inside = !horizontal && !grouped && size >= 22
+                  const inside =
+                    !horizontal && !grouped && series.length > 1 && size >= 24
                   // Keep tiny or zero segment values beside the bar, never below the axis.
                   const smallStack =
-                    !horizontal && !grouped && series.length > 1 && size < 22
+                    !horizontal && !grouped && series.length > 1 && size < 24
                   return (
                     <g key={s.key}>
                       <rect
@@ -350,13 +374,15 @@ function Plot({
                               ? "end"
                               : "middle"
                         }
-                        fontSize="12"
+                        fontSize="14"
                         fontWeight="600"
                         fill={
                           inside
                             ? "var(--background)"
                             : smallStack
-                              ? s.color
+                              ? s.key === "pending" || s.key === "missed"
+                                ? "var(--color-warning-text)"
+                                : s.color
                               : "var(--foreground)"
                         }
                       >
@@ -372,7 +398,7 @@ function Plot({
                     x={center}
                     y={bottom - (sum / limit) * plotHeight - 9}
                     textAnchor="middle"
-                    fontSize="13"
+                    fontSize="16"
                     fontWeight="700"
                     fill="var(--foreground)"
                   >
@@ -384,7 +410,7 @@ function Plot({
                     x={width - 30}
                     y={center + 4}
                     textAnchor="end"
-                    fontSize="12"
+                    fontSize="14"
                     fill="var(--foreground)"
                   >
                     {number(
@@ -398,7 +424,7 @@ function Plot({
                     x={center}
                     y={bottom + 39}
                     textAnchor="middle"
-                    fontSize="12"
+                    fontSize="14"
                     fill="var(--muted-foreground)"
                   >
                     Rejection: {number(row.percent ?? 0)}%
@@ -436,7 +462,7 @@ function Plot({
                       10
                     }
                     textAnchor="middle"
-                    fontSize="12"
+                    fontSize="14"
                     fontWeight="600"
                     fill={colors.rejectionRate}
                   >
@@ -449,7 +475,7 @@ function Plot({
                   key={i}
                   x={width - right + 10}
                   y={bottom - (i / 4) * plotHeight + 4}
-                  fontSize="11"
+                  fontSize="13"
                   fill="var(--muted-foreground)"
                 >
                   {number((rateLimit * i) / 4)}%
@@ -464,7 +490,7 @@ function Plot({
               horizontal ? undefined : `rotate(-90 15 ${top + plotHeight / 2})`
             }
             textAnchor="middle"
-            fontSize="12"
+            fontSize="14"
             fill="var(--muted-foreground)"
           >
             {axisTitle}
@@ -472,7 +498,7 @@ function Plot({
         </svg>
       </div>
       {!horizontal ? (
-        <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
           {series.map((s) => (
             <span key={s.key} className="inline-flex items-center gap-2">
               <span
@@ -494,8 +520,8 @@ function Plot({
         </div>
       ) : null}
       {horizontal && rows.length > 6 ? (
-        <p className="text-xs text-muted-foreground">
-          {rows.length} entries � Scroll within chart to view all
+        <p className="text-sm text-muted-foreground">
+          {rows.length} entries | Scroll within chart to view all
         </p>
       ) : null}
     </div>
@@ -580,7 +606,7 @@ export function QualityReportChart({
         missed: row.expected - row.completed,
       },
     }))
-    summary = `Expected: ${number(sum("expected"))} · Completed: ${number(sum("completed"))} · Missed: ${number(sum("expected") - sum("completed"))}`
+    summary = `Expected: ${number(sum("expected"))} · Completed: ${number(sum("completed"))} · Missed: ${number(sum("expected") - sum("completed"))} · Completion: ${number(sum("expected") ? (sum("completed") / sum("expected")) * 100 : 0)}%`
     description =
       "One check per completed running machine-hour. Downtime excluded; checks must match that hour."
   } else if (
@@ -670,17 +696,21 @@ export function QualityReportChart({
   return (
     <ChartCard
       compact
+      className="font-sans [--font-heading:Arial,sans-serif] [--font-sans:Arial,sans-serif] [&_[data-slot=card-description]]:text-base [&_[data-slot=card-title]]:text-xl"
       title={qualityCharts[id].title}
       actions={pinnable ? <PinQualityChartButton chartId={id} /> : undefined}
       description={
         <>
-          <span className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums">
+          <span
+            className="flex flex-wrap gap-x-4 gap-y-1 text-base tabular-nums"
+            style={{ fontFamily: "Arial, sans-serif" }}
+          >
             {summary.split(" · ").map((item) => {
               const [name, ...value] = item.split(": ")
               return (
                 <span key={name}>
                   {name}:{" "}
-                  <strong className="font-semibold text-foreground">
+                  <strong className="font-bold text-foreground">
                     {value.join(": ")}
                   </strong>
                 </span>
