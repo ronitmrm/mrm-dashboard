@@ -207,9 +207,10 @@ Preserve keyboard operation, visible focus, labelled controls, sufficient contra
 Pass an explicit `value` to every `NativeSelectOption`; the searchable wrapper
 uses that prop to collect its selectable options.
 
-Planner queue reviews use explicit Keep running / Stop running setup decisions,
-a labelled queue-position selector and one compact `OperationalTable` per selected
-machine. Show forecast dates after these decisions; keep sequential setup review.
+Planner queue reviews keep current work running unless Stop running setup is
+selected. Show Cancel stop only after a stop is selected. Use a labelled
+queue-position selector and one compact `OperationalTable` per selected machine.
+Show forecast dates after these decisions; keep sequential setup review.
 Do not repeat drag handles, placement slots or generic step banners. Stop choices
 are drafts until the planner action is saved; offer the normal session-close link
 where required. Changing placement or a stop choice invalidates queue confirmation.
