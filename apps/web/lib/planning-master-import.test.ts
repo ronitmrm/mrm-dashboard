@@ -12,6 +12,21 @@ import {
 import { parseTemplateUpload } from "./template-upload"
 
 describe("planning master CSV imports", () => {
+  it("reads complete exported Machine Master rows for bulk updates", () => {
+    const csv = "Machine No.,Production Unit,Machine Family,Machine Type,Machine Size,Machine Location Within Unit,Machine Model No.,Machine Make,Machine Load,Machine Serial No.,Machine Installation Date,Machine Stabiliser No.,Machine MCB No.,Machine Warranty,Status,Remarks\n0001,cnc,T42,Collet-42,,2,DX200-3,ACME,7.7 KW,000123,29/09/2024,,M25,29/09/2025,Active,Type corrected\n"
+    const [parsed] = parseTemplateUpload(
+      "machine_master", "machine-master-all-rows.csv", Buffer.from(csv).toString("base64"),
+      new Set(["machine_master"])
+    ).rows
+    expect(machineMasterImportPayload(parsed!, "cnc")).toMatchObject({
+      machineNo: "0001", productionFloorCode: "cnc", machineFamily: "T42",
+      machineType: "Collet-42", location: 2, machineModelNo: "DX200-3",
+      machineMake: "ACME", machineLoad: "7.7 KW", machineSerialNo: "000123",
+      machineInstallationDate: "2024-09-29", machineMcbNo: "M25",
+      machineWarranty: "29/09/2025", status: "Active", remarks: "Type Corrected",
+    })
+  })
+
   it("recognises exported Work Order headings including Required RM (kg)", () => {
     const csv = 'Jc No.,Part Code,Fg Po No.,Rm Po No.,Po Date,Order Pcs,Order Kg,Required RM (kg)\nJC-1,P-1,FG-1,RM-1,02/09/2026,"1,000","1,200","1,30,000.25"\n'
     expect(parseTemplateUpload(
