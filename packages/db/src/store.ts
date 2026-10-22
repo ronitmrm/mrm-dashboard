@@ -1202,17 +1202,32 @@ async function issueRequisitionWithClient(
     ) {
       throw new Error("Unit IDs can be selected only for Non Consumables.")
     }
-    const balance = await client.query<{ available: string }>(
+    const balances = await client.query<{ available: string; locationId: string }>(
       `
-        SELECT COALESCE(sum(quantity), 0)::text AS available
-        FROM store.stock_movements
-        WHERE organization_id = $1 AND item_type_id = $2 AND location_id = $3
+        SELECT location.id AS "locationId", sum(movement.quantity)::text AS available
+        FROM store.stock_movements movement
+        JOIN store.locations location ON location.id = movement.location_id
+        WHERE movement.organization_id = $1 AND movement.item_type_id = $2
+          AND movement.asset_id IS NULL AND location.accountable_store_id = $3
+          AND location.organization_id = $1 AND location.location_type = 'STORE'
+          AND location.active
+        GROUP BY location.id
+        HAVING sum(movement.quantity) <> 0
+        ORDER BY sum(movement.quantity) DESC, location.id
       `,
-      [input.organizationId, row.item_type_id, row.location_id]
+      [input.organizationId, row.item_type_id, row.accountable_store_id]
     )
-    if (Number(balance.rows[0]!.available) < quantity) {
+    let remainingUnits = Math.round(quantity * 1000)
+    const availableUnits = balances.rows.reduce((total, balance) =>
+      total + Math.round(Number(balance.available) * 1000), 0)
+    if (availableUnits < remainingUnits) {
       throw new Error("Insufficient current stock for this issue.")
     }
+    const deductions = balances.rows.flatMap((balance) => {
+      const units = Math.min(remainingUnits, Math.max(0, Math.round(Number(balance.available) * 1000)))
+      remainingUnits -= units
+      return units > 0 ? [{ locationId: balance.locationId, quantity: units / 1000 }] : []
+    })
     await client.query(
       `
         INSERT INTO store.stock_movements (
@@ -1221,17 +1236,18 @@ async function issueRequisitionWithClient(
           from_holder_reference, from_holder_name,
           to_holder_type, to_holder_reference,
           to_holder_name, moved_by, remark, created_by_user_id
-        ) SELECT $1, $2, $3, $4, 'ISSUE', $5 * -1,
+        ) SELECT $1, $2, deduction.location_id, $4, 'ISSUE', deduction.quantity * -1,
           'STORE', location.code, location.name, $6, $7, $8, $9, $10, $11
-        FROM store.locations location
-        WHERE location.id = $3 AND location.organization_id = $1
+        FROM unnest($3::uuid[], $5::numeric[]) AS deduction(location_id, quantity)
+        JOIN store.locations location ON location.id = deduction.location_id
+          AND location.organization_id = $1
       `,
       [
         input.organizationId,
         row.item_type_id,
-        row.location_id,
+        deductions.map((deduction) => deduction.locationId),
         input.requisitionId,
-        quantity,
+        deductions.map((deduction) => deduction.quantity),
         holderType,
         holderReference,
         holderName,
@@ -5036,10 +5052,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 JOIN store.locations balance_location
                   ON balance_location.id = movement.location_id
                 WHERE movement.item_type_id = request.item_type_id
-                  AND (header.fulfillment_kind = 'STORE_TRANSFER'
-                    AND balance_location.accountable_store_id = location.accountable_store_id
-                    OR header.fulfillment_kind <> 'STORE_TRANSFER'
-                    AND movement.location_id = request.location_id))
+                  AND movement.organization_id = request.organization_id
+                  AND movement.asset_id IS NULL
+                  AND balance_location.accountable_store_id = location.accountable_store_id
+                  AND balance_location.location_type = 'STORE' AND balance_location.active)
             END)::numeric)::text AS "availableStock",
             CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
               SELECT asset.asset_code

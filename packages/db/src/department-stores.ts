@@ -541,6 +541,77 @@ async function moveOwnedAsset(
   return asset.id
 }
 
+async function listStorageAssets(
+  client: PoolClient,
+  organizationId: string,
+  assetCodes: string[]
+) {
+  const result = await client.query<{
+    assetCode: string
+    id: string
+    holderType: string
+    holderName: string | null
+    holderReference: string | null
+    holderStoreId: string | null
+    inGaugeSet: boolean
+    status: string
+  }>(
+    `SELECT asset.id, asset.asset_code AS "assetCode", asset.status,
+       asset.current_holder_type AS "holderType",
+       asset.current_holder_name AS "holderName",
+       asset.current_holder_reference AS "holderReference",
+       location.accountable_store_id AS "holderStoreId",
+       EXISTS (SELECT 1 FROM store.gauge_set_memberships member
+         WHERE member.asset_id = asset.id AND member.removed_at IS NULL) AS "inGaugeSet"
+     FROM store.assets asset
+     LEFT JOIN store.locations location ON location.id = asset.current_location_id
+     WHERE asset.organization_id = $1 AND lower(asset.asset_code) = ANY($2::text[])
+     ORDER BY asset.id FOR UPDATE OF asset`,
+    [organizationId, assetCodes.map((code) => code.toLowerCase())]
+  )
+  return result.rows
+}
+
+function assertStorageAsset(
+  asset: Awaited<ReturnType<typeof listStorageAssets>>[number] | undefined,
+  store: AccountableStore
+) {
+  if (!asset || ["SCRAPPED", "LOST"].includes(asset.status)) {
+    throw new Error("Choose an active Unit ID assigned to this Store.")
+  }
+  const assignedHere = asset.holderType === "STORE" ? asset.holderStoreId === store.id
+    : asset.holderType === "DEPARTMENT" && store.productionFloorCode !== null &&
+      productionFloorFromDepartment(asset.holderName, asset.holderReference) === store.productionFloorCode
+  if (!assignedHere) throw new Error("This Unit ID is not assigned to this Store.")
+  if (asset.inGaugeSet) throw new Error("Move this Unit ID with its gauge set to keep both gauges together.")
+  return asset
+}
+
+async function assignAssetStorageLocation(
+  client: PoolClient,
+  input: MutationIdentity & {
+    assetCode: string
+    locationId: string
+    store: AccountableStore
+  }
+) {
+  const { store } = input
+  const asset = assertStorageAsset((await listStorageAssets(client, input.organizationId,
+    [requiredText(input.assetCode, "Unit ID")]))[0], store)
+  const destination = await resolveDestination(client, {
+    organizationId: input.organizationId, storeId: store.id,
+    holderType: "STORE", holderReference: input.locationId,
+  })
+  if (destination.locationId === store.defaultLocationId) {
+    throw new Error("Choose a rack/bin location in this Store.")
+  }
+  await saveAssetStorageLocation(client, {
+    organizationId: input.organizationId, assetId: asset.id, storeId: store.id,
+    locationId: destination.locationId!, actorUserId: input.actorUserId, remark: input.remark,
+  })
+  return { assetId: asset.id }
+}
+
 export async function recordAssetLossInTransaction(
   client: PoolClient,
   input: MutationIdentity & { assetCode: string; storeCode?: string; allowOccupiedToolingLoss?: boolean }
@@ -1622,48 +1693,145 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
     }) {
       return withTransaction(pool, async (client) => {
         const store = await findStore(client, input.organizationId, input.storeCode)
-        const result = await client.query<{
-          id: string
-          holderType: string
-          holderName: string | null
-          holderReference: string | null
-          holderStoreId: string | null
-          inGaugeSet: boolean
-          status: string
-        }>(
-          `SELECT asset.id, asset.status, asset.current_holder_type AS "holderType",
-             asset.current_holder_name AS "holderName",
-             asset.current_holder_reference AS "holderReference",
-             location.accountable_store_id AS "holderStoreId",
-             EXISTS (SELECT 1 FROM store.gauge_set_memberships member
-               WHERE member.asset_id = asset.id AND member.removed_at IS NULL) AS "inGaugeSet"
-           FROM store.assets asset
-           LEFT JOIN store.locations location ON location.id = asset.current_location_id
-           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
-           FOR UPDATE OF asset`,
-          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
+        return assignAssetStorageLocation(client, { ...input, store })
+      })
+    },
+
+    async assignStorageLocationsBulk(input: MutationIdentity & {
+      rows: Array<{
+        unitId?: string
+        typeCode?: string
+        locationCode: string
+        remark?: string
+        rowNumber?: number
+      }>
+      storeCode: string
+    }) {
+      if (!input.rows.length || input.rows.length > 500) {
+        throw new Error("Upload between 1 and 500 storage location assignments.")
+      }
+      return withTransaction(pool, async (client) => {
+        const store = await findStore(client, input.organizationId, input.storeCode)
+        const items = await client.query<{ id: string; typeCode: string }>(
+          `SELECT id, type_code AS "typeCode" FROM store.item_types
+           WHERE organization_id = $1 AND lower(type_code) = ANY($2::text[])
+             AND active AND tracking_mode = 'CONSUMABLE'
+           ORDER BY id FOR UPDATE`,
+          [input.organizationId, input.rows.map((row) => row.typeCode?.trim().toLowerCase() ?? "")]
         )
-        const asset = result.rows[0]
-        if (!asset || ["SCRAPPED", "LOST"].includes(asset.status)) {
-          throw new Error("Choose an active Unit ID assigned to this Store.")
+        const assets = await listStorageAssets(client, input.organizationId,
+          input.rows.map((row) => row.unitId?.trim() ?? ""))
+        const locations = await client.query<{ id: string; code: string; name: string }>(
+          `SELECT id, code, name FROM store.locations WHERE organization_id = $1
+             AND accountable_store_id = $2 AND location_type = 'STORE' AND active
+           ORDER BY id FOR SHARE`,
+          [input.organizationId, store.id]
+        )
+        const balances = await client.query<{
+          itemTypeId: string; locationId: string; available: string
+        }>(
+          `SELECT movement.item_type_id AS "itemTypeId", location.id AS "locationId",
+             sum(movement.quantity)::text AS available
+           FROM store.stock_movements movement
+           JOIN store.locations location ON location.id = movement.location_id
+           WHERE movement.organization_id = $1 AND movement.asset_id IS NULL
+             AND movement.item_type_id = ANY($3::uuid[])
+             AND location.organization_id = $1 AND location.accountable_store_id = $2
+             AND location.location_type = 'STORE' AND location.active
+           GROUP BY movement.item_type_id, location.id HAVING sum(movement.quantity) <> 0`,
+          [input.organizationId, store.id, items.rows.map((item) => item.id)]
+        )
+        const itemByCode = new Map(items.rows.map((item) => [item.typeCode.toLowerCase(), item]))
+        const assetByCode = new Map(assets.map((asset) => [asset.assetCode.toLowerCase(), asset]))
+        const locationByCode = new Map(locations.rows.map((location) => [location.code.toLowerCase(), location]))
+        const locationById = new Map(locations.rows.map((location) => [location.id, location]))
+        const unitAssignments: Array<{ assetId: string; locationId: string; remark: string | null }> = []
+        const movements: Array<{
+          itemTypeId: string; locationId: string; quantity: string
+          fromCode: string; fromName: string; toCode: string; toName: string; remark: string
+        }> = []
+        const seen = new Set<string>()
+        for (const [index, row] of input.rows.entries()) {
+          try {
+            const unitId = row.unitId?.trim() ?? ""
+            const typeCode = row.typeCode?.trim() ?? ""
+            if (Boolean(unitId) === Boolean(typeCode)) {
+              throw new Error("Enter either a Unit ID or a consumable Asset Code, but not both.")
+            }
+            const key = `${unitId ? "unit" : "item"}:${(unitId || typeCode).toLowerCase()}`
+            if (seen.has(key)) throw new Error("This Unit ID or Asset Code occurs more than once.")
+            seen.add(key)
+            const locationCode = requiredText(row.locationCode, "Storage location code")
+            const destination = locationByCode.get(locationCode.toLowerCase())
+            if (!destination) throw new Error("Choose a location in the accountable Store.")
+            if (destination.id === store.defaultLocationId) {
+              throw new Error("Choose a rack/bin location in this Store.")
+            }
+            if (unitId) {
+              const asset = assertStorageAsset(assetByCode.get(unitId.toLowerCase()), store)
+              unitAssignments.push({ assetId: asset.id, locationId: destination.id,
+                remark: row.remark?.trim() || null })
+              continue
+            }
+            const itemTypeId = itemByCode.get(typeCode.toLowerCase())?.id
+            if (!itemTypeId) throw new Error("Active consumable Asset Code was not found. Use Unit ID for a non-consumable item.")
+            const itemBalances = balances.rows.filter((balance) => balance.itemTypeId === itemTypeId)
+            if (itemBalances.some((balance) => Number(balance.available) < 0)) {
+              throw new Error("This Asset Code has a negative location balance. Correct its stock records first.")
+            }
+            if (!itemBalances.length) {
+              throw new Error("This Asset Code has no available stock in this Store.")
+            }
+            for (const balance of itemBalances) {
+              if (balance.locationId === destination.id) continue
+              const source = locationById.get(balance.locationId)!
+              const movement = {
+                itemTypeId,
+                fromCode: source.code, fromName: source.name,
+                toCode: destination.code, toName: destination.name,
+                remark: ["Bulk storage location assignment", row.remark?.trim()].filter(Boolean).join(": "),
+              }
+              movements.push({ ...movement, locationId: source.id, quantity: `-${balance.available}` },
+                { ...movement, locationId: destination.id, quantity: balance.available })
+            }
+          } catch (error) {
+            throw new Error(`Row ${row.rowNumber ?? index + 2}: ${error instanceof Error ? error.message : "Storage location assignment failed."}`)
+          }
         }
-        const assignedHere = asset.holderType === "STORE" ? asset.holderStoreId === store.id
-          : asset.holderType === "DEPARTMENT" && store.productionFloorCode !== null &&
-            productionFloorFromDepartment(asset.holderName, asset.holderReference) === store.productionFloorCode
-        if (!assignedHere) throw new Error("This Unit ID is not assigned to this Store.")
-        if (asset.inGaugeSet) throw new Error("Move this Unit ID with its gauge set to keep both gauges together.")
-        const destination = await resolveDestination(client, {
-          organizationId: input.organizationId, storeId: store.id,
-          holderType: "STORE", holderReference: input.locationId,
-        })
-        if (destination.locationId === store.defaultLocationId) {
-          throw new Error("Choose a rack/bin location in this Store.")
+        if (unitAssignments.length) {
+          await client.query(
+            `INSERT INTO store.asset_storage_locations (
+               organization_id, asset_id, accountable_store_id, location_id,
+               updated_by_user_id, remark)
+             SELECT $1, assignment."assetId", $2, assignment."locationId", $4, assignment.remark
+             FROM jsonb_to_recordset($3::jsonb) AS assignment(
+               "assetId" uuid, "locationId" uuid, remark text)
+             WHERE true
+             ON CONFLICT (asset_id, accountable_store_id) DO UPDATE SET
+               location_id = EXCLUDED.location_id, updated_at = now(),
+               updated_by_user_id = EXCLUDED.updated_by_user_id, remark = EXCLUDED.remark`,
+            [input.organizationId, store.id, JSON.stringify(unitAssignments), input.actorUserId ?? null]
+          )
         }
-        await saveAssetStorageLocation(client, {
-          organizationId: input.organizationId, assetId: asset.id, storeId: store.id,
-          locationId: destination.locationId!, actorUserId: input.actorUserId, remark: input.remark,
-        })
-        return { assetId: asset.id }
+        if (movements.length) {
+          await client.query(
+            `INSERT INTO store.stock_movements (
+               organization_id, item_type_id, location_id, movement_type, quantity,
+               from_holder_type, from_holder_reference, from_holder_name,
+               to_holder_type, to_holder_reference, to_holder_name,
+               moved_by, remark, created_by_user_id)
+             SELECT $1, movement."itemTypeId", movement."locationId", 'ADJUSTMENT', movement.quantity,
+               'STORE', movement."fromCode", movement."fromName",
+               'STORE', movement."toCode", movement."toName", $3, movement.remark, $4
+             FROM jsonb_to_recordset($2::jsonb) AS movement(
+               "itemTypeId" uuid, "locationId" uuid, quantity numeric,
+               "fromCode" text, "fromName" text, "toCode" text, "toName" text, remark text)`,
+            [input.organizationId, JSON.stringify(movements), input.movedBy?.trim() || null,
+              input.actorUserId ?? null]
+          )
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { assigned: input.rows.length }
       })
     },
 

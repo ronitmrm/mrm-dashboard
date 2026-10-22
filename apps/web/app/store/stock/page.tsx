@@ -30,6 +30,7 @@ import { MetricSummary, PageHeader } from "@/components/ui/golden-patterns"
 import { TableExcelDownloadButton } from "@/components/table-excel-download-button"
 import { StorePurchaseOrderForm } from "@/components/store/store-purchase-order-form"
 import { StoreStockLossForm } from "@/components/store/store-stock-loss-form"
+import { StoreLocationCsvControls } from "@/components/store/store-location-csv-controls"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -147,8 +148,13 @@ export default async function StoreStockPage({
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Stock"
-        actions={<TableExcelDownloadButton
-          fileName={`main-store-stock-${today}.xlsx`} tableId="main-store-stock" />}
+        actions={<>
+          <TableExcelDownloadButton
+            fileName={`main-store-stock-${today}.xlsx`} tableId="main-store-stock" />
+          {mode === "view" ? <StoreLocationCsvControls
+            canEdit={storeActions.has("store.asset_movement.write")}
+            storeCode="MAIN" /> : null}
+        </>}
       />
 
       {firstValue(params.saved) === "1" ? (

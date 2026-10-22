@@ -13,6 +13,8 @@ import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import { isPastOrTodayIstDate } from "@/lib/date-time"
 import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
+import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
+import { readMasterCsv } from "@/lib/master-data-csv"
 
 export type DepartmentStoreActionState = { error: string | null }
 
@@ -49,7 +51,8 @@ async function withStoreWrite(
   ) => Promise<unknown>,
   mainCapability: "store.asset_movement.write" | "store.asset_repair.write" = "store.asset_movement.write",
   mainReturnPath?: "/store/movement" | "/store/stock" | "/store/orders",
-  requireMainStockRead = false
+  requireMainStockRead = false,
+  redirectOnSuccess = true
 ): Promise<DepartmentStoreActionState> {
   const storeCode = required(formData, "store_code")
   const { capability, path: storePath } = permissionForStore(storeCode)
@@ -90,6 +93,7 @@ async function withStoreWrite(
     ...productionFloors.map(({ code }) => `${departmentStoreHref(code)}/movement`),
     ...productionFloors.map(({ code }) => `${departmentStoreHref(code)}/repairs`),
   ]) revalidatePath(destination)
+  if (!redirectOnSuccess) return { error: null }
   redirect(`${path}?saved=1`)
 }
 
@@ -210,6 +214,27 @@ export async function assignDepartmentAssetStorageAction(
       remark: optional(formData, "remark"),
     }), "store.asset_movement.write", "/store/stock"
   )
+}
+
+export async function importStoreStorageLocationsAction(formData: FormData) {
+  return withCsvImportFeedback(async () => {
+    const result = await withStoreWrite(formData, async (repository, context) => {
+      const rows = await readMasterCsv(formData.get("master_csv_file"), "Location CSV")
+      await repository.assignStorageLocationsBulk({
+        ...context,
+        rows: rows.flatMap((row, index) => row.location_code ? [{
+          unitId: row.unit_id ?? "",
+          typeCode: row.asset_code ?? "",
+          locationCode: row.location_code,
+          remark: row.note ?? "",
+          rowNumber: index + 2,
+        }] : []),
+      })
+    }, "store.asset_movement.write", "/store/stock", true, false)
+    if (result.error) {
+      throw new Error(`${result.error} No locations were changed. Correct the file and upload it again.`)
+    }
+  }, "Location import failed. No locations were changed.")
 }
 
 export async function createQualityGaugeSetAction(
