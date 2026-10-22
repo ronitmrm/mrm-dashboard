@@ -22,11 +22,18 @@ test("shows an explicit running-setup stop choice and the ordered queue result",
     </>
   )
   expect(markup).toContain("Stop running setup")
-  expect(markup).toContain("Keep running")
+  expect(markup).toContain("Cancel stop")
   expect(markup).toContain("Stop on save")
   expect(markup).toContain('aria-pressed="true"')
   expect(markup.indexOf("M744 / P2292")).toBeLessThan(
     markup.lastIndexOf("M838 / P2072")
   )
   expect(markup).not.toContain("draggable")
+  const keepingRunning = renderToStaticMarkup(
+    <PlannerSetupDecision identity="M838 / P2072 / Setup 1" machine="CNC-25"
+      running selected={false} onChange={() => {}} />
+  )
+  expect(keepingRunning).toContain("Keep running")
+  expect(keepingRunning.match(/<button\b/g)).toHaveLength(1)
+  expect(keepingRunning).toContain("Stop running setup")
 })

@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { CircleStop, Play } from "lucide-react"
+import { CircleStop, Undo2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Label } from "@workspace/ui/components/label"
@@ -76,21 +76,14 @@ export function PlannerSetupDecision({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        {!required || selected ? (
+        {selected ? (
           <Button
             type="button"
-            variant={selected ? "outline" : "secondary"}
-            aria-pressed={!selected}
+            variant="outline"
             onClick={() => onChange(false)}
           >
-            <Play className="size-4" aria-hidden="true" />
-            {required
-              ? running
-                ? "Cancel stop"
-                : "Cancel move"
-              : running
-                ? "Keep running"
-                : "Keep current setup"}
+            <Undo2 data-icon="inline-start" aria-hidden="true" />
+            {running ? "Cancel stop" : "Cancel move"}
           </Button>
         ) : null}
         <Button
