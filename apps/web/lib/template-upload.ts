@@ -67,6 +67,11 @@ function decodeDataUrl(value: string) {
 }
 
 const csvFieldsByEntryType = new Map([
+  ["machine_master", [
+    "machineNo", "productionFloorCode", "machineFamily", "machineType", "machineName", "location",
+    "machineModelNo", "machineMake", "machineLoad", "machineSerialNo", "machineInstallationDate",
+    "machineStabiliserNo", "machineMcbNo", "machineWarranty", "status", "remarks",
+  ]],
   ["rm_inward", [
     "jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg", "rmLocation",
   ]],
@@ -75,9 +80,19 @@ const csvFieldsByEntryType = new Map([
   ]],
 ])
 
+const machineMasterCsvAliases = new Map([
+  ["productionunit", "productionFloorCode"],
+  ["machinesize", "machineName"],
+  ["machinelocationwithinunit", "location"],
+])
+
 function csvHeader(entryType: string, header: string) {
   const trimmed = header.trim()
   const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (entryType === "machine_master") {
+    const alias = machineMasterCsvAliases.get(normalized)
+    if (alias) return alias
+  }
   return csvFieldsByEntryType.get(entryType)
     ?.find((field) => field.toLowerCase() === normalized) ?? trimmed
 }
@@ -144,6 +159,7 @@ function parseCsv(csvText: string, entryType: string): Array<Record<string, unkn
 }
 
 const machineMasterTextFields = new Set([
+  "machineno",
   "machinemodelno",
   "machineserialno",
   "machinestabiliserno",
