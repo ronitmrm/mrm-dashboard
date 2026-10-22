@@ -331,7 +331,6 @@ function Plot({
                   const y = horizontal
                     ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
-                  const stacked = !horizontal && !grouped && series.length > 1
                   return (
                     <g key={s.key}>
                       <rect
@@ -346,7 +345,9 @@ function Plot({
                       <text
                         x={
                           horizontal
-                            ? left + size + 9
+                            ? value === null
+                              ? left + 8
+                              : left + size / 2
                             : grouped
                               ? x + thickness / 2
                               : center
@@ -354,19 +355,29 @@ function Plot({
                         y={
                           horizontal
                             ? center + 4
-                            : stacked
-                              ? Math.min(bottom - 4, y + size / 2 + 4)
-                              : y - 7
+                            : Math.min(bottom - 4, y + size / 2 + 4)
                         }
-                        textAnchor={horizontal ? "start" : "middle"}
+                        textAnchor={
+                          horizontal && value === null ? "start" : "middle"
+                        }
                         fontSize="14"
                         fontWeight="600"
                         fill="#000000"
                       >
                         {value === null
                           ? "No approvals"
-                          : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ?? ""}`}
+                          : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ? " min" : ""}`}
                       </text>
+                      {horizontal && row.annotation && value !== null ? (
+                        <text
+                          x={left + size + 9}
+                          y={center + 4}
+                          fontSize="13"
+                          fill="var(--muted-foreground)"
+                        >
+                          {row.detail}
+                        </text>
+                      ) : null}
                     </g>
                   )
                 })}
