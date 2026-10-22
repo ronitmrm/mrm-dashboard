@@ -349,10 +349,7 @@ function Plot({
                             ? left + size + 9
                             : grouped
                               ? x + thickness / 2
-                              : stacked
-                                ? center +
-                                  (si === 0 ? -1 : 1) * (thickness / 2 + 8)
-                                : center
+                              : center
                         }
                         y={
                           horizontal
@@ -361,16 +358,10 @@ function Plot({
                               ? Math.min(bottom - 4, y + size / 2 + 4)
                               : y - 7
                         }
-                        textAnchor={
-                          horizontal || (stacked && si > 0)
-                            ? "start"
-                            : stacked
-                              ? "end"
-                              : "middle"
-                        }
+                        textAnchor={horizontal ? "start" : "middle"}
                         fontSize="14"
                         fontWeight="600"
-                        fill="var(--foreground)"
+                        fill="#000000"
                       >
                         {value === null
                           ? "No approvals"
