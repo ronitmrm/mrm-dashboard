@@ -132,6 +132,7 @@ function TrendCard(
 }
 
 function ChartCard({
+  compact = false,
   actions,
   children,
   className,
@@ -145,6 +146,7 @@ function ChartCard({
   loading = false,
   title,
 }: {
+  compact?: boolean
   actions?: ReactNode
   children: ReactNode
   className?: string
@@ -159,11 +161,26 @@ function ChartCard({
   title: ReactNode
 }) {
   return (
-    <SectionCard className={cn("h-full", className)} data-slot="chart-card">
-      <CardHeader className="border-b border-border/70 pb-4">
+    <SectionCard
+      className={cn(
+        "h-full",
+        compact && "gap-3 [--card-spacing:--spacing(4)]",
+        className
+      )}
+      data-slot="chart-card"
+    >
+      <CardHeader
+        className={compact ? "pb-0" : "border-b border-border/70 pb-4"}
+      >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span
+              className={
+                compact
+                  ? "hidden"
+                  : "flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              }
+            >
               <Icon aria-hidden="true" className="size-4" />
             </span>
             <div className="min-w-0">
@@ -176,7 +193,7 @@ function ChartCard({
           {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
       </CardHeader>
-      <CardContent className="grid min-h-56 gap-4 pt-1">
+      <CardContent className={cn("grid gap-4 pt-1", !compact && "min-h-56")}>
         {loading ? (
           <DashboardLoadingSkeleton cards={0} chartRows={5} />
         ) : error ? (
