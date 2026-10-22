@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: worker-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -55,7 +55,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version-file: .nvmrc
+          node-version: "22"
 
       - name: Install pnpm
         run: |
@@ -76,3 +76,82 @@ jobs:
 
       - name: Build worker dependency graph
         run: pnpm --filter @workspace/runtime... build
+
+  deploy:
+    name: Deploy GCP worker
+    needs: verify
+    if: >-
+      vars.GCP_WORKER_DEPLOY_ENABLED == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_WORKER_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_WORKER_REGION }}
+      WORKER_POOL: ${{ vars.GCP_WORKER_POOL }}
+      GCP_WIF_PROVIDER: ${{ vars.GCP_WORKER_WIF_PROVIDER }}
+      GCP_DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GCP_WORKER_DEPLOYER_SERVICE_ACCOUNT }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check deployment configuration
+        run: |
+          : "${GCP_PROJECT_ID:?Set GCP_WORKER_PROJECT_ID in repository variables}"
+          : "${GCP_REGION:?Set GCP_WORKER_REGION in repository variables}"
+          : "${WORKER_POOL:?Set GCP_WORKER_POOL in repository variables}"
+          : "${GCP_WIF_PROVIDER:?Set GCP_WORKER_WIF_PROVIDER in repository variables}"
+          : "${GCP_DEPLOYER_SERVICE_ACCOUNT:?Set GCP_WORKER_DEPLOYER_SERVICE_ACCOUNT in repository variables}"
+
+      - name: Build worker image
+        id: image
+        run: |
+          image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mrm-workers/runtime:${GITHUB_SHA}"
+          docker build \
+            --file packages/runtime/Dockerfile \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "$image" \
+            .
+          printf 'uri=%s\n' "$image" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          version: ">= 589.0.0"
+
+      - name: Push worker image
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker push "$IMAGE_URI"
+
+      - name: Update worker pool
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          digest="$(gcloud artifacts docker images describe "$IMAGE_URI" \
+            --project "$GCP_PROJECT_ID" \
+            --format='value(image_summary.digest)')"
+          test -n "$digest"
+          gcloud run worker-pools update "$WORKER_POOL" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image "${IMAGE_URI%:*}@${digest}" \
+            --revision-suffix "${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --update-env-vars "GIT_COMMIT_SHA=${GITHUB_SHA},REFRESH_WORKER_ID=gcp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --quiet
+          printf 'Deployed `%s` to `%s` in `%s`.\n' \
+            "$GITHUB_SHA" "$WORKER_POOL" "$GCP_REGION" >> "$GITHUB_STEP_SUMMARY"
