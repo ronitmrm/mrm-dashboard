@@ -2171,13 +2171,36 @@ test("material review blocks completion, releases only selected setups, and clea
   await planning.upsertWorkOrder({ ...workOrder, sourcePayload: { ...workOrder.sourcePayload, requiredRmKg: 100 } });
   expect(await review()).toMatchObject([{ requiredKg: 100, receivedKg: 50, pendingKg: 50, shortAccepted: false }]);
   await expect(complete(2)).rejects.toThrow('RM is pending');
+  const session = await repository.startProductionSession({ organizationId, jobCardNumber, machineNumber: machines[0]!,
+    operationSetupCode: '1', operatorCode: firstOperator, measurementMethod: 'weight', pieceWeightGrams: 1,
+    cycleTimeSeconds: 60, productionDate: '2026-10-17', shift: 'Day', startedAt: '2026-10-17T08:30:00+05:30' });
+  const end = { organizationId, sessionId: session.id, endedAt: '2026-10-17T09:30:00+05:30',
+    grossWeightKg: 0.01, crateCount: 0, crateWeightKg: 0, enteredRole: 'authorized_staff' };
+  await expect(repository.closeProductionSession({ ...end, endReason: 'item_complete' })).rejects.toThrow('RM is pending');
+  await expect(repository.closeProductionSession({ organizationId, sessionId: session.id, endedAt: end.endedAt,
+    endReason: 'awaiting_material' })).rejects.toThrow('Record the actual weight output');
   const setups = (await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber);
-  for (const setupNumber of [1, 2]) {
-    const setup = setups.find(row => row.setupNumber === setupNumber)!;
-    await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: 'conventional',
-      setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion), reason: 'Input exhausted; more material expected.' });
-  }
+  const firstSetup = setups.find(row => row.setupNumber === 1)!;
+  await pool.query('UPDATE manufacturing.shop_floor_setup_state SET active = false WHERE id = $1', [firstSetup.id]);
+  await expect(repository.closeProductionSession({ ...end, endReason: 'awaiting_material' })).rejects.toThrow('Setup changed');
+  expect((await pool.query('SELECT status, quantity_good::text FROM manufacturing.production_sessions WHERE id = $1',
+    [session.id])).rows[0]).toMatchObject({ status: 'open', quantity_good: '0' });
+  await pool.query('UPDATE manufacturing.shop_floor_setup_state SET active = true WHERE id = $1', [firstSetup.id]);
+  await expect(repository.closeProductionSession({ ...end, endReason: 'awaiting_material' })).resolves.toMatchObject({ goodPieces: 10 });
+  const releasedState = async () => (await pool.query(`SELECT stage, active, row_version::text, source_payload
+    FROM manufacturing.shop_floor_setup_state WHERE id = $1`, [firstSetup.id])).rows[0];
+  const released = await releasedState();
+  expect(released).toMatchObject({ stage: 'planned', active: false,
+    source_payload: { awaitingMaterial: { kind: 'rm', availableAtRelease: 50 } } });
+  await repository.correctProductionSession({ ...end, endReason: 'awaiting_material', grossWeightKg: 0.011,
+    correctionReason: 'Correct actual weighing.' });
+  expect(await releasedState()).toEqual(released);
+  await expect(repository.correctProductionSession({ ...end, endReason: 'manual_stop', correctionReason: 'Change close reason.' }))
+    .rejects.toThrow('Awaiting material cannot be added or removed');
+  const secondSetup = setups.find(row => row.setupNumber === 2)!;
+  await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: 'conventional',
+    setupStateId: secondSetup.id, expectedRowVersion: Number(secondSetup.rowVersion), reason: 'Input exhausted; more material expected.' });
   expect((await repository.readReleasableSetups({ organizationId, productionFloorCode: 'conventional' }))
     .rows.filter(row => row.jobCardNumber === jobCardNumber)).toMatchObject([{ setupNumber: 3 }]);
   await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
@@ -2189,6 +2212,14 @@ test("material review blocks completion, releases only selected setups, and clea
   await complete(2);
   await receipt('rm-wait-second-' + suffix, 50);
   expect(await review()).toEqual([]);
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[0]!,
+    operationSetupCode: '1', stage: 'raw_material_at_machine', payload: {} })).resolves.toMatchObject({ ok: true });
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[1]!,
+    operationSetupCode: '2', stage: 'raw_material_at_machine', payload: {} })).rejects.toThrow('released awaiting material');
+  await repository.recordProductionEntry({ organizationId, jobCardNumber, machineNumber: machines[0]!, operationSetupCode: '1',
+    productionDate: '2026-10-18', quantityGood: 1, quantityRejected: 0, payload: {}, sourceId: randomUUID() });
+  await expect(repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: machines[1]!,
+    operationSetupCode: '2', stage: 'raw_material_at_machine', payload: {} })).resolves.toMatchObject({ ok: true });
   const workspace = await repository.readJobCardWorkspace({ organizationId, jobCardNumber });
   expect(workspace.analytics.material).toMatchObject({ requiredKg: 100, receivedKg: 100, pendingKg: 0 });
   expect(workspace.rawMaterialReceipts).toHaveLength(2);

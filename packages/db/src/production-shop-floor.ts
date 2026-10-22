@@ -179,6 +179,7 @@ type ProductionSessionEndReason =
   | "item_complete"
   | "job_change"
   | "manual_stop"
+  | "awaiting_material"
 
 type ProductionEntryRole = "quality" | "shop_floor" | "machinist" | "authorized_staff"
 
@@ -338,6 +339,7 @@ function productionSessionEndReason(value: string) {
     "item_complete",
     "job_change",
     "manual_stop",
+    "awaiting_material",
   ])
   if (!reasons.has(value as ProductionSessionEndReason)) {
     throw new Error("A valid production session end reason is required.")
@@ -1106,6 +1108,68 @@ async function assertSetupMaterialWait(client: PoolClient, organizationId: strin
   if (waits.rows.some(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0)))) {
     throw new ShopFloorConflictError("This setup was released awaiting material. Record more RM or upstream good output before starting it again.")
   }
+}
+
+async function releaseSetupAwaitingMaterialInTransaction(
+  client: PoolClient,
+  input: {
+    organizationId: string
+    actorUserId?: string | null
+    productionFloorCode: string
+    setupStateId: string
+    expectedRowVersion?: number
+    reason: string
+  }
+) {
+  const result = await client.query<{
+    id: string; machine_id: string; work_order_id: string; operation_setup_id: string
+    route_option_id: string; stage: string; active: boolean; row_version: string
+    source_payload: Record<string, unknown>; snapshot: Record<string, unknown>; context: Record<string, unknown>
+  }>(`SELECT state.*, to_jsonb(state) AS snapshot,
+      jsonb_build_object('jcNo', work_order.job_card_number, 'partCode', item.uid,
+        'optionNumber', route.route_code, 'setupNo', setup.setup_number::text, 'machine', machine.machine_number,
+        'productionFloorCode', floor.code) AS context
+    FROM manufacturing.shop_floor_setup_state state
+    JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+    JOIN catalog.items item ON item.id = work_order.item_id
+    JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+    JOIN manufacturing.route_options route ON route.id = state.route_option_id
+    JOIN catalog.machines machine ON machine.id = state.machine_id
+    JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+    WHERE state.id = $1 AND state.organization_id = $2 AND floor.code = $3 FOR UPDATE OF state`,
+  [input.setupStateId, input.organizationId, input.productionFloorCode])
+  const state = result.rows[0]
+  if (!state || !state.active || state.stage === "item_complete" ||
+    (input.expectedRowVersion !== undefined && Number(state.row_version) !== input.expectedRowVersion)) {
+    throw new ShopFloorConflictError("Setup changed. Refresh and select its current machine assignment.")
+  }
+  const order = await workOrderContext(client, input.organizationId, String(state.context.jcNo), input.productionFloorCode)
+  if (order.route_option_id !== state.route_option_id) throw new ShopFloorConflictError("The selected setup belongs to an earlier route. Refresh the assignments.")
+  const session = await client.query(`SELECT id FROM manufacturing.production_sessions
+    WHERE work_order_id = $1 AND operation_setup_id = $2 AND machine_id = $3
+      AND status = 'open' AND reversed_at IS NULL`, [state.work_order_id, state.operation_setup_id, state.machine_id])
+  if (session.rows.length) throw new ShopFloorConflictError("Close the Production Session and record its output before releasing this machine.")
+  const upstream = await upstreamGoodForSetup(client, state.work_order_id, state.operation_setup_id)
+  if (objectRecord(order.source_payload).isRework === true && !upstream) {
+    throw new ShopFloorConflictError(firstReworkReleaseBlockedReason)
+  }
+  const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
+  const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
+    actionType: "Release machine", releasedAt: new Date().toISOString(), reason: input.reason,
+    awaitingMaterial: { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
+  await client.query(`UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false,
+    completed_at = NULL, source_payload = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
+  [payload, input.actorUserId ?? null, state.id])
+  await client.query(`INSERT INTO manufacturing.shop_floor_stage_events
+    (organization_id, setup_state_id, from_stage, to_stage, machine_id, actor_user_id, reason, source_system, source_table, source_id, source_payload)
+    VALUES ($1, $2, $3, 'planned', $4, $5, $6, 'mrm-dashboard', 'shop_floor_status', $7, $8)`,
+  [input.organizationId, state.id, state.stage, state.machine_id, input.actorUserId ?? null, input.reason, randomUUID(), payload])
+  await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+    target_id, actor_user_id, reason, before_state, after_state, source_system, source_table, source_id)
+    VALUES ($1, 'production.setup.released_awaiting_material', 'manufacturing', 'shop_floor_setup_state',
+      $2, $3, $4, $5, $6, 'mrm-dashboard', 'setup_release', $7)`,
+  [input.organizationId, state.id, input.actorUserId ?? null, input.reason, state.snapshot, payload, randomUUID()])
+  return { id: state.id, stage: "planned" as const }
 }
 
 async function completeProductionSessionSetup(
@@ -2713,6 +2777,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const outputPending = current.measurement_method === "weight" &&
           !hasCompleteWeightOutput
+        if (endReason === "awaiting_material" && outputPending) {
+          throw new Error("Record the actual weight output before releasing the machine awaiting material.")
+        }
         const output = current.measurement_method === "counter"
           ? calculateProductionSessionOutput({
               endCount: nonNegativeWholeNumber(input.endCount, "End count"),
@@ -2811,6 +2878,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (endReason === "item_complete") {
           await completeProductionSessionSetup(client, {
             ...input, endedAt, sourcePayload,
+          })
+        } else if (endReason === "awaiting_material") {
+          const setup = await client.query<{ id: string }>(
+            `SELECT id FROM manufacturing.shop_floor_setup_state
+             WHERE organization_id = $1 AND work_order_id = $2 AND route_option_id = $3
+               AND operation_setup_id = $4 AND machine_id = $5 AND active
+             FOR UPDATE`,
+            [input.organizationId, current.work_order_id, current.route_option_id,
+              current.operation_setup_id, current.machine_id]
+          )
+          if (!setup.rows[0]) {
+            throw new ShopFloorConflictError("Setup changed. Refresh and select its current machine assignment.")
+          }
+          await releaseSetupAwaitingMaterialInTransaction(client, {
+            organizationId: input.organizationId,
+            actorUserId: input.actorUserId,
+            productionFloorCode: current.production_floor_code,
+            setupStateId: setup.rows[0].id,
+            reason: "Production session ended awaiting material",
           })
         }
         await queueDashboardRefresh(client, input.organizationId)
@@ -3061,6 +3147,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operation_setup_id: string
           crate_weight_kg: string | null
           cycle_time_seconds: string
+          end_reason: ProductionSessionEndReason
           end_count: string | null
           gross_weight_kg: string | null
           machine_id: string
@@ -3078,7 +3165,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `
             SELECT session.work_order_id, session.operation_setup_id,
               session.machine_id, session.measurement_method,
-              session.started_at, session.start_count, session.end_count,
+              session.started_at, session.start_count, session.end_count, session.end_reason,
               session.piece_weight_grams, session.gross_weight_kg, session.crate_weight_kg,
               session.cycle_time_seconds, session.production_entry_id,
               session.source_payload, session.status, session.row_version,
@@ -3098,6 +3185,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!current) throw new Error("Production session was not found.")
         if (current.status !== "closed") {
           throw new Error("Only a closed production session can be corrected.")
+        }
+        if (endReason !== current.end_reason &&
+          (endReason === "awaiting_material" || current.end_reason === "awaiting_material")) {
+          throw new ShopFloorConflictError("Awaiting material cannot be added or removed through a closed-session correction.")
         }
         if (input.downtimeCorrection && input.expectedRowVersion !== Number(current.row_version)) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before correcting downtime.")
@@ -5412,55 +5503,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       return transaction(pool, async client => {
         await client.query(`SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext(state.machine_id::text))
           FROM manufacturing.shop_floor_setup_state state WHERE state.id = $1 AND state.organization_id = $2`, [input.setupStateId, input.organizationId])
-        const result = await client.query<{
-          id: string; machine_id: string; work_order_id: string; operation_setup_id: string
-          route_option_id: string; stage: string; active: boolean; row_version: string
-          source_payload: Record<string, unknown>; snapshot: Record<string, unknown>; context: Record<string, unknown>
-        }>(`SELECT state.*, to_jsonb(state) AS snapshot,
-            jsonb_build_object('jcNo', work_order.job_card_number, 'partCode', item.uid,
-              'optionNumber', route.route_code, 'setupNo', setup.setup_number::text, 'machine', machine.machine_number,
-              'productionFloorCode', floor.code) AS context
-          FROM manufacturing.shop_floor_setup_state state
-          JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
-          JOIN catalog.items item ON item.id = work_order.item_id
-          JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
-          JOIN manufacturing.route_options route ON route.id = state.route_option_id
-          JOIN catalog.machines machine ON machine.id = state.machine_id
-          JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-          WHERE state.id = $1 AND state.organization_id = $2 AND floor.code = $3 FOR UPDATE OF state`,
-        [input.setupStateId, input.organizationId, input.productionFloorCode])
-        const state = result.rows[0]
-        if (!state || !state.active || state.stage === "item_complete" || Number(state.row_version) !== input.expectedRowVersion) {
-          throw new ShopFloorConflictError("Setup changed. Refresh and select its current machine assignment.")
-        }
-        const order = await workOrderContext(client, input.organizationId, String(state.context.jcNo), input.productionFloorCode)
-        if (order.route_option_id !== state.route_option_id) throw new ShopFloorConflictError("The selected setup belongs to an earlier route. Refresh the assignments.")
-        const session = await client.query(`SELECT id FROM manufacturing.production_sessions
-          WHERE work_order_id = $1 AND operation_setup_id = $2 AND machine_id = $3
-            AND status = 'open' AND reversed_at IS NULL`, [state.work_order_id, state.operation_setup_id, state.machine_id])
-        if (session.rows.length) throw new ShopFloorConflictError("Close the Production Session with Manual Stop and record its output before releasing this machine.")
-        const upstream = await upstreamGoodForSetup(client, state.work_order_id, state.operation_setup_id)
-        if (objectRecord(order.source_payload).isRework === true && !upstream) {
-          throw new ShopFloorConflictError(firstReworkReleaseBlockedReason)
-        }
-        const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
-        const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
-          actionType: "Release machine", releasedAt: new Date().toISOString(), reason,
-          awaitingMaterial: { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
-        await client.query(`UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false,
-          completed_at = NULL, source_payload = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
-        [payload, input.actorUserId ?? null, state.id])
-        await client.query(`INSERT INTO manufacturing.shop_floor_stage_events
-          (organization_id, setup_state_id, from_stage, to_stage, machine_id, actor_user_id, reason, source_system, source_table, source_id, source_payload)
-          VALUES ($1, $2, $3, 'planned', $4, $5, $6, 'mrm-dashboard', 'shop_floor_status', $7, $8)`,
-        [input.organizationId, state.id, state.stage, state.machine_id, input.actorUserId ?? null, reason, randomUUID(), payload])
-        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
-          target_id, actor_user_id, reason, before_state, after_state, source_system, source_table, source_id)
-          VALUES ($1, 'production.setup.released_awaiting_material', 'manufacturing', 'shop_floor_setup_state',
-            $2, $3, $4, $5, $6, 'mrm-dashboard', 'setup_release', $7)`,
-        [input.organizationId, state.id, input.actorUserId ?? null, reason, state.snapshot, payload, randomUUID()])
+        const released = await releaseSetupAwaitingMaterialInTransaction(client, { ...input, reason })
         await queueDashboardRefresh(client, input.organizationId)
-        return { id: state.id, stage: "planned" as const }
+        return released
       })
     },
 
