@@ -331,11 +331,7 @@ function Plot({
                   const y = horizontal
                     ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
-                  const inside =
-                    !horizontal && !grouped && series.length > 1 && size >= 24
-                  // Keep tiny or zero segment values beside the bar, never below the axis.
-                  const smallStack =
-                    !horizontal && !grouped && series.length > 1 && size < 24
+                  const stacked = !horizontal && !grouped && series.length > 1
                   return (
                     <g key={s.key}>
                       <rect
@@ -353,7 +349,7 @@ function Plot({
                             ? left + size + 9
                             : grouped
                               ? x + thickness / 2
-                              : smallStack
+                              : stacked
                                 ? center +
                                   (si === 0 ? -1 : 1) * (thickness / 2 + 8)
                                 : center
@@ -361,32 +357,20 @@ function Plot({
                         y={
                           horizontal
                             ? center + 4
-                            : inside
-                              ? y + size / 2 + 4
-                              : smallStack
-                                ? Math.min(bottom - 4, y + size / 2 + 4)
-                                : y - 7
+                            : stacked
+                              ? Math.min(bottom - 4, y + size / 2 + 4)
+                              : y - 7
                         }
                         textAnchor={
-                          horizontal || (smallStack && si > 0)
+                          horizontal || (stacked && si > 0)
                             ? "start"
-                            : smallStack
+                            : stacked
                               ? "end"
                               : "middle"
                         }
                         fontSize="14"
                         fontWeight="600"
-                        fill={
-                          inside
-                            ? s.color === colors.pending
-                              ? "var(--color-on-warning)"
-                              : "var(--background)"
-                            : smallStack
-                              ? s.key === "pending" || s.key === "missed"
-                                ? "var(--color-warning-text)"
-                                : s.color
-                              : "var(--foreground)"
-                        }
+                        fill="var(--foreground)"
                       >
                         {value === null
                           ? "No approvals"
@@ -466,7 +450,7 @@ function Plot({
                     textAnchor="middle"
                     fontSize="14"
                     fontWeight="600"
-                    fill={colors.rejectionRate}
+                    fill="var(--foreground)"
                   >
                     {number(row.percent ?? 0)}%
                   </text>
