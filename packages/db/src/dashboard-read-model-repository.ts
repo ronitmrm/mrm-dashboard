@@ -72,25 +72,33 @@ function withLiveSetupStages(
     const row = payloadRecord(value)
     const state = byKey.get(setupKey(row, text(row.machine)))
     if (!state) return value
-    const runningStatus = state.stage === "item_complete"
-      ? "Complete"
-      : state.stage === "operator_started"
-        ? "Running"
-        : state.stage === "setting" || state.stage === "quality_approval"
-          ? "Setup complete"
-          : row.runningStatus
+    const returnedToPlanning = state.stage === "planned" && !state.active
+    const updatedAt = returnedToPlanning
+      ? state.payload.releasedAt ?? state.payload.reopenedAt ?? state.completedAt ?? state.payload.completedAt
+      : state.completedAt ?? state.payload.completedAt
+    const runningStatus = returnedToPlanning
+      ? "Planned"
+      : state.stage === "item_complete"
+        ? "Complete"
+        : state.stage === "operator_started"
+          ? "Running"
+          : state.stage === "setting" || state.stage === "quality_approval"
+            ? "Setup complete"
+            : row.runningStatus
     return {
       ...row,
       shopFloorStage: state.stage,
-      shopFloorStageLabel: text(state.payload.stageLabel) || state.stage,
+      shopFloorStageLabel: returnedToPlanning ? "Planned" : text(state.payload.stageLabel) || state.stage,
       shopFloorDoneBy: text(state.payload.doneBy),
       shopFloorWorker: text(state.payload.worker),
       shopFloorRemark: text(state.payload.remark),
-      shopFloorUpdatedAt: text(state.completedAt ?? state.payload.completedAt),
+      shopFloorUpdatedAt: text(updatedAt),
       runningStatus,
-      ...(state.active && state.stage !== "item_complete"
-        ? { shopFloorTaskReady: true, shopFloorTaskBlocker: "" }
-        : {}),
+      ...(returnedToPlanning
+        ? { shopFloorTaskReady: false, shopFloorTaskBlocker: "Setup returned to planning. Wait for the updated machine plan." }
+        : state.active && state.stage !== "item_complete"
+          ? { shopFloorTaskReady: true, shopFloorTaskBlocker: "" }
+          : {}),
     }
   })
   return {

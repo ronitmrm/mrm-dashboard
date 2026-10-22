@@ -750,4 +750,28 @@ test("material waits release upstream machines while running downstream retains 
   const moreWip = { ...moreRm, productionEntries: moreRm.productionEntries.map(row => row.setupNo === '1'
     ? { ...row, actualQty: 6000, outputQty: 6000 } : row) };
   expect(buildLegacyDashboardSnapshot(moreWip).productionControl.machinePlanDetailRows.some(row => row.setupNo === '2')).toBe(true);
+  const parallel = { ...input,
+    productionEntries: [...input.productionEntries, { ...input.productionEntries[0]!, machine: 'WAIT-1B', actualQty: 1000, outputQty: 1000 }],
+    dataEntries: [...input.dataEntries,
+      entry('machine_master', { machineNo: 'WAIT-1B', machineType: 'CNC', machineFamily: 'WAIT-F1', status: 'Active' }),
+      entry('work_order', { jcNo: 'NEXT-JC', partCode: 'M378', optionNumber: '1', orderPcs: 1000, rmInwardDate: '2026-10-12', rmInwardKg: 10 }),
+    ],
+    currentShopFloorStatusRows: [...input.currentShopFloorStatusRows,
+      { ...input.currentShopFloorStatusRows[0]!, machine: 'WAIT-1B', stage: 'operator_started', awaitingMaterial: undefined }],
+    planOverrides: [{ target: 'WAIT-JC', setupNo: '1', toMachine: 'WAIT-1', assignmentMode: 'add_parallel_machine', createdAt }],
+  };
+  const calculationTime = Date.parse('2026-10-22T10:00:00Z');
+  const parallelRows = buildLegacyDashboardSnapshot(parallel, { calculationTime }).productionControl.machinePlanDetailRows;
+  expect(parallelRows.some(row => row.jcNo === 'WAIT-JC' && row.machine === 'WAIT-1')).toBe(false);
+  expect(parallelRows.find(row => row.jcNo === 'WAIT-JC' && row.machine === 'WAIT-1B')).toMatchObject({ runningStatus: 'Running', rawActualQty: 1000 });
+  expect(parallelRows.find(row => row.jcNo === 'WAIT-JC' && row.setupNo === '2')).toMatchObject({ physicalWipQty: 1000 });
+  expect(parallelRows.find(row => row.jcNo === 'NEXT-JC' && row.setupNo === '1')).toMatchObject({ machine: 'WAIT-1', shopFloorTaskReady: true });
+  const interrupted = buildLegacyDashboardSnapshot({ ...parallel, planOverrides: [...parallel.planOverrides,
+    { target: 'WAIT-JC', setupNo: '1', fromMachine: 'WAIT-1', toMachine: 'WAIT-1B', assignmentMode: 'move', createdAt,
+      interruptedSetups: [{ jobCardNumber: 'WAIT-JC', setupNumber: 1, machineNumber: 'WAIT-1', finishedQuantity: 5000 }] }],
+  }, { calculationTime }).productionControl.machinePlanDetailRows;
+  expect(interrupted.find(row => row.jcNo === 'WAIT-JC' && row.machine === 'WAIT-1B')).toMatchObject({ pendingGoodQty: 4000 });
+  const parallelResumed = buildLegacyDashboardSnapshot({ ...parallel, dataEntries: parallel.dataEntries.map(row => row.entryType === 'work_order' && row.payload.jcNo === 'WAIT-JC'
+    ? { ...row, payload: { ...row.payload, rmInwardKg: 50.22 } } : row) }, { calculationTime }).productionControl.machinePlanDetailRows;
+  expect(parallelResumed.find(row => row.jcNo === 'WAIT-JC' && row.machine === 'WAIT-1')).toMatchObject({ shopFloorStage: 'planned', pendingGoodQty: 2000 });
 });

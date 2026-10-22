@@ -3,9 +3,10 @@ import { expect, it } from "vitest"
 
 import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 
-it("delivers a saved RM stage to the machinist queue before planning refresh", async () => {
+it("delivers saved and released setup stages before planning refresh", async () => {
   const createdAt = new Date("2026-10-03T12:00:00.000Z")
   const liveVersion = "2026-10-03 12:01:00+00"
+  let released = false
   const query = async (_sql: unknown, parameters?: unknown[]) => ({
     rows: typeof _sql === "string" && _sql.includes("FROM derived.dashboard_source_records source") ? [{
       source_id: "receipt-1", source_kind: "data_entry", source_group: "dataEntries",
@@ -18,20 +19,23 @@ it("delivers a saved RM stage to the machinist queue before planning refresh", a
       last_error: null,
       live_version: liveVersion,
       live_setup_stages: [{
-        active: true,
+        active: !released,
         completedAt: null,
         machine: "CNC-9",
-        stage: "raw_material_at_machine",
+        stage: released ? "planned" : "raw_material_at_machine",
         payload: {
           jcNo: "P2238", partCode: "M421B", optionNumber: "1",
           setupNo: "1", completedAt: "2026-10-03T12:01:00.000Z",
+          ...(released ? { stageLabel: "Machine Started", releasedAt: "2026-10-03T12:02:00.000Z",
+            awaitingMaterial: { kind: "rm", availableAtRelease: 50 } } : {}),
         },
       }],
       model_created_at: createdAt,
       model_payload: parameters?.[3] === liveVersion ? null : { productionControl: { machinePlanDetailRows: [{
         jcNo: "P2238", partCode: "M421B", optionNumber: "1",
-        setupNo: "1", machine: "CNC-9", shopFloorStage: "planned",
-        shopFloorTaskReady: false, shopFloorTaskBlocker: "Planned date not due",
+        setupNo: "1", machine: "CNC-9", shopFloorStage: released ? "operator_started" : "planned",
+        runningStatus: released ? "Running" : "Planned",
+        shopFloorTaskReady: released, shopFloorTaskBlocker: released ? "" : "Planned date not due",
         plannedDate: "2026-10-07", orderPcs: 1000,
       }] } },
       model_source_watermark: {},
@@ -65,4 +69,16 @@ it("delivers a saved RM stage to the machinist queue before planning refresh", a
   )
   expect(unchanged.notModified).toBe(true)
   expect(unchanged.dashboard).toBeNull()
+
+  released = true
+  const afterRelease = await repository.state(
+    "11111111-1111-4111-8111-111111111111", {}, "cnc", 7
+  )
+  expect(afterRelease.patch).toMatchObject({
+    productionControl: { machinePlanDetailRows: [{
+      shopFloorStage: "planned", runningStatus: "Planned", shopFloorTaskReady: false,
+      shopFloorStageLabel: "Planned", shopFloorUpdatedAt: "2026-10-03T12:02:00.000Z",
+      shopFloorTaskBlocker: "Setup returned to planning. Wait for the updated machine plan.",
+    }] },
+  })
 })

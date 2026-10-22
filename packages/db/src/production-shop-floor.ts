@@ -1096,16 +1096,18 @@ async function upstreamGoodForSetup(client: Pick<PoolClient, "query">, workOrder
 }
 
 async function assertSetupMaterialWait(client: PoolClient, organizationId: string, workOrderId: string, setupId: string, machineId: string) {
-  const waits = await client.query<{ source_payload: Record<string, unknown> }>(`SELECT source_payload
+  const waits = await client.query<{ machine_id: string; source_payload: Record<string, unknown> }>(`SELECT machine_id, source_payload
     FROM manufacturing.shop_floor_setup_state WHERE work_order_id = $1 AND operation_setup_id = $2
       AND stage = 'planned' AND source_payload ? 'awaitingMaterial'
       AND NOT EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state running
         WHERE running.work_order_id = $1 AND running.operation_setup_id = $2
           AND running.machine_id = $3 AND running.active)`, [workOrderId, setupId, machineId])
   if (!waits.rows.length) return
+  const machineWaits = waits.rows.filter(row => row.machine_id === machineId)
+  const applicableWaits = machineWaits.length ? machineWaits : waits.rows
   const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
   const upstream = await upstreamGoodForSetup(client, workOrderId, setupId)
-  if (waits.rows.some(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0)))) {
+  if (applicableWaits.every(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0)))) {
     throw new ShopFloorConflictError("This setup was released awaiting material. Record more RM or upstream good output before starting it again.")
   }
 }
@@ -2592,6 +2594,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       enteredRole?: string
       grossWeightKg?: number
       organizationId: string
+      productionFloorCode?: string
       sessionId: string
     }) {
       return transaction(pool, async (client) => {
@@ -2650,6 +2653,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         const current = session.rows[0]
         if (!current) throw new Error("Production session was not found.")
+        if (input.productionFloorCode !== undefined &&
+          normalizeProductionFloorCode(input.productionFloorCode) !== current.production_floor_code) {
+          throw new ProductionUnitAccessError("This production session belongs to another Production Unit.")
+        }
         if (current.status !== "open") {
           throw new Error("Production session is already closed.")
         }
