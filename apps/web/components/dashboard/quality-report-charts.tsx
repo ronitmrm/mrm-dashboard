@@ -192,8 +192,7 @@ function Plot({
       ? 65
       : 24
   const top = 24
-  const bottom =
-    height - (horizontal ? 44 : series.length > 1 && !grouped ? 72 : 40)
+  const bottom = height - (horizontal ? 44 : shiftProduction ? 65 : 40)
   const plotWidth = width - left - right
   const plotHeight = bottom - top
   const band = (horizontal ? plotHeight : plotWidth) / rows.length
@@ -310,7 +309,7 @@ function Plot({
                     ? center - thickness / 2
                     : bottom - size - (grouped ? 0 : base)
                   const inside = !horizontal && !grouped && size >= 22
-                  // Small stacked segments get their own coloured label below the axis.
+                  // Keep tiny or zero segment values beside the bar, never below the axis.
                   const smallStack =
                     !horizontal && !grouped && series.length > 1 && size < 22
                   return (
@@ -330,7 +329,10 @@ function Plot({
                             ? left + size + 9
                             : grouped
                               ? x + thickness / 2
-                              : center
+                              : smallStack
+                                ? center +
+                                  (si === 0 ? -1 : 1) * (thickness / 2 + 8)
+                                : center
                         }
                         y={
                           horizontal
@@ -338,10 +340,16 @@ function Plot({
                             : inside
                               ? y + size / 2 + 4
                               : smallStack
-                                ? bottom + 35 + si * 14
+                                ? Math.min(bottom - 4, y + size / 2 + 4)
                                 : y - 7
                         }
-                        textAnchor={horizontal ? "start" : "middle"}
+                        textAnchor={
+                          horizontal || (smallStack && si > 0)
+                            ? "start"
+                            : smallStack
+                              ? "end"
+                              : "middle"
+                        }
                         fontSize="12"
                         fontWeight="600"
                         fill={
@@ -352,9 +360,6 @@ function Plot({
                               : "var(--foreground)"
                         }
                       >
-                        {smallStack
-                          ? `${s.key === "pending" ? "Pending" : s.label}: `
-                          : ""}
                         {value === null
                           ? "No approvals"
                           : `${number(value ?? 0)}${percentage ? "%" : ""}${row.annotation ?? ""}`}
