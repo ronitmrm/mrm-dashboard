@@ -6242,13 +6242,23 @@ function calculateRescheduleMachineQueues(details: Array<Record<string, unknown>
   return details;
 }
 
+function compareMachineQueuePriority(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const aScore = safeNumber(rowValue(a, "plannerPriorityScore"));
+  const scoreDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - aScore;
+  if (scoreDiff || aScore <= 0) return scoreDiff;
+  const machine = canonicalKey(rowText(a, "machine", "machineNo"));
+  // Decision time orders equal priorities within their physical queue only.
+  if (!machine || machine !== canonicalKey(rowText(b, "machine", "machineNo"))) return 0;
+  return (Date.parse(rowText(b, "priorityDecisionAt")) || 0) - (Date.parse(rowText(a, "priorityDecisionAt")) || 0);
+}
+
 function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
   const continuityHistory = Number(shopFloorRowIsComplete(b) && planningMeta(b).continuityProtected)
     - Number(shopFloorRowIsComplete(a) && planningMeta(a).continuityProtected);
   if (continuityHistory) return continuityHistory;
   const aActualStart = lockedProductionStartDate(a);
   const bActualStart = lockedProductionStartDate(b);
-  const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
+  const priorityDiff = compareMachineQueuePriority(a, b);
   const aHeldBeforeB = priorityKeepsRowBefore(b, a);
   const bHeldBeforeA = priorityKeepsRowBefore(a, b);
   if (aHeldBeforeB && !bHeldBeforeA) return -1;
@@ -6490,7 +6500,7 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
 }
 
 function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: Record<string, unknown>) {
-  if (safeNumber(rowValue(priorityRow, "plannerPriorityScore")) <= safeNumber(rowValue(blockingRow, "plannerPriorityScore"))) return false;
+  if (compareMachineQueuePriority(priorityRow, blockingRow) >= 0) return false;
   const state = priorityQueueState(blockingRow);
   if (state === "idle") return !priorityKeepsRowBefore(priorityRow, blockingRow);
   const mode = priorityApprovalMode(priorityRow);

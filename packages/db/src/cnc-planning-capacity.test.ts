@@ -309,6 +309,50 @@ test("newer first-position move takes precedence over an older breakdown placeme
   expect(preparedRows.find(row => row.jcNo === "P2288")?.plannedProductionStartDate).toBe("22/10/2026")
 })
 
+test("newer urgent request precedes older urgent unstarted work on the same machine", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-10-22T08:00:00Z"))
+  const createdAt = "2026-10-01T06:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const input = {
+    productionFloorCode: "cnc" as const, workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      ...[
+        { jcNo: "P2134", partCode: "M1368B" },
+        { jcNo: "P2258", partCode: "M2102" },
+      ].flatMap(job => [
+        entry("work_order", { ...job, optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+        entry("route", { partNo: job.partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
+        entry("cycle", { partNo: job.partCode, optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      ]),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
+    ],
+    previousMachinePlanDetailRows: [
+      { jcNo: "P2134", partCode: "M1368B", optionNumber: "1", setupNo: "1", routeMachine: "HX", machine: "HX-01" },
+      { jcNo: "P2258", partCode: "M2102", optionNumber: "1", setupNo: "1", routeMachine: "HX", machine: "HX-01" },
+    ],
+    plannerPriorities: [
+      { jobCardNumber: "P1413", partCode: "M1368B", priority: "Urgent", approvalMode: "allow_started_not_running", createdAt: "2026-10-11T10:23:35.478Z",
+        interruptedSetups: [{ jobCardNumber: "P2057", machineNumber: "HX-01", setupNumber: 1, finishedQuantity: 0 }] },
+      { jobCardNumber: "P3335", partCode: "M2102", priority: "Urgent", approvalMode: "idle_queue_only", createdAt: "2026-10-22T06:54:51.162Z" },
+    ],
+  }
+  const plan = (prepared = false) => buildLegacyDashboardSnapshot({
+    ...input,
+    dataEntries: [...input.dataEntries, ...(prepared ? [entry("shop_floor_status", {
+      jcNo: "P2134", partCode: "M1368B", optionNumber: "1", setupNo: "1", machine: "HX-01", stage: "raw_material_at_machine", completedAt: "2026-10-22T06:00:00Z",
+    })] : [])],
+  }).productionControl.machinePlanDetailRows
+
+  const rows = plan()
+  expect(rows.find(row => row.jcNo === "P2258")).toMatchObject({ machine: "HX-01", plannedProductionStartDate: "22/10/2026", shopFloorTaskReady: true })
+  expect(rows.find(row => row.jcNo === "P2134")?.plannedProductionStartDate).toBe("23/10/2026")
+
+  const preparedRows = plan(true)
+  expect(preparedRows.find(row => row.jcNo === "P2134")).toMatchObject({ plannedProductionStartDate: "22/10/2026", shopFloorStage: "raw_material_at_machine" })
+  expect(preparedRows.find(row => row.jcNo === "P2258")?.plannedProductionStartDate).toBe("23/10/2026")
+})
+
 test("move setup honors a target machine after its past outage", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-10-03T11:27:00Z"))
