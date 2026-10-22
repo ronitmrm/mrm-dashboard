@@ -451,9 +451,11 @@ supersedes earlier approvals for the released machine.
 A Planner may add a compatible physical machine to a planned or running setup
 even when the normal minimum-run rule would not split the quantity again.
 Current setup machines keep their work. If the added machine owns another active
-setup, the Planner explicitly approves stopping that setup and closes its open
-Production Session before saving. The decision releases only that target setup,
-records its settled output, and recalculates the shared remaining allocation and
+setup, the Planner can keep it running and queue the new work after it. This
+preserves its active setup and open Production Session. Alternatively, the Planner
+explicitly approves stopping that setup and closes its open Production Session
+before saving. Only an approved stop releases that target setup and records its
+settled output. The decision recalculates the shared remaining allocation and
 downstream probable dates. The target queue position must be reviewed before saving.
 The saved queue position remains binding during recalculation and idle-gap
 filling. Unstarted jobs with earlier material dates cannot pass a setup placed

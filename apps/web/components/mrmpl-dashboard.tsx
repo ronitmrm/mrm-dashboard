@@ -4977,6 +4977,12 @@ function ParallelMachinePlannerForm({
       ),
     [plannedRows, toMachine]
   )
+  const selectedTargetRows = targetOccupiedRows.filter(
+    (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
+  )
+  const selectedRunningTargetRows = selectedTargetRows.filter(
+    machineIssueRowNeedsProducedQty
+  )
   const queueReviewGroups = useMemo(
     () =>
       machineConstraintQueueReview({
@@ -5014,10 +5020,7 @@ function ParallelMachinePlannerForm({
     canReview &&
     reviewReady &&
     queueReviewConfirmed &&
-    Boolean(reason.trim()) &&
-    targetOccupiedRows.every(
-      (row) => selectedTargetInterruptions[machineIssueRowKey(row)]
-    )
+    Boolean(reason.trim())
 
   function resetReview() {
     setReviewReady(false)
@@ -5040,7 +5043,7 @@ function ParallelMachinePlannerForm({
         target,
         setupNo,
         toMachine,
-        interruptedSetups: targetOccupiedRows.map((row) => ({
+        interruptedSetups: selectedTargetRows.map((row) => ({
           jcNo: jobCardNumber(row),
           setupNo: displayValue(row.setupNo),
           machine: machineValue(row, "machine"),
@@ -5185,6 +5188,7 @@ function ParallelMachinePlannerForm({
             <div className="grid gap-2">
               <PlannerSetupStops
                 rows={targetOccupiedRows}
+                required={false}
                 selected={selectedTargetInterruptions}
                 onChange={(key, stop) => {
                   setSelectedTargetInterruptions((current) => ({
@@ -5194,12 +5198,10 @@ function ParallelMachinePlannerForm({
                   setQueueReviewConfirmed(false)
                 }}
               />
-              {targetOccupiedRows.some(machineIssueRowNeedsProducedQty) ? (
+              {selectedRunningTargetRows.length ? (
                 <PlannerSessionSettlementNotice
                   mode="close"
-                  rows={targetOccupiedRows.filter(
-                    machineIssueRowNeedsProducedQty
-                  )}
+                  rows={selectedRunningTargetRows}
                   sessionRows={asArray(productionControl.productionCardRows)}
                 />
               ) : null}
