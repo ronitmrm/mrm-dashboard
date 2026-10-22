@@ -378,7 +378,9 @@ function Plot({
                         fontWeight="600"
                         fill={
                           inside
-                            ? "var(--background)"
+                            ? s.color === colors.pending
+                              ? "var(--color-on-warning)"
+                              : "var(--background)"
                             : smallStack
                               ? s.key === "pending" || s.key === "missed"
                                 ? "var(--color-warning-text)"
