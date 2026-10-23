@@ -25,6 +25,7 @@ import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 type Session = Record<string, unknown>
 type Workflow = Record<string, unknown>
 type Material = Awaited<ReturnType<ReturnType<typeof createProductionShopFloorRepository>["readRawMaterialReviews"]>>["rows"][number]
+type MaterialFlowReview = Awaited<ReturnType<ReturnType<typeof createProductionShopFloorRepository>["readRawMaterialReviews"]>>["materialFlowReviews"][number]
 const workflowKey = (row: Workflow) =>
   [row.machine, row.jcNo, row.partCode, row.optionNumber, row.setupNo].join("|")
 const quantity = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 })
@@ -57,6 +58,7 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
     ? (delivery.data.rows as Session[]).filter(session => !closedIds.includes(String(session.id)))
     : []
   const materials = (materialDelivery.data?.rows ?? []) as Material[]
+  const materialFlowReviews = (materialDelivery.data?.materialFlowReviews ?? []) as MaterialFlowReview[]
   const workflows = workflowRows.filter(row => !resolvedKeys.includes(workflowKey(row)))
   const loading = delivery.loading || materialDelivery.loading
   const loadError = [
@@ -127,10 +129,10 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
         {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, session flags and workflow exceptions in this Production Unit." /> : null}
         {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError}
           action={<Button variant="outline" onClick={refresh}>Refresh flags</Button>} /> : null}
-        {!loading && !loadError && !materials.length && !sessions.length && !workflows.length && !reworkRows.length ? (
+        {!loading && !loadError && !materials.length && !materialFlowReviews.length && !sessions.length && !workflows.length && !reworkRows.length ? (
           <StandardState title="No open planning reviews" description="No RM shortages, session flags or workflow exceptions need review." />
         ) : null}
-        {materials.length || sessions.length || workflows.length || reworkRows.length ? (
+        {materials.length || materialFlowReviews.length || sessions.length || workflows.length || reworkRows.length ? (
           <OperationalTable filterStorageKey={`planning-control-flags-${floor}`} containerClassName="max-h-[70vh] rounded-lg border">
             <TableHeader><TableRow>
               <TableHead>Flag Type</TableHead>
@@ -168,6 +170,29 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
                     <span className="block max-w-72 break-words" title={formatIstDateTime(String(row.acceptance?.acceptedAt ?? ""))}>{String(row.acceptance?.reason ?? "Accepted by planner")}</span>
                   ) : <Button size="sm" variant="outline" disabled={Boolean(savingId) || row.requiredKg === null}
                     onClick={() => { setSelectedMaterial(row); setMaterialReason(""); setMaterialError("") }}>Accept short RM</Button>}</TableCell>
+                </TableRow>
+              ))}
+              {materialFlowReviews.map(row => (
+                <TableRow key={`material-flow:${row.id}`} data-row-id={`material-flow:${row.id}`}>
+                  <TableCell><StatusBadge tone="warning" value="Material flow conflict" /></TableCell>
+                  <TableCell>
+                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(row.jobCardNumber)}?floor=${floor}`}>{row.jobCardNumber}</Link>
+                    <div>{row.partCode}</div>
+                    <div className="text-xs text-muted-foreground">Option {row.optionNumber} · Setup {row.setupNumber}</div>
+                  </TableCell>
+                  <TableCell className="font-medium">{row.machineNumber}</TableCell>
+                  <TableCell>—</TableCell>
+                  <TableCell>
+                    <div className="max-w-80 whitespace-normal">Setup {row.upstreamSetupNumber} is Item Complete, but Setup {row.setupNumber} was released awaiting material.</div>
+                    <div className="tabular-nums">Upstream good: {quantity.format(row.upstreamGoodPieces)} · Setup processed: {quantity.format(row.setupProcessedPieces)}</div>
+                    <div className="max-w-80 whitespace-normal text-xs text-muted-foreground">Review production counts. Reopen the upstream setup if unfinished work remains.</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" asChild><Link href={`/dashboard/production-sessions?floor=${floor}${row.sessionId ? `&session=${encodeURIComponent(row.sessionId)}` : ""}`}>Review sessions</Link></Button>
+                      <Button size="sm" variant="outline" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {sessions.map(session => {

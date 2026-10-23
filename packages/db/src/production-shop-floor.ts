@@ -1,7 +1,7 @@
 import { assertToolingAvailable } from "./tooling-availability"
 import { readJobCardRevisions, readJobCardRevisionHistory } from "./job-card-revisions"
 import { randomUUID } from "node:crypto"
-import { materialWaitPending, readJobCardMaterialBalances } from "./production-material"
+import { materialWaitPending, readJobCardMaterialBalances, readMaterialFlowReviews } from "./production-material"
 import { readMaterialMovementWaits } from "./material-movement-waits"
 import { assertSettingChecklistComplete } from "./setup-checklist-validation"
 
@@ -5443,8 +5443,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     async readRawMaterialReviews(input: { organizationId: string; productionFloorCode: string }) {
-      const rows = await readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode)
-      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient) }
+      const [rows, materialFlowReviews] = await Promise.all([
+        readJobCardMaterialBalances(pool, input.organizationId, input.productionFloorCode),
+        readMaterialFlowReviews(pool, input.organizationId, input.productionFloorCode),
+      ])
+      return { rows: rows.filter(row => row.receivedKg > 0 && row.requiredKg !== null && !row.receiptSufficient), materialFlowReviews }
     },
 
     async acceptShortRawMaterial(input: {

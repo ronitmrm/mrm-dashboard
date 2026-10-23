@@ -9,7 +9,11 @@ vi.mock("@/components/ui/golden-patterns", () => import("./ui/golden-patterns"))
 vi.mock("@/hooks/use-conditional-records", () => ({
   useConditionalRecords: (url: string) => ({
     loading: false, error: url.startsWith("/api/raw-material-review") ? feeds.materialError : null, refresh: vi.fn(),
-    data: { movementWaits: url.startsWith("/api/raw-material-review") && !feeds.materialError ? [{
+    data: { materialFlowReviews: url.startsWith("/api/raw-material-review") && !feeds.materialError ? [{
+      id: "material-flow-1", jobCardNumber: "P2267", partCode: "M2164C", optionNumber: "2",
+      setupNumber: 2, machineNumber: "CNC-13", upstreamSetupNumber: 1,
+      upstreamGoodPieces: 100, setupProcessedPieces: 40, sessionId: "flow-session-1",
+    }] : [], movementWaits: url.startsWith("/api/raw-material-review") && !feeds.materialError ? [{
       id: "wait-1", jobCardNumber: "P1201", partCode: "M101", optionNumber: "1", setupNumber: 2,
       machineNumber: "CNC-12", readyAt: "2026-10-18T03:30:00Z", workingMinutes: 60,
     }] : [], rows: url.startsWith("/api/raw-material-review") ? (feeds.materialError ? [] : [{
@@ -42,6 +46,15 @@ test("combines RM, session and workflow flags with their actions in one filterab
   expect(markup).toContain("Required: 100 kg")
   expect(markup).toContain("Pending: 60 kg")
   expect(markup).toContain("Accept short RM")
+  expect(markup).toContain("Material flow conflict")
+  expect(markup).toContain("Setup 1 is Item Complete, but Setup 2 was released awaiting material.")
+  expect(markup).toContain("Upstream good: 100 · Setup processed: 40")
+  expect(markup).toContain("Review production counts. Reopen the upstream setup if unfinished work remains.")
+  expect(markup).toContain("/dashboard/job-cards/P2267?floor=cnc")
+  expect(markup).toContain("/dashboard/production-sessions?floor=cnc&amp;session=flow-session-1")
+  expect(markup).toContain("Review sessions")
+  expect(markup).toContain("/?tab=productionControlTab&amp;floor=cnc")
+  expect(markup).toContain("Planner Actions")
   expect(markup).toContain("Revision — Route Selection Required")
   expect(markup).toContain("Select route in Part Readiness")
   expect(markup).not.toContain("Floor material wait")
