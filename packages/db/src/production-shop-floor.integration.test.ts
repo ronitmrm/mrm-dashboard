@@ -2261,6 +2261,48 @@ test("material review blocks completion, releases only selected setups, and clea
   expect(Number((workspace.jobCard as Record<string, unknown>).orderedQuantity)).toBe(10000);
 });
 
+test("flags released downstream material waits after upstream completion", async () => {
+  const jobCardNumber = `FLOW-WAIT-${suffix}`
+  const upstreamMachine = `FLOW-UP-${suffix}`
+  const downstreamMachine = `FLOW-DOWN-${suffix}`
+  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 1 },
+    workOrderNumber: jobCardNumber })
+  await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+  await repository.upsertRawMaterialReceipt({ organizationId, quantityKg: 1, receiptNumber: rmPoNumber,
+    receivedOn: "2026-10-17", sourceId: randomUUID(), payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber } })
+  for (const [machineNumber, operationSetupCode] of [[upstreamMachine, "1"], [downstreamMachine, "2"]] as const) {
+    await planning.upsertMachine({ machineNumber, organizationId })
+    await repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber,
+      operationSetupCode, stage: "operator_started", payload: {} })
+  }
+  await repository.recordProductionEntry({ organizationId, jobCardNumber, machineNumber: upstreamMachine,
+    operationSetupCode: "1", productionDate: "2026-10-17", quantityGood: 50, quantityRejected: 0,
+    payload: {}, sourceId: randomUUID() })
+  const session = await repository.startProductionSession({ organizationId, jobCardNumber,
+    machineNumber: downstreamMachine, operationSetupCode: "2", operatorCode: firstOperator,
+    measurementMethod: "weight", pieceWeightGrams: 1, cycleTimeSeconds: 60,
+    startedAt: "2026-10-17T08:30:00+05:30" })
+  await repository.closeProductionSession({ organizationId, sessionId: session.id,
+    endedAt: "2026-10-17T09:30:00+05:30", endReason: "awaiting_material",
+    grossWeightKg: 0.01, crateCount: 0, crateWeightKg: 0, enteredRole: "authorized_staff" })
+  const review = () => repository.readRawMaterialReviews({ organizationId, productionFloorCode: "conventional" })
+  const expectedFlag = expect.objectContaining({ jobCardNumber, partCode: itemUid, optionNumber: "1",
+    setupNumber: 2, machineNumber: downstreamMachine, upstreamSetupNumber: 1,
+    upstreamGoodPieces: 50, setupProcessedPieces: 10, sessionId: session.id })
+  expect(await review()).not.toMatchObject({ materialFlowReviews: expect.arrayContaining([expectedFlag]) })
+  await repository.recordSetupCompletion({ organizationId, jobCardNumber, machineNumber: upstreamMachine,
+    operationSetupCode: "1", completedBy: "Planner" })
+  const flagged = await review()
+  expect(flagged.rows.some(row => row.jobCardNumber === jobCardNumber)).toBe(false)
+  expect(flagged).toMatchObject({ materialFlowReviews: expect.arrayContaining([expectedFlag]) })
+  const upstream = (await repository.readCompletedSetups({ organizationId, productionFloorCode: "conventional" }))
+    .rows.find(row => row.jobCardNumber === jobCardNumber && row.machineNumber === upstreamMachine)!
+  await repository.reopenSetup({ organizationId, productionFloorCode: "conventional", setupStateId: upstream.id,
+    expectedRowVersion: Number(upstream.rowVersion), reason: "Review unfinished upstream output." })
+  expect(await review()).not.toMatchObject({ materialFlowReviews: expect.arrayContaining([expectedFlag]) })
+})
+
 test("RM shortage flag and completion blocker clear at 95% usable receipt", async () => {
   const jobCardNumber = `RM-ALLOWANCE-${suffix}`
   await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
