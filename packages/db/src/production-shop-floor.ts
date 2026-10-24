@@ -1072,6 +1072,25 @@ async function lockProductionSessionMachine(
   )
 }
 
+async function assertProductionSessionDoesNotOverlap(
+  client: PoolClient,
+  input: { machineId: string; startedAt: Date; endedAt?: Date; sessionId?: string }
+) {
+  const overlap = await client.query<{ id: string }>(
+    `SELECT id FROM manufacturing.production_sessions
+     WHERE machine_id = $1 AND id IS DISTINCT FROM $2::uuid AND reversed_at IS NULL
+       AND COALESCE(ended_at, 'infinity'::timestamptz) > started_at
+       AND COALESCE(ended_at, 'infinity'::timestamptz) > $3::timestamptz
+       AND (($4::timestamptz IS NULL AND started_at <= $3::timestamptz)
+         OR ($4::timestamptz IS NOT NULL AND started_at < $4::timestamptz AND $3::timestamptz < $4::timestamptz))
+     LIMIT 1`,
+    [input.machineId, input.sessionId ?? null, input.startedAt.toISOString(), input.endedAt?.toISOString() ?? null]
+  )
+  if (overlap.rows[0]) {
+    throw new ShopFloorConflictError("Session time overlaps another production session on this machine.")
+  }
+}
+
 async function assertMaterialCompletion(client: PoolClient, organizationId: string, workOrderId: string) {
   await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE", [workOrderId, organizationId])
   const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
@@ -1661,6 +1680,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (open.rows[0]) {
           throw new Error("This machine already has an open production session.")
         }
+        await assertProductionSessionDoesNotOverlap(client, { machineId, startedAt })
         const openBreakdown = await client.query<{ id: string }>(
           `
             SELECT task.id
@@ -1752,12 +1772,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               measurement_method, end_count
             FROM manufacturing.production_sessions
             WHERE machine_id = $1 AND status = 'closed'
-              AND reversed_at IS NULL
+              AND reversed_at IS NULL AND ended_at <= $2
             ORDER BY ended_at DESC, created_at DESC
             LIMIT 1
             FOR UPDATE
           `,
-          [machineId]
+          [machineId, startedAt.toISOString()]
         )
         const prior = previous.rows[0]
         const canCarry = measurementMethod === "counter"
@@ -2599,6 +2619,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     }) {
       return transaction(pool, async (client) => {
         const endedAt = requiredTimestamp(input.endedAt, "Session end")
+        if (endedAt > new Date()) throw new Error("Session end cannot be in the future.")
         const endReason = productionSessionEndReason(input.endReason)
         const closedByRole = input.enteredRole
           ? productionEntryRole(input.enteredRole)
@@ -2663,6 +2684,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
+        await assertProductionSessionDoesNotOverlap(client, {
+          machineId: current.machine_id, startedAt: current.started_at, endedAt, sessionId: input.sessionId,
+        })
         if (current.has_open_downtime && endReason === "shift_end") {
           const breakdownDowntime = await client.query<{
             id: string
@@ -3049,21 +3073,26 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const shift = productionShiftAt(current.production_floor_code, startedAt)
         if (!shift) throw new Error("Session start must be within a production shift.")
-        const neighbours = await client.query<{
-          started_at: Date; ended_at: Date | null
-        }>(`(SELECT started_at, ended_at FROM manufacturing.production_sessions
-            WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at <= $3
-            ORDER BY started_at DESC, created_at DESC, id DESC LIMIT 1)
-          UNION ALL
-          (SELECT started_at, ended_at FROM manufacturing.production_sessions
-            WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at >= $3
-            ORDER BY started_at, created_at, id LIMIT 1)`,
-          [current.machine_id, input.sessionId, current.started_at.toISOString()])
-        for (const neighbour of neighbours.rows) {
-          const overlaps = neighbour.started_at <= current.started_at
-            ? !neighbour.ended_at || startedAt < neighbour.ended_at
-            : startedAt >= neighbour.started_at || !current.ended_at || current.ended_at > neighbour.started_at
-          if (overlaps) throw new ShopFloorConflictError("Corrected start would overlap or change the order of machine sessions.")
+        if (startedAt.getTime() !== current.started_at.getTime()) {
+          const neighbours = await client.query<{
+            started_at: Date; ended_at: Date | null
+          }>(`(SELECT started_at, ended_at FROM manufacturing.production_sessions
+              WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at <= $3
+              ORDER BY started_at DESC, created_at DESC, id DESC LIMIT 1)
+            UNION ALL
+            (SELECT started_at, ended_at FROM manufacturing.production_sessions
+              WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at >= $3
+              ORDER BY started_at, created_at, id LIMIT 1)`,
+            [current.machine_id, input.sessionId, current.started_at.toISOString()])
+          for (const neighbour of neighbours.rows) {
+            const overlaps = neighbour.started_at <= current.started_at
+              ? !neighbour.ended_at || startedAt < neighbour.ended_at
+              : startedAt >= neighbour.started_at || !current.ended_at || current.ended_at > neighbour.started_at
+            if (overlaps) throw new ShopFloorConflictError("Corrected start would overlap or change the order of machine sessions.")
+          }
+          await assertProductionSessionDoesNotOverlap(client, {
+            machineId: current.machine_id, startedAt, endedAt: current.ended_at ?? undefined, sessionId: input.sessionId,
+          })
         }
         const downtime = await client.query<{ started_at: Date; ended_at: Date | null; duration_minutes: number | null }>(`
           SELECT started_at, ended_at, duration_minutes FROM manufacturing.production_session_downtime_events
@@ -3141,6 +3170,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           "Correction reason"
         )
         const endedAt = requiredTimestamp(input.endedAt, "Session end")
+        if (endedAt > new Date()) throw new Error("Session end cannot be in the future.")
         const endReason = productionSessionEndReason(input.endReason)
         const enteredRole = input.enteredRole
           ? productionEntryRole(input.enteredRole)
@@ -3156,6 +3186,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           cycle_time_seconds: string
           end_reason: ProductionSessionEndReason
           end_count: string | null
+          ended_at: Date
           gross_weight_kg: string | null
           machine_id: string
           measurement_method: ProductionMeasurementMethod
@@ -3172,7 +3203,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `
             SELECT session.work_order_id, session.operation_setup_id,
               session.machine_id, session.measurement_method,
-              session.started_at, session.start_count, session.end_count, session.end_reason,
+              session.started_at, session.start_count, session.end_count, session.end_reason, session.ended_at,
               session.piece_weight_grams, session.gross_weight_kg, session.crate_weight_kg,
               session.cycle_time_seconds, session.production_entry_id,
               session.source_payload, session.status, session.row_version,
@@ -3203,20 +3234,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
-        const nextSession = await client.query<{ started_at: Date }>(
-          `
-            SELECT started_at
-            FROM manufacturing.production_sessions
-            WHERE machine_id = $1 AND reversed_at IS NULL
-              AND started_at > $2
-            ORDER BY started_at, created_at, id
-            LIMIT 1
-            FOR SHARE
-          `,
-          [current.machine_id, current.started_at.toISOString()]
-        )
-        if (nextSession.rows[0] && endedAt > nextSession.rows[0].started_at) {
-          throw new Error("Session end cannot overlap the next machine session.")
+        if (endedAt.getTime() !== current.ended_at.getTime()) {
+          await assertProductionSessionDoesNotOverlap(client, {
+            machineId: current.machine_id, startedAt: current.started_at, endedAt, sessionId: input.sessionId,
+          })
         }
         if (input.downtimeCorrection) {
           const change = input.downtimeCorrection

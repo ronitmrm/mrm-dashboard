@@ -9,6 +9,7 @@ import { createMaintenanceReportCorrectionRepository } from "./maintenance-repor
 import { createMasterDataLifecycleRepository } from "./master-data-lifecycle"
 import { migrateDatabase } from "./migrate"
 import { createQualityRepository } from "./quality"
+import { createQualityReportRepository } from "./quality-reports"
 import { createWorkforceRepository } from "./workforce"
 
 const connectionString =
@@ -107,6 +108,65 @@ afterAll(async () => {
 })
 
 describe("workforce, quality, and maintenance workflows", () => {
+  test("rejects released first-piece tasks without losing historical approvals or corrections", async () => {
+    const state = await pool.query<{ id: string; work_order_id: string; operation_setup_id: string; machine_id: string }>(
+      `INSERT INTO manufacturing.shop_floor_setup_state (
+        organization_id, work_order_id, route_option_id, operation_setup_id,
+        machine_id, stage, active, source_system, source_table, source_id
+      ) SELECT $1, work_order.id, selection.route_option_id, setup.id,
+          machine.id, 'planned', false, 'test', 'quality_request', $4
+        FROM manufacturing.work_orders work_order
+        JOIN manufacturing.route_selections selection ON selection.work_order_id = work_order.id
+        JOIN manufacturing.operation_setups setup ON setup.route_option_id = selection.route_option_id
+        JOIN catalog.machines machine ON machine.organization_id = work_order.organization_id AND machine.machine_number = $3
+        WHERE work_order.organization_id = $1 AND work_order.job_card_number = $2
+        RETURNING id, work_order_id, operation_setup_id, machine_id`,
+      [organizationId, jobCardNumber, machineNumber, randomUUID()]
+    )
+    const request = state.rows[0]!
+    const taskAssignedAt = "2026-08-16T03:30:00.000Z"
+    await pool.query(
+      `INSERT INTO manufacturing.shop_floor_stage_events (
+        organization_id, setup_state_id, machine_id, to_stage, occurred_at, source_system, source_table, source_id
+      ) SELECT $1, $2, $3, event.stage, event.at::timestamptz, 'test', 'quality_request', gen_random_uuid()::text
+        FROM (VALUES ('setting', '2026-08-16T03:29:00Z'), ('setting', $4), ('quality_approval', '2026-08-16T03:31:00Z'),
+          ('planned', '2026-08-16T03:33:00Z')) AS event(stage, at)`,
+      [organizationId, request.id, request.machine_id, taskAssignedAt]
+    )
+    await pool.query(
+      `INSERT INTO quality.first_piece_inspections (
+        organization_id, work_order_id, operation_setup_id, machine_id, inspected_at,
+        status, check_key, source_system, source_table, source_id, source_payload
+      ) VALUES ($1, $2, $3, $4, '2026-08-18T03:30:00Z', 'Approved', $5, 'test', 'stale_quality_report', $5, NULL),
+        ($1, $2, $3, $4, '2026-08-16T03:32:00Z', 'Approved', $6, 'test', 'stale_quality_report', $6,
+          '{"taskAssignedAt":"2026-08-16T03:29:00Z"}'::jsonb)`,
+      [organizationId, request.work_order_id, request.operation_setup_id, request.machine_id, `STALE-${suffix}`, `REPLACED-${suffix}`]
+    )
+    const reports = createQualityReportRepository({ connectionString })
+    try {
+      expect((await reports.load({ from: "2026-08-18", to: "2026-08-18", floors: ["conventional"], inspectors: [] })).approvals).toBe(0)
+      expect((await reports.load({ from: "2026-08-16", to: "2026-08-16", floors: ["conventional"], inspectors: [] })).approvals).toBe(0)
+      const input = {
+        organizationId, jobCardNumber, machineNumber, operationSetupCode: "1.1",
+        inspectionKey: `TASK-FP-${suffix}`, inspectedAt: "2026-08-18T03:30:00Z",
+        dimensions: [], payload: { taskAssignedAt }, status: "Approved",
+      }
+      await expect(quality.recordFirstPieceInspection(input)).rejects.toThrow("no longer pending")
+      const historical = { ...input, inspectedAt: "2026-08-16T03:32:00Z" }
+      const saved = await quality.recordFirstPieceInspection(historical)
+      expect((await quality.recordFirstPieceInspection({
+        ...historical, correctionReason: "Correct historical note", notes: "Verified",
+      })).id).toBe(saved.id)
+      const report = await reports.load({ from: "2026-08-16", to: "2026-08-16", floors: ["conventional"], inspectors: [] })
+      expect(report.approvals).toBe(1)
+      expect(report.shifts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ label: "General", approved: 1, minutes: 2 }),
+      ]))
+    } finally {
+      await reports.close()
+    }
+  })
+
   test("keeps workforce writes traceable while projecting one attendance state", async () => {
     const attendance = await workforce.recordAttendance({
       attendanceDate: "2026-07-21",

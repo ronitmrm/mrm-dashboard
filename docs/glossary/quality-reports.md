@@ -26,7 +26,12 @@ in the selected range. Pending before range means outstanding at its start;
 pending at range end includes earlier outstanding requests. Future ranges are
 capped at the current instant when evaluating status. Elapsed time includes
 overnight/non-working hours. Shift comparisons attribute status and approval
-time to the Setting Done shift. Missing shift context is shown as Unspecified.
+time to the Setting Done shift. An explicit Setting shift takes precedence;
+otherwise its timestamp determines the configured shift. Other jobs' production
+sessions cannot supply that shift. Missing shift context is shown as Unspecified.
+An inspection must belong to its original Setting task, before replacement or
+release/completion. Late submissions cannot approve a replacement task or inflate
+elapsed approval time; saved historical reports remain available for correction.
 Active quality employees appear even without approvals; historical approving
 inspectors remain visible in the selected range.
 
