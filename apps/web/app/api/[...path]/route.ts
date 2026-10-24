@@ -2348,6 +2348,23 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
+      if (entryType === "fg_rejected") {
+        const payload = plainRecord(body.payload)
+        const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)
+        const result = await withPlanningRepository(request, scope.capability,
+          ({ actorUserId, organizationId, repository }) => repository.receiveRework({
+            actorUserId, organizationId, productionFloorCode: scope.floor,
+            originalJobCardNumber: text(payload.originalJobCardNumber), quantity: Number(payload.quantity),
+            receiptType: "fg_rejected",
+            replacementRequiredRmKg: optionalNumeric(payload.replacementRequiredRmKg),
+            replacementRmPoNo: optionalText(payload.replacementRmPoNo),
+            receivedOn: text(payload.receivedOn), reason: text(payload.reason),
+          }))
+        return json(await withPlanningRefresh(request, path, body, {
+          ...result, ok: true, rowsUpdated: 1,
+          savedText: `${result.activities[0]!.jobCardNumber} created for remake. Receive fresh RM and select the route in Part Readiness. Reference: ${result.receiptReference}.`,
+        }))
+      }
       if (entryType === "rework_rejected") {
         const payload = plainRecord(body.payload)
         const scope = operationalEntryWriteScope(entryType, "save", body.productionFloorCode, payload)

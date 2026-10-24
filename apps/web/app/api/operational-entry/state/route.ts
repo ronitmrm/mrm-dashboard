@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
       request,
       async ({ organizationId, repository }) => {
         const state = await repository.scopedFactsState({ organizationId, productionFloorCode: floor,
-          entryTypes: entry === "software_raw" ? [entry, "route"] : entry === "rm_inward" ? [entry, "work_order"] : [entry.startsWith("rework_") ? "work_order" : entry],
+          entryTypes: entry === "software_raw" ? [entry, "route"] : entry === "rm_inward" ? [entry, "work_order"] : [entry.startsWith("rework_") || entry === "fg_rejected" ? "work_order" : entry],
+          dispatchedJobCards: entry === "fg_rejected",
           identity: [operationalEntryCapability(entry, "read", floor)],
           knownSourceRevision: params.get("knownSourceRevision"),
           knownVersion: params.has("knownVersion") ? Number(params.get("knownVersion")) : undefined })
