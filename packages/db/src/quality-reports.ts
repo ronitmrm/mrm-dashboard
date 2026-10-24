@@ -54,6 +54,7 @@ export function createQualityReportRepository(options: RepositoryPoolOptions) {
         FROM manufacturing.shop_floor_stage_events e
         WHERE e.organization_id=$1 AND e.to_stage='setting' AND e.reversed_at IS NULL
       ) SELECT e.id::text,e.occurred_at::text AS "requestedAt",approval.inspected_at::text AS "approvedAt",
+        LEAST(e.next_setting,closure.occurred_at)::text AS "closedAt",
         approval.inspector,COALESCE(NULLIF(e.source_payload->>'shift',''),shift_row.shift,'Unspecified') AS shift,f.code AS floor
       FROM settings e JOIN manufacturing.shop_floor_setup_state state ON state.id=e.setup_state_id
       JOIN catalog.machines m ON m.id=e.machine_id JOIN manufacturing.production_floors f ON f.id=m.production_floor_id
@@ -66,6 +67,13 @@ export function createQualityReportRepository(options: RepositoryPoolOptions) {
           AND i.inspected_at>=e.occurred_at AND (e.next_setting IS NULL OR i.inspected_at<e.next_setting)
         ORDER BY i.inspected_at,i.id LIMIT 1
       ) approval ON true
+      LEFT JOIN LATERAL (
+        SELECT event.occurred_at FROM manufacturing.shop_floor_stage_events event
+        WHERE event.organization_id=$1 AND event.setup_state_id=e.setup_state_id AND event.machine_id=e.machine_id
+          AND event.reversed_at IS NULL AND event.occurred_at>=e.occurred_at
+          AND event.to_stage IN ('planned','quality_approval','operator_started','item_complete')
+        ORDER BY event.occurred_at,event.id LIMIT 1
+      ) closure ON true
       LEFT JOIN LATERAL (
         SELECT s.shift FROM manufacturing.production_sessions s WHERE s.organization_id=$1 AND s.machine_id=e.machine_id
           AND s.reversed_at IS NULL AND s.started_at<=e.occurred_at AND COALESCE(s.ended_at,now())>=e.occurred_at

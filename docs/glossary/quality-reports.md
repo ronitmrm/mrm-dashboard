@@ -15,9 +15,13 @@ Additional Checking/Assembly/QC rejection entries are separate from machine
 production and do not change these operation-level rejection percentages.
 
 Setting Done raises a first-piece request. Each request remains pending,
-including Not OK, until its first successful QC inspection. Repeated Setting
-Done events define separate request windows. Status bars group requests by the
-Setting Done date; approvals and elapsed-time trends count approvals completed
+including Not OK, until its first successful QC inspection or its request closes.
+A later Setting Done replaces the previous request; a recorded QC approval,
+production start, item completion or planner release also closes its pending wait.
+These closures do not invent inspection approvals or elapsed-time measurements.
+Historical ranges retain requests that were still waiting at that cutoff.
+Repeated Setting Done events define separate request windows. Status bars group
+requests by the Setting Done date; approvals and elapsed-time trends count approvals completed
 in the selected range. Pending before range means outstanding at its start;
 pending at range end includes earlier outstanding requests. Future ranges are
 capped at the current instant when evaluating status. Elapsed time includes

@@ -9,6 +9,7 @@ export type QualityRequest = {
   id: string
   requestedAt: string
   approvedAt: string | null
+  closedAt: string | null
   inspector: string | null
   shift: string
 }
@@ -224,16 +225,22 @@ export function buildQualityReport(
     Date.parse(now),
     Date.parse(`${to}T23:59:59.999+05:30`)
   )
+  const rangeStart = Date.parse(`${from}T00:00:00+05:30`)
   for (const request of source.requests) {
     const requestDate = qualityDate(request.requestedAt)
+    const resolvedAt = Math.min(
+      request.approvedAt ? Date.parse(request.approvedAt) : Infinity,
+      request.closedAt ? Date.parse(request.closedAt) : Infinity
+    )
     const approved =
       request.approvedAt && Date.parse(request.approvedAt) <= cutoff
         ? request.approvedAt
         : null
-    if (requestDate < from && (!approved || qualityDate(approved) >= from))
-      pendingBefore++
-    if (Date.parse(request.requestedAt) <= cutoff && !approved) pendingNow++
-    if (inRange(requestDate)) {
+    if (requestDate < from && resolvedAt >= rangeStart) pendingBefore++
+    const pending =
+      Date.parse(request.requestedAt) <= cutoff && resolvedAt > cutoff
+    if (pending) pendingNow++
+    if (inRange(requestDate) && (approved || pending)) {
       for (const item of [
         get(daily, requestDate),
         get(shifts, request.shift || "Unspecified"),
