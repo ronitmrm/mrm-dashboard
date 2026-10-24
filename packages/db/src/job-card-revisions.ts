@@ -111,7 +111,8 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     ...result.rows.map(row => ({ ...row, revisionLabel: labels.get(row.revisionReference) ?? "Original" })),
     ...revisions.filter(row => row.revisionNumber > 0).map(row => ({
       revisionReference: row.jobCardNumber, revisionLabel: row.revisionLabel,
-      eventType: row.sourcePayload.createdFromReworkRejection === true ? "replacement_created" : "return_received", eventTime: row.sourcePayload.receivedAt,
+      eventType: row.sourcePayload.receiptType === "fg_rejected" ? "fg_rejected"
+        : row.sourcePayload.createdFromReworkRejection === true ? "replacement_created" : "return_received", eventTime: row.sourcePayload.receivedAt,
       detail: [row.sourcePayload.receiptReference, row.reason].filter(Boolean).join(" · "), quantity: row.quantity,
     })),
     ...revisions.filter(row => row.sourcePayload.reworkRejectedAt && row.sourcePayload.createdFromReworkRejection !== true).map(row => ({

@@ -672,6 +672,20 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "fg_rejected",
+    title: "FG Rejected",
+    description: "Record dispatched finished goods that cannot be reworked. Create a remake revision under the same Job Card with fresh RM, a generated Return Reference, and manual route selection.",
+    fields: [
+      { name: "originalJobCardNumber", label: "Dispatched Job Card / Revision / Activity", required: true },
+      { name: "quantity", label: "Rejected Quantity (pieces)", type: "number", min: "1", step: "1", required: true },
+      { name: "replacementRequiredRmKg", label: "New RM Required for Remake (kg)", type: "number", min: "0.001", step: "0.001", required: true },
+      { name: "replacementRmPoNo", label: "Remake RM PO (blank uses original RM PO)" },
+      { name: "receivedOn", label: "Rejection Date", type: "date", required: true },
+      { name: "receiptReference", label: "Return Reference", readOnly: true, placeholder: "Generated on save" },
+      { name: "reason", label: "Rejection Reason", required: true },
+    ],
+  },
+  {
     entryType: "rework_rejected",
     title: "Rework Rejected",
     description: "Close failed rework and create the next Replacement revision under the same Job Card. Close trial sessions first. The full undispatched batch is rejected; replacement requires fresh RM and manual route selection.",
@@ -10645,7 +10659,7 @@ function DataEntryPanel({
     }
   }
 
-  const csvImportAction = bulkEntryType.startsWith("rework_") || !canUseEntry(
+  const csvImportAction = bulkEntryType.startsWith("rework_") || bulkEntryType === "fg_rejected" || !canUseEntry(
     bulkEntryType,
     "import"
   ) ? null : bulkEntryType === "store_masters" ? (
@@ -10686,7 +10700,7 @@ function DataEntryPanel({
           <OperationalWorkspaceTabs
             activeView="dataEntry"
             csvDownloadAction={
-              !bulkEntryType.startsWith("rework_") && canUseEntry(bulkEntryType, "read") ? (
+              !bulkEntryType.startsWith("rework_") && bulkEntryType !== "fg_rejected" && canUseEntry(bulkEntryType, "read") ? (
                 <MasterDataCsvDownloadButton
                   href={`/api/data-template?${new URLSearchParams({ entryType: bulkEntryType, floor: productionFloorCode })}`}
                 />
@@ -11735,6 +11749,13 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 
 function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
   const columns = columnsForProductionMaster(spec.fields)
+  if (spec.entryType === "fg_rejected") return [
+    { key: "rootJobCardNumber", label: "Job Card" },
+    { key: "originalJobCardNumber", label: "Rejected Activity" },
+    { key: "jcNo", label: "Remake Reference" },
+    { key: "partCode", label: "Part Code" },
+    ...columns.filter(column => column.key !== "originalJobCardNumber"),
+  ]
   if (spec.entryType === "rework_rejected") return [
     { key: "jcNo", label: "Failed Rework Revision" },
     { key: "receiptReference", label: "Return Reference" },
@@ -14280,10 +14301,11 @@ function DataEntryForm({
   ])
   const resolvedFields = spec.fields.map((field) => {
     if ((spec.entryType === "rm_inward" && field.name === "jcNo") ||
-      (spec.entryType === "rework_received" && field.name === "originalJobCardNumber") ||
+      (["rework_received", "fg_rejected"].includes(spec.entryType) && field.name === "originalJobCardNumber") ||
       (spec.entryType === "rework_rejected" && field.name === "jobCardNumber")) {
       const activities = asArray(productionControl.jobCardActivityOptions ?? productionControl.workOrders)
         .filter(row => spec.entryType !== "rm_inward" || row.isRework !== true)
+        .filter(row => spec.entryType !== "fg_rejected" || Number(row.dispatchedPieces) > 0 && !["Cancelled", "Rejected"].includes(str(row.status)))
         .filter(row => spec.entryType !== "rework_rejected" || row.isRework === true && !["Cancelled", "Rejected"].includes(str(row.status)))
         .map(row => str(row.jcNo)).filter(Boolean)
       return { ...field, options: ["", ...activities] }
@@ -14378,7 +14400,7 @@ function DataEntryForm({
     >
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        {spec.entryType === "planning_holiday" || spec.entryType.startsWith("rework_") ? (
+        {spec.entryType === "planning_holiday" || spec.entryType.startsWith("rework_") || spec.entryType === "fg_rejected" ? (
           <CardDescription>{spec.description}</CardDescription>
         ) : null}
         {spec.entryType === "route" ? (

@@ -1458,6 +1458,7 @@ function buildProductionControl({
       originalJobCardNumber: rowText(row, "originalJobCardNumber"),
       receivedOn: rowText(row, "receivedOn"),
       receiptReference: rowText(row, "receiptReference"),
+      receiptType: rowText(row, "receiptType"),
       createdFromReworkRejection: rowValue(row, "createdFromReworkRejection") === true,
       reworkRejectedOn: rowText(row, "reworkRejectedOn"),
       reworkRejectedQuantity: safeNumber(rowValue(row, "reworkRejectedQuantity")),

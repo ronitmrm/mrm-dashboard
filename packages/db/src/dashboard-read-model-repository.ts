@@ -525,12 +525,14 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
       knownSourceRevision?: string | null
       knownVersion?: number
       toolingAssetCodes?: boolean
+      dispatchedJobCards?: boolean
     }) {
       return transaction(pool, async client => {
         await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         const sourceRevision = await readDashboardSourceRevision(client, input.organizationId,
           input.productionFloorCode, [...input.entryTypes,
             ...(input.toolingAssetCodes ? ["tooling_asset_codes"] : []),
+            ...(input.dispatchedJobCards ? ["dispatchApprovals"] : []),
             ...(input.entryTypes.includes("software_raw") ? ["productionEntries", "sessions"] : [])], input.identity)
         const metadata = await client.query<{ version: string | null; status: string | null }>(
           `SELECT model.version::text, job.status FROM (SELECT $1::uuid AS organization_id) requested
@@ -566,6 +568,23 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
           const key = (row: JsonRecord) => text(row.jcNo).toLowerCase()
           const prior = new Map((published.rows[0]?.rows ?? []).map(row => [key(row), row]))
           productionControl.workOrders = facts.productionControl.workOrders.map(row => ({ ...prior.get(key(row)), ...row }))
+          if (input.dispatchedJobCards) {
+            const dispatched = await client.query<{ jcNo: string; quantity: string | null }>(
+              `SELECT work_order.job_card_number AS "jcNo",
+                 CASE WHEN bool_or(dispatch.quantity IS NULL) THEN NULL ELSE sum(dispatch.quantity)::text END AS quantity
+               FROM manufacturing.dispatch_approval_events dispatch
+               JOIN manufacturing.work_orders work_order ON work_order.id = dispatch.work_order_id
+                 AND work_order.organization_id = dispatch.organization_id
+               WHERE dispatch.organization_id = $1 AND dispatch.decision = 'approved' AND dispatch.reversed_at IS NULL
+                 AND lower(work_order.job_card_number) = ANY($2::text[])
+               GROUP BY work_order.job_card_number`,
+              [input.organizationId, facts.productionControl.workOrders.map(key)])
+            const quantities = new Map(dispatched.rows.map(row => [key(row), row.quantity === null ? null : Number(row.quantity)]))
+            productionControl.workOrders = facts.productionControl.workOrders.map(row => ({
+              ...prior.get(key(row)), ...row,
+              dispatchedPieces: quantities.has(key(row)) ? quantities.get(key(row)) : 0,
+            }))
+          }
         }
         if (input.toolingAssetCodes) productionControl.toolingAssetCodes = await readToolingAssetCodes(client, input.organizationId)
         return { ...envelope, notModified: false, dashboard: {

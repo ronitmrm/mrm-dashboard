@@ -73,6 +73,19 @@ describe("operational-entry state API", () => {
 
   afterEach(() => vi.restoreAllMocks())
 
+  it("loads Job Card facts using the FG Rejected leaf permission", async () => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.fg_rejected.read"])
+    dependencies.scopedFactsState.mockResolvedValue({ notModified: false, dashboard: {} })
+
+    expect((await GET(request("fg_rejected"))).status).toBe(200)
+    expect(dependencies.scopedFactsState).toHaveBeenCalledWith(expect.objectContaining({
+      entryTypes: ["work_order"],
+      dispatchedJobCards: true,
+      identity: ["entries.cnc.fg_rejected.read"],
+      productionFloorCode: "cnc",
+    }))
+  })
+
   it("rejects unauthenticated and out-of-scope requests before loading records", async () => {
     dependencies.getSession.mockResolvedValue(null)
     expect((await GET(request())).status).toBe(401)
@@ -151,6 +164,7 @@ describe("operational-entry state API", () => {
       organizationId: "organization-1",
       productionFloorCode: "cnc",
       entryTypes: ["work_order"],
+      dispatchedJobCards: false,
       identity: ["entries.cnc.work_order.read"],
       knownSourceRevision: null,
       knownVersion: undefined,
