@@ -1922,6 +1922,51 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           client, input.organizationId, input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        const taskAssignedAt = String(input.payload.taskAssignedAt ?? "").trim()
+        // A saved task can outlive its assignment. Historical reports still belong
+        // before release/replacement; corrections retain the saved report's context.
+        if (!previous && taskAssignedAt) {
+          const request = await client.query<{ id: string }>(
+            `SELECT request.id
+             FROM manufacturing.shop_floor_stage_events request
+             JOIN manufacturing.shop_floor_setup_state state ON state.id = request.setup_state_id
+             WHERE request.organization_id = $1 AND state.work_order_id = $2
+               AND state.operation_setup_id = $3 AND request.machine_id = $4
+               AND request.to_stage = 'setting' AND request.reversed_at IS NULL
+               AND request.occurred_at = migration.try_timestamptz($5)
+             ORDER BY request.id DESC LIMIT 1 FOR UPDATE OF state`,
+            [input.organizationId, context.work_order_id, context.operation_setup_id,
+              machineId, taskAssignedAt]
+          )
+          const open = request.rows[0] && await client.query<{ task_open: boolean }>(
+            `SELECT request.occurred_at <= COALESCE(migration.try_timestamptz($2), now())
+               AND NOT EXISTS (
+                 SELECT 1 FROM manufacturing.shop_floor_stage_events event
+                 WHERE event.setup_state_id = request.setup_state_id
+                   AND event.machine_id = request.machine_id AND event.reversed_at IS NULL
+                   AND event.occurred_at >= request.occurred_at
+                   AND event.occurred_at <= COALESCE(migration.try_timestamptz($2), now())
+                   AND ((event.to_stage IN ('planned', 'item_complete')
+                       AND event.occurred_at < COALESCE(migration.try_timestamptz($2), now()))
+                     OR (event.to_stage = 'setting'
+                       AND (event.occurred_at, event.id) > (request.occurred_at, request.id)))
+               ) AND NOT EXISTS (
+                 SELECT 1 FROM quality.first_piece_inspections inspection
+                 WHERE inspection.work_order_id = $3 AND inspection.operation_setup_id = $4
+                   AND inspection.machine_id = request.machine_id AND inspection.reversed_at IS NULL
+                   AND lower(inspection.status) IN ('approved', 'ok')
+                   AND (NULLIF(inspection.source_payload->>'taskAssignedAt', '') IS NULL
+                     OR migration.try_timestamptz(inspection.source_payload->>'taskAssignedAt') = request.occurred_at)
+                   AND inspection.inspected_at >= request.occurred_at
+                   AND inspection.inspected_at <= COALESCE(migration.try_timestamptz($2), now())
+               ) AS task_open
+             FROM manufacturing.shop_floor_stage_events request WHERE request.id = $1`,
+            [request.rows[0].id, input.inspectedAt, context.work_order_id, context.operation_setup_id]
+          )
+          if (!open?.rows[0]?.task_open) {
+            throw new Error("This first-piece task is no longer pending. Refresh the Quality tasks before submitting.")
+          }
+        }
         const correctionReason = previous
           ? requiredText(input.correctionReason, "Correction reason")
           : null

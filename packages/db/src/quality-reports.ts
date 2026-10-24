@@ -55,30 +55,29 @@ export function createQualityReportRepository(options: RepositoryPoolOptions) {
         WHERE e.organization_id=$1 AND e.to_stage='setting' AND e.reversed_at IS NULL
       ) SELECT e.id::text,e.occurred_at::text AS "requestedAt",approval.inspected_at::text AS "approvedAt",
         LEAST(e.next_setting,closure.occurred_at)::text AS "closedAt",
-        approval.inspector,COALESCE(NULLIF(e.source_payload->>'shift',''),shift_row.shift,'Unspecified') AS shift,f.code AS floor
+        approval.inspector,COALESCE(NULLIF(e.source_payload->>'shift',''),'Unspecified') AS shift,f.code AS floor
       FROM settings e JOIN manufacturing.shop_floor_setup_state state ON state.id=e.setup_state_id
       JOIN catalog.machines m ON m.id=e.machine_id JOIN manufacturing.production_floors f ON f.id=m.production_floor_id
       JOIN manufacturing.work_orders w ON w.id=state.work_order_id
+      LEFT JOIN LATERAL (
+        SELECT min(event.occurred_at) AS occurred_at,
+          min(event.occurred_at) FILTER (WHERE event.to_stage IN ('planned','item_complete')) AS ended_at
+        FROM manufacturing.shop_floor_stage_events event
+        WHERE event.organization_id=$1 AND event.setup_state_id=e.setup_state_id AND event.machine_id=e.machine_id
+          AND event.reversed_at IS NULL AND event.occurred_at>=e.occurred_at
+          AND event.to_stage IN ('planned','quality_approval','operator_started','item_complete')
+      ) closure ON true
       LEFT JOIN LATERAL (
         SELECT i.inspected_at,COALESCE(NULLIF(i.legacy_inspector,''),u.name,'Unspecified') AS inspector
         FROM quality.first_piece_inspections i LEFT JOIN identity.users u ON u.id=i.inspector_user_id
         WHERE i.organization_id=$1 AND i.work_order_id=state.work_order_id AND i.operation_setup_id=state.operation_setup_id
           AND i.machine_id=e.machine_id AND i.reversed_at IS NULL AND lower(i.status) IN ('approved','ok')
+          AND (NULLIF(i.source_payload->>'taskAssignedAt','') IS NULL
+            OR migration.try_timestamptz(i.source_payload->>'taskAssignedAt')=e.occurred_at)
           AND i.inspected_at>=e.occurred_at AND (e.next_setting IS NULL OR i.inspected_at<e.next_setting)
+          AND (closure.ended_at IS NULL OR i.inspected_at<=closure.ended_at)
         ORDER BY i.inspected_at,i.id LIMIT 1
       ) approval ON true
-      LEFT JOIN LATERAL (
-        SELECT event.occurred_at FROM manufacturing.shop_floor_stage_events event
-        WHERE event.organization_id=$1 AND event.setup_state_id=e.setup_state_id AND event.machine_id=e.machine_id
-          AND event.reversed_at IS NULL AND event.occurred_at>=e.occurred_at
-          AND event.to_stage IN ('planned','quality_approval','operator_started','item_complete')
-        ORDER BY event.occurred_at,event.id LIMIT 1
-      ) closure ON true
-      LEFT JOIN LATERAL (
-        SELECT s.shift FROM manufacturing.production_sessions s WHERE s.organization_id=$1 AND s.machine_id=e.machine_id
-          AND s.reversed_at IS NULL AND s.started_at<=e.occurred_at AND COALESCE(s.ended_at,now())>=e.occurred_at
-        ORDER BY s.started_at DESC LIMIT 1
-      ) shift_row ON true
       WHERE f.code=ANY($4::text[]) AND e.occurred_at < (($3::date+1)::timestamp AT TIME ZONE 'Asia/Kolkata')
         AND (approval.inspected_at IS NULL OR approval.inspected_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata')
           OR e.occurred_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata'))

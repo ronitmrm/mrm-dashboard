@@ -56,6 +56,9 @@ by the job, part, option, setup, machine and Setting task assignment time.
 Retrying that same task keeps the same report identity. A new task's readings
 must not overwrite an earlier approval or require an old-report correction
 reason. Earlier reports remain available for review and reasoned correction.
+New task reports must still belong to that Setting request at the inspection
+time; a released, replaced, completed or already approved task cannot be submitted
+again as a new report.
 
 Setup Checklist masters belong to one production unit. New checklist codes use
 one shared SC sequence across all units and are assigned when saved. A code cannot
@@ -363,6 +366,10 @@ day. Finish forecasts exclude closed Friday and holiday Production Dates; those
 offs do not block planning, setup preparation, or setup starts.
 
 Start Session pre-fills the selected shift's scheduled start. End Session pre-fills that session's scheduled shift end. Both remain editable for exceptions; for example, Conventional starts at 08:30 and ends at 20:00.
+An actual session cannot end in the future or overlap another recorded session
+on the same machine. Adjacent sessions and backdated gaps remain valid.
+Historical quantity/downtime corrections that retain the same timing remain
+available even when older records contain an overlap.
 
 For CNC Shift C, End Session pre-fills 06:00 on the calendar day after the
 session's Production Date, even when the session is closed late. Shift A and B

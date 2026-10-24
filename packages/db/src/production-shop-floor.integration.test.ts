@@ -1430,8 +1430,18 @@ describe("production and shop-floor workflows", () => {
     expect(open).toMatchObject({ status: "open", sessionReference: original.sessionReference,
       goodPieces: 0, shift: "General" })
     expect((open.startedAt as Date).toISOString()).toBe("2026-08-14T03:00:00.000Z")
+    const futureEnd = new Date(Date.now() + 86_400_000).toISOString()
+    await expect(repository.closeProductionSession({ sessionId: first.id, organizationId,
+      endedAt: futureEnd, endReason: "manual_stop" })).rejects.toThrow("future")
     await repository.closeProductionSession({ sessionId: first.id, organizationId, grossWeightKg: 0.154,
       crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:00:00+05:30", endReason: "manual_stop", enteredRole: "quality" })
+    await expect(repository.startProductionSession({ ...start, startedAt: "2026-08-14T09:00:00+05:30" }))
+      .rejects.toThrow("overlap")
+    const backdated = await repository.startProductionSession({ ...start, startedAt: "2026-08-13T08:30:00+05:30" })
+    await expect(repository.closeProductionSession({ sessionId: backdated.id, organizationId,
+      endedAt: "2026-08-14T08:31:00+05:30", endReason: "manual_stop" })).rejects.toThrow("overlap")
+    await repository.closeProductionSession({ sessionId: backdated.id, organizationId, grossWeightKg: 0.154,
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-13T09:30:00+05:30", endReason: "manual_stop" })
     const second = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
     expect((await read(second.id)).sessionReference).toBe(`${machineNumber.toUpperCase()}-20260815-02`)
     await repository.recordProductionSessionDowntime({ sessionId: second.id, organizationId,
@@ -1440,6 +1450,9 @@ describe("production and shop-floor workflows", () => {
     await repository.closeProductionSession({ sessionId: second.id, organizationId, grossWeightKg: 0.154,
       crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-15T10:00:00+05:30", endReason: "item_complete" })
     const before = await read(second.id)
+    await expect(repository.correctProductionSession({ sessionId: second.id, organizationId,
+      endedAt: futureEnd, endReason: "item_complete", correctionReason: "Incorrect end time." }))
+      .rejects.toThrow("future")
     const stateQuery = `SELECT to_jsonb(state) AS state FROM manufacturing.shop_floor_setup_state state
       WHERE state.machine_id = (SELECT machine_id FROM manufacturing.production_sessions WHERE id = $1)`
     const state = (await pool.query(stateQuery, [second.id])).rows
@@ -1466,6 +1479,16 @@ describe("production and shop-floor workflows", () => {
     expect(new Date(audit[0]!.after_state.started_at)).toEqual(after.startedAt)
     await expect(correct(second.id, "2026-08-14T09:00:00+05:30")).rejects.toThrow("overlap")
     expect((await read(second.id)).startedAt).toEqual(after.startedAt)
+    // Existing overlaps must not prevent repairs that retain recorded timing.
+    await pool.query("UPDATE manufacturing.production_sessions SET ended_at = $1 WHERE id = $2",
+      ["2026-08-15T09:30:00+05:30", backdated.id])
+    const sameEnd = { sessionId: second.id, organizationId, endedAt: "2026-08-15T10:00:00+05:30",
+      endReason: "item_complete", grossWeightKg: 0.154, crateCount: 0, crateWeightKg: 0,
+      correctionReason: "Recalculate output without changing recorded timing." }
+    await repository.correctProductionSession(sameEnd)
+    await expect(repository.correctProductionSession({ ...sameEnd, endedAt: "2026-08-15T09:59:00+05:30" }))
+      .rejects.toThrow("overlap")
+    await correct(second.id, "2026-08-15T09:00:00+05:30")
   })
 
   test("reverses mistaken downtime while moving a closed session end earlier", async () => {
