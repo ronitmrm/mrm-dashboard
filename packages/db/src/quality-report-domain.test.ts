@@ -6,7 +6,7 @@ import {
 } from "./quality-report-domain"
 
 describe("quality reports", () => {
-  it("uses elapsed approvals, pending Not OK requests, and completed running hours with matched checks", () => {
+  it("uses elapsed approvals, excludes closed requests, and matches completed running hours", () => {
     const source: QualityReportSource = {
       production: [
         {
@@ -19,9 +19,18 @@ describe("quality reports", () => {
       ],
       requests: [
         {
+          id: "replaced",
+          requestedAt: "2026-10-19T09:00:00+05:30",
+          approvedAt: null,
+          closedAt: "2026-10-20T10:00:00+05:30",
+          inspector: null,
+          shift: "A",
+        },
+        {
           id: "approved",
           requestedAt: "2026-10-20T20:00:00+05:30",
           approvedAt: "2026-10-21T08:00:00+05:30",
+          closedAt: null,
           inspector: "QC1",
           shift: "B",
         },
@@ -29,6 +38,7 @@ describe("quality reports", () => {
           id: "not-ok",
           requestedAt: "2026-10-21T09:00:00+05:30",
           approvedAt: null,
+          closedAt: null,
           inspector: null,
           shift: "A",
         },
@@ -79,6 +89,18 @@ describe("quality reports", () => {
       0
     )
     expect(result.shifts.find((row) => row.label === "B")?.minutes).toBe(720)
+    const historical = buildQualityReport(
+      source,
+      "2026-10-19",
+      "2026-10-19",
+      "2026-10-21T20:00:00+05:30"
+    )
+    expect(historical).toMatchObject({
+      pendingBefore: 0,
+      pendingNow: 1,
+      approvals: 0,
+    })
+    expect(historical.daily[0]?.pending).toBe(1)
   })
   it("does not use repeated checks in one hour to fill another hour or downtime", () => {
     const run = {
