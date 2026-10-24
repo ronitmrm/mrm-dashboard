@@ -67,22 +67,23 @@ describe("production session output", () => {
     ).toBeNull()
   })
 
-  test("calculates good pieces from weight after crate tare and QC rejection", () => {
-    expect(
-      calculateProductionSessionOutput({
-        crateCount: 2,
-        crateWeightKg: 1.1,
-        grossWeightKg: 100,
-        measurementMethod: "weight",
-        pieceWeightGrams: 489,
-        rejectedPieces: 3,
-      })
-    ).toEqual({
-      goodPieces: 197,
-      netWeightKg: 97.8,
-      rejectedPieces: 3,
-      totalPieces: 200,
+  test("keeps whole-piece weight boundaries and floors fractional pieces after tare", () => {
+    const input = {
+      crateCount: 1,
+      crateWeightKg: 1.1,
+      grossWeightKg: 2.94,
+      measurementMethod: "weight" as const,
+      pieceWeightGrams: 8,
+      rejectedPieces: 1,
+    }
+    expect(calculateProductionSessionOutput(input)).toEqual({
+      goodPieces: 229,
+      netWeightKg: 1.84,
+      rejectedPieces: 1,
+      totalPieces: 230,
     })
+    expect(calculateProductionSessionOutput({ ...input, grossWeightKg: 2.939 }))
+      .toMatchObject({ goodPieces: 228, totalPieces: 229 })
   })
 
   test("calculates CNC good pieces from the machine counter after QC rejection", () => {

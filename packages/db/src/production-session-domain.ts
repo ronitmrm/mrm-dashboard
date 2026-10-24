@@ -228,11 +228,16 @@ export function calculateProductionSessionOutput(
     if (!(input.pieceWeightGrams > 0)) {
       throw new Error("Piece weight must be greater than zero.")
     }
-    netWeightKg = Math.max(
-      input.grossWeightKg - input.crateCount * input.crateWeightKg,
+    // Match the stored three-decimal weights before flooring whole pieces.
+    const netWeightGrams = Math.max(
+      Math.round(input.grossWeightKg * 1000) -
+        input.crateCount * Math.round(input.crateWeightKg * 1000),
       0
     )
-    totalPieces = Math.floor((netWeightKg * 1000) / input.pieceWeightGrams)
+    netWeightKg = netWeightGrams / 1000
+    totalPieces = Math.floor(
+      (netWeightGrams * 1000) / Math.round(input.pieceWeightGrams * 1000)
+    )
   }
 
   if (rejectedPieces > totalPieces) {
