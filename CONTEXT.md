@@ -376,6 +376,10 @@ _Avoid_: Tracking mode, free-text asset type.
 A quantity-managed item whose quantities share one Asset Code and are allocated and issued without a Unit ID, Asset Movement, Store Return, maintenance, or calibration.
 _Avoid_: Physical Asset, returnable asset.
 
+**Consumable Storage Locations**:
+The rack/bin locations recorded for one Consumable Asset Code in one Store. Multiple locations share the Store's single stock total, without a quantity assigned to each location.
+_Avoid_: Quantity split, separate Asset Codes for each rack.
+
 **Non Consumable Asset**:
 One returnable physical unit whose Unit ID / Serial ID keeps its assignment, Asset Movement, Store Return, maintenance, and calibration separate from other units sharing the same Asset Code.
 _Avoid_: Consumable quantity, Store Item Type row.

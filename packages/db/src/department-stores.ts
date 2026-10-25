@@ -829,14 +829,13 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             item.asset_name AS "assetName", make_model.name AS "makeModel",
             item.unit,
             COALESCE((SELECT string_agg(storage.code, ', ' ORDER BY storage.code)
-              FROM store.locations storage
-              WHERE storage.organization_id = $1 AND storage.accountable_store_id = $2
+              FROM store.consumable_storage_locations saved_storage
+              JOIN store.locations storage ON storage.id = saved_storage.location_id
+              WHERE saved_storage.organization_id = $1
+                AND saved_storage.item_type_id = item.id
+                AND saved_storage.accountable_store_id = $2
                 AND storage.active AND storage.location_type = 'STORE'
                 AND storage.id <> $3
-                AND (SELECT COALESCE(sum(balance.quantity), 0)
-                  FROM store.stock_movements balance
-                  WHERE balance.organization_id = $1 AND balance.item_type_id = item.id
-                    AND balance.asset_id IS NULL AND balance.location_id = storage.id) > 0
             ), '') AS "storageLocations",
             trim_scale(COALESCE(sum(movement.quantity) FILTER (
               WHERE location.accountable_store_id = $2), 0))::text
@@ -1744,11 +1743,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
         const itemByCode = new Map(items.rows.map((item) => [item.typeCode.toLowerCase(), item]))
         const assetByCode = new Map(assets.map((asset) => [asset.assetCode.toLowerCase(), asset]))
         const locationByCode = new Map(locations.rows.map((location) => [location.code.toLowerCase(), location]))
-        const locationById = new Map(locations.rows.map((location) => [location.id, location]))
         const unitAssignments: Array<{ assetId: string; locationId: string; remark: string | null }> = []
-        const movements: Array<{
-          itemTypeId: string; locationId: string; quantity: string
-          fromCode: string; fromName: string; toCode: string; toName: string; remark: string
+        const consumableAssignments: Array<{
+          itemTypeId: string; locationId: string; remark: string | null
         }> = []
         const seen = new Set<string>()
         for (const [index, row] of input.rows.entries()) {
@@ -1762,14 +1759,20 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             if (seen.has(key)) throw new Error("This Unit ID or Asset Code occurs more than once.")
             seen.add(key)
             const locationCode = requiredText(row.locationCode, "Storage location code")
-            const destination = locationByCode.get(locationCode.toLowerCase())
-            if (!destination) throw new Error("Choose a location in the accountable Store.")
-            if (destination.id === store.defaultLocationId) {
-              throw new Error("Choose a rack/bin location in this Store.")
-            }
+            const codes = unitId || locationByCode.has(locationCode.toLowerCase())
+              ? [locationCode]
+              : [...new Set(locationCode.split(",").map((code) => code.trim().toLowerCase()))]
+            const destinations = codes.map((code) => {
+              const destination = locationByCode.get(code.toLowerCase())
+              if (!destination) throw new Error("Choose a location in the accountable Store.")
+              if (destination.id === store.defaultLocationId) {
+                throw new Error("Choose a rack/bin location in this Store.")
+              }
+              return destination
+            })
             if (unitId) {
               const asset = assertStorageAsset(assetByCode.get(unitId.toLowerCase()), store)
-              unitAssignments.push({ assetId: asset.id, locationId: destination.id,
+              unitAssignments.push({ assetId: asset.id, locationId: destinations[0]!.id,
                 remark: row.remark?.trim() || null })
               continue
             }
@@ -1782,18 +1785,9 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             if (!itemBalances.length) {
               throw new Error("This Asset Code has no available stock in this Store.")
             }
-            for (const balance of itemBalances) {
-              if (balance.locationId === destination.id) continue
-              const source = locationById.get(balance.locationId)!
-              const movement = {
-                itemTypeId,
-                fromCode: source.code, fromName: source.name,
-                toCode: destination.code, toName: destination.name,
-                remark: ["Bulk storage location assignment", row.remark?.trim()].filter(Boolean).join(": "),
-              }
-              movements.push({ ...movement, locationId: source.id, quantity: `-${balance.available}` },
-                { ...movement, locationId: destination.id, quantity: balance.available })
-            }
+            for (const destination of destinations) consumableAssignments.push({
+              itemTypeId, locationId: destination.id, remark: row.remark?.trim() || null,
+            })
           } catch (error) {
             throw new Error(`Row ${row.rowNumber ?? index + 2}: ${error instanceof Error ? error.message : "Storage location assignment failed."}`)
           }
@@ -1813,21 +1807,46 @@ export function createDepartmentStoreRepository(options: RepositoryPoolOptions) 
             [input.organizationId, store.id, JSON.stringify(unitAssignments), input.actorUserId ?? null]
           )
         }
-        if (movements.length) {
+        if (consumableAssignments.length) {
+          const assignments = JSON.stringify(consumableAssignments)
+          const itemTypeIds = [...new Set(consumableAssignments.map((assignment) => assignment.itemTypeId))]
           await client.query(
-            `INSERT INTO store.stock_movements (
-               organization_id, item_type_id, location_id, movement_type, quantity,
-               from_holder_type, from_holder_reference, from_holder_name,
-               to_holder_type, to_holder_reference, to_holder_name,
-               moved_by, remark, created_by_user_id)
-             SELECT $1, movement."itemTypeId", movement."locationId", 'ADJUSTMENT', movement.quantity,
-               'STORE', movement."fromCode", movement."fromName",
-               'STORE', movement."toCode", movement."toName", $3, movement.remark, $4
-             FROM jsonb_to_recordset($2::jsonb) AS movement(
-               "itemTypeId" uuid, "locationId" uuid, quantity numeric,
-               "fromCode" text, "fromName" text, "toCode" text, "toName" text, remark text)`,
-            [input.organizationId, JSON.stringify(movements), input.movedBy?.trim() || null,
-              input.actorUserId ?? null]
+            `INSERT INTO audit.events (
+               organization_id, event_type, target_schema, target_table, target_id,
+               actor_user_id, reason, before_state, after_state, metadata,
+               source_system, source_table, source_id
+             ) SELECT $1, 'store.consumable_storage_locations_assigned', 'store', 'item_types',
+               assignment."itemTypeId", $4, max(assignment.remark),
+               jsonb_build_object('locationCodes', COALESCE((
+                 SELECT jsonb_agg(location.code ORDER BY location.code)
+                 FROM store.consumable_storage_locations saved
+                 JOIN store.locations location ON location.id = saved.location_id
+                 WHERE saved.organization_id = $1 AND saved.accountable_store_id = $2
+                   AND saved.item_type_id = assignment."itemTypeId"
+               ), '[]'::jsonb)),
+               jsonb_build_object('locationCodes', jsonb_agg(location.code ORDER BY location.code)),
+               jsonb_build_object('storeCode', $5::text),
+               'mrm-dashboard', 'store_storage_locations', gen_random_uuid()::text
+             FROM jsonb_to_recordset($3::jsonb) AS assignment(
+               "itemTypeId" uuid, "locationId" uuid, remark text)
+             JOIN store.locations location ON location.id = assignment."locationId"
+             GROUP BY assignment."itemTypeId"`,
+            [input.organizationId, store.id, assignments, input.actorUserId ?? null, store.code]
+          )
+          await client.query(
+            `DELETE FROM store.consumable_storage_locations
+             WHERE organization_id = $1 AND accountable_store_id = $2
+               AND item_type_id = ANY($3::uuid[])`,
+            [input.organizationId, store.id, itemTypeIds]
+          )
+          await client.query(
+            `INSERT INTO store.consumable_storage_locations (
+               organization_id, item_type_id, accountable_store_id, location_id,
+               updated_by_user_id, remark)
+             SELECT $1, assignment."itemTypeId", $2, assignment."locationId", $4, assignment.remark
+             FROM jsonb_to_recordset($3::jsonb) AS assignment(
+               "itemTypeId" uuid, "locationId" uuid, remark text)`,
+            [input.organizationId, store.id, assignments, input.actorUserId ?? null]
           )
         }
         await queueDashboardRefresh(client, input.organizationId)
