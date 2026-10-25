@@ -5,6 +5,8 @@ import {
   type ProductionFloorCode,
 } from "@workspace/db/production-floors"
 
+import { istDateValue } from "./date-time"
+
 export type SharedEmployeeMasterRow = {
   department: string
   departmentCode: string | null
@@ -77,7 +79,9 @@ type EmployeeOptionSource = {
   employeeCode?: unknown
   empId?: unknown
   employeeName?: unknown
+  lastWorkingDate?: string | null
   status?: unknown
+  terminatedDate?: string | null
 }
 
 export type EmployeeOption = {
@@ -243,9 +247,14 @@ export function productionDispatchApproverOptions(
 export function recruitmentInterviewerOptions(
   rows: readonly EmployeeOptionSource[]
 ) {
+  const today = istDateValue()
   return employeeOptions(rows, isLeadershipEmployee, (row) => {
     const status = String(row.status).trim()
     if (status === "Active" || status === "Occupied") return true
+    if (status === "Resigned" || status === "Leaving") {
+      const lastWorkingDate = row.lastWorkingDate ?? row.terminatedDate
+      return Boolean(lastWorkingDate && lastWorkingDate >= today)
+    }
     return (
       status === "Appointed" && Boolean(String(row.employeeCode ?? "").trim())
     )
