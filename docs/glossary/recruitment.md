@@ -255,7 +255,10 @@ reconstructed reliably.
 In Employee Master, Withdraw Resignation keeps the same joined assignment and
 restores it to Occupied. HR records a withdrawal reason; the original resignation,
 its planned last working date, and the withdrawal time and reason remain visible
-in the editor and Employee Assignment History. Actual departures cannot be
+in the editor. Employee Assignment History shows the original resignation and
+each cancellation as separate dated rows with their reasons, alongside the
+assignment's current state. Its summary counts assignments rather than history
+events. Actual departures cannot be
 withdrawn. Any pending replacement appointment must be cancelled first; the
 withdrawal closes open recruitment for the retained employee's posts.
 

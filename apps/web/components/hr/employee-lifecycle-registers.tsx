@@ -21,8 +21,8 @@ import { useRouter } from "next/navigation"
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { EmployeeLetterForm } from "@/components/hr/employee-letter-dialog"
-import { EmployeeResignationHistory } from "@/components/hr/employee-resignation-history"
 import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
+import { formatIstDateTime } from "@/lib/date-time"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
 import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
@@ -276,6 +276,22 @@ export function EmployeeAssignmentHistory({
 }) {
   const departed = assignments.filter((assignment) => assignment.endedOn && assignment.exitType !== "Role Changed")
   const roleChanges = assignments.filter((assignment) => assignment.exitType === "Role Changed" && assignment.endedOn)
+  const rows = assignments.flatMap((assignment) => [
+    {
+      id: assignment.id, assignment,
+      status: assignment.endedOn
+        ? assignment.exitType ?? "Unspecified"
+        : assignment.exitType === "Resigned" ? "Resignation Planned" : "Current",
+      plannedEndOn: assignment.plannedEndOn, endedOn: assignment.endedOn,
+      recordedAt: null, note: assignment.exitNote,
+    },
+    ...(assignment.resignationHistory ?? []).map((event, index) => ({
+      id: `${assignment.id}:resignation:${index}`, assignment,
+      status: event.type === "Resignation Withdrawn" ? "Resignation Cancelled" : event.type,
+      plannedEndOn: event.lastWorkingDate, endedOn: null,
+      recordedAt: event.recordedAt, note: event.note,
+    })),
+  ])
   return (
     <>
       <MetricSummary
@@ -292,7 +308,7 @@ export function EmployeeAssignmentHistory({
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
-          <CardDescription>Joined assignments remain here after a role change or departure.</CardDescription>
+          <CardDescription>Assignments, resignations and cancelled resignations appear as separate rows. Summary counts reflect assignments.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
@@ -300,39 +316,26 @@ export function EmployeeAssignmentHistory({
               <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
               <TableHead>Department</TableHead><TableHead>Designation</TableHead>
               <TableHead>Joined</TableHead><TableHead>Planned End</TableHead>
-              <TableHead>Actual End</TableHead><TableHead>Exit</TableHead>
-              <TableHead>Resignation History</TableHead>
+              <TableHead>Actual End</TableHead><TableHead>Status</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {assignments.map((assignment) => {
-                const exitStatus = assignment.endedOn
-                  ? assignment.exitType ?? "Unspecified"
-                  : assignment.exitType === "Resigned" ? "Resignation Planned" : "Current"
-                return <TableRow key={assignment.id}>
+              {rows.map((row) => {
+                const { assignment, status } = row
+                return <TableRow key={row.id}>
                   <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                   <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                   <TableCell>{assignment.department ?? "—"}</TableCell>
                   <TableCell>{assignment.designation ?? "—"}</TableCell>
                   <TableCell>{formatCalendarDate(assignment.joinedOn ?? "Not recorded")}</TableCell>
-                  <TableCell>{formatCalendarDate(assignment.plannedEndOn ?? "—")}</TableCell>
-                  <TableCell>{formatCalendarDate(assignment.endedOn ?? "—")}</TableCell>
-                  <TableCell>
-                    <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" || exitStatus === "Role Changed" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
-                    {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}
-                  </TableCell>
-                  <TableCell>
-                    {assignment.resignationHistory?.length
-                      ? <Dialog>
-                          <DialogTrigger asChild>
-                            <Button aria-label={`View resignation history for ${assignment.employeeName}`} size="sm" variant="outline">View History ({assignment.resignationHistory.length})</Button>
-                          </DialogTrigger>
-                          <StandardDialogContent title="Resignation History" description={assignment.employeeName}>
-                            <EmployeeResignationHistory history={assignment.resignationHistory} />
-                          </StandardDialogContent>
-                        </Dialog> : "—"}
+                  <TableCell>{formatCalendarDate(row.plannedEndOn ?? "—")}</TableCell>
+                  <TableCell>{formatCalendarDate(row.endedOn ?? "—")}</TableCell>
+                  <TableCell data-filter-value={status}>
+                    <StatusBadge value={status} tone={status === "Left Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
+                    {row.recordedAt ? <span className="block text-xs text-muted-foreground">{formatIstDateTime(row.recordedAt)} IST</span> : null}
+                    {row.note ? <span className="block text-xs text-muted-foreground">{row.note}</span> : null}
                   </TableCell>
                 </TableRow>})}
-              {!assignments.length ? <TableRow><TableCell colSpan={9}>
+              {!assignments.length ? <TableRow><TableCell colSpan={8}>
                 <StandardState title="No Assignment History" description="Joined employees will appear here." />
               </TableCell></TableRow> : null}
             </TableBody>
