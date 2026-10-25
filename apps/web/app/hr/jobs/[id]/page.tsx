@@ -360,13 +360,20 @@ export default async function JobWorkspacePage({
                             candidateName={application.candidateName}
                             appointmentDefaults={(() => {
                               const offer = offerLetters.find((letter) => letter.applicationId === application.id)
-                              return offer ? {
+                              return offer || application.status === "Did Not Join" ? {
                                 offer,
                                 salaryBeforeProbation: application.salaryBeforeProbation,
                                 salaryAfterProbationMinimum: application.salaryAfterProbationMinimum,
                                 salaryAfterProbationMaximum: application.salaryAfterProbationMaximum,
                               } : undefined
                             })()}
+                            canReappoint={
+                              application.status === "Did Not Join" &&
+                              application.allRoundsApproved && job.status === "Open" &&
+                              canViewOfferLetters && grants.includes(hrTaskCapabilities.completeCandidateAppointment)
+                            }
+                            didNotJoinOn={application.didNotJoinOn}
+                            didNotJoinReason={application.didNotJoinReason}
                             canRecordDidNotJoin={
                               application.canRecordDidNotJoin &&
                               grants.includes(
