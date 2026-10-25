@@ -1,5 +1,8 @@
 # Railway worker deployment
 
+For the temporary GCP replacement, see [GCP worker deployment](gcp-worker-deployment.md).
+That workflow deploys independently; Railway is paused or resumed manually by the user.
+
 ## Contract
 
 - GitHub deployment branch: `main`.
