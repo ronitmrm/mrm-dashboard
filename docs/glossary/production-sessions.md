@@ -159,8 +159,13 @@ without a Planner action. The setup returns to Planned, inactive, and waits for 
 RM (first setup) or upstream good output (later setups). Order targets, recorded
 production and the RM shortage remain. Counter output or complete weight details
 are required; Weight Pending cannot use this close reason. The first rework setup
-cannot wait for fresh RM. Corrections may retain this reason to correct output or
-timing, but cannot change another close reason into it or undo the recorded release.
+cannot wait for fresh RM. A closed-session correction may change Shift Ends or
+another non-completion close reason to Awaiting material and release the matching
+active setup in the same transaction. Actual output, a correction reason and the
+current saved session version are required. A later session on that machine or a
+changed assignment blocks the release. Item Complete must use Reopen Setup first.
+Corrections may retain Awaiting material to correct output or timing, but cannot
+undo the recorded release.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.
