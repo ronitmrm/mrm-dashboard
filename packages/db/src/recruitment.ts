@@ -5001,6 +5001,154 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async reappointCandidateAppointment(
+      input: MutationContext & CandidateAppointmentTermsInput & {
+        applicationId: string
+        joiningDate: string
+        previousJoiningDate: string
+        reason: string
+      } & ({ previousLetterId: null } | {
+        previousLetterId: string
+        issuedOn: string
+        details: Omit<OfferLetterDetails, "salaryAfterProbationMinimum" | "salaryAfterProbationMaximum">
+        renderPdf: (letter: PreparedEmploymentLetter) => Promise<Uint8Array>
+      })
+    ) {
+      const terms = candidateAppointmentTerms({ ...input, willingToJoin: true })
+      const reason = required(input.reason, "Reason for reappointment")
+      const joiningDate = required(input.joiningDate, "New joining date")
+      const date = new Date(`${joiningDate}T00:00:00Z`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(joiningDate) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== joiningDate) {
+        throw new Error("Enter a valid new joining date.")
+      }
+      return transaction(pool, async (client) => {
+        const result = await client.query<{
+          id: string; candidate_id: string; job_id: string; post_id: string | null;
+          status: string; joining_date: string | null; did_not_join_on: string | null;
+          did_not_join_reason: string | null; job_status: string; today: string;
+          salary_before_probation: string | null; salary_after_probation_minimum: string | null;
+          salary_after_probation_maximum: string | null;
+        }>(
+          `SELECT application.id, application.candidate_id, application.status,
+             application.joining_date::text, application.did_not_join_on::text,
+             application.did_not_join_reason, application.salary_before_probation,
+             application.salary_after_probation_minimum, application.salary_after_probation_maximum,
+             job.id AS job_id, job.post_id, job.status AS job_status,
+             to_char(current_timestamp AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS today
+           FROM recruitment.applications application
+           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+           WHERE application.id = $1 AND application.organization_id = $2
+             AND job.organization_id = $2 FOR UPDATE OF application, job`,
+          [required(input.applicationId, "Candidate application"), input.organizationId]
+        )
+        const application = result.rows[0]
+        if (!application) throw new Error("Candidate application was not found.")
+        if (application.status !== "Did Not Join" || !application.joining_date || !application.did_not_join_on) {
+          throw new Error("Only an application recorded as Did Not Join can be reappointed.")
+        }
+        if (application.joining_date !== input.previousJoiningDate) {
+          throw new Error("The previous joining date has changed. Refresh and try again.")
+        }
+        if (joiningDate < application.today || joiningDate <= application.did_not_join_on) {
+          throw new Error("New joining date must be today or later and after the recorded non-joining date.")
+        }
+        if (application.job_status !== "Open" || !application.post_id) {
+          throw new Error("The original job must be open with an available approved post before reappointment.")
+        }
+        const posts = await client.query<{
+          id: string; status: string; employee_name: string | null; employee_code: string | null;
+          appointed_application_id: string | null; last_working_date: string | null;
+        }>(
+          `SELECT post.id, post.status, post.employee_name, post.employee_code,
+             post.appointed_application_id, post.last_working_date::text
+           FROM recruitment.posts post WHERE post.organization_id = $1
+             AND post.status <> 'Inactive' AND (post.id = $2::uuid OR post.id IN (
+               SELECT link.post_id FROM recruitment.combined_role_posts link
+               JOIN recruitment.posts primary_post ON primary_post.combined_role_id = link.combined_role_id
+               WHERE primary_post.id = $2::uuid AND primary_post.organization_id = $1
+             )) ORDER BY post.id FOR UPDATE OF post`,
+          [input.organizationId, application.post_id]
+        )
+        const postIds = posts.rows.map((post) => post.id)
+        const vacant = posts.rows.every((post) => post.status === "Vacant" &&
+          !optional(post.employee_name) && !optional(post.employee_code) && !post.appointed_application_id)
+        const outgoing = posts.rows[0]
+        const resigned = posts.rows.every((post) => post.status === "Resigned" &&
+          post.last_working_date && (optional(post.employee_name) || optional(post.employee_code)) &&
+          post.employee_code === outgoing?.employee_code && post.employee_name === outgoing?.employee_name)
+        if (!postIds.includes(application.post_id) || (!vacant && !resigned)) {
+          throw new Error("The original vacancy is no longer available. No appointment details were changed.")
+        }
+        const reservations = await client.query(
+          `SELECT id FROM recruitment.post_replacements WHERE organization_id = $1
+             AND status = 'Pending' AND (application_id = $2 OR post_id = ANY($3::uuid[]))
+           ORDER BY post_id FOR UPDATE`,
+          [input.organizationId, application.id, postIds]
+        )
+        const joined = await client.query(
+          `SELECT id FROM recruitment.employee_post_assignments
+           WHERE organization_id = $1 AND application_id = $2
+           UNION ALL SELECT id FROM recruitment.post_replacements
+           WHERE organization_id = $1 AND application_id = $2 AND status = 'Joined' LIMIT 1`,
+          [input.organizationId, application.id]
+        )
+        const otherAppointments = await client.query(
+          `SELECT id FROM recruitment.applications
+           WHERE organization_id = $1 AND job_post_id = $2 AND id <> $3
+             AND ((candidate_id = $4 AND status IN ('Assigned', 'Hold', 'Interview'))
+               OR (status = 'Approved' AND willing_to_join = true))
+           ORDER BY id FOR UPDATE`,
+          [input.organizationId, application.job_id, application.id, application.candidate_id]
+        )
+        if (reservations.rows.length || joined.rows.length || otherAppointments.rows.length) {
+          throw new Error("The candidate has already joined or the vacancy is reserved by another appointment. No appointment details were changed.")
+        }
+        if (input.previousLetterId === null) {
+          const existingOffer = await client.query(
+            `SELECT id FROM recruitment.employment_letters
+             WHERE organization_id = $1 AND application_id = $2 AND letter_type = 'offer'
+             ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+            [input.organizationId, application.id]
+          )
+          if (existingOffer.rows.length) throw new Error("An Offer Letter now exists. Refresh and reopen reappointment.")
+        }
+        await client.query(
+          `UPDATE recruitment.applications SET status = 'Approved', willing_to_join = NULL,
+             did_not_join_on = NULL, did_not_join_reason = NULL
+           WHERE id = $1 AND organization_id = $2`,
+          [application.id, input.organizationId]
+        )
+        await completeCandidateAppointmentInTransaction(client, {
+          ...input, applicationId: application.id, terms,
+        })
+        const revisedOffer = input.previousLetterId !== null ? await insertOfferRevision(client, {
+          ...input, joiningDate, reason,
+          salary: terms.salaryBeforeProbation!,
+          details: { ...input.details, salaryAfterProbationMinimum: terms.salaryAfterProbationMinimum!,
+            salaryAfterProbationMaximum: terms.salaryAfterProbationMaximum! },
+        }) : null
+        await client.query(
+          `INSERT INTO recruitment.candidate_events (
+             organization_id, candidate_id, job_post_id, application_id, event_type, title,
+             notes, occurred_at, actor_user_id, source_system, source_table, source_id
+           ) VALUES ($1,$2,$3,$4,'Reappointed','Candidate reappointed after non-joining',
+             $5,now(),$6,'mrm-dashboard','application-reappointment',$7)`,
+          [input.organizationId, application.candidate_id, application.job_id, application.id,
+            `Did Not Join on ${application.did_not_join_on}: ${application.did_not_join_reason ?? "No reason recorded"}. New joining date ${joiningDate}. ${revisedOffer ? `Offer ${revisedOffer.reference} replaces ${revisedOffer.previousReference}. ` : ""}${reason}`,
+            input.actorUserId ?? null, randomUUID()]
+        )
+        await audit(client, {
+          ...input, eventType: "recruitment.application.reappointed", reason,
+          beforeState: application,
+          afterState: { ...terms, status: "Approved", didNotJoinOn: null,
+            didNotJoinReason: null, letterId: revisedOffer?.id ?? null },
+          metadata: { postIds, previousLetterId: input.previousLetterId },
+          targetId: application.id, targetTable: "applications",
+        })
+        return { id: application.id, jobId: application.job_id, letterId: revisedOffer?.id ?? null }
+      })
+    },
+
     async withdrawCandidateApplication(
       input: MutationContext & { applicationId: string; reason: string }
     ) {

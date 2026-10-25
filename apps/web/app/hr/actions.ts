@@ -10,6 +10,7 @@ import {
   createRecruitmentRepository,
   type AppointmentLetterDetails,
   type MasterDataKind,
+  type OfferLetterDetails,
   type PreparedEmploymentLetterRecord,
   recruitmentInterviewRound,
 } from "@workspace/db"
@@ -819,23 +820,24 @@ export async function withdrawCandidateApplicationAction(formData: FormData) {
   )
 }
 
-export async function reviseCandidateAppointmentAction(formData: FormData) {
+async function saveCandidateAppointmentRevision(formData: FormData, mode: "correct" | "reappoint") {
   await requireCapability("masters.universal.employee_assignments.read", hrReturnPath(formData))
   await mutate(
     formData,
     hrTaskCapabilities.completeCandidateAppointment,
     async (repository, context) => {
-      const result = await repository.reviseCandidateAppointment({
+      const input = {
         ...context,
         applicationId: value(formData, "application_id"),
         joiningDate: value(formData, "joining_date"),
         previousJoiningDate: value(formData, "previous_joining_date"),
-        previousLetterId: value(formData, "previous_letter_id"),
         salaryBeforeProbation: value(formData, "salary_before_probation"),
         salaryAfterProbationMinimum: value(formData, "salary_after_probation_minimum"),
         salaryAfterProbationMaximum: value(formData, "salary_after_probation_maximum"),
-        issuedOn: value(formData, "offer_issued_on"),
-        details: {
+        reason: value(formData, "reason"),
+      }
+      const previousLetterId = value(formData, "previous_letter_id")
+      const details = {
           dutyStartTime: value(formData, "offer_duty_start_time"),
           dutyEndTime: value(formData, "offer_duty_end_time"),
           payPeriod: value(formData, "offer_pay_period") === "day" ? "day" : "month",
@@ -844,15 +846,35 @@ export async function reviseCandidateAppointmentAction(formData: FormData) {
           probationUnit: value(formData, "offer_probation_unit") === "days" ? "days" : "months",
           signatoryDesignation: value(formData, "offer_signatory_designation"),
           signatoryName: value(formData, "offer_signatory_name"),
-        },
+        } satisfies Omit<OfferLetterDetails, "salaryAfterProbationMinimum" | "salaryAfterProbationMaximum">
+      const offerInput = {
+        ...input,
+        previousLetterId,
+        issuedOn: value(formData, "offer_issued_on"),
+        details,
         renderPdf: buildEmploymentLetterPdf,
-        reason: value(formData, "reason"),
-      })
+      }
+      const result = mode === "reappoint"
+        ? await repository.reappointCandidateAppointment(previousLetterId
+          ? offerInput : { ...input, previousLetterId: null })
+        : await repository.reviseCandidateAppointment(offerInput)
       revalidatePath(`/hr/jobs/${result.jobId}`)
       revalidatePath("/hr/candidates", "layout")
     },
-    "Appointment corrected and updated Offer Letter PDF generated. Previous offers remain in candidate history."
+    mode === "reappoint"
+      ? value(formData, "previous_letter_id")
+        ? "Candidate reappointed with a new joining date and updated Offer Letter. Earlier non-joining and offers remain in history."
+        : "Candidate reappointed with a new joining date. Earlier non-joining remains in history."
+      : "Appointment corrected and updated Offer Letter PDF generated. Previous offers remain in candidate history."
   )
+}
+
+export async function reviseCandidateAppointmentAction(formData: FormData) {
+  await saveCandidateAppointmentRevision(formData, "correct")
+}
+
+export async function reappointCandidateAppointmentAction(formData: FormData) {
+  await saveCandidateAppointmentRevision(formData, "reappoint")
 }
 
 export async function updateEmployeeProbationAction(formData: FormData) {

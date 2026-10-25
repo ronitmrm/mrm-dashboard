@@ -165,7 +165,20 @@ The application becomes Did Not Join and the same job reopens, retaining its
 original requirement. Original appointment terms, interviews and generated
 Offer Letter remain historical evidence; the cancellation reason and date are
 recorded in candidate history and the audit log. Repeating the action cannot
-release another vacancy. A future application is a new application cycle.
+release another vacancy.
+
+If that candidate later agrees to a new joining date for the same reopened job,
+Reappoint Candidate restores the accepted appointment on the same application.
+Earlier interview approvals, the Did Not Join event and its reason remain in
+candidate history. HR enters a new date after non-joining (today or later),
+confirms the terms and supplies a reappointment reason. The original vacancy
+must still be available; joined employees and another person's reservation
+cannot be overwritten. Combined posts are reserved together.
+
+An existing Offer Letter receives a new immutable revision; earlier PDFs remain
+available. Appointments without an earlier offer retain their agreed terms.
+The Offer & Joining Register returns to Awaiting Joining with the new date.
+A candidate applying to a different job uses a new application cycle.
 
 ## Pending Replacement Appointment
 

@@ -19,6 +19,7 @@ import {
   withdrawCandidateApplicationAction,
   recordCandidateDidNotJoinAction,
   reviseCandidateAppointmentAction,
+  reappointCandidateAppointmentAction,
 } from "@/app/hr/actions"
 import {
   CandidateAppointmentFields,
@@ -37,11 +38,11 @@ function DidNotJoinSubmitButton({ disabled }: { disabled: boolean }) {
   )
 }
 
-function OfferRevisionSubmitButton() {
+function AppointmentSubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus()
   return (
     <Button type="submit" disabled={pending}>
-      {pending ? "Saving…" : "Save And Generate Updated PDF"}
+      {pending ? "Saving…" : label}
     </Button>
   )
 }
@@ -51,9 +52,12 @@ export function CandidateApplicationActions({
   candidateName,
   canCompleteAppointment,
   canRecordDidNotJoin = false,
+  canReappoint = false,
   canWithdraw,
   defaultJoiningDate,
   appointmentDefaults,
+  didNotJoinOn,
+  didNotJoinReason,
   masterView,
   panelId,
   returnJobId,
@@ -62,37 +66,44 @@ export function CandidateApplicationActions({
   candidateName: string
   canCompleteAppointment: boolean
   canRecordDidNotJoin?: boolean
+  canReappoint?: boolean
   canWithdraw: boolean
   defaultJoiningDate: string | null
   appointmentDefaults?: CandidateAppointmentDefaults
+  didNotJoinOn?: string | null
+  didNotJoinReason?: string | null
   masterView?: "dataEntry" | "masterTables"
   panelId?: string
   returnJobId?: string
 }) {
   const today = istDateValue(new Date())
+  const minimumRejoiningDate = didNotJoinOn === today
+    ? istDateValue(new Date(`${today}T00:00:00Z`).getTime() + 86_400_000) : today
   const joiningDateIsFuture = Boolean(
     defaultJoiningDate && defaultJoiningDate > today
   )
-  if (!canCompleteAppointment && !canWithdraw && !canRecordDidNotJoin)
+  if (!canCompleteAppointment && !canWithdraw && !canRecordDidNotJoin && !canReappoint)
     return null
 
   return (
     <div className="flex justify-end gap-2">
-      {canRecordDidNotJoin && appointmentDefaults ? (
+      {(canReappoint || canRecordDidNotJoin && appointmentDefaults?.offer) && appointmentDefaults ? (
         <Sheet>
           <SheetTrigger asChild>
             <Button size="sm" type="button" variant="outline">
               <Pencil data-icon="inline-start" />
-              Edit Appointment & Offer
+              {canReappoint ? "Reappoint Candidate" : "Edit Appointment & Offer"}
             </Button>
           </SheetTrigger>
           <StandardDrawerContent
             className="w-full overflow-y-auto sm:max-w-2xl"
-            title="Edit Appointment & Offer"
-            description={`Correct ${candidateName}'s appointment terms. Saving creates an updated PDF and keeps earlier offers in history.`}
+            title={canReappoint ? "Reappoint Candidate With New Joining Date" : "Edit Appointment & Offer"}
+            description={canReappoint
+              ? `Reappoint ${candidateName} to the same job. Earlier interviews, non-joining and offers remain in candidate history.${appointmentDefaults.offer ? " Saving generates an updated offer." : ""}`
+              : `Correct ${candidateName}'s appointment terms. Saving creates an updated PDF and keeps earlier offers in history.`}
           >
             <form
-              action={reviseCandidateAppointmentAction}
+              action={canReappoint ? reappointCandidateAppointmentAction : reviseCandidateAppointmentAction}
               className="px-6 pb-6"
             >
               <input
@@ -115,15 +126,24 @@ export function CandidateApplicationActions({
                 <input
                   name="previous_letter_id"
                   type="hidden"
-                  value={appointmentDefaults.offer.id}
+                  value={appointmentDefaults.offer?.id ?? ""}
                 />
+                {canReappoint && didNotJoinOn ? (
+                  <p className="text-sm text-muted-foreground">
+                    Earlier Did Not Join: {formatIstDate(didNotJoinOn)}{didNotJoinReason ? ` · ${didNotJoinReason}` : ""}
+                  </p>
+                ) : null}
                 <CandidateAppointmentFields
-                  defaultJoiningDate={defaultJoiningDate ?? ""}
-                  defaults={appointmentDefaults}
+                  defaultJoiningDate={canReappoint ? "" : defaultJoiningDate ?? ""}
+                  defaults={canReappoint && appointmentDefaults.offer
+                    ? { ...appointmentDefaults, offer: { ...appointmentDefaults.offer, issuedOn: today } }
+                    : appointmentDefaults}
+                  includeOfferDetails={!canReappoint || Boolean(appointmentDefaults.offer)}
+                  minimumJoiningDate={canReappoint ? minimumRejoiningDate : undefined}
                 />
                 <Field>
                   <FieldLabel htmlFor={`joining-reason-${applicationId}`}>
-                    Reason for Correction
+                    {canReappoint ? "Reason for Reappointment" : "Reason for Correction"}
                   </FieldLabel>
                   <Textarea
                     id={`joining-reason-${applicationId}`}
@@ -132,7 +152,9 @@ export function CandidateApplicationActions({
                     rows={3}
                   />
                 </Field>
-                <OfferRevisionSubmitButton />
+                <AppointmentSubmitButton label={canReappoint
+                  ? appointmentDefaults.offer ? "Reappoint And Generate Updated Offer" : "Confirm Reappointment"
+                  : "Save And Generate Updated PDF"} />
               </FieldGroup>
             </form>
           </StandardDrawerContent>

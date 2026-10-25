@@ -370,3 +370,70 @@ test("a pending replacement blocks resignation withdrawal without changing eithe
       replacementAppointments: [expect.objectContaining({ employeeName: "Incoming Employee", status: "Pending" })] })
   }
 }, 60_000)
+
+async function reappointmentFixture() {
+  const f = await fixture()
+  for (const round of ["Screening Round", "Technical Round", "HR Round"]) {
+    await pool.query(
+      `INSERT INTO recruitment.interviews
+       (organization_id, application_id, round_name, status, source_system, source_table, source_id)
+       VALUES ($1,$2,$3,'Approved','test','interviews',$4)`,
+      [f.organizationId, f.applicationId, round, randomUUID()]
+    )
+  }
+  await repository.recordCandidateDidNotJoin({ organizationId: f.organizationId,
+    applicationId: f.applicationId, didNotJoinOn: "2026-01-02", reason: "Candidate did not attend" })
+  return { ...f, input: { organizationId: f.organizationId, applicationId: f.applicationId,
+    joiningDate: "2099-01-01", previousJoiningDate: "2026-01-01", previousLetterId: f.letterId,
+    issuedOn: "2026-10-25", reason: "Candidate confirmed availability again",
+    salaryBeforeProbation: 11000, salaryAfterProbationMinimum: 13000, salaryAfterProbationMaximum: 15000,
+    details: { dutyStartTime: "09:00", dutyEndTime: "18:00", payPeriod: "month" as const,
+      postalAddress: "Jamnagar", probationLength: 3, probationUnit: "months" as const,
+      signatoryName: "HR Manager", signatoryDesignation: "Manager" },
+    renderPdf: async () => Buffer.from("%PDF-new-offer"),
+  } }
+}
+
+test("reappointment reuses approved interviews, reserves combined posts and retains no-show and previous offer", async () => {
+  const f = await reappointmentFixture()
+  const interviews = (await repository.getJobWorkspace(f.organizationId, f.jobId))!.interviews
+  const result = await repository.reappointCandidateAppointment(f.input)
+  const workspace = (await repository.getJobWorkspace(f.organizationId, f.jobId))!
+  expect(workspace.job.status).toBe("Closed")
+  expect(workspace.applications).toHaveLength(1)
+  expect(workspace.applications[0]).toMatchObject({ id: f.applicationId, status: "Approved",
+    joiningDate: "2099-01-01", willingToJoin: true, didNotJoinOn: null, didNotJoinReason: null,
+    salaryBeforeProbation: 11000, allRoundsApproved: true })
+  expect(workspace.interviews.map((interview) => interview.id).sort())
+    .toEqual(interviews.map((interview) => interview.id).sort())
+  const posts = (await repository.listPosts(f.organizationId)).filter((post) => f.postIds.some((id) => id === post.id))
+  expect(posts).toHaveLength(2)
+  for (const post of posts) expect(post).toMatchObject({ status: "Appointed", employeeCode: null,
+    appointedApplicationId: f.applicationId, joiningDate: "2099-01-01" })
+  const offers = await letters.listForJob(f.organizationId, f.jobId)
+  expect(offers).toHaveLength(2)
+  expect(offers).toContainEqual(expect.objectContaining({ id: f.letterId, joiningDate: "2026-01-01",
+    referenceNumber: "TEST-OFFER", fileAvailable: true, supersedesLetterId: null }))
+  expect(offers).toContainEqual(expect.objectContaining({ id: result.letterId,
+    joiningDate: "2099-01-01", fileAvailable: true, supersedesLetterId: f.letterId }))
+  const events = await repository.listCandidateEvents(f.organizationId, f.candidateId)
+  expect(events).toContainEqual(expect.objectContaining({ eventType: "Did Not Join", notes: "Candidate did not attend" }))
+  expect(events).toContainEqual(expect.objectContaining({ eventType: "Reappointed",
+    notes: expect.stringContaining("Candidate confirmed availability again") }))
+}, 60_000)
+
+test("reappointment cannot overwrite an occupied member of the original combined vacancy", async () => {
+  const f = await reappointmentFixture()
+  await pool.query(
+    `UPDATE recruitment.posts SET status='Occupied', employee_name='Replacement Employee',
+       employee_code='789' WHERE id=$1`, [f.postIds[1]]
+  )
+  await expect(repository.reappointCandidateAppointment(f.input)).rejects.toThrow("vacancy is no longer available")
+  const workspace = (await repository.getJobWorkspace(f.organizationId, f.jobId))!
+  expect(workspace.job.status).toBe("Open")
+  expect(workspace.applications[0]).toMatchObject({ status: "Did Not Join", joiningDate: "2026-01-01",
+    didNotJoinOn: "2026-01-02", didNotJoinReason: "Candidate did not attend" })
+  expect(await letters.listForJob(f.organizationId, f.jobId)).toHaveLength(1)
+  expect((await repository.listPosts(f.organizationId)).find((post) => post.id === f.postIds[1]))
+    .toMatchObject({ status: "Occupied", employeeCode: "789", employeeName: "Replacement Employee" })
+}, 60_000)

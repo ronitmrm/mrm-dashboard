@@ -18,21 +18,25 @@ export type CandidateAppointmentDefaults = {
   salaryBeforeProbation: number | null
   salaryAfterProbationMinimum: number | null
   salaryAfterProbationMaximum: number | null
-  offer: RecruitmentEmploymentLetterRow
+  offer?: RecruitmentEmploymentLetterRow
 }
 
 export function CandidateAppointmentFields({
   defaultJoiningDate = "",
   defaults,
+  includeOfferDetails = true,
+  minimumJoiningDate,
 }: {
   defaults?: CandidateAppointmentDefaults
   defaultJoiningDate?: string
+  includeOfferDetails?: boolean
+  minimumJoiningDate?: string
 }) {
   const fieldId = useId()
   const [willingToJoin, setWillingToJoin] = useState(defaults ? "yes" : "")
 
   function detail(key: keyof OfferLetterDetails) {
-    const value = defaults?.offer.details[key]
+    const value = defaults?.offer?.details[key]
     return typeof value === "string" || typeof value === "number" ? value : ""
   }
 
@@ -44,7 +48,7 @@ export function CandidateAppointmentFields({
         </p>
         <p className="text-sm text-muted-foreground">
           {defaults
-            ? "Correct the terms below and generate an updated offer."
+            ? "Confirm the appointment terms below."
             : "Confirm the candidate’s willingness before creating the appointment."}
         </p>
       </div>
@@ -78,6 +82,7 @@ export function CandidateAppointmentFields({
               defaultValue={defaultJoiningDate}
               id={`${fieldId}-joining-date`}
               name="joining_date"
+              min={minimumJoiningDate}
               required
               type="date"
             />
@@ -153,7 +158,7 @@ export function CandidateAppointmentFields({
               </div>
             </div>
           </div>
-          <div className="grid gap-4 rounded-xl border bg-background p-4">
+          {includeOfferDetails ? <div className="grid gap-4 rounded-xl border bg-background p-4">
             <div>
               <p className="font-medium">Offer Letter Details</p>
               <p className="text-xs text-muted-foreground">
@@ -168,7 +173,7 @@ export function CandidateAppointmentFields({
                 <Input
                   id={`${fieldId}-offer-issued-on`}
                   name="offer_issued_on"
-                  defaultValue={defaults?.offer.issuedOn ?? ""}
+                  defaultValue={defaults?.offer?.issuedOn ?? ""}
                   required
                   type="date"
                 />
@@ -282,7 +287,7 @@ export function CandidateAppointmentFields({
                 />
               </Field>
             </div>
-          </div>
+          </div> : null}
         </>
       ) : null}
     </div>
