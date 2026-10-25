@@ -4396,14 +4396,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                       AND asset.current_holder_type = 'STORE'
                       AND asset.status = 'AVAILABLE'
                   )
-                  ELSE COALESCE((
-                    SELECT sum(movement.quantity)
-                    FROM store.stock_movements movement
-                    WHERE movement.item_type_id = item.id
-                      AND movement.location_id = location.id
-                  ), 0) <> 0
+                  ELSE EXISTS (
+                    SELECT 1 FROM store.consumable_storage_locations storage
+                    WHERE storage.organization_id = item.organization_id
+                      AND storage.item_type_id = item.id
+                      AND storage.accountable_store_id = location.accountable_store_id
+                      AND storage.location_id = location.id
+                  )
                 END
-            ), 'Not in stock') AS "storageLocations",
+            ), CASE WHEN item.tracking_mode = 'CONSUMABLE' THEN 'Not assigned'
+              ELSE 'Not in stock' END) AS "storageLocations",
             trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
               THEN (SELECT count(*)::numeric FROM store.assets asset
                 JOIN store.accountable_stores accountable
@@ -5354,14 +5356,16 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                       AND asset.current_holder_type = 'STORE'
                       AND asset.status = 'AVAILABLE'
                   )
-                  ELSE COALESCE((
-                    SELECT sum(movement.quantity)
-                    FROM store.stock_movements movement
-                    WHERE movement.item_type_id = item.id
-                      AND movement.location_id = location.id
-                  ), 0) <> 0
+                  ELSE EXISTS (
+                    SELECT 1 FROM store.consumable_storage_locations storage
+                    WHERE storage.organization_id = item.organization_id
+                      AND storage.item_type_id = item.id
+                      AND storage.accountable_store_id = location.accountable_store_id
+                      AND storage.location_id = location.id
+                  )
                 END
-            ), 'Not in stock') AS "storageLocations"
+            ), CASE WHEN item.tracking_mode = 'CONSUMABLE' THEN 'Not assigned'
+              ELSE 'Not in stock' END) AS "storageLocations"
           FROM store.item_types item
           JOIN store.make_models make_model ON make_model.id = item.make_model_id
           WHERE item.organization_id = $1 AND item.active

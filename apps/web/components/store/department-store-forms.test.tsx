@@ -46,12 +46,12 @@ test("returns omit receiving storage and use forms show the signed-in operator a
     selectedItemIds={["item-1"]} consumables={[{
       itemTypeId: "item-1", typeCode: "C002", assetName: "Insert", unit: "No.",
       assetCategory: "Cutting Insert", assetSubcategory: "Turning Insert", makeModel: "Non Specific",
-      availableQuantity: "18", companyQuantity: "18", storageLocations: "CNC-A",
+      availableQuantity: "18", companyQuantity: "18", storageLocations: "CNC-A, CNC-B",
     }]} />)
   expect(multiple).toContain('name="item_type_id" value="item-1"')
   expect(multiple.match(/<input[^>]*name="quantity_item-1"[^>]*>/)?.[0]).toContain('max="18"')
   expect(multiple.match(/<input[^>]*name="use_storage_location_item-1"[^>]*>/)?.[0])
-    .toMatch(/readOnly="".*value="CNC-A"/i)
+    .toMatch(/readOnly="".*value="CNC-A, CNC-B"/i)
   expect(multiple.match(/<input[^>]*name="use_available_units_item-1"[^>]*>/)?.[0])
     .toMatch(/readOnly="".*value="18 No\."/i)
   expect(multiple.match(/<input[^>]*name="operator_id"[^>]*>/)?.[0])

@@ -49,8 +49,9 @@ export function StoreLocationCsvControls({
                 <li>Download the CSV of stock that can be assigned in this Store.</li>
                 <li>
                   Enter an existing rack/bin code from this Store in{" "}
-                  <strong>location_code</strong>. Blank locations are skipped;
-                  they keep their current location.
+                  <strong>location_code</strong>. For Consumables, separate
+                  multiple codes with commas in the same cell: <strong>CNC-A, CNC-B</strong>.
+                  Use one code per Non Consumable Unit ID.
                 </li>
                 <li>
                   Keep <strong>unit_id</strong> for Non Consumables or{" "}
@@ -59,8 +60,9 @@ export function StoreLocationCsvControls({
                 </li>
               </ol>
               <p>
-                Each Consumable row assigns all its current stock in this Store
-                to that rack/bin. Move gauge sets using the set movement form.
+                Each Consumable row replaces its saved location list and keeps
+                one combined quantity. Blank locations keep their current
+                assignments. Move gauge sets using the set movement form.
               </p>
               <p className="text-muted-foreground">
                 Upload up to 500 assignments at a time. If any row has an error,

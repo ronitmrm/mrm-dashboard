@@ -142,22 +142,29 @@ separate from **Assigned location**: changing a rack/bin does not change the
 assigned Store, Department, Machine or Supplier, the unit's status, responsibility,
 quantities, or another Store's saved rack/bin. A Store may update storage only for
 units currently assigned there and may select only its own active rack/bin
-locations. Receipt or return to the default Store location leaves that Store's
-storage blank without clearing another Store's saved rack/bin.
+locations. Receipt or return to the default Store location leaves a Non Consumable
+Unit ID's storage blank in that Store without clearing another Store's saved rack/bin.
 An active Gauge Set changes storage together through its Set Movement.
+
+Consumables keep a list of rack/bin references per Asset Code and Store, with one
+combined quantity and no quantity assigned to an individual rack/bin. Selecting a
+rack/bin for incoming stock adds it to that Store's saved list. These references
+remain saved when stock reaches zero.
 
 Each Store's Stock Register offers **Download Location CSV** and, for users with
 movement permission, **Upload Locations CSV**. The download lists eligible existing
-Unit IDs and in-stock Consumable Asset Codes. Fill `location_code` with an active
-rack/bin code belonging to that Store; blank locations are skipped. Each row uses
-either `unit_id` for a Non Consumable or `asset_code` for a Consumable, with an
-optional `note`. Up to 500 assignments are accepted in one transaction; a bad or
-duplicate identifier rejects the complete upload with its row number. Location
-codes must already exist in Location Master. Gauge-set members use Set Movement.
-Unit rows update only that Store's storage entry. A Consumable row relocates all
-quantity held in that Store to the selected rack/bin using balanced, audited stock
-movements, preserving Store and company totals. Main Store request availability
-and fulfillment use its stock across racks, including after a location assignment.
+Unit IDs and in-stock Consumable Asset Codes, with blank location fields. Fill
+`location_code` with active rack/bin codes belonging to that Store. A Consumable
+row can list multiple codes in the same cell separated by commas, for example
+`CNC-A, CNC-B`; a Non Consumable Unit ID takes one code. Blank locations are skipped.
+Each row uses either `unit_id` for a Non Consumable or `asset_code` for a Consumable,
+with an optional `note`. Up to 500 assignments are accepted in one transaction; a
+bad or duplicate identifier rejects the complete upload with its row number.
+Location codes must already exist in Location Master. Gauge-set members use Set
+Movement. Unit rows update only that Store's storage entry. A Consumable row
+replaces only that Store's saved location list, without changing stock quantities
+or creating stock movements. Store and company totals, request availability and
+fulfillment remain unchanged.
 
 **Store Balance**: Unused quantity of one Consumable at one accountable store.
 An internal transfer decreases the source balance and increases the destination
