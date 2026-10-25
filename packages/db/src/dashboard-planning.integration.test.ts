@@ -117,27 +117,21 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
-  test("records FG rejection as a remake without rework and requires fresh RM", async () => {
+  test("receives a full replacement return without rework and requires fresh RM", async () => {
     const organizationId = (await pool.query<{ id: string }>("INSERT INTO core.organizations (code, name) VALUES ($1, 'Remake Test') RETURNING id", [`REMAKE-${suffix}`])).rows[0]!.id
     await pool.query("INSERT INTO manufacturing.production_floors (organization_id, code, name) VALUES ($1, 'cnc', 'CNC-01')", [organizationId])
     const original = `JC-REMAKE-${suffix}`
     const parent = await repository.upsertWorkOrder({ organizationId, itemUid,
       jobCardNumber: original, workOrderNumber: original, orderedQuantity: 10,
       sourcePayload: { jcNo: original, partCode: itemUid, orderPcs: 10, rmPoNo: `RM-${suffix}`, productionFloorCode: "cnc" } })
-    const factsInput = { organizationId, productionFloorCode: "cnc" as const, entryTypes: ["work_order"],
-      identity: ["fg_rejected"], dispatchedJobCards: true }
-    const undispatched = await dashboard.scopedFactsState(factsInput)
     await pool.query(`INSERT INTO manufacturing.dispatch_approval_events (organization_id, work_order_id,
       decision, quantity, source_system, source_table, source_id, source_payload)
       VALUES ($1, $2, 'approved', 10, 'test', 'dispatchApprovals', $3, $4)`,
       [organizationId, parent.id, randomUUID(), { jcNo: original, quantity: 10, productionFloorCode: "cnc" }])
-    expect(await dashboard.scopedFactsState({ ...factsInput, knownSourceRevision: undispatched.sourceRevision,
-      knownVersion: undispatched.version })).toMatchObject({ notModified: false,
-      dashboard: { productionControl: { workOrders: [expect.objectContaining({ jcNo: original, dispatchedPieces: 10 })] } } })
     await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 10, receivedOn: "2026-10-01",
       receiptNumber: `ORIGINAL-REMAKE-RM-${suffix}`, payload: { jcNo: original, productionFloorCode: "cnc" } })
     const receipt = { organizationId, productionFloorCode: "cnc" as const, originalJobCardNumber: original,
-      quantity: 4, receiptType: "fg_rejected" as const, replacementRmPoNo: `NEW-RM-${suffix}`,
+      quantity: 4, replacementQuantity: 4, replacementRmPoNo: `NEW-RM-${suffix}`,
       receivedOn: "2026-10-02", reason: "Cannot be reworked; remake from fresh material" }
     await expect(repository.receiveRework(receipt)).rejects.toThrow("Enter positive Required RM (kg)")
     const saved = await repository.receiveRework({ ...receipt, replacementRequiredRmKg: 2 })
@@ -149,11 +143,11 @@ describe("dashboard planning writes", () => {
     const waiting = await read()
     expect(waiting.revisions.map(row => row.disposition)).toEqual(["original", "replacement"])
     expect(waiting.jobCard).toMatchObject({ workOrderSource: {
-      isRework: false, receiptType: "fg_rejected", requiredRmKg: 2, rmPoNo: `NEW-RM-${suffix}`,
+      isRework: false, requiredRmKg: 2, rmPoNo: `NEW-RM-${suffix}`,
     } })
     expect((await pool.query(`SELECT event_type, source_table FROM audit.events
-      WHERE target_id = $1 AND event_type = 'production.fg.rejected'`, [replacement.id])).rows)
-      .toEqual([{ event_type: "production.fg.rejected", source_table: "fg_rejected" }])
+      WHERE target_id = $1 AND event_type = 'production.rework.received'`, [replacement.id])).rows)
+      .toEqual([{ event_type: "production.rework.received", source_table: "rework_received" }])
     expect(waiting.rawMaterialReceipts).toEqual([])
     expect(waiting.analytics.material).toMatchObject({ requiredKg: 2, receivedKg: 0, receiptSufficient: false })
     await jobCards.upsertRawMaterialReceipt({ organizationId, quantityKg: 2, receivedOn: "2026-10-03",

@@ -56,7 +56,7 @@ describe("scoped operational entry access", () => {
     ).toBe("entries.forging.rm_inward.import")
   })
 
-  it("offers only dispatched Job Cards for FG rejection and keeps its register separate", () => {
+  it("keeps historical FG rejection revisions in Rework Received and rejects the removed entry", () => {
     const rejected = { jcNo: "JC-1 · Rev 1 · Replacement", receiptType: "fg_rejected", isRevision: true, productionFloorCode: "cnc" }
     const payload = { productionControl: { workOrders: [
       { jcNo: "JC-1", dispatchedPieces: 10, productionFloorCode: "cnc" },
@@ -66,12 +66,9 @@ describe("scoped operational entry access", () => {
       rejected,
       { jcNo: "REWORK", isRevision: true, productionFloorCode: "cnc" },
     ] } }
-    const view = operationalEntrySnapshot(payload, "fg_rejected", "cnc")
-    expect(view.productionControl.jobCardActivityOptions).toEqual([{ jcNo: "JC-1", dispatchedPieces: 10 }])
-    expect(view.productionControl).toMatchObject({ workOrders: [rejected] })
     expect(operationalEntrySnapshot(payload, "rework_received", "cnc").productionControl)
-      .toMatchObject({ workOrders: [{ jcNo: "REWORK", isRevision: true, productionFloorCode: "cnc" }] })
-    expect(operationalEntryWriteScope("fg_rejected", "save", "cnc", {}).capability)
-      .toBe("entries.cnc.fg_rejected.save")
+      .toMatchObject({ workOrders: [rejected, { jcNo: "REWORK", isRevision: true, productionFloorCode: "cnc" }] })
+    expect(() => operationalEntryWriteScope("fg_rejected", "save", "cnc", {}))
+      .toThrow("valid operational entry")
   })
 })
