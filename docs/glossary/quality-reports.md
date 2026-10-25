@@ -20,9 +20,16 @@ A later Setting Done replaces the previous request; a recorded QC approval,
 production start, item completion or planner release also closes its pending wait.
 These closures do not invent inspection approvals or elapsed-time measurements.
 Historical ranges retain requests that were still waiting at that cutoff.
-Repeated Setting Done events define separate request windows. Status bars group
-requests by the Setting Done date; approvals and elapsed-time trends count approvals completed
-in the selected range. Pending before range means outstanding at its start;
+Repeated Setting Done events define separate request windows. Daily status bars
+show approvals completed on each date and all requests still pending at that
+IST day's end, including earlier requests. Today's pending count stops at the
+current instant and matches the first-piece requests awaiting QC approval for
+the same permitted units; downtime restart tasks are separate. Future dates do
+not project today's pending requests forward. Shift status bars show approvals
+completed in the selected range and outstanding requests at its cutoff,
+including earlier requests, grouped by the Setting Done shift. Approvals and
+elapsed-time trends count approvals completed in the selected range.
+Pending before range means outstanding at its start;
 pending at range end includes earlier outstanding requests. Future ranges are
 capped at the current instant when evaluating status. Elapsed time includes
 overnight/non-working hours. Shift comparisons attribute status and approval
