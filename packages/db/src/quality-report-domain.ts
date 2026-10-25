@@ -221,13 +221,18 @@ export function buildQualityReport(
   }
   let pendingBefore = 0
   let pendingNow = 0
-  const cutoff = Math.min(
-    Date.parse(now),
-    Date.parse(`${to}T23:59:59.999+05:30`)
-  )
+  const nowAt = Date.parse(now)
+  const cutoff = Math.min(nowAt, Date.parse(`${to}T23:59:59.999+05:30`))
   const rangeStart = Date.parse(`${from}T00:00:00+05:30`)
+  const dailyCutoffs = [...daily]
+    .filter(([date]) => date <= qualityDate(nowAt))
+    .map(([date, item]) => ({
+      item,
+      cutoff: Math.min(nowAt, Date.parse(`${date}T23:59:59.999+05:30`)),
+    }))
   for (const request of source.requests) {
-    const requestDate = qualityDate(request.requestedAt)
+    const requestedAt = Date.parse(request.requestedAt)
+    const requestDate = qualityDate(requestedAt)
     const resolvedAt = Math.min(
       request.approvedAt ? Date.parse(request.approvedAt) : Infinity,
       request.closedAt ? Date.parse(request.closedAt) : Infinity
@@ -237,27 +242,24 @@ export function buildQualityReport(
         ? request.approvedAt
         : null
     if (requestDate < from && resolvedAt >= rangeStart) pendingBefore++
-    const pending =
-      Date.parse(request.requestedAt) <= cutoff && resolvedAt > cutoff
-    if (pending) pendingNow++
-    if (inRange(requestDate) && (approved || pending)) {
-      for (const item of [
-        get(daily, requestDate),
-        get(shifts, request.shift || "Unspecified"),
-      ])
-        item[approved ? "approved" : "pending"]++
+    if (requestedAt <= cutoff && resolvedAt > cutoff) {
+      pendingNow++
+      get(shifts, request.shift || "Unspecified").pending++
+    }
+    for (const day of dailyCutoffs) {
+      if (requestedAt <= day.cutoff && resolvedAt > day.cutoff)
+        day.item.pending++
     }
     if (!approved || !inRange(qualityDate(approved))) continue
-    const elapsed =
-      (Date.parse(approved) - Date.parse(request.requestedAt)) / 60_000
+    const elapsed = (Date.parse(approved) - requestedAt) / 60_000
     if (elapsed < 0) continue
     const inspector = get(inspectors, request.inspector || "Unspecified")
-    inspector.approved++
     for (const item of [
       get(daily, qualityDate(approved)),
       get(shifts, request.shift || "Unspecified"),
       inspector,
     ]) {
+      item.approved++
       item.minutes += elapsed
       item.timed++
     }

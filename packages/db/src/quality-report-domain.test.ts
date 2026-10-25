@@ -6,6 +6,63 @@ import {
 } from "./quality-report-domain"
 
 describe("quality reports", () => {
+  it("carries pending requests into each day and shift until resolution, without projecting future backlog", () => {
+    const source: QualityReportSource = {
+      production: [],
+      requests: [
+        {
+          id: "pending-21",
+          requestedAt: "2026-10-21T09:00:00+05:30",
+          shift: "A",
+        },
+        {
+          id: "pending-24",
+          requestedAt: "2026-10-24T09:00:00+05:30",
+          shift: "B",
+        },
+        {
+          id: "approved-25",
+          requestedAt: "2026-10-22T09:00:00+05:30",
+          approvedAt: "2026-10-25T10:00:00+05:30",
+          inspector: "QC1",
+          shift: "A",
+        },
+      ].map((request) => ({
+        approvedAt: null,
+        closedAt: null,
+        inspector: null,
+        ...request,
+      })),
+      inspectors: ["QC1"],
+      runs: [],
+      checks: [],
+      defects: [],
+    }
+    const result = buildQualityReport(
+      source,
+      "2026-10-24",
+      "2026-10-26",
+      "2026-10-25T12:00:00+05:30"
+    )
+    expect(
+      result.daily.map((row) => [row.label, row.pending, row.approved])
+    ).toEqual([
+      ["2026-10-24", 3, 0],
+      ["2026-10-25", 2, 1],
+      ["2026-10-26", 0, 0],
+    ])
+    expect(
+      result.shifts.map((row) => [row.label, row.pending, row.approved])
+    ).toEqual([
+      ["A", 1, 1],
+      ["B", 1, 0],
+    ])
+    expect(result).toMatchObject({
+      pendingBefore: 2,
+      pendingNow: 2,
+      approvals: 1,
+    })
+  })
   it("uses elapsed approvals, excludes closed requests, and matches completed running hours", () => {
     const source: QualityReportSource = {
       production: [

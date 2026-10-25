@@ -568,15 +568,16 @@ export function QualityReportChart({
   ) {
     series = [
       { key: "approved", label: "Approved", color: colors.good },
-      { key: "pending", label: "Pending incl. Not OK", color: colors.pending },
+      { key: "pending", label: "Pending incl. earlier days", color: colors.pending },
     ]
     rows = buckets.map((row) => ({
       label: label(row),
       values: { approved: row.approved, pending: row.pending },
     }))
     summary = `Pending before range: ${number(data.pendingBefore)} · Approved in range: ${number(data.approvals)} · Pending at range end: ${number(data.pendingNow)}`
-    description =
-      "Bars group requests by Setting Done date/shift. Not OK remains pending until approved."
+    description = shift
+      ? "Approved in the selected range; pending at range end, including earlier days and Not OK. Grouped by Setting Done shift."
+      : "Approved on each date; pending at each day's end (now for today), including earlier days and Not OK."
   } else if (id === "quality-approval-trend" || id === "quality-shift-time") {
     series = [
       { key: "minutes", label: "Average elapsed minutes", color: colors.time },
