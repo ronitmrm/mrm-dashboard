@@ -239,6 +239,13 @@ records until joining is confirmed. Older current assignments start as a baselin
 prior occupants without a retained letter or replacement snapshot cannot be
 reconstructed reliably.
 
+In Employee Master, Withdraw Resignation keeps the same joined assignment and
+restores it to Occupied. HR records a withdrawal reason; the original resignation,
+its planned last working date, and the withdrawal time and reason remain visible
+in the editor and Employee Assignment History. Actual departures cannot be
+withdrawn. Any pending replacement appointment must be cancelled first; the
+withdrawal closes open recruitment for the retained employee's posts.
+
 Employee Data begins with a confirmed Joined assignment and an Employee ID; an
 appointment alone does not create an employee data row. HR may fill the row later.
 Date of birth, contact and emergency details, addresses, gender, blood group,

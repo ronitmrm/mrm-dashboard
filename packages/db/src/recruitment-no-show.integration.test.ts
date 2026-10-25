@@ -327,3 +327,46 @@ test("a joined or replaced appointment cannot release posts or reopen the job", 
     (await repository.getJobWorkspace(f.organizationId, f.jobId))?.job.status
   ).toBe("Closed")
 }, 60_000)
+
+test("withdrawing resignation restores combined posts and preserves assignment and resignation history", async () => {
+  const f = await fixture(true)
+  const before = (await repository.listEmployeeAssignments(f.organizationId))
+    .filter((assignment) => assignment.employeeCode === "123")
+  expect(before).toHaveLength(2)
+  await repository.assignEmployee({ organizationId: f.organizationId, postId: f.postIds[0]!,
+    employeeEvent: "Resigned", lastWorkingDate: "2099-10-25" })
+  await repository.assignEmployee({ organizationId: f.organizationId, postId: f.postIds[0]!,
+    employeeEvent: "Resignation Withdrawn", exitNote: "Employee will continue in the same role" })
+  for (const post of (await repository.listPosts(f.organizationId)).filter((post) => f.postIds.some((id) => id === post.id))) {
+    expect(post).toMatchObject({ status: "Occupied", employeeCode: "123",
+      employeeName: "No-show Candidate", joiningDate: "2026-01-01", lastWorkingDate: null,
+      appointedApplicationId: f.applicationId })
+  }
+  const after = await repository.listEmployeeAssignments(f.organizationId)
+  for (const assignment of before) {
+    expect(after.find((row) => row.id === assignment.id)).toMatchObject({
+      joinedOn: assignment.joinedOn, probationDueOn: assignment.probationDueOn,
+      plannedEndOn: null, endedOn: null, exitType: null,
+      resignationHistory: [
+        { type: "Resigned", recordedAt: expect.any(String), lastWorkingDate: "2099-10-25", note: null },
+        { type: "Resignation Withdrawn", recordedAt: expect.any(String), lastWorkingDate: "2099-10-25",
+          note: "Employee will continue in the same role" },
+      ],
+    })
+  }
+}, 60_000)
+
+test("a pending replacement blocks resignation withdrawal without changing either appointment", async () => {
+  const f = await fixture(true)
+  await repository.assignEmployee({ organizationId: f.organizationId, postId: f.postIds[0]!,
+    employeeEvent: "Resigned", lastWorkingDate: "2099-10-25" })
+  await repository.assignEmployee({ organizationId: f.organizationId, postId: f.postIds[0]!,
+    employeeEvent: "Appointed", employeeName: "Incoming Employee" })
+  await expect(repository.assignEmployee({ organizationId: f.organizationId, postId: f.postIds[0]!,
+    employeeEvent: "Resignation Withdrawn", exitNote: "Employee will continue" }))
+    .rejects.toThrow("Cancel the pending replacement")
+  for (const post of (await repository.listPosts(f.organizationId)).filter((post) => f.postIds.some((id) => id === post.id))) {
+    expect(post).toMatchObject({ status: "Resigned", employeeCode: "123", lastWorkingDate: "2099-10-25",
+      replacementAppointments: [expect.objectContaining({ employeeName: "Incoming Employee", status: "Pending" })] })
+  }
+}, 60_000)

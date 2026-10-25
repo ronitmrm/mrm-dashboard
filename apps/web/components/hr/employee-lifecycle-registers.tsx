@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation"
 import { updateEmployeeProbationAction } from "@/app/hr/actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { EmployeeLetterForm } from "@/components/hr/employee-letter-dialog"
+import { EmployeeResignationHistory } from "@/components/hr/employee-resignation-history"
 import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
 import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
@@ -300,6 +301,7 @@ export function EmployeeAssignmentHistory({
               <TableHead>Department</TableHead><TableHead>Designation</TableHead>
               <TableHead>Joined</TableHead><TableHead>Planned End</TableHead>
               <TableHead>Actual End</TableHead><TableHead>Exit</TableHead>
+              <TableHead>Resignation History</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {assignments.map((assignment) => {
@@ -318,8 +320,19 @@ export function EmployeeAssignmentHistory({
                     <StatusBadge value={exitStatus} tone={exitStatus === "Left Without Process" ? "warning" : exitStatus === "Resignation Planned" || exitStatus === "Role Changed" ? "information" : exitStatus === "Current" ? "positive" : "neutral"} />
                     {assignment.exitNote ? <span className="block text-xs text-muted-foreground">{assignment.exitNote}</span> : null}
                   </TableCell>
+                  <TableCell>
+                    {assignment.resignationHistory?.length
+                      ? <Dialog>
+                          <DialogTrigger asChild>
+                            <Button aria-label={`View resignation history for ${assignment.employeeName}`} size="sm" variant="outline">View History ({assignment.resignationHistory.length})</Button>
+                          </DialogTrigger>
+                          <StandardDialogContent title="Resignation History" description={assignment.employeeName}>
+                            <EmployeeResignationHistory history={assignment.resignationHistory} />
+                          </StandardDialogContent>
+                        </Dialog> : "—"}
+                  </TableCell>
                 </TableRow>})}
-              {!assignments.length ? <TableRow><TableCell colSpan={8}>
+              {!assignments.length ? <TableRow><TableCell colSpan={9}>
                 <StandardState title="No Assignment History" description="Joined employees will appear here." />
               </TableCell></TableRow> : null}
             </TableBody>
