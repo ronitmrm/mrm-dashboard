@@ -1082,7 +1082,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       replacementQuantity?: number
       replacementRequiredRmKg?: number
       replacementRmPoNo?: string
-      receiptType?: "fg_rejected"
       receivedOn: string
       reason: string
     }) {
@@ -1093,8 +1092,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0) {
           throw new ShopFloorConflictError("Returned quantity must be a positive whole number.")
         }
-        const isFgRejected = input.receiptType === "fg_rejected"
-        const replacementQuantity = isFgRejected ? input.quantity : input.replacementQuantity ?? 0
+        const replacementQuantity = input.replacementQuantity ?? 0
         if (!Number.isSafeInteger(replacementQuantity) || replacementQuantity < 0 || replacementQuantity > input.quantity) {
           throw new ShopFloorConflictError("Replacement quantity must be a whole number between zero and returned quantity.")
         }
@@ -1165,7 +1163,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
           const sourcePayload = {
             isRevision: true, isRework: activity.disposition === "rework", disposition: activity.disposition,
-            ...(isFgRejected ? { receiptType: "fg_rejected" } : {}),
             revisionNumber, revisionRootWorkOrderId: rootId, rootJobCardNumber,
             reworkOfWorkOrderId: order.id, originalJobCardNumber: order.job_card_number,
             jcNo: jobCardNumber, partCode: item.rows[0]!.uid, description: item.rows[0]!.description,
@@ -1185,11 +1182,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               input.actorUserId ?? null, randomUUID(), sourcePayload])
           await client.query(`INSERT INTO audit.events (organization_id, actor_user_id, event_type, target_schema,
             target_table, target_id, before_state, after_state, source_system, source_table, source_id)
-            VALUES ($1, $2, $6, 'manufacturing', 'work_orders', $3, NULL, $4,
-              'mrm-dashboard', $7, $5)`,
-            [input.organizationId, input.actorUserId ?? null, saved.rows[0]!.id, sourcePayload, randomUUID(),
-              isFgRejected ? "production.fg.rejected" : "production.rework.received",
-              isFgRejected ? "fg_rejected" : "rework_received"])
+            VALUES ($1, $2, 'production.rework.received', 'manufacturing', 'work_orders', $3, NULL, $4,
+              'mrm-dashboard', 'rework_received', $5)`,
+            [input.organizationId, input.actorUserId ?? null, saved.rows[0]!.id, sourcePayload, randomUUID()])
           savedActivities.push({ id: saved.rows[0]!.id, jobCardNumber, disposition: activity.disposition, quantity: activity.quantity })
         }
         await queueDashboardRefresh(client, input.organizationId)

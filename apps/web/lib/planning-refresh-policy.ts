@@ -24,7 +24,6 @@ const autoRefreshDataEntryTypes = new Set([
   ...productionMasterTableEntryTypes,
   "work_order",
   "rework_received",
-  "fg_rejected",
   "rework_rejected",
   "rm_inward",
   "production_session_close",

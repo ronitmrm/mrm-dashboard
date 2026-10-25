@@ -33,7 +33,6 @@ describe("master data workspaces", () => {
     expect(operationalDataEntryTypes).toEqual([
       "work_order",
       "rework_received",
-      "fg_rejected",
       "rework_rejected",
       "rm_inward",
       "software_raw",
@@ -87,9 +86,8 @@ describe("master data workspaces", () => {
       { isRevision: true, disposition: "replacement", orderPcs: 8, returnQuantity: 20, requiredRmKg: 2, rmPoNo: "NEW-RM" },
     ] })).toMatchObject([{ quantity: 8, returnQuantity: 20, replacementQuantity: 8, replacementRequiredRmKg: 2, replacementRmPoNo: "NEW-RM" }])
     const fgRejected = { isRevision: true, receiptType: "fg_rejected", disposition: "replacement", orderPcs: 4, requiredRmKg: 1, rmPoNo: "FRESH-RM" }
-    expect(operationalEntryRows("fg_rejected", {}, { workOrders: [fgRejected, workOrder] }))
+    expect(operationalEntryRows("rework_received", {}, { workOrders: [fgRejected, workOrder] }))
       .toMatchObject([{ quantity: 4, replacementRequiredRmKg: 1, replacementRmPoNo: "FRESH-RM" }])
-    expect(operationalEntryRows("rework_received", {}, { workOrders: [fgRejected] })).toEqual([])
   })
 
   it("preserves the existing identity when a master is opened for editing", () => {

@@ -50,7 +50,6 @@ function record(value: unknown): Record<string, unknown> {
 const sources = {
   work_order: "workOrders",
   rework_received: "workOrders",
-  fg_rejected: "workOrders",
   rework_rejected: "workOrders",
   rm_inward: "rmInwardRows",
   software_raw: "productionOutputRows",
@@ -91,17 +90,15 @@ export function operationalEntrySnapshot(
       ),
     },
     productionControl: {
-      ...(entry === "rm_inward" || entry === "rework_received" || entry === "rework_rejected" || entry === "fg_rejected" ? {
+      ...(entry === "rm_inward" || entry === "rework_received" || entry === "rework_rejected" ? {
         jobCardActivityOptions: rowsForUnit(record(source.productionControl).workOrders)
           .filter(row => entry !== "rm_inward" || record(row).isRework !== true)
           .filter(row => entry !== "rework_rejected" || record(row).isRework === true && !["Cancelled", "Rejected"].includes(String(record(row).status)))
-          .filter(row => entry !== "fg_rejected" || Number(record(row).dispatchedPieces) > 0 && !["Cancelled", "Rejected"].includes(String(record(row).status)))
-          .map(row => ({ jcNo: record(row).jcNo, ...(entry === "fg_rejected" ? { dispatchedPieces: record(row).dispatchedPieces } : {}), ...(entry === "rework_rejected" ? { orderPcs: record(row).orderPcs, isRework: true } : {}) })),
+          .map(row => ({ jcNo: record(row).jcNo, ...(entry === "rework_rejected" ? { orderPcs: record(row).orderPcs, isRework: true } : {}) })),
       } : {}),
       [sources[entry]]: rowsForUnit(
         record(source.productionControl)[sources[entry]]
-      ).filter(row => entry !== "rework_received" || record(row).isRevision === true && record(row).createdFromReworkRejection !== true && record(row).receiptType !== "fg_rejected")
-        .filter(row => entry !== "fg_rejected" || record(row).receiptType === "fg_rejected"),
+      ).filter(row => entry !== "rework_received" || record(row).isRevision === true && record(row).createdFromReworkRejection !== true),
     },
   }
 }
