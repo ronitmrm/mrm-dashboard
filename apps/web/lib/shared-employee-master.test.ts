@@ -1,5 +1,5 @@
 import type { RecruitmentPostRow } from "@workspace/db"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   activeEmployeeForCode,
@@ -419,6 +419,25 @@ describe("shared Employee Master", () => {
       { code: "MGR-1", name: "Bina" },
       { code: "MGT-1", name: "Chirag" },
     ])
+  })
+
+  it("keeps resigned interviewers through their last working day in India", () => {
+    vi.useFakeTimers()
+    try {
+      const posts = [post({ id: "1", status: "Resigned", designation: "Manager",
+        employeeCode: "101", employeeName: "Leaving Manager", lastWorkingDate: "2026-10-25" })]
+      const expected = [{ code: "101", name: "Leaving Manager" }]
+      vi.setSystemTime(new Date("2026-10-24T18:29:00Z"))
+      expect(recruitmentInterviewerOptions(posts)).toEqual(expected)
+      vi.setSystemTime(new Date("2026-10-25T18:29:00Z"))
+      expect(recruitmentInterviewerOptions(posts)).toEqual(expected)
+      expect(recruitmentInterviewerOptions(sharedEmployeeMasterRows(posts))).toEqual(expected)
+      vi.setSystemTime(new Date("2026-10-25T18:30:00Z"))
+      expect(recruitmentInterviewerOptions(posts)).toEqual([])
+      expect(recruitmentInterviewerOptions(sharedEmployeeMasterRows(posts))).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("offers appointed leadership who already have Employee IDs as interviewers", () => {
