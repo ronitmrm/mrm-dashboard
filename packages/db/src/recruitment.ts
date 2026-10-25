@@ -237,6 +237,12 @@ export type RecruitmentEmployeeAssignmentRow = {
   exitType: string | null
   exitNote: string | null
   appointmentLetterIssuedOn: string | null
+  resignationHistory?: Array<{
+    type: "Resigned" | "Resignation Withdrawn"
+    recordedAt: string
+    lastWorkingDate: string | null
+    note: string | null
+  }>
 }
 
 export type RecruitmentInterviewRow = {
@@ -819,6 +825,85 @@ async function assignEmployeeInTransaction(
     : current
   if (!targets.rows.length) {
     throw new Error("The combined role has no active approved posts.")
+  }
+  if (input.employeeEvent === "Resignation Withdrawn") {
+    const reason = required(input.exitNote, "Reason for withdrawing resignation")
+    const targetIds = targets.rows.map((post) => post.id)
+    if (targets.rows.some((post) => post.status !== "Resigned" ||
+        !post.last_working_date ||
+        post.employee_code !== currentPost.employee_code ||
+        post.employee_name !== currentPost.employee_name)) {
+      throw new Error("Only the same resigning employee can withdraw their resignation.")
+    }
+    const pending = await client.query(
+      `SELECT id FROM recruitment.post_replacements
+       WHERE organization_id = $1 AND post_id = ANY($2::uuid[])
+         AND status = 'Pending' FOR UPDATE`,
+      [input.organizationId, targetIds]
+    )
+    if (pending.rows.length) {
+      throw new Error("Cancel the pending replacement before withdrawing this resignation.")
+    }
+    const assignments = await client.query<{
+      id: string
+      post_id: string
+      employee_code: string | null
+      employee_name: string
+      joined_on: string | null
+      application_id: string | null
+      planned_end_on: string | null
+      exit_type: string | null
+      exit_note: string | null
+    }>(
+      `SELECT id, post_id, employee_code, employee_name, joined_on::text,
+         application_id, planned_end_on::text, exit_type, exit_note
+       FROM recruitment.employee_post_assignments
+       WHERE organization_id = $1 AND post_id = ANY($2::uuid[])
+         AND ended_on IS NULL ORDER BY post_id FOR UPDATE`,
+      [input.organizationId, targetIds]
+    )
+    if (assignments.rows.length !== targetIds.length ||
+        assignments.rows.some((assignment) =>
+          assignment.employee_code !== currentPost.employee_code ||
+          (currentPost.employee_name !== null && assignment.employee_name !== currentPost.employee_name))) {
+      throw new Error("Only an employee whose current assignment has not ended can withdraw their resignation.")
+    }
+    const result = await client.query<{ id: string }>(
+      `UPDATE recruitment.posts post SET status = 'Occupied', last_working_date = NULL,
+         joining_date = COALESCE(assignment.joined_on, post.joining_date),
+         appointed_application_id = COALESCE(assignment.application_id, post.appointed_application_id),
+         updated_by_user_id = $3, updated_at = now(), row_version = post.row_version + 1
+       FROM recruitment.employee_post_assignments assignment
+       WHERE post.organization_id = $1 AND post.id = ANY($2::uuid[])
+         AND assignment.organization_id = post.organization_id
+         AND assignment.post_id = post.id AND assignment.ended_on IS NULL
+       RETURNING post.id`,
+      [input.organizationId, targetIds, input.actorUserId ?? null]
+    )
+    if (result.rows.length !== targetIds.length) {
+      throw new Error("Not every approved post in the assignment was updated.")
+    }
+    await client.query(
+      `UPDATE recruitment.employee_post_assignments
+       SET planned_end_on = NULL, exit_type = NULL, exit_note = NULL, updated_at = now()
+       WHERE organization_id = $1 AND id = ANY($2::uuid[])`,
+      [input.organizationId, assignments.rows.map((assignment) => assignment.id)]
+    )
+    await closeOpenJobsForManualAssignment(client, input, targetIds)
+    await auditMany(client, assignments.rows.map((assignment, ordinal) =>
+      recruitmentAssignmentAudit({
+        ...input,
+        eventType: "recruitment.employee.resignation_withdrawn",
+        reason,
+        beforeState: { ...assignment,
+          lastWorkingDate: targets.rows.find((post) => post.id === assignment.post_id)!.last_working_date },
+        afterState: { status: "Occupied", lastWorkingDate: null, plannedEndOn: null },
+        metadata: { postId: assignment.post_id, combinedRoleId: currentPost.combined_role_id },
+        targetId: assignment.id,
+        targetTable: "employee_post_assignments",
+      }, commandId, ordinal)
+    ))
+    return { selectedPost: { id: currentPost.id }, updatedPostCount: result.rows.length }
   }
   if (
     input.employeeEvent === "Removed" &&
@@ -3535,6 +3620,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         exit_type: string | null
         exit_note: string | null
         appointment_letter_issued_on: string | null
+        resignation_history: NonNullable<RecruitmentEmployeeAssignmentRow["resignationHistory"]>
       }>(
         `SELECT assignment.id, assignment.post_code,
            combined.vacancy_code AS combined_vacancy_code,
@@ -3553,7 +3639,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            legacy_event.recorded_on AS legacy_probation_recorded_on,
            assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
-           letter.issued_on::text AS appointment_letter_issued_on
+           letter.issued_on::text AS appointment_letter_issued_on,
+           COALESCE(resignation_events.history, '[]'::json) AS resignation_history
          FROM recruitment.employee_post_assignments assignment
          LEFT JOIN recruitment.employee_profiles profile
            ON profile.organization_id = assignment.organization_id
@@ -3614,6 +3701,33 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              )
            ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1
          ) letter ON true
+         LEFT JOIN LATERAL (
+           SELECT json_agg(json_build_object(
+             'type', CASE WHEN event.event_type = 'recruitment.employee.resigned'
+               THEN 'Resigned' ELSE 'Resignation Withdrawn' END,
+             'recordedAt', event.occurred_at::text,
+             'lastWorkingDate', CASE WHEN event.event_type = 'recruitment.employee.resigned'
+               THEN event.metadata->>'lastWorkingDate'
+               ELSE event.before_state->>'lastWorkingDate' END,
+             'note', event.reason
+           ) ORDER BY event.occurred_at, event.id) AS history
+           FROM audit.events event
+           WHERE event.organization_id = assignment.organization_id
+             AND event.target_schema = 'recruitment'
+             AND ((event.target_table = 'employee_post_assignments'
+                 AND event.target_id = assignment.id
+                 AND event.event_type = 'recruitment.employee.resignation_withdrawn')
+               OR (event.target_table = 'posts' AND event.target_id = assignment.post_id
+                 AND event.event_type = 'recruitment.employee.resigned'
+                 AND event.occurred_at >= assignment.created_at
+                 AND (assignment.ended_on IS NULL OR event.occurred_at <= assignment.updated_at)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM recruitment.employee_post_assignments later
+                   WHERE later.organization_id = assignment.organization_id
+                     AND later.post_id = assignment.post_id
+                     AND later.created_at > assignment.created_at
+                     AND later.created_at <= event.occurred_at)))
+         ) resignation_events ON true
          WHERE assignment.organization_id = $1
          ORDER BY assignment.created_at DESC, assignment.id DESC`,
         [organizationId]
@@ -3641,6 +3755,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         exitType: row.exit_type,
         exitNote: row.exit_note,
         appointmentLetterIssuedOn: row.appointment_letter_issued_on,
+        resignationHistory: row.resignation_history ?? [],
       }))
     },
 

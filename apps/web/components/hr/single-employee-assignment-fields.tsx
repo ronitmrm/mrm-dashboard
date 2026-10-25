@@ -23,11 +23,22 @@ import {
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import { useMemo, useState } from "react"
+import { EmployeeResignationHistory } from "./employee-resignation-history"
 import { employeeAssignmentForPost } from "@/lib/employee-handover-rows"
 
 type AssignmentTarget = {
   combinedRole: RecruitmentCombinedRoleRow | null
   post: RecruitmentPostRow
+}
+
+function resignedAssignment(
+  post: RecruitmentPostRow | undefined,
+  assignments: RecruitmentEmployeeAssignmentRow[]
+) {
+  return post?.status === "Resigned" ? assignments.find((assignment) =>
+    assignment.postCode === post.postCode && assignment.endedOn === null &&
+    (!post.employeeCode || assignment.employeeCode === post.employeeCode)
+  ) : undefined
 }
 
 function initialEmploymentEvent(
@@ -95,25 +106,29 @@ export function SingleEmployeeAssignmentFields({
     ({ post }) => post.id === requestedInitialPost?.id
   )
   const [postId, setPostId] = useState(initialTarget?.post.id ?? "")
+  const initialAssignment = resignedAssignment(initialTarget?.post, employeeAssignments)
   const [employeeName, setEmployeeName] = useState(
-    initialTarget?.post.employeeName ?? ""
+    initialTarget?.post.employeeName ?? initialAssignment?.employeeName ?? ""
   )
   const [employeeCode, setEmployeeCode] = useState(
-    initialTarget?.post.employeeCode ?? ""
+    initialTarget?.post.employeeCode ?? initialAssignment?.employeeCode ?? ""
   )
   const [event, setEvent] = useState(
     initialEmploymentEvent(initialTarget?.post.status, allowIdentityCorrection)
   )
   const selected = targets.find(({ post }) => post.id === postId)
-  const selectedAssignment = selected && event === "Joined"
-    ? employeeAssignmentForPost(selected.post, employeeAssignments) : undefined
+  const selectedAssignment = selected
+    ? employeeAssignmentForPost(selected.post, employeeAssignments) ??
+      resignedAssignment(selected.post, employeeAssignments) : undefined
   const assigned = Boolean(
-    selected?.post.employeeName || selected?.post.employeeCode
+    selected?.post.employeeName || selected?.post.employeeCode || selectedAssignment
   )
   const appointed = selected?.post.status === "Appointed"
   const pendingReplacement = selected?.post.replacementAppointments?.find(
     (appointment) => appointment.status === "Pending"
   )
+  const canWithdrawResignation = allowIdentityCorrection &&
+    selected?.post.status === "Resigned" && Boolean(selectedAssignment && !selectedAssignment.endedOn)
   const appointingReplacement =
     selected?.post.status === "Resigned" && event === "Appointed"
   const managingReplacement =
@@ -145,9 +160,10 @@ export function SingleEmployeeAssignmentFields({
 
   function selectTarget(nextPostId: string) {
     const next = targets.find(({ post }) => post.id === nextPostId)
+    const assignment = resignedAssignment(next?.post, employeeAssignments)
     setPostId(nextPostId)
-    setEmployeeName(next?.post.employeeName ?? "")
-    setEmployeeCode(next?.post.employeeCode ?? "")
+    setEmployeeName(next?.post.employeeName ?? assignment?.employeeName ?? "")
+    setEmployeeCode(next?.post.employeeCode ?? assignment?.employeeCode ?? "")
     setEvent(initialEmploymentEvent(next?.post.status, allowIdentityCorrection))
   }
 
@@ -163,8 +179,8 @@ export function SingleEmployeeAssignmentFields({
       setEmployeeName(pendingReplacement?.employeeName ?? "")
       setEmployeeCode(pendingReplacement?.employeeCode ?? "")
     } else {
-      setEmployeeName(selected?.post.employeeName ?? "")
-      setEmployeeCode(selected?.post.employeeCode ?? "")
+      setEmployeeName(selected?.post.employeeName ?? selectedAssignment?.employeeName ?? "")
+      setEmployeeCode(selected?.post.employeeCode ?? selectedAssignment?.employeeCode ?? "")
     }
   }
 
@@ -222,9 +238,9 @@ export function SingleEmployeeAssignmentFields({
       {selected ? (
         <Alert className="w-full min-w-0">
           <AlertDescription>
-            Current Assignment: {selected.post.employeeName ?? "Unassigned"}
-            {selected.post.employeeCode
-              ? ` (${selected.post.employeeCode})`
+            Current Assignment: {selected.post.employeeName ?? selectedAssignment?.employeeName ?? "Unassigned"}
+            {(selected.post.employeeCode ?? selectedAssignment?.employeeCode)
+              ? ` (${selected.post.employeeCode ?? selectedAssignment?.employeeCode})`
               : ""}{" "}
             · {selected.post.status}
             {selected.post.lastWorkingDate
@@ -358,6 +374,11 @@ export function SingleEmployeeAssignmentFields({
                 Joined — Becomes Occupied
               </NativeSelectOption>
               <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
+              {canWithdrawResignation ? (
+                <NativeSelectOption value="Resignation Withdrawn" disabled={Boolean(pendingReplacement)}>
+                  Withdraw Resignation — Keep Employee
+                </NativeSelectOption>
+              ) : null}
               {canChangeRole ? (
                 <NativeSelectOption value="Role Changed">
                   Role Changed — Release This Post Only
@@ -389,6 +410,20 @@ export function SingleEmployeeAssignmentFields({
           </FieldDescription>
         ) : null}
       </Field>
+      {canWithdrawResignation && pendingReplacement ? (
+        <FieldDescription>
+          Cancel the pending replacement appointment before withdrawing this resignation.
+        </FieldDescription>
+      ) : null}
+      {event === "Resignation Withdrawn" ? (
+        <Field className="w-full min-w-0">
+          <FieldLabel htmlFor="resignation-withdrawal-reason">Withdrawal Reason</FieldLabel>
+          <Input id="resignation-withdrawal-reason" name="exit_note" required />
+          <FieldDescription>
+            Keeps this employee on the same assignment. The resignation and withdrawal remain in history.
+          </FieldDescription>
+        </Field>
+      ) : null}
       {event === "Resigned" ? (
         <Field className="w-full min-w-0">
           <FieldLabel htmlFor="last-working-date">Planned Last Working Date</FieldLabel>
@@ -476,6 +511,12 @@ export function SingleEmployeeAssignmentFields({
             <Input id="exit-note" name="exit_note" />
           </Field>
         </>
+      ) : null}
+      {selectedAssignment?.resignationHistory?.length ? (
+        <Field>
+          <FieldLabel>Resignation History</FieldLabel>
+          <EmployeeResignationHistory history={selectedAssignment.resignationHistory} />
+        </Field>
       ) : null}
     </>
   )
