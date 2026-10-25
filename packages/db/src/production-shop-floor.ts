@@ -3224,12 +3224,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (current.status !== "closed") {
           throw new Error("Only a closed production session can be corrected.")
         }
-        if (endReason !== current.end_reason &&
-          (endReason === "awaiting_material" || current.end_reason === "awaiting_material")) {
-          throw new ShopFloorConflictError("Awaiting material cannot be added or removed through a closed-session correction.")
+        const releasesMachine = endReason === "awaiting_material" && current.end_reason !== "awaiting_material"
+        if (current.end_reason === "awaiting_material" && endReason !== current.end_reason) {
+          throw new ShopFloorConflictError("Awaiting material cannot be removed through a closed-session correction.")
         }
-        if (input.downtimeCorrection && input.expectedRowVersion !== Number(current.row_version)) {
-          throw new ShopFloorConflictError("Production session changed. Refresh it before correcting downtime.")
+        if (releasesMachine && current.end_reason === "item_complete") {
+          throw new ShopFloorConflictError("Use Reopen Setup before releasing a setup marked Item Complete.")
+        }
+        if ((input.downtimeCorrection || releasesMachine) && input.expectedRowVersion !== Number(current.row_version)) {
+          throw new ShopFloorConflictError("Production session changed. Refresh it before saving the correction.")
         }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
@@ -3383,6 +3386,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const outputPending = current.measurement_method === "weight" &&
           current.gross_weight_kg === null && !hasAnyWeightOutput
+        if (endReason === "awaiting_material" && outputPending) {
+          throw new ShopFloorConflictError("Record the actual weight output before releasing the machine awaiting material.")
+        }
         const output = current.measurement_method === "counter"
           ? calculateProductionSessionOutput({
               endCount: nonNegativeWholeNumber(input.endCount, "End count"),
@@ -3506,6 +3512,38 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (endReason === "item_complete") {
           await completeProductionSessionSetup(client, {
             ...input, correctionReason, endedAt, sourcePayload,
+          })
+        } else if (releasesMachine) {
+          const setup = await client.query<{ id: string; superseded: boolean }>(
+            `SELECT state.id, EXISTS (
+               SELECT 1 FROM manufacturing.production_sessions later
+               WHERE later.machine_id = session.machine_id AND later.reversed_at IS NULL
+                 AND (later.started_at, later.created_at, later.id)
+                   > (session.started_at, session.created_at, session.id)
+             ) AS superseded
+             FROM manufacturing.production_sessions session
+             JOIN manufacturing.shop_floor_setup_state state
+               ON state.work_order_id = session.work_order_id
+               AND state.route_option_id = session.route_option_id
+               AND state.operation_setup_id = session.operation_setup_id
+               AND state.machine_id = session.machine_id AND state.active
+             WHERE session.id = $1 AND session.organization_id = $2
+             FOR UPDATE OF state`,
+            [input.sessionId, input.organizationId]
+          )
+          const state = setup.rows[0]
+          if (!state) {
+            throw new ShopFloorConflictError("Setup changed. Refresh and select its current machine assignment.")
+          }
+          if (state.superseded) {
+            throw new ShopFloorConflictError("This setup has later activity. Correct its latest production session instead.")
+          }
+          await releaseSetupAwaitingMaterialInTransaction(client, {
+            organizationId: input.organizationId,
+            actorUserId: input.actorUserId,
+            productionFloorCode: current.production_floor_code,
+            setupStateId: state.id,
+            reason: correctionReason,
           })
         }
         await queueDashboardRefresh(client, input.organizationId)

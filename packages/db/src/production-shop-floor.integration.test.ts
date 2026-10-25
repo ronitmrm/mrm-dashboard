@@ -949,6 +949,12 @@ describe("production and shop-floor workflows", () => {
       endReason: "item_complete", endCount: 10_850,
       endedAt: "2026-08-15T14:00:00+05:30",
     })).rejects.toThrow("later activity")
+    await expect(repository.correctProductionSession({
+      organizationId, sessionId: first.id, correctionReason: "Waiting for more material",
+      expectedRowVersion: Number(sessions.rows.find((row) => row.id === first.id)!.rowVersion),
+      endReason: "awaiting_material", endCount: 10_850,
+      endedAt: "2026-08-15T14:00:00+05:30",
+    })).rejects.toThrow("later activity")
     expect(sessions.rows.find((row) => row.id === second.id)).toMatchObject({
       downtimeMinutes: 5,
       startCount: 10_850,
@@ -2223,7 +2229,12 @@ test("material review blocks completion, releases only selected setups, and clea
   expect((await pool.query('SELECT status, quantity_good::text FROM manufacturing.production_sessions WHERE id = $1',
     [session.id])).rows[0]).toMatchObject({ status: 'open', quantity_good: '0' });
   await pool.query('UPDATE manufacturing.shop_floor_setup_state SET active = true WHERE id = $1', [firstSetup.id]);
-  await expect(repository.closeProductionSession({ ...end, endReason: 'awaiting_material' })).resolves.toMatchObject({ goodPieces: 10 });
+  await expect(repository.closeProductionSession({ ...end, endReason: 'shift_end' })).resolves.toMatchObject({ goodPieces: 10 });
+  const closedSession = (await repository.readProductionSessions({ organizationId,
+    productionFloorCode: 'conventional', sessionId: session.id })).rows[0]!;
+  await expect(repository.correctProductionSession({ ...end, endReason: 'awaiting_material',
+    expectedRowVersion: Number(closedSession.rowVersion), correctionReason: 'Shift Ends selected by mistake; waiting for balance RM.' }))
+    .resolves.toMatchObject({ goodPieces: 10 });
   const releasedState = async () => (await pool.query(`SELECT stage, active, row_version::text, source_payload
     FROM manufacturing.shop_floor_setup_state WHERE id = $1`, [firstSetup.id])).rows[0];
   const released = await releasedState();
@@ -2244,7 +2255,7 @@ test("material review blocks completion, releases only selected setups, and clea
   expect((await repository.readProductionSessions({ organizationId, productionFloorCode: 'conventional',
     sessionId: nextSession.id })).rows[0]).toMatchObject({ status: 'open', jobCardNumber: nextJobCard });
   await expect(repository.correctProductionSession({ ...end, endReason: 'manual_stop', correctionReason: 'Change close reason.' }))
-    .rejects.toThrow('Awaiting material cannot be added or removed');
+    .rejects.toThrow('Awaiting material cannot be removed');
   const secondSetup = setups.find(row => row.setupNumber === 2)!;
   await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: 'conventional',
     setupStateId: secondSetup.id, expectedRowVersion: Number(secondSetup.rowVersion), reason: 'Input exhausted; more material expected.' });
