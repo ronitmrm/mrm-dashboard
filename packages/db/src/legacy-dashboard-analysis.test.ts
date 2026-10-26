@@ -68,10 +68,10 @@ test("reopened setup retains output without a missing-start exception or machine
 test("saved route change uses the new route and remaining setup quantities", () => {
   const createdAt = "2026-10-03T11:21:35Z"
   const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
-  const snapshot = buildLegacyDashboardSnapshot({
-    productionFloorCode: "cnc",
+  const input = {
+    productionFloorCode: "cnc" as const,
     workbookName: "PostgreSQL",
-    productionEntries: [],
+    productionEntries: [{ jobCard: "P2205", partCode: "M615", optionNumber: "1", setupNo: "1", machine: "CNC-7", machineType: "CNC", operatorId: "OP", prodDate: "2026-10-02", createdAt: "2026-10-02T16:00:00Z", outputQty: 550, actualQty: 550, rejectQty: 0, targetQty: 1450 }],
     dataEntries: [
       entry("work_order", { jcNo: "P2205", partCode: "M615", orderPcs: 1450, rmInwardDate: "2026-10-03", rmInwardKg: 1 }),
       ...["1", "2"].map((optionNumber) => entry("route", { partNo: "M615", optionNumber, setupNo: "1", machineType: "CNC", machineFamily: optionNumber === "1" ? "JL" : "C3" })),
@@ -82,15 +82,51 @@ test("saved route change uses the new route and remaining setup quantities", () 
     ],
     routeSelections: [{ jobCardNumber: "P2205", routeCode: "1", createdAt }],
     routeChanges: [{ jobCardNumber: "P2205", newRouteCode: "2", remainingSetups: [{ setupNumber: 1, plan: true, quantity: 900 }], createdAt }],
-  })
+    currentShopFloorStatusRows: [{ jcNo: "P2205", partCode: "M615", optionNumber: "1", setupNo: "1", machine: "CNC-7", stage: "planned", active: false, hasRecordedStart: true, createdAt }],
+    planOverrides: [{ target: "P2205", setupNo: "1", toMachine: "CNC-7", assignmentMode: "add_parallel_machine", createdAt: "2026-10-02T10:00:00Z" }],
+  }
+  const originalHistory = structuredClone(input.productionEntries)
+  const snapshot = buildLegacyDashboardSnapshot(input)
 
   expect(snapshot.productionControl?.workOrders.find((row) => row.jcNo === "P2205")).toMatchObject({
-    optionNumber: "2", optionSource: "Route change",
+    optionNumber: "2", optionSource: "Route change", rawActualQty: 550,
     routeChangeRemainingSetups: [{ setupNo: "1", plan: true, quantity: 900 }],
   })
   expect(snapshot.productionControl?.machinePlanDetailRows.find((row) => row.jcNo === "P2205")).toMatchObject({
     machine: "CNC-21", optionNumber: "2", orderPcs: 900,
+    setupRemainingQty: 900, rawActualQty: 0, runningStatus: "Planned",
   })
+  const recalculated = buildLegacyDashboardSnapshot({ ...input, previousMachinePlanDetailRows: snapshot.productionControl.machinePlanDetailRows }).productionControl
+  expect(recalculated.machinePlanDetailRows).toEqual(snapshot.productionControl.machinePlanDetailRows)
+  expect(recalculated.workOrders.find((row) => row.jcNo === "P2205")).toMatchObject({ optionNumber: "2", rawActualQty: 550 })
+  const started = buildLegacyDashboardSnapshot({
+    ...input,
+    productionEntries: [...input.productionEntries, { ...input.productionEntries[0]!, optionNumber: "2", machine: "CNC-21", prodDate: "2026-10-04", createdAt: "2026-10-04T16:00:00Z", outputQty: 100, actualQty: 100 }],
+    currentShopFloorStatusRows: [...input.currentShopFloorStatusRows, { ...input.currentShopFloorStatusRows[0]!, optionNumber: "2", machine: "CNC-21", stage: "operator_started", active: true, createdAt: "2026-10-04T10:00:00Z" }],
+  }).productionControl
+  expect(started.machinePlanDetailRows.find((row) => row.jcNo === "P2205")).toMatchObject({ machine: "CNC-21", runningStatus: "Running", rawActualQty: 100, setupRemainingQty: 800 })
+  expect(started.workOrders.find((row) => row.jcNo === "P2205")).toMatchObject({ rawActualQty: 650 })
+  expect(input.productionEntries).toEqual(originalHistory)
+})
+
+test("a new remaining plan excludes earlier execution on the same route", () => {
+  const createdAt = "2026-10-03T11:21:35Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const control = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL",
+    productionEntries: [{ jobCard: "P1", partCode: "M1", optionNumber: "1", setupNo: "1", machine: "HX-01", machineType: "CNC", operatorId: "OP", prodDate: "2026-10-02", createdAt: "2026-10-02T16:00:00Z", outputQty: 100, actualQty: 100, rejectQty: 0, targetQty: 500 }],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1", partCode: "M1", optionNumber: "1", orderPcs: 500, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+      entry("route", { partNo: "M1", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "HX" }),
+      entry("cycle", { partNo: "M1", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+      entry("tooling", { partNo: "M1", optionNumber: "1", setupNo: "1" }),
+      entry("machine_master", { machineNo: "HX-01", machineType: "CNC", machineFamily: "HX", status: "Active" }),
+    ],
+    routeChanges: [{ jobCardNumber: "P1", fromRouteCode: "1", newRouteCode: "1", remainingSetups: [{ setupNumber: 1, plan: true, quantity: 300 }], createdAt }],
+    currentShopFloorStatusRows: [{ jcNo: "P1", partCode: "M1", optionNumber: "1", setupNo: "1", machine: "HX-01", stage: "planned", active: false, hasRecordedStart: true, createdAt }],
+  }).productionControl
+  expect(control.machinePlanDetailRows[0]).toMatchObject({ machine: "HX-01", optionNumber: "1", runningStatus: "Planned", rawActualQty: 0, setupRemainingQty: 300 })
+  expect(control.workOrders[0]).toMatchObject({ rawActualQty: 100 })
 })
 
 test("incomplete changed route stays in Part Readiness without a machine plan", () => {
@@ -337,7 +373,7 @@ test("actual finish carries completed final work across an equivalent route chan
   const unrecordedNewRouteWorkflow = buildLegacyDashboardSnapshot({
     ...input,
     routeChanges: [{ ...input.routeChanges[0]!, remainingSetups: [{ setupNumber: 1, plan: true, quantity: 50 }] }],
-    productionEntries: [{ ...input.productionEntries[0]!, optionNumber: "2" }],
+    productionEntries: [{ ...input.productionEntries[0]!, optionNumber: "2", prodDate: "2026-10-04", createdAt: "2026-10-04T16:00:00Z" }],
   }).productionControl
   expect(unrecordedNewRouteWorkflow).toMatchObject({ workflowExceptionRows: [
     expect.objectContaining({ jcNo: "P2266", optionNumber: "2", rawProductionWithoutWorkflow: true }),
