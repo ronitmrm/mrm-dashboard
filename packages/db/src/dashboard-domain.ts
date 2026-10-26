@@ -1,4 +1,5 @@
 export type ProductionEntry = {
+  createdAt?: string;
   prodDate: string;
   operatorId: string;
   operatorName?: string;

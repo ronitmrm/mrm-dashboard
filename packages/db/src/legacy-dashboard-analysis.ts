@@ -1261,6 +1261,7 @@ function buildProductionControl({
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   const rawBySetup = new Map<string, PlanningProductionActual>();
   const rawBySetupAnyMachine = new Map<string, PlanningProductionActual & { machines: Set<string> }>();
+  const historicalBySetup = new Map<string, PlanningProductionActual & { machines: Set<string> }>();
   const finalSetupChainsByJobCard = new Map<string, FinalSetupRoute[]>();
   let latestRawDate = "";
   for (const row of productionRows) {
@@ -1280,7 +1281,12 @@ function buildProductionControl({
     const machine = rowText(row, "MACHINE NO", "M/C NO", "machine");
     const setupKey = productionSetupKey({ jcNo, partCode, setupNo, machine });
     const setupAnyMachineKey = productionSetupBaseKey({ jcNo, partCode, setupNo });
-    if (setupKey) {
+    const routeChange = routeChangesForWorkOrder(routeChangesByTarget, jcNo, partCode)[0];
+    const currentExecution = !routeChange || (
+      canonicalKey(rowText(row, "OPTION NUMBER")) === canonicalKey(rowText(routeChange, "newRouteCode", "newOption", "NEW ROUTE OPTION", "NEW OPTION"))
+      && rowCreatedAtMs(row) > rowCreatedAtMs(routeChange)
+    );
+    if (setupKey && currentExecution) {
       const setupRec = getOrCreate(rawBySetup, setupKey, (): PlanningProductionActual => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>() }));
       if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
       if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
@@ -1290,14 +1296,18 @@ function buildProductionControl({
       setupRec.rows += 1;
     }
     if (setupAnyMachineKey) {
-      const setupRec = getOrCreate(rawBySetupAnyMachine, setupAnyMachineKey, (): PlanningProductionActual & { machines: Set<string> } => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>(), machines: new Set<string>() }));
-      if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
-      if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
-      if (prodDate) setupRec.dates.add(prodDate);
-      setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
-      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
-      setupRec.rows += 1;
-      if (machine) setupRec.machines.add(machine);
+      // Historical stock still feeds downstream work; only current execution owns machines.
+      const maps = currentExecution ? [historicalBySetup, rawBySetupAnyMachine] : [historicalBySetup];
+      for (const map of maps) {
+        const setupRec = getOrCreate(map, setupAnyMachineKey, (): PlanningProductionActual & { machines: Set<string> } => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>(), machines: new Set<string>() }));
+        if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
+        if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
+        if (prodDate) setupRec.dates.add(prodDate);
+        setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
+        setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+        setupRec.rows += 1;
+        if (machine) setupRec.machines.add(machine);
+      }
     }
   }
   const dispatchByJobCard = new Map<string, DispatchSummary>();
@@ -1479,6 +1489,7 @@ function buildProductionControl({
       optionNumber: effectiveOption || "Not selected",
       optionSource: routeChange ? "Route change" : (optionNumber ? "Excel" : (selectedOptionNumber ? "Planner selected" : (effectiveOption ? "Auto single route" : "Planner required"))),
       routeChangeFromOption,
+      routeChangeCreatedAt: rowText(routeChange ?? {}, "createdAt"),
       routeChangeRemainingSetups,
       candidateOption: !optionNumber && effectiveOption ? effectiveOption : "-",
       availableOptions,
@@ -1598,7 +1609,7 @@ function buildProductionControl({
   const workOrderRegisterRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
   const masterGaps = allWorkOrderGaps.filter(isMaterialPlanningReady);
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, toolingAvailability, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar, undefined, historicalBySetup);
   const productionDashboardRows = buildProductionDashboardRows({
     rawBySetup,
     cycleRows,
@@ -2246,6 +2257,7 @@ function normalizedRawSoftwareRows(rows: Record<string, unknown>[], routeLookup:
 
 function normalizedProductionEntries(entries: Array<Partial<ProductionEntry> | Record<string, unknown>>) {
   return entries.map((entry) => ({
+    createdAt: entry.createdAt,
     "PRODUCTION DATE": entry.prodDate,
     "MACHINE NO": entry.machine,
     "OPERATOR ID": entry.operatorId,
@@ -3512,6 +3524,7 @@ function initializeMachinePlanDetails(
   previousMachineAssignments: Map<string, Set<string>>,
   planningCalendar: PlanningCalendar,
   simulation?: { reservedPlans: Record<string, unknown>[]; deadlineDate: string; readyNotBefore?: string },
+  historicalBySetup = rawBySetupAnyMachine,
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = latestMasterRows(cycleRows);
@@ -3582,11 +3595,13 @@ function initializeMachinePlanDetails(
       const previousRoute = allRoutes[allRoutes.indexOf(route) - 1];
       const previousSetupNo = previousRoute ? rowText(previousRoute, "SETUP NO.", "SETUP CODE", "setupNo") : "";
       const upstreamActual = previousRoute
-        ? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo }))
-          ?? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: previousSetupNo }))
+        ? historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo }))
+          ?? historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: previousSetupNo }))
         : undefined;
       const setupGoodQty = productionActualAnyMachine?.actualQty ?? 0;
-      const setupProcessedQty = productionActualAnyMachine?.outputQty ?? 0;
+      const setupStock = historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: displaySetupNo }))
+        ?? historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo }));
+      const setupProcessedQty = setupStock?.outputQty ?? 0;
       const physicalWipQty = Math.max((upstreamActual?.actualQty ?? 0) - setupProcessedQty, 0);
       const upstreamPlans = previousRoute ? details.filter((plan) =>
         rowText(plan, "jcNo") === rowText(row, "jcNo")
@@ -7380,11 +7395,13 @@ function isEarlyDownstreamOverride(row: ActionRow) {
 }
 
 function matchingPlanOverridesForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
+  const routeChangedAt = Date.parse(rowText(workOrder, "routeChangeCreatedAt")) || 0;
   const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
   const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
   const setupKeys = new Set([plannerSetupKey(setupNo), plannerSetupKey(displaySetupNo ?? "")].filter(Boolean));
   return planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
+    if (routeChangedAt && rowCreatedAtMs(row) <= routeChangedAt) return false;
     const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
     const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
     const rowPartKey = canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO"));

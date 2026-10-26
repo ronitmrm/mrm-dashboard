@@ -253,6 +253,10 @@ them to Planned; the new route requires RM at Machine, Setting, Quality Approval
 and Machine Start again. Recorded production and the old route remain historical.
 As the new setup advances, its saved workflow stage remains authoritative;
 historical output must not imply that Machine Start has already happened.
+Only production on the selected route recorded after the latest Route Change
+counts against its remaining setup quantities or reserves its running machines.
+Earlier production remains in history and supplies downstream WIP; earlier
+machine-switch and parallel-machine choices do not carry into the new plan.
 A saved route with zero remaining setup quantity
 still exists; it does not create a Route Master gap or new machine work. An
 explicit remaining-setup plan with no positive planned quantity creates no machine
