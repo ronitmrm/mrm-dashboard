@@ -433,6 +433,7 @@ test("role change cannot release a whole combined job", async () => {
 describe("reviseCandidateAppointment", () => {
   function fixture() {
     const query = vi.fn(async (sql: string) => {
+      if (sql.includes("JOIN recruitment.combined_roles combined")) return { rows: [] }
       if (sql.includes("FROM recruitment.applications application")) return { rows: [{
         id: "application-1", candidate_id: "candidate-1", job_id: "job-1",
         post_id: "post-1", status: "Approved", willing_to_join: true, joining_date: "2026-11-03",
@@ -492,6 +493,30 @@ describe("reviseCandidateAppointment", () => {
 })
 
 describe("assignEmployee", () => {
+  test("rejects actions that bypass the retained employee or candidate lifecycle", async () => {
+    const post = { id: "post-1", status: "Occupied", can_replace: false, combined_role_id: null,
+      employee_name: "Test Employee", employee_code: "65", joining_date: "2020-01-01",
+      last_working_date: null as string | null, appointed_application_id: null as string | null }
+    const query = vi.fn(async (sql: string) => ({ rows:
+      sql.includes("SELECT id, employee_name, employee_code") ? [{ ...post }]
+        : sql.includes("UPDATE recruitment.posts") ? [{ id: post.id }] : [] }))
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({ pool: { connect: async () => client } as unknown as Pool })
+    const input = { organizationId: "org-1", postId: post.id, employeeName: post.employee_name,
+      employeeCode: post.employee_code, joiningDate: post.joining_date, identityCorrection: true }
+    await expect(repository.assignEmployee({ ...input, employeeEvent: "Appointed" }))
+      .rejects.toThrow("already joined")
+    post.status = "Resigned"
+    post.last_working_date = "2099-01-01"
+    await expect(repository.assignEmployee({ ...input, employeeEvent: "Joined" }))
+      .rejects.toThrow("Withdraw Resignation")
+    post.status = "Appointed"
+    post.appointed_application_id = "application-1"
+    await expect(repository.assignEmployee({ ...input, employeeEvent: "Removed" }))
+      .rejects.toThrow("Did Not Join")
+    expect(query.mock.calls.some(([sql]) => sql.trimStart().startsWith("UPDATE"))).toBe(false)
+  })
+
   test.each([
     {
       event: "Replacement Joined",
@@ -848,7 +873,7 @@ describe("assignEmployee", () => {
     expect(update?.[1]?.[1]).toBe("104")
   })
 
-  test("corrects both name and numeric ID in explicit correction mode", async () => {
+  test("corrects identity and keeps joined dates consistent in explicit correction mode", async () => {
     const postId = "00000000-0000-4000-8000-000000000001"
     const query = vi.fn(
       async (statement: string, parameters?: readonly unknown[]) => {
@@ -885,6 +910,7 @@ describe("assignEmployee", () => {
       identityCorrection: true,
       organizationId: "00000000-0000-4000-8000-000000000010",
       postId,
+      joiningDate: "2026-10-01",
       probationDueOn: "2026-11-01",
     })
 
@@ -897,7 +923,9 @@ describe("assignEmployee", () => {
       "Occupied",
     ])
     expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.employee_post_assignments"),
-      ["2026-11-01", "00000000-0000-4000-8000-000000000010", [postId], "105"])
+      ["2026-11-01", "00000000-0000-4000-8000-000000000010", [postId], "105", "2026-10-01"])
+    expect(query.mock.calls.find(([sql]) => sql.includes("UPDATE recruitment.employee_post_assignments"))?.[0])
+      .toContain("joined_on = COALESCE($5::date, joined_on)")
   })
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {

@@ -261,6 +261,11 @@ assignment's current state. Its summary counts assignments rather than history
 events. Actual departures cannot be
 withdrawn. Any pending replacement appointment must be cancelled first; the
 withdrawal closes open recruitment for the retained employee's posts.
+Joined employees cannot be changed back to Appointed. Resigned employees use
+Withdraw Resignation to stay employed or Confirm Replacement Joined for an
+incoming employee. Accepted candidate appointments use Did Not Join to cancel
+the reservation and reopen recruitment. These safeguards apply to individual
+edits and assignment workbook uploads.
 
 Employee Data begins with a confirmed Joined assignment and an Employee ID; an
 appointment alone does not create an employee data row. HR may fill the row later.

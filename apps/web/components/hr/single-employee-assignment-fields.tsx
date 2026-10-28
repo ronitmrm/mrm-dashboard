@@ -136,10 +136,6 @@ export function SingleEmployeeAssignmentFields({
   const awaitingJoiningConfirmation = Boolean(
     appointed && selected?.post.joiningConfirmationDue
   )
-  const employeeIdentityLocked =
-    event === "Designation Corrected" || (selected?.post.status === "Resigned" &&
-    !appointingReplacement &&
-    !managingReplacement)
   const canCorrectIdentity = Boolean(
     allowIdentityCorrection &&
     assigned &&
@@ -147,6 +143,9 @@ export function SingleEmployeeAssignmentFields({
     (selected?.post.status === "Appointed" ||
       selected?.post.status === "Occupied")
   )
+  const employeeIdentityLocked = assigned &&
+    !["Appointed", "Joined", "Replacement Joined"].includes(event)
+  const candidateAppointment = Boolean(appointed && selected.post.appointedApplicationId)
   const canChangeRole = Boolean(
     selected?.post.status === "Occupied" &&
     !selected.combinedRole &&
@@ -230,16 +229,16 @@ export function SingleEmployeeAssignmentFields({
               </NativeSelectOptGroup>
             ) : null}
           </NativeSelect>
-          {selected?.combinedRole ? (
-            <FieldDescription>
-              Included Posts: {selected.combinedRole.postCodes.join(", ")}. One
-              Employee Assignment Updates The Complete Combined Job.
-            </FieldDescription>
-          ) : null}
         </Field>
       ) : (
         <input name="post_id" type="hidden" value={postId} />
       )}
+      {selected?.combinedRole ? (
+        <FieldDescription>
+          Combined job {selected.combinedRole.vacancyCode} includes {selected.combinedRole.postCodes.join(", ")}.
+          Employee actions here update all included posts. Split the combined job before correcting one designation.
+        </FieldDescription>
+      ) : null}
       {canCorrectIdentity ? (
         <input name="identity_correction" type="hidden" value="true" />
       ) : null}
@@ -335,7 +334,7 @@ export function SingleEmployeeAssignmentFields({
           <FieldDescription>
             {event === "Designation Corrected"
               ? "Designation correction keeps the same employee and Employee ID."
-              : "Employee Details Stay Locked Until This Post Is Vacated."}
+              : "Employee details stay unchanged for this action."}
           </FieldDescription>
         ) : null}
       </Field>
@@ -362,7 +361,7 @@ export function SingleEmployeeAssignmentFields({
               <NativeSelectOption value="Appointed">
                 No — Keep As Appointed
               </NativeSelectOption>
-              <NativeSelectOption value="Removed">
+              <NativeSelectOption value="Removed" disabled={candidateAppointment}>
                 Remove Appointment — Becomes Vacant
               </NativeSelectOption>
             </>
@@ -371,7 +370,7 @@ export function SingleEmployeeAssignmentFields({
               <NativeSelectOption value="">Select Action</NativeSelectOption>
               <NativeSelectOption
                 value="Appointed"
-                disabled={Boolean(pendingReplacement)}
+                disabled={Boolean(pendingReplacement) || selected?.post.status === "Occupied"}
               >
                 {selected?.post.status === "Resigned"
                   ? "Appointed — Pending Replacement"
@@ -379,11 +378,11 @@ export function SingleEmployeeAssignmentFields({
               </NativeSelectOption>
               <NativeSelectOption
                 value="Joined"
-                disabled={Boolean(pendingReplacement)}
+                disabled={Boolean(pendingReplacement) || selected?.post.status === "Resigned"}
               >
                 Joined — Becomes Occupied
               </NativeSelectOption>
-              <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
+              <NativeSelectOption value="Resigned" disabled={selected?.post.status !== "Occupied" && selected?.post.status !== "Resigned"}>Resigned</NativeSelectOption>
               {canWithdrawResignation ? (
                 <NativeSelectOption value="Resignation Withdrawn" disabled={Boolean(pendingReplacement)}>
                   Withdraw Resignation — Keep Employee
@@ -399,7 +398,7 @@ export function SingleEmployeeAssignmentFields({
               ) : null}
               <NativeSelectOption
                 value="Removed"
-                disabled={Boolean(pendingReplacement)}
+                disabled={Boolean(pendingReplacement) || candidateAppointment}
               >
                 Remove Assignment — Becomes Vacant
               </NativeSelectOption>
@@ -420,6 +419,12 @@ export function SingleEmployeeAssignmentFields({
           <FieldDescription>
             Planned Joining Date: {formatCalendarDate(selected.post.joiningDate)}. The Post Stays
             Appointed Until Actual Joining Is Confirmed With An Employee ID.
+          </FieldDescription>
+        ) : null}
+        {candidateAppointment ? (
+          <FieldDescription>
+            Use Did Not Join in Employee Master or the candidate&apos;s job to cancel
+            this accepted appointment, record the reason and reopen recruitment.
           </FieldDescription>
         ) : null}
       </Field>
