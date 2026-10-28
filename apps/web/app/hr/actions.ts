@@ -334,8 +334,15 @@ export async function assignEmployeeAction(formData: FormData) {
   await mutate(
     formData,
     masterCapability("employee_assignments", "save"),
-    (repository, context) =>
-      repository.assignEmployee({
+    (repository, context) => value(formData, "employee_event") === "Designation Corrected"
+      ? repository.correctEmployeeDesignation({
+        ...context,
+        postId: value(formData, "post_id"),
+        destinationPostId: value(formData, "destination_post_id"),
+        expectedEmployeeCode: value(formData, "employee_code"),
+        reason: value(formData, "exit_note"),
+      })
+      : repository.assignEmployee({
         ...context,
         employeeCode: value(formData, "employee_code"),
         employeeEvent: value(formData, "employee_event"),

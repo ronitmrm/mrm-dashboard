@@ -301,6 +301,14 @@ date with a Role Changed status, and an audit event records the change. This is
 not a resignation or departure; the employee's other posts remain occupied.
 Role Changed is available only when the employee holds another occupied post.
 
+Designation Correction fixes a legacy designation without recording a departure
+or a fresh join. From an occupied standalone post, HR selects a vacant standalone
+post with a different designation in the same department and records a reason.
+The same employee assignment moves to that post; joining date, probation dates
+and completion, employee details and retained letters stay with it. The former
+post becomes vacant. Pending replacements must be cancelled first. Assignment
+History retains the old/new post codes and designations, reason and recorded time.
+
 For each joined assignment, HR sees a reminder as probation end approaches.
 Employee Master shows the probation end date saved for that employee's joined
 assignment. The date comes from the accepted Offer Letter probation period when

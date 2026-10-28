@@ -137,9 +137,9 @@ export function SingleEmployeeAssignmentFields({
     appointed && selected?.post.joiningConfirmationDue
   )
   const employeeIdentityLocked =
-    selected?.post.status === "Resigned" &&
+    event === "Designation Corrected" || (selected?.post.status === "Resigned" &&
     !appointingReplacement &&
-    !managingReplacement
+    !managingReplacement)
   const canCorrectIdentity = Boolean(
     allowIdentityCorrection &&
     assigned &&
@@ -156,6 +156,14 @@ export function SingleEmployeeAssignmentFields({
       post.status === "Occupied" &&
       post.employeeCode === selected?.post.employeeCode
     )
+  )
+  const canCorrectDesignation = Boolean(selected?.post.status === "Occupied" &&
+    !selected.post.combinedRoleId && selected.post.employeeCode && selectedAssignment && !pendingReplacement)
+  const designationTargets = individualTargets.filter(({ post }) =>
+    post.id !== postId && post.status === "Vacant" && !post.combinedRoleId &&
+    post.departmentCode === selected?.post.departmentCode &&
+    post.designation !== selected?.post.designation &&
+    !post.replacementAppointments?.some((appointment) => appointment.status === "Pending")
   )
 
   function selectTarget(nextPostId: string) {
@@ -325,7 +333,9 @@ export function SingleEmployeeAssignmentFields({
           </FieldDescription>
         ) : employeeIdentityLocked ? (
           <FieldDescription>
-            Employee Details Stay Locked Until This Post Is Vacated.
+            {event === "Designation Corrected"
+              ? "Designation correction keeps the same employee and Employee ID."
+              : "Employee Details Stay Locked Until This Post Is Vacated."}
           </FieldDescription>
         ) : null}
       </Field>
@@ -383,6 +393,9 @@ export function SingleEmployeeAssignmentFields({
                 <NativeSelectOption value="Role Changed">
                   Role Changed — Release This Post Only
                 </NativeSelectOption>
+              ) : null}
+              {canCorrectDesignation ? (
+                <NativeSelectOption value="Designation Corrected">Designation Correction</NativeSelectOption>
               ) : null}
               <NativeSelectOption
                 value="Removed"
@@ -462,6 +475,31 @@ export function SingleEmployeeAssignmentFields({
               blank to use the accepted Offer Letter period or, for a direct join,
               one calendar month after joining. Enter a date to override it.
             </FieldDescription>
+          </Field>
+        </>
+      ) : null}
+      {event === "Designation Corrected" ? (
+        <>
+          <FieldDescription>
+            Corrects the recorded designation while retaining this employee&apos;s joining date,
+            probation status, employee details and letters. Both posts and the reason are logged in assignment history.
+          </FieldDescription>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="correct-designation-post">Correct Approved Post</FieldLabel>
+            <NativeSelect id="correct-designation-post" name="destination_post_id" defaultValue="" required>
+              <NativeSelectOption value="">Select Correct Post</NativeSelectOption>
+              {designationTargets.map(({ post }) => (
+                <NativeSelectOption key={post.id} value={post.id}>{post.postCode} · {post.designation}</NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <FieldDescription>
+              {designationTargets.length ? "Choose a vacant standalone post in the same department."
+                : "Create a vacant approved post with the correct designation in this department first."}
+            </FieldDescription>
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="designation-correction-reason">Correction Reason</FieldLabel>
+            <Input id="designation-correction-reason" name="exit_note" maxLength={1000} required />
           </Field>
         </>
       ) : null}

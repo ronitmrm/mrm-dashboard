@@ -335,6 +335,51 @@ test("joining directly from Employee Master closes the linked open job", async (
   expect(audits.join(" ")).toContain("recruitment.job.closed")
 })
 
+test("designation correction moves the retained assignment and records its previous designation", async () => {
+  const source = { id: "old-post", post_code: "HR-AS-1", department_id: "hr", designation_id: "assistant", designation: "Assistant", status: "Occupied", combined_role_id: null, employee_code: "65", employee_name: "Test Employee", appointed_application_id: null }
+  const destination = { ...source, id: "new-post", post_code: "HR-HO-1", designation_id: "hod", designation: "HOD", status: "Vacant", employee_code: null, employee_name: null }
+  const snapshot = { id: "retained-assignment", post_id: source.id, post_code: source.post_code, joined_on: "2024-07-13", probation_due_on: "2024-08-12", legacy_probation_completed: true, ended_on: null }
+  const after = { ...snapshot, post_id: destination.id, post_code: destination.post_code }
+  const history = { recordedAt: "2026-10-28T10:00:00Z", previousPostCode: source.post_code, postCode: destination.post_code, previousDesignation: "Assistant", designation: "HOD", note: "Legacy title correction" }
+  const query = vi.fn(async (sql: string, parameters?: readonly unknown[]) => {
+    if (sql.includes("SELECT post.id, post.post_code")) return { rows: [source, destination] }
+    if (sql.includes("SELECT assignment.id, assignment.joined_on")) return { rows: [{ id: snapshot.id, joined_on: snapshot.joined_on, application_id: null, snapshot }] }
+    if (sql.includes("UPDATE recruitment.employee_post_assignments")) {
+      expect(parameters).toEqual([destination.id, destination.post_code, snapshot.id, "org-1"])
+      expect(sql).not.toMatch(/(?:probation_due_on|joined_on|legacy_probation_completed|ended_on)\s*=/)
+      return { rows: [{ snapshot: after }] }
+    }
+    if (sql.includes("SELECT assignment.id, assignment.post_code")) return { rows: [{ id: snapshot.id, designation_history: [history] }] }
+    return { rows: [] }
+  })
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({ pool: { query, connect: async () => client } as unknown as Pool })
+  await expect(repository.correctEmployeeDesignation({ organizationId: "org-1", postId: source.id,
+    destinationPostId: destination.id, expectedEmployeeCode: "65", reason: history.note,
+  })).resolves.toEqual({ id: destination.id })
+  expect(query).toHaveBeenCalledWith("SELECT set_config('mrm.designation_correction', 'true', true)")
+  expect(query).toHaveBeenCalledWith("SELECT set_config('mrm.designation_correction', 'false', true)")
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("status = 'Occupied'"), ["Test Employee", "65", snapshot.joined_on, null, null, destination.id, "org-1"])
+  const audit = query.mock.calls.find(([sql]) => sql.includes("INSERT INTO audit.events"))
+  const events = JSON.parse(String(audit?.[1]?.[0])) as Array<{ eventType: string; beforeState: typeof snapshot; afterState: typeof snapshot; reason: string }>
+  expect(events[0]).toMatchObject({ eventType: "recruitment.employee.designation_corrected", beforeState: snapshot, afterState: after, reason: history.note })
+  await expect(repository.listEmployeeAssignments("org-1")).resolves.toMatchObject([{ id: snapshot.id, designationHistory: [history] }])
+})
+
+test("designation correction rejects an occupied destination before changing either assignment", async () => {
+  const query = vi.fn(async (sql: string) => ({ rows: sql.includes("SELECT post.id, post.post_code") ? [
+    { id: "old-post", status: "Occupied", employee_code: "65", combined_role_id: null, department_id: "hr", designation_id: "assistant" },
+    { id: "new-post", status: "Occupied", employee_code: "66", combined_role_id: null, department_id: "hr", designation_id: "hod" },
+  ] : [] }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({ pool: { connect: async () => client } as unknown as Pool })
+  await expect(repository.correctEmployeeDesignation({ organizationId: "org-1", postId: "old-post",
+    destinationPostId: "new-post", expectedEmployeeCode: "65", reason: "Legacy correction",
+  })).rejects.toThrow("vacant standalone post")
+  expect(query).toHaveBeenCalledWith("ROLLBACK")
+  expect(query.mock.calls.some(([sql]) => sql.trimStart().startsWith("UPDATE"))).toBe(false)
+})
+
 test("role change releases only the standalone post and records a non-departure event", async () => {
   const query = vi.fn(async (statement: string, parameters?: unknown[]) => {
     if (statement.includes("SELECT id, employee_name, employee_code")) return { rows: [{

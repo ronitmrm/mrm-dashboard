@@ -27,6 +27,7 @@ test("prefills the probation end date saved when the employee joined", () => {
     allowIdentityCorrection combinedRoles={[]} employeeAssignments={[assignment]}
     initialPostId={post.id} posts={[post]} showTargetSelector={false} />)
   expect(html).toMatch(/name="probation_due_on"[^>]*value="2026-12-15"/)
+  expect(html).toContain('value="Designation Corrected"')
 })
 
 test("offers resignation withdrawal for the retained employee and shows the history", () => {
