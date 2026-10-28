@@ -776,6 +776,22 @@ async function closeOpenJobsForManualAssignment(
   })))
 }
 
+function assertEmployeeAssignmentTransition(
+  post: { status: string; appointedApplicationId?: string | null },
+  employeeEvent: string
+) {
+  const event = employeeEvent.trim() || "Appointed"
+  if (post.status === "Occupied" && event === "Appointed") {
+    throw new Error("This employee has already joined. Keep Joined to correct their details, or use Designation Correction.")
+  }
+  if (post.status === "Resigned" && event === "Joined") {
+    throw new Error("Use Withdraw Resignation to retain this employee, or Confirm Replacement Joined for an incoming employee.")
+  }
+  if (post.status === "Appointed" && post.appointedApplicationId && event === "Removed") {
+    throw new Error("Use Did Not Join to cancel this candidate appointment and reopen its recruitment job.")
+  }
+}
+
 async function assignEmployeeInTransaction(
   client: PoolClient,
   input: EmployeeAssignmentInput,
@@ -790,11 +806,12 @@ async function assignEmployeeInTransaction(
     id: string
     joining_date: string | null
     last_working_date: string | null
+    appointed_application_id: string | null
     status: string
   }>(
     `
       SELECT id, employee_name, employee_code, combined_role_id,
-        joining_date::text,
+        joining_date::text, appointed_application_id,
         last_working_date::text, status,
         (status = 'Vacant' OR (status = 'Resigned'
           AND last_working_date < current_date)) AS can_replace
@@ -814,11 +831,12 @@ async function assignEmployeeInTransaction(
         id: string
         joining_date: string | null
         last_working_date: string | null
+        appointed_application_id: string | null
         status: string
       }>(
         `
           SELECT post.id, post.employee_name, post.employee_code,
-            post.joining_date::text,
+            post.joining_date::text, post.appointed_application_id,
             post.last_working_date::text, post.status,
             (post.status = 'Vacant' OR (post.status = 'Resigned'
               AND post.last_working_date < current_date)) AS can_replace
@@ -839,6 +857,10 @@ async function assignEmployeeInTransaction(
     : current
   if (!targets.rows.length) {
     throw new Error("The combined role has no active approved posts.")
+  }
+  for (const post of targets.rows) {
+    assertEmployeeAssignmentTransition({ status: post.status,
+      appointedApplicationId: post.appointed_application_id }, input.employeeEvent || "Appointed")
   }
   if (input.employeeEvent === "Resignation Withdrawn") {
     const reason = required(input.exitNote, "Reason for withdrawing resignation")
@@ -1092,13 +1114,15 @@ async function assignEmployeeInTransaction(
   if (result.rows.length !== targetIds.length) {
     throw new Error("Not every approved post in the assignment was updated.")
   }
-  if (correctsExistingIdentity && assignment.status === "Occupied" && optional(input.probationDueOn)) {
+  if (correctsExistingIdentity && assignment.status === "Occupied" &&
+      (optional(input.probationDueOn) || optional(input.joiningDate))) {
     await client.query(
       `UPDATE recruitment.employee_post_assignments
-       SET probation_due_on = $1::date, updated_at = now()
+       SET probation_due_on = COALESCE($1::date, probation_due_on),
+         joined_on = COALESCE($5::date, joined_on), updated_at = now()
        WHERE organization_id = $2 AND post_id = ANY($3::uuid[])
          AND employee_code = $4 AND ended_on IS NULL`,
-      [optional(input.probationDueOn), input.organizationId, targetIds, assignment.employeeCode]
+      [optional(input.probationDueOn), input.organizationId, targetIds, assignment.employeeCode, optional(input.joiningDate)]
     )
   }
   if (assignment.status === "Appointed" || assignment.status === "Occupied") {
@@ -4054,6 +4078,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       const commandId = randomUUID()
       return transaction(pool, async (client) => {
         type TargetPost = {
+          appointed_application_id: string | null
           combined_role_id: string | null
           employee_code: string | null
           employee_name: string | null
@@ -4085,7 +4110,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   'combined'::text AS target_type,
                   combined.id AS combined_role_id, post.id AS post_id,
                   link.is_primary, post.post_code, post.status AS post_status,
-                  post.employee_name, post.employee_code
+                  post.employee_name, post.employee_code, post.appointed_application_id
                 FROM recruitment.combined_roles combined
                 JOIN recruitment.combined_role_posts link
                   ON link.combined_role_id = combined.id
@@ -4119,7 +4144,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   'individual'::text AS target_type,
                   post.combined_role_id, false AS is_primary, post.post_code,
                   post.status AS post_status,
-                  post.employee_name, post.employee_code
+                  post.employee_name, post.employee_code, post.appointed_application_id
                 FROM recruitment.posts post
                 WHERE post.organization_id = $1
                   AND post.status <> 'Inactive'
@@ -4195,6 +4220,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             {
               employeeCode: post.employee_code,
               employeeName: post.employee_name,
+              status: post.post_status,
+              appointedApplicationId: post.appointed_application_id,
             },
           ])
         )
@@ -4215,6 +4242,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         for (const row of orderedAssignments) {
           const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
           const targets = targetsByCode.get(key)!
+          for (const target of targets) {
+            assertEmployeeAssignmentTransition(currentByPostId.get(target.post_id)!, row.employeeEvent)
+          }
           const current =
             targets
               .map((target) => currentByPostId.get(target.post_id)!)
@@ -4232,8 +4262,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           })
           for (const target of targets) {
             currentByPostId.set(target.post_id, {
+              ...currentByPostId.get(target.post_id)!,
               employeeCode: assignment.employeeCode,
               employeeName: assignment.employeeName,
+              status: assignment.status,
             })
             const previousUpdate = updatesByPostId.get(target.post_id)
             updatesByPostId.set(target.post_id, {

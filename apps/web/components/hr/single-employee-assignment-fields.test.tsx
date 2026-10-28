@@ -28,6 +28,7 @@ test("prefills the probation end date saved when the employee joined", () => {
     initialPostId={post.id} posts={[post]} showTargetSelector={false} />)
   expect(html).toMatch(/name="probation_due_on"[^>]*value="2026-12-15"/)
   expect(html).toContain('value="Designation Corrected"')
+  expect(html).toMatch(/value="Appointed"[^>]*disabled/)
 })
 
 test("offers resignation withdrawal for the retained employee and shows the history", () => {
@@ -40,6 +41,7 @@ test("offers resignation withdrawal for the retained employee and shows the hist
     allowIdentityCorrection combinedRoles={[]} employeeAssignments={[{ ...assignment, resignationHistory: history }]}
     initialPostId={post.id} posts={[resigned]} showTargetSelector={false} />)
   expect(html).toContain('value="Resignation Withdrawn"')
+  expect(html).toMatch(/value="Joined"[^>]*disabled/)
   expect(html).toMatch(/name="employee_name"[^>]*value="Test Employee"/)
   expect(html).toContain("Employee agreed to continue")
   expect(html).toContain("15/09/2026")
