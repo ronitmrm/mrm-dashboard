@@ -16,6 +16,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { TimeInput } from "@workspace/ui/components/time-input"
+import { StandardState } from "@workspace/ui/components/standard-state"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -72,6 +73,11 @@ function ScheduleFields({
   function selectApplication(nextApplicationId: string) {
     setApplicationId(nextApplicationId)
     setRoundName("")
+  }
+
+  if (!applications.length) {
+    return <StandardState title="No Interviews To Schedule"
+      description="Assign a candidate to this job, or record/reschedule an existing interview before scheduling the next round." />
   }
 
   return (
