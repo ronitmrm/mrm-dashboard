@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 
 import type { RecruitmentEmployeeAssignmentRow, RecruitmentEmploymentLetterRow, RecruitmentPostRow } from "@workspace/db"
@@ -9,7 +10,7 @@ import {
   CardContent, CardDescription, CardHeader, CardTitle, SectionCard,
 } from "@workspace/ui/components/card"
 import { Dialog, DialogTrigger } from "@workspace/ui/components/dialog"
-import { Field, FieldDescription, FieldLabel } from "@workspace/ui/components/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -36,49 +37,77 @@ function ProbationDateEditor({ assignment, canGenerateAppointment }: {
   assignment: RecruitmentEmployeeAssignmentRow
   canGenerateAppointment: boolean
 }) {
+  const [extending, setExtending] = useState(false)
   return (
-    <Dialog>
+    <Dialog onOpenChange={() => setExtending(false)}>
       <DialogTrigger asChild>
         <Button size="sm" type="button" variant="outline">Update</Button>
       </DialogTrigger>
       <StandardDialogContent
         className="max-h-[90vh] overflow-y-auto"
-        title={`Probation End Date · ${assignment.employeeName}`}
+        title={`Probation Review · ${assignment.employeeName}`}
         description={`${assignment.postCode} · Employee ID ${assignment.employeeCode ?? "not recorded"}`}
       >
-        <form action={updateEmployeeProbationAction} className="grid gap-4">
-          <input name="panel" type="hidden" value="probationRemindersPanel" />
-          <input name="assignment_id" type="hidden" value={assignment.id} />
-          <Field>
-            <FieldLabel htmlFor={`probation-${assignment.id}`}>Probation Ends On</FieldLabel>
-            <Input
-              defaultValue={assignment.probationDueOn ?? ""}
-              id={`probation-${assignment.id}`}
-              name="probation_due_on"
-              type="date"
-            />
-            <FieldDescription>Set this date if it was unavailable at joining.</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`probation-remark-${assignment.id}`}>Remark</FieldLabel>
-            <Textarea
-              id={`probation-remark-${assignment.id}`}
-              maxLength={1000}
-              name="remark"
-              placeholder="Add a note about this update"
-              rows={3}
-            />
-            <FieldDescription>Optional. Saved with this update in the audit history.</FieldDescription>
-          </Field>
-          {assignment.probationRemark ? <p className="text-sm text-muted-foreground">Latest remark: {assignment.probationRemark}</p> : null}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit">Save Update</Button>
-            {canGenerateAppointment ? (
-              <Button name="next_step" type="submit" value="appointment" variant="outline">
-                Save & Generate Appointment Letter
-              </Button>
-            ) : null}
-          </div>
+        <form action={updateEmployeeProbationAction}>
+          <FieldGroup>
+            <input name="panel" type="hidden" value="probationRemindersPanel" />
+            <input name="assignment_id" type="hidden" value={assignment.id} />
+            <Field>
+              {extending ? <FieldDescription>Current probation ends on {formatCalendarDate(assignment.probationDueOn ?? "Date needed")}.</FieldDescription> : null}
+              <FieldLabel htmlFor={`probation-${assignment.id}`}>
+                {extending ? "Next Probation End Date" : "Probation Ends On"}
+              </FieldLabel>
+              <Input
+                defaultValue={extending ? "" : assignment.probationDueOn ?? ""}
+                id={`probation-${assignment.id}`}
+                key={String(extending)}
+                min={extending ? assignment.probationDueOn ?? undefined : undefined}
+                name="probation_due_on"
+                required={extending}
+                type="date"
+              />
+              <FieldDescription>{extending
+                ? "Choose a later end date for the next probation review."
+                : "Set this date if it was unavailable at joining."}</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`probation-remark-${assignment.id}`}>{extending ? "Review Comment" : "Remark"}</FieldLabel>
+              <Textarea
+                id={`probation-remark-${assignment.id}`}
+                maxLength={1000}
+                name="remark"
+                placeholder="Add a note about this update"
+                required={extending}
+                rows={3}
+              />
+              <FieldDescription>{extending
+                ? "Required. The extension, both dates and this comment appear in Employee Assignment History."
+                : "Optional. Saved with this update in the audit history."}</FieldDescription>
+            </Field>
+            {assignment.probationRemark ? <p className="text-sm text-muted-foreground">Latest remark: {assignment.probationRemark}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              {extending ? (
+                <>
+                  <Button name="next_step" type="submit" value="extend">Save Extension</Button>
+                  <Button onClick={() => setExtending(false)} type="button" variant="outline">Back</Button>
+                </>
+              ) : (
+                <>
+                  <Button type="submit">Save Update</Button>
+                  {canGenerateAppointment ? (
+                    <>
+                      <Button name="next_step" type="submit" value="appointment" variant="outline">
+                        Save & Generate Appointment Letter
+                      </Button>
+                      <Button disabled={!assignment.probationDueOn} onClick={() => setExtending(true)} type="button" variant="outline">
+                        Extend Probation
+                      </Button>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </FieldGroup>
         </form>
       </StandardDialogContent>
     </Dialog>
@@ -284,12 +313,20 @@ export function EmployeeAssignmentHistory({
         : assignment.exitType === "Resigned" ? "Resignation Planned" : "Current",
       plannedEndOn: assignment.plannedEndOn, endedOn: assignment.endedOn,
       recordedAt: null, note: assignment.exitNote,
+      probationChange: null,
     },
     ...(assignment.resignationHistory ?? []).map((event, index) => ({
       id: `${assignment.id}:resignation:${index}`, assignment,
       status: event.type === "Resignation Withdrawn" ? "Resignation Cancelled" : event.type,
       plannedEndOn: event.lastWorkingDate, endedOn: null,
       recordedAt: event.recordedAt, note: event.note,
+      probationChange: null,
+    })),
+    ...(assignment.probationHistory ?? []).map((event, index) => ({
+      id: `${assignment.id}:probation:${index}`, assignment,
+      status: "Probation Extended", plannedEndOn: null, endedOn: null,
+      recordedAt: event.recordedAt, note: event.note,
+      probationChange: event,
     })),
   ])
   return (
@@ -308,7 +345,7 @@ export function EmployeeAssignmentHistory({
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
-          <CardDescription>Assignments, resignations and cancelled resignations appear as separate rows. Summary counts reflect assignments.</CardDescription>
+          <CardDescription>Assignments, resignations, cancelled resignations and probation extensions appear as separate rows. Summary counts reflect assignments.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
@@ -330,7 +367,8 @@ export function EmployeeAssignmentHistory({
                   <TableCell>{formatCalendarDate(row.plannedEndOn ?? "—")}</TableCell>
                   <TableCell>{formatCalendarDate(row.endedOn ?? "—")}</TableCell>
                   <TableCell data-filter-value={status}>
-                    <StatusBadge value={status} tone={status === "Left Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
+                    <StatusBadge value={status} tone={status === "Left Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" || status === "Probation Extended" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
+                    {row.probationChange ? <span className="block text-xs text-muted-foreground">Probation: {formatCalendarDate(row.probationChange.previousDueOn ?? "Not recorded")} → {formatCalendarDate(row.probationChange.nextDueOn)}</span> : null}
                     {row.recordedAt ? <span className="block text-xs text-muted-foreground">{formatIstDateTime(row.recordedAt)} IST</span> : null}
                     {row.note ? <span className="block text-xs text-muted-foreground">{row.note}</span> : null}
                   </TableCell>

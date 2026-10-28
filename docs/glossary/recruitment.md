@@ -317,6 +317,11 @@ for its past-dated rows, those rows receive an explicit completion record.
 Future-dated rows remain pending. A probation-date update may include an
 optional remark retained in the assignment audit history and shown with the
 current reminder.
+During a probation review, HR can choose Extend Probation, enter a later end
+date and a required review comment, then save the extension. Probation stays
+pending until completion. Each extension retains the previous end date, new end
+date, comment and recorded time as a separate Employee Assignment History row.
+Only active assignments with pending probation can be extended.
 Completed reminders leave the open HR task list and remain in a probation
 completion log. The log identifies whether completion came from an issued
 Appointment Letter or a recorded legacy completion; its recorded date is the

@@ -878,6 +878,7 @@ export async function reappointCandidateAppointmentAction(formData: FormData) {
 }
 
 export async function updateEmployeeProbationAction(formData: FormData) {
+  const nextStep = value(formData, "next_step")
   await mutate(
     formData,
     masterCapability("employee_assignments", "save"),
@@ -886,9 +887,10 @@ export async function updateEmployeeProbationAction(formData: FormData) {
       assignmentId: value(formData, "assignment_id"),
       probationDueOn: value(formData, "probation_due_on") || null,
       remark: value(formData, "remark") || null,
+      extend: nextStep === "extend",
     }),
-    "Probation update saved.",
-    value(formData, "next_step") === "appointment"
+    nextStep === "extend" ? "Probation extended. The review is due on the new end date." : "Probation update saved.",
+    nextStep === "appointment"
       ? { probationAppointment: value(formData, "assignment_id") }
       : undefined
   )

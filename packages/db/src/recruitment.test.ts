@@ -243,6 +243,47 @@ test("employee assignments expose the generated offer retained for their own app
   expect(sql).toContain("ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1")
 })
 
+test("extends probation with the review comment and retains both dates in assignment history", async () => {
+  const assignment = {
+    id: "assignment-1", probation_due_on: "2026-10-28", ended_on: null,
+    legacy_probation_completed: false, has_appointment_letter: false,
+  }
+  const history = { recordedAt: "2026-10-28T10:00:00Z", previousDueOn: "2026-10-28", nextDueOn: "2026-11-28", note: "More supervised work needed" }
+  const query = vi.fn(async (sql: string) => ({ rows:
+    sql.includes("SELECT assignment.id, assignment.probation_due_on") ? [assignment]
+      : sql.includes("UPDATE recruitment.employee_post_assignments") ? [{ probation_due_on: "2026-11-28" }]
+        : sql.includes("SELECT assignment.id, assignment.post_code") ? [{ id: assignment.id, probation_history: [history] }]
+          : [],
+  }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({ pool: { query, connect: async () => client } as unknown as Pool })
+  await repository.updateEmployeeProbation({
+    organizationId: "org-1", assignmentId: assignment.id, extend: true,
+    probationDueOn: history.nextDueOn, remark: history.note,
+  })
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.employee_post_assignments"),
+    [history.nextDueOn, assignment.id, "org-1"])
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO audit.events"), [expect.stringContaining('"eventType":"recruitment.employee.probation_extended"')])
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO audit.events"), [expect.stringContaining('"probation_due_on":"2026-10-28"')])
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO audit.events"), [expect.stringContaining(history.note)])
+  await expect(repository.listEmployeeAssignments("org-1")).resolves.toMatchObject([{ id: assignment.id, probationHistory: [history] }])
+})
+
+test("rejects a probation extension that does not move the end date forward", async () => {
+  const query = vi.fn(async (sql: string) => ({ rows: sql.includes("SELECT assignment.id, assignment.probation_due_on")
+    ? [{ id: "assignment-1", probation_due_on: "2026-10-28", ended_on: null, legacy_probation_completed: false, has_appointment_letter: false }]
+    : [],
+  }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({ pool: { connect: async () => client } as unknown as Pool })
+  await expect(repository.updateEmployeeProbation({
+    organizationId: "org-1", assignmentId: "assignment-1", extend: true,
+    probationDueOn: "2026-10-28", remark: "Review needs more time",
+  })).rejects.toThrow("must be later")
+  expect(query).toHaveBeenCalledWith("ROLLBACK")
+  expect(query.mock.calls.some(([sql]) => sql.trimStart().startsWith("UPDATE") || sql.includes("INSERT INTO audit.events"))).toBe(false)
+})
+
 test("removing a joined employee requires an actual end date and exit type", async () => {
   const query = vi.fn(async (statement: string) => ({ rows: statement.includes("SELECT id, employee_name, employee_code")
     ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
