@@ -243,6 +243,12 @@ export type RecruitmentEmployeeAssignmentRow = {
     lastWorkingDate: string | null
     note: string | null
   }>
+  probationHistory?: Array<{
+    recordedAt: string
+    previousDueOn: string | null
+    nextDueOn: string
+    note: string | null
+  }>
 }
 
 export type RecruitmentInterviewRow = {
@@ -3621,6 +3627,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         exit_note: string | null
         appointment_letter_issued_on: string | null
         resignation_history: NonNullable<RecruitmentEmployeeAssignmentRow["resignationHistory"]>
+        probation_history: NonNullable<RecruitmentEmployeeAssignmentRow["probationHistory"]>
       }>(
         `SELECT assignment.id, assignment.post_code,
            combined.vacancy_code AS combined_vacancy_code,
@@ -3640,7 +3647,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on,
-           COALESCE(resignation_events.history, '[]'::json) AS resignation_history
+           COALESCE(resignation_events.history, '[]'::json) AS resignation_history,
+           COALESCE(probation_events.history, '[]'::json) AS probation_history
          FROM recruitment.employee_post_assignments assignment
          LEFT JOIN recruitment.employee_profiles profile
            ON profile.organization_id = assignment.organization_id
@@ -3684,7 +3692,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            WHERE event.target_schema = 'recruitment'
              AND event.target_table = 'employee_post_assignments'
              AND event.target_id = assignment.id
-             AND event.event_type = 'recruitment.employee.probation_date_updated'
+             AND event.event_type IN ('recruitment.employee.probation_date_updated',
+               'recruitment.employee.probation_extended')
              AND nullif(trim(event.reason), '') IS NOT NULL
            ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1
          ) remark_event ON true
@@ -3728,6 +3737,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                      AND later.created_at > assignment.created_at
                      AND later.created_at <= event.occurred_at)))
          ) resignation_events ON true
+         LEFT JOIN LATERAL (
+           SELECT json_agg(json_build_object(
+             'recordedAt', event.occurred_at::text,
+             'previousDueOn', event.before_state->>'probation_due_on',
+             'nextDueOn', event.after_state->>'probation_due_on',
+             'note', event.reason
+           ) ORDER BY event.occurred_at, event.id) AS history
+           FROM audit.events event
+           WHERE event.organization_id = assignment.organization_id
+             AND event.target_schema = 'recruitment'
+             AND event.target_table = 'employee_post_assignments'
+             AND event.target_id = assignment.id
+             AND event.event_type = 'recruitment.employee.probation_extended'
+         ) probation_events ON true
          WHERE assignment.organization_id = $1
          ORDER BY assignment.created_at DESC, assignment.id DESC`,
         [organizationId]
@@ -3756,6 +3779,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         exitNote: row.exit_note,
         appointmentLetterIssuedOn: row.appointment_letter_issued_on,
         resignationHistory: row.resignation_history ?? [],
+        probationHistory: row.probation_history ?? [],
       }))
     },
 
@@ -3764,12 +3788,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         assignmentId: string
         probationDueOn: string | null
         remark?: string | null
+        extend?: boolean
       }
     ) {
       if (input.probationDueOn && !/^\d{4}-\d{2}-\d{2}$/.test(input.probationDueOn)) {
         throw new Error("Enter a valid probation end date.")
       }
       const remark = input.remark?.trim() || null
+      if (input.extend && !input.probationDueOn) {
+        throw new Error("Enter the next probation end date.")
+      }
+      if (input.extend && !remark) {
+        throw new Error("Add a review comment before extending probation.")
+      }
       if (remark && remark.length > 1000) {
         throw new Error("Keep the probation remark within 1,000 characters.")
       }
@@ -3777,13 +3808,40 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const before = await client.query<{
           id: string
           probation_due_on: string | null
+          ended_on: string | null
+          legacy_probation_completed: boolean
+          has_appointment_letter: boolean
         }>(
-          `SELECT id, probation_due_on::text
-           FROM recruitment.employee_post_assignments
-           WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+          `SELECT assignment.id, assignment.probation_due_on::text,
+             assignment.ended_on::text, assignment.legacy_probation_completed,
+             EXISTS (
+               SELECT 1 FROM recruitment.employment_letters letter
+               WHERE letter.organization_id = assignment.organization_id
+                 AND letter.employee_code = assignment.employee_code
+                 AND letter.letter_type = 'appointment' AND letter.pdf_bytes IS NOT NULL
+                 AND NOT EXISTS (
+                   SELECT 1 FROM recruitment.employment_letters revision
+                   WHERE revision.organization_id = letter.organization_id
+                     AND revision.supersedes_letter_id = letter.id
+                 )
+             ) AS has_appointment_letter
+           FROM recruitment.employee_post_assignments assignment
+           WHERE assignment.id = $1 AND assignment.organization_id = $2 FOR UPDATE`,
           [required(input.assignmentId, "Employee assignment"), input.organizationId]
         )
         if (!before.rows[0]) throw new Error("Employee assignment was not found.")
+        const assignment = before.rows[0]
+        if (input.extend) {
+          if (assignment.ended_on || assignment.legacy_probation_completed || assignment.has_appointment_letter) {
+            throw new Error("Only an active assignment with pending probation can be extended.")
+          }
+          if (!assignment.probation_due_on) {
+            throw new Error("Save the current probation end date before extending it.")
+          }
+          if (input.probationDueOn && input.probationDueOn <= assignment.probation_due_on) {
+            throw new Error("The next probation end date must be later than the current end date.")
+          }
+        }
         const after = await client.query(
           `UPDATE recruitment.employee_post_assignments
            SET probation_due_on = $1::date, updated_at = now()
@@ -3793,7 +3851,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         await audit(client, {
           ...input,
-          eventType: "recruitment.employee.probation_date_updated",
+          eventType: input.extend
+            ? "recruitment.employee.probation_extended"
+            : "recruitment.employee.probation_date_updated",
           reason: remark,
           beforeState: before.rows[0],
           afterState: after.rows[0],
