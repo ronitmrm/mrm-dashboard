@@ -21,6 +21,9 @@ test("shows the resignation and its cancellation as separate history rows withou
     plannedEndOn: null, endedOn: null, exitType: null, exitNote: null,
     legacyProbationCompleted: false, legacyProbationRecordedOn: null,
     appointmentLetterIssuedOn: null, offerLetterId: null, offerLetterReference: null,
+    designationHistory: [
+      { recordedAt: "2026-10-04T10:00:00Z", previousPostCode: "HR-AS-1", postCode: "HR-HO-1", previousDesignation: "Assistant", designation: "HOD", note: "Corrected original designation" },
+    ],
     probationHistory: [
       { recordedAt: "2026-10-03T10:00:00Z", previousDueOn: "2026-10-01", nextDueOn: "2026-11-01", note: "Needs another month of supervised work" },
     ],
@@ -31,7 +34,7 @@ test("shows the resignation and its cancellation as separate history rows withou
   }
   const html = renderToStaticMarkup(<EmployeeAssignmentHistory assignments={[assignment]} />)
   const rows = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/)?.[1]?.match(/<tr\b[\s\S]*?<\/tr>/g)
-  expect(rows).toHaveLength(4)
+  expect(rows).toHaveLength(5)
   expect(rows?.[0]).toContain('data-filter-value="Current"')
   expect(rows?.[1]).toContain('data-filter-value="Resigned"')
   expect(rows?.[1]).toContain("Leaving for another role")
@@ -44,6 +47,10 @@ test("shows the resignation and its cancellation as separate history rows withou
   expect(rows?.[3]).toContain("01/11/2026")
   expect(rows?.[3]).toContain("Needs another month of supervised work")
   expect(rows?.[3]).toContain("03/10/2026, 15:30 IST")
+  expect(rows?.[4]).toContain('data-filter-value="Designation Corrected"')
+  expect(rows?.[4]).toContain("Assistant (HR-AS-1)")
+  expect(rows?.[4]).toContain("HOD (HR-HO-1)")
+  expect(rows?.[4]).toContain("Corrected original designation")
   expect(html).not.toContain("View History")
   expect(html).not.toContain(">Resignation History<")
 })

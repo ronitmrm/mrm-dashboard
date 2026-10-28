@@ -249,6 +249,14 @@ export type RecruitmentEmployeeAssignmentRow = {
     nextDueOn: string
     note: string | null
   }>
+  designationHistory?: Array<{
+    recordedAt: string
+    previousPostCode: string
+    postCode: string
+    previousDesignation: string
+    designation: string
+    note: string | null
+  }>
 }
 
 export type RecruitmentInterviewRow = {
@@ -3628,6 +3636,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         appointment_letter_issued_on: string | null
         resignation_history: NonNullable<RecruitmentEmployeeAssignmentRow["resignationHistory"]>
         probation_history: NonNullable<RecruitmentEmployeeAssignmentRow["probationHistory"]>
+        designation_history: NonNullable<RecruitmentEmployeeAssignmentRow["designationHistory"]>
       }>(
         `SELECT assignment.id, assignment.post_code,
            combined.vacancy_code AS combined_vacancy_code,
@@ -3648,7 +3657,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on,
            COALESCE(resignation_events.history, '[]'::json) AS resignation_history,
-           COALESCE(probation_events.history, '[]'::json) AS probation_history
+           COALESCE(probation_events.history, '[]'::json) AS probation_history,
+           COALESCE(designation_events.history, '[]'::json) AS designation_history
          FROM recruitment.employee_post_assignments assignment
          LEFT JOIN recruitment.employee_profiles profile
            ON profile.organization_id = assignment.organization_id
@@ -3751,6 +3761,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND event.target_id = assignment.id
              AND event.event_type = 'recruitment.employee.probation_extended'
          ) probation_events ON true
+         LEFT JOIN LATERAL (
+           SELECT json_agg(json_build_object(
+             'recordedAt', event.occurred_at::text,
+             'previousPostCode', event.before_state->>'post_code',
+             'postCode', event.after_state->>'post_code',
+             'previousDesignation', event.before_state->>'designation',
+             'designation', event.after_state->>'designation',
+             'note', event.reason
+           ) ORDER BY event.occurred_at, event.id) AS history
+           FROM audit.events event
+           WHERE event.organization_id = assignment.organization_id
+             AND event.target_schema = 'recruitment'
+             AND event.target_table = 'employee_post_assignments'
+             AND event.target_id = assignment.id
+             AND event.event_type = 'recruitment.employee.designation_corrected'
+         ) designation_events ON true
          WHERE assignment.organization_id = $1
          ORDER BY assignment.created_at DESC, assignment.id DESC`,
         [organizationId]
@@ -3780,6 +3806,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         appointmentLetterIssuedOn: row.appointment_letter_issued_on,
         resignationHistory: row.resignation_history ?? [],
         probationHistory: row.probation_history ?? [],
+        designationHistory: row.designation_history ?? [],
       }))
     },
 
@@ -3861,6 +3888,103 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "employee_post_assignments",
         })
         return { id: input.assignmentId }
+      })
+    },
+
+    async correctEmployeeDesignation(input: MutationContext & {
+      postId: string
+      destinationPostId: string
+      expectedEmployeeCode: string
+      reason: string
+    }) {
+      const postId = required(input.postId, "Current approved post")
+      const destinationPostId = required(input.destinationPostId, "Correct approved post")
+      const employeeCode = required(input.expectedEmployeeCode, "Employee ID")
+      const reason = required(input.reason, "Designation correction reason")
+      if (postId === destinationPostId) throw new Error("Choose a different approved post.")
+      if (reason.length > 1000) throw new Error("Keep the correction reason within 1,000 characters.")
+      return transaction(pool, async (client) => {
+        const posts = await client.query<{
+          id: string; post_code: string; department_id: string; designation_id: string
+          designation: string; status: string; combined_role_id: string | null
+          employee_code: string | null; employee_name: string | null
+          appointed_application_id: string | null
+        }>(
+          `SELECT post.id, post.post_code, post.department_id, post.designation_id,
+             designation.name AS designation, post.status, post.combined_role_id,
+             post.employee_code, post.employee_name, post.appointed_application_id
+           FROM recruitment.posts post
+           JOIN recruitment.designations designation ON designation.id = post.designation_id
+           WHERE post.organization_id = $1 AND post.id = ANY($2::uuid[])
+           ORDER BY post.id FOR UPDATE OF post`,
+          [input.organizationId, [postId, destinationPostId]]
+        )
+        const source = posts.rows.find((post) => post.id === postId)
+        const destination = posts.rows.find((post) => post.id === destinationPostId)
+        if (!source || source.status !== "Occupied" || source.combined_role_id ||
+            source.employee_code !== employeeCode) {
+          throw new Error("Refresh and select this employee's occupied standalone post.")
+        }
+        if (!destination || destination.status !== "Vacant" || destination.combined_role_id ||
+            destination.employee_code || destination.employee_name || destination.appointed_application_id ||
+            destination.department_id !== source.department_id || destination.designation_id === source.designation_id) {
+          throw new Error("Choose a vacant standalone post with the correct designation in the same department.")
+        }
+        const replacements = await client.query(
+          `SELECT id FROM recruitment.post_replacements
+           WHERE organization_id = $1 AND post_id = ANY($2::uuid[]) AND status = 'Pending'
+           FOR UPDATE`, [input.organizationId, [postId, destinationPostId]]
+        )
+        if (replacements.rows.length) throw new Error("Cancel the pending replacement before correcting this designation.")
+        const assignments = await client.query<{
+          id: string; joined_on: string | null; application_id: string | null
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT assignment.id, assignment.joined_on::text, assignment.application_id,
+             to_jsonb(assignment) AS snapshot
+           FROM recruitment.employee_post_assignments assignment
+           WHERE assignment.organization_id = $1 AND assignment.post_id = $2
+             AND assignment.employee_code = $3 AND assignment.ended_on IS NULL FOR UPDATE`,
+          [input.organizationId, postId, employeeCode]
+        )
+        const assignment = assignments.rows[0]
+        if (assignments.rows.length !== 1 || !assignment) throw new Error("A single current joined assignment is required for designation correction.")
+        await client.query("SELECT set_config('mrm.designation_correction', 'true', true)")
+        const corrected = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE recruitment.employee_post_assignments assignment
+           SET post_id = $1, post_code = $2, updated_at = now()
+           WHERE id = $3 AND organization_id = $4
+           RETURNING to_jsonb(assignment) AS snapshot`,
+          [destinationPostId, destination.post_code, assignment.id, input.organizationId]
+        )
+        await client.query(
+          `UPDATE recruitment.posts
+           SET employee_name = $1, employee_code = $2, joining_date = $3::date,
+             appointed_application_id = $4, status = 'Occupied', last_working_date = NULL,
+             updated_by_user_id = $5, updated_at = now(), row_version = row_version + 1
+           WHERE id = $6 AND organization_id = $7`,
+          [source.employee_name, employeeCode, assignment.joined_on,
+            source.appointed_application_id ?? assignment.application_id,
+            input.actorUserId ?? null, destinationPostId, input.organizationId]
+        )
+        await client.query(
+          `UPDATE recruitment.posts
+           SET employee_name = NULL, employee_code = NULL, joining_date = NULL,
+             appointed_application_id = NULL, status = 'Vacant', last_working_date = NULL,
+             updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1
+           WHERE id = $2 AND organization_id = $3`,
+          [input.actorUserId ?? null, postId, input.organizationId]
+        )
+        await client.query("SELECT set_config('mrm.designation_correction', 'false', true)")
+        await closeOpenJobsForManualAssignment(client, { ...input, employeeEvent: "Designation Corrected" }, [destinationPostId])
+        await audit(client, {
+          ...input, eventType: "recruitment.employee.designation_corrected", reason,
+          beforeState: { ...assignment.snapshot, designation: source.designation },
+          afterState: { ...corrected.rows[0]!.snapshot, designation: destination.designation },
+          metadata: { sourcePostId: postId, destinationPostId },
+          targetId: assignment.id, targetTable: "employee_post_assignments",
+        })
+        return { id: destinationPostId }
       })
     },
 
