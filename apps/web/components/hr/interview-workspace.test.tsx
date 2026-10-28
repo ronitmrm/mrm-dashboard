@@ -11,6 +11,7 @@ vi.mock("@/components/ui/golden-patterns", () => ({ MetricSummary: () => null, S
 vi.mock("@/lib/date-time", () => import("../../lib/date-time"))
 
 import { InterviewScheduleBoard } from "./interview-workspace"
+import { InterviewScheduleForm } from "./interview-schedule-form"
 
 const scheduled: RecruitmentInterviewRow = {
   applicationId: "scheduled", candidateId: "candidate", candidateName: "Scheduled Candidate",
@@ -35,4 +36,10 @@ test("hides rescheduling without scheduling permission even when other HR action
   const html = renderToStaticMarkup(<InterviewScheduleBoard canSchedule={false} canWrite interviews={[scheduled]} />)
   expect(html).toContain("Record Outcome")
   expect(html).not.toContain("Reschedule")
+})
+
+test("explains when every candidate already has an interview scheduled", () => {
+  const html = renderToStaticMarkup(<InterviewScheduleForm interviews={[scheduled]} />)
+  expect(html).toContain("No Interviews To Schedule")
+  expect(html).not.toContain("Select Post / Job First")
 })
