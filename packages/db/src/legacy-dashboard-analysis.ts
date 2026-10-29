@@ -7402,14 +7402,13 @@ function matchingPlanOverridesForSetup(planOverrides: ActionRow[], workOrder: Re
   return planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
     if (routeChangedAt && rowCreatedAtMs(row) <= routeChangedAt) return false;
-    const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
-    const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
-    const rowPartKey = canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO"));
+    const rowJcKey = canonicalKey(rowText(row, "jobCardNumber", "jcNo", "JC NO.", "JC NO"));
+    // A shared Part Code is metadata when the action targets a specific Job Card.
+    const targetKey = rowJcKey || canonicalKey(rowText(row, "target", "partCode", "PART CODE", "PART NO"));
     const rowSetupKey = plannerSetupKey(rowText(row, "setupNumber", "setupNo", "SETUP NO.", "SETUP NO"));
-    const targetMatches = Boolean(targetKey && (targetKey === jcKey || targetKey === partKey));
-    const rowMatches = Boolean((rowJcKey && rowJcKey === jcKey) || (rowPartKey && rowPartKey === partKey));
+    const targetMatches = Boolean(targetKey && (targetKey === jcKey || (!rowJcKey && targetKey === partKey)));
     const setupMatches = !rowSetupKey || setupKeys.has(rowSetupKey);
-    return (targetMatches || rowMatches) && setupMatches;
+    return targetMatches && setupMatches;
   });
 }
 

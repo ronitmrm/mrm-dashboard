@@ -260,6 +260,32 @@ test("move setup honors first position when its source interruption has no outpu
   )[0]?.jcNo).toBe("P2262")
 })
 
+test("machine moves keep original and replacement job cards separate for the same part", () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date("2026-10-29T06:30:00Z"))
+  const replacement = "P2263 · Rev 1 · Replacement"
+  const partCode = "M2160B"
+  const createdAt = "2026-10-28T14:07:45Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const rows = buildLegacyDashboardSnapshot({
+    productionFloorCode: "cnc", workbookName: "PostgreSQL", productionEntries: [],
+    dataEntries: [
+      ...["P2263", replacement].map(jcNo => entry("work_order", { jcNo, partCode, optionNumber: "1", orderPcs: 60, rmInwardDate: "2026-10-28", rmInwardKg: 1 })),
+      entry("route", { partNo: partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "T25" }),
+      entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: 50 }),
+      ...["CNC-10", "CNC-13", "CNC-15"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "T25", status: "Active" })),
+    ],
+    previousMachinePlanDetailRows: [{ jcNo: replacement, partCode, optionNumber: "1", setupNo: "1", machine: "CNC-15", routeMachine: "T25" }],
+    planOverrides: [
+      { jobCardNumber: "P2263", partCode, setupNumber: 1, fromMachineNumber: "CNC-13", toMachineNumber: "CNC-10", assignmentMode: "move", reason: "Original move", createdAt: "2026-09-29T05:54:15Z" },
+      { jobCardNumber: replacement, partCode, setupNumber: 1, fromMachineNumber: "CNC-10", toMachineNumber: "CNC-13", assignmentMode: "move", reason: "Npd Item", createdAt },
+    ],
+  }).productionControl.machinePlanDetailRows
+
+  expect(rows.find(row => row.jcNo === "P2263")).toMatchObject({ machine: "CNC-10", plannerActionConflict: "", planOverrideReason: "Original move" })
+  expect(rows.find(row => row.jcNo === replacement)).toMatchObject({ machine: "CNC-13", plannerActionConflict: "", planOverrideReason: "Npd Item" })
+})
+
 test("newer first-position move takes precedence over an older breakdown placement", () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date("2026-10-21T13:42:00Z"))
