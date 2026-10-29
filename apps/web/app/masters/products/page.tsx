@@ -26,6 +26,7 @@ export default async function ProductsMasterPage({
   const grants = await listGrantedCapabilities(session.user.id, [
     masterCapability("products", "create"),
     masterCapability("products", "import"),
+    masterCapability("products", "rename"),
   ])
   const records = (await searchParams).masterView === "masterTables"
   const connectionString = readAuthEnvironment().connectionString
@@ -38,7 +39,12 @@ export default async function ProductsMasterPage({
       .finally(() => repository.close())
     content = (
       <FormSection title="Internal Products" width="full">
-        <ProductPortfolioTable rows={rows} />
+        <ProductPortfolioTable
+          rows={rows}
+          canRenamePartCode={grants.includes(
+            masterCapability("products", "rename")
+          )}
+        />
       </FormSection>
     )
   } else {
@@ -54,7 +60,11 @@ export default async function ProductsMasterPage({
         {grants.includes(masterCapability("products", "create")) ? (
           <PortfolioEntryForm options={options} masterData />
         ) : null}
-        {!grants.length ? (
+        {!grants.some(
+          (grant) =>
+            grant === masterCapability("products", "create") ||
+            grant === masterCapability("products", "import")
+        ) ? (
           <p>You have view access. Open View Records to see products.</p>
         ) : null}
       </>

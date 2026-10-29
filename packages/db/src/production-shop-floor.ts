@@ -3755,10 +3755,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [selectedRoute?.id ?? null]
         ),
         pool.query<Record<string, unknown>>(
-          `SELECT summary.*, session.source_payload AS "sessionPayload",
+          `SELECT summary.*, item.uid AS part_code, session.source_payload AS "sessionPayload",
              COALESCE(downtime.intervals, '[]'::jsonb) AS "downtimeIntervals"
            FROM reporting.production_session_summary summary
            JOIN manufacturing.production_sessions session ON session.id = summary.id
+           JOIN manufacturing.work_orders work_order ON work_order.id = session.work_order_id
+           JOIN catalog.items item ON item.id = work_order.item_id
            LEFT JOIN LATERAL (
              SELECT jsonb_agg(jsonb_build_object(
                'startedAt', event.started_at, 'endedAt', event.ended_at
@@ -4590,7 +4592,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             target.pieces AS "targetPieces",
             session.source_payload->'efficiencyFlagReview' AS "efficiencyFlagReview",
             session.job_card_number_snapshot AS "jobCardNumber",
-            session.part_code_snapshot AS "partCode",
+            item.uid AS "partCode",
             session.option_number_snapshot AS "optionNumber",
             session.setup_number_snapshot AS "setupNumber",
             session.machine_number_snapshot AS "machineNumber",
@@ -4892,7 +4894,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               AND session.reversed_at IS NULL
           )
           SELECT "sessionId", "sessionReference", "productionDate", shift,
-            "machineNumber", "jobCardNumber", "partCode", "optionNumber",
+            "machineNumber", "jobCardNumber",
+            COALESCE((SELECT item.uid FROM manufacturing.production_sessions session
+              JOIN manufacturing.work_orders work_order ON work_order.id = session.work_order_id
+              JOIN catalog.items item ON item.id = work_order.item_id
+              WHERE session.id = events."sessionId" AND session.organization_id = $1), "partCode") AS "partCode",
+            "optionNumber",
             "setupNumber", "operatorCode", "operatorName", "eventType",
             "eventTime", "startedAt", "endedAt", "durationMinutes",
             "reasonCode", "reasonName", quantity, "enteredByName",

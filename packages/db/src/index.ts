@@ -292,4 +292,5 @@ export {
 export { createOrderAcceptanceRepository } from "./order-acceptance"
 export { createRejectionRepository } from "./rejections"
 export { syncMaterialMovementWaits } from "./material-movement-waits"
+export { createPartCodeRepository, type PartCodeRename } from "./part-codes"
 export { createQualityReportRepository } from "./quality-reports"

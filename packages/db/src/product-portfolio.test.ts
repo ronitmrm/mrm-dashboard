@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createProductPortfolioRepository } from "./product-portfolio"
 
 const orderedProduct = {
+  id: "ordered-product",
   category: "Hydraulics",
   item_type: "List",
   mrmpl_description: "Ordered hose fitting",
@@ -16,6 +17,7 @@ const orderedProduct = {
 }
 
 const quotedProduct = {
+  id: "quoted-product",
   category: "Hydraulics",
   item_type: "List",
   mrmpl_description: "Customer quoted fitting",
@@ -47,6 +49,7 @@ describe("Product Portfolio repository", () => {
       })
     ).resolves.toEqual([
       {
+        itemId: "ordered-product",
         category: "Hydraulics",
         itemType: "List",
         mrmplDescription: "Ordered hose fitting",
@@ -58,6 +61,7 @@ describe("Product Portfolio repository", () => {
         designRevision: "00",
       },
       {
+        itemId: "quoted-product",
         category: "Hydraulics",
         itemType: "List",
         mrmplDescription: "Customer quoted fitting",

@@ -2,6 +2,7 @@ import type { ArtifactStorageProviderIdentifier } from "./artifacts"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 export type ProductPortfolioRow = {
+  itemId: string
   category: string | null
   itemType: string
   mrmplDescription: string
@@ -107,6 +108,7 @@ export type DrawingRevisionHistoryRow = {
 }
 
 type ProductPortfolioDatabaseRow = {
+  id: string
   category: string | null
   item_type: string
   mrmpl_description: string
@@ -163,7 +165,7 @@ export function createProductPortfolioRepository(
       const customerUid = options.customerUid?.trim() ?? ""
       const result = await pool.query<ProductPortfolioDatabaseRow>(
         `
-          SELECT item.uid, item.item_type,
+          SELECT item.id, item.uid, item.item_type,
             COALESCE(
               NULLIF(btrim(item.source_payload ->> 'productSize'), ''),
               NULLIF(btrim(profile.size), ''),
@@ -233,6 +235,7 @@ export function createProductPortfolioRepository(
       )
 
       const products = result.rows.map((row) => ({
+        itemId: row.id,
         category: row.category,
         itemType: row.item_type,
         mrmplDescription: row.mrmpl_description,

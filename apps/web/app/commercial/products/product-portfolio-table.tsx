@@ -3,18 +3,25 @@
 import { useEffect, useMemo, useState } from "react"
 import { FilterX } from "lucide-react"
 import Link from "next/link"
-import { MetricSummary } from "../../../components/ui/golden-patterns"
+import {
+  ActionToolbar,
+  MetricSummary,
+} from "../../../components/ui/golden-patterns"
+import { PageActions } from "@/components/ui/page-actions"
+import { PartCodeRenameDialog } from "@/app/masters/products/part-code-rename-dialog"
+import { PartCodeCsvRenameDialog } from "@/app/masters/products/part-code-csv-rename-dialog"
 
 import type { ProductPortfolioRow } from "@workspace/db"
 import { designProductSelectionReturnHref } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import {
   ExcelColumnFilter,
   uniqueFilterOptions,
 } from "@workspace/ui/components/excel-column-filter"
 import {
- OperationalTable,
+  OperationalTable,
   TableBody,
   TableCell,
   TableHead,
@@ -58,10 +65,30 @@ function valueForColumn(row: ProductPortfolioRow, columnIndex: number) {
 export function ProductPortfolioTable({
   rows,
   selection,
+  canRenamePartCode = false,
 }: {
   rows: ProductPortfolioRow[]
   selection?: { lineIndex?: number; returnTo: string }
+  canRenamePartCode?: boolean
 }) {
+  const [renamingPart, setRenamingPart] = useState<ProductPortfolioRow | null>(
+    null
+  )
+  const [renameMessage, setRenameMessage] = useState("")
+  function showRenamed(
+    message: string,
+    changes: Array<{ currentCode: string; newCode: string }>
+  ) {
+    setRenameMessage(message)
+    const codes = new Map(
+      changes.map((change) => [change.currentCode, change.newCode])
+    )
+    setFilters((current) =>
+      current[0]
+        ? { ...current, 0: current[0].map((code) => codes.get(code) ?? code) }
+        : current
+    )
+  }
   const [filters, setFilters] = useState<TableColumnFilters>({})
   const [filtersHydrated, setFiltersHydrated] = useState(false)
   const [sort, setSort] = useState<TableSort | null>(null)
@@ -140,13 +167,20 @@ export function ProductPortfolioTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {canRenamePartCode ? (
+        <PageActions>
+          <ActionToolbar>
+            <PartCodeCsvRenameDialog onRenamed={showRenamed} />
+          </ActionToolbar>
+        </PageActions>
+      ) : null}
       <MetricSummary
         scope="Portfolio matching current table filters · all pages"
         items={[
           {
             label: "Products",
             value: filteredRows.length,
-            tone: "information"
+            tone: "information",
           },
           {
             label: "Categories",
@@ -155,9 +189,9 @@ export function ProductPortfolioTable({
                 row.category ? [row.category] : []
               )
             ).size,
-            tone: "brand"
+            tone: "brand",
           },
-          { tone: "brand", label: "On This Page", value: visibleRows.length }
+          { tone: "brand", label: "On This Page", value: visibleRows.length },
         ]}
       />
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -205,15 +239,36 @@ export function ProductPortfolioTable({
         </div>
       </div>
 
+      {renameMessage ? (
+        <Alert role="status">
+          <AlertDescription>{renameMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+      {renamingPart ? (
+        <PartCodeRenameDialog
+          product={renamingPart}
+          onClose={() => setRenamingPart(null)}
+          onSuccess={(message, newCode) => {
+            showRenamed(message, [{ currentCode: renamingPart.uid, newCode }])
+            setRenamingPart(null)
+          }}
+        />
+      ) : null}
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border">
- <OperationalTable
+        <OperationalTable
           className="min-w-[76rem] text-xs"
           containerClassName="max-h-none overflow-visible"
           filterMode="external"
         >
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              <TableHead>{selection ? "Select" : "Dossier"}</TableHead>
+              <TableHead>
+                {selection
+                  ? "Select"
+                  : canRenamePartCode
+                    ? "Actions"
+                    : "Dossier"}
+              </TableHead>
               {facetedColumns.map((column) => (
                 <TableHead data-filterable="true" key={column.label}>
                   <span className="block">{column.label}</span>
@@ -247,7 +302,7 @@ export function ProductPortfolioTable({
           <TableBody>
             {visibleRows.length ? (
               visibleRows.map((product) => (
-                <TableRow key={product.uid}>
+                <TableRow key={product.itemId}>
                   {selection ? (
                     <TableCell>
                       <Button asChild size="sm">
@@ -264,11 +319,25 @@ export function ProductPortfolioTable({
                     </TableCell>
                   ) : (
                     <TableCell>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/commercial/products/${encodeURIComponent(product.uid)}`}>
-                          View Dossier
-                        </Link>
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/commercial/products/${encodeURIComponent(product.uid)}`}
+                          >
+                            View Dossier
+                          </Link>
+                        </Button>
+                        {canRenamePartCode ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRenamingPart(product)}
+                          >
+                            Rename Part Code
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   )}
                   <TableCell className="font-mono font-medium" translate="no">
@@ -299,7 +368,7 @@ export function ProductPortfolioTable({
               </TableRow>
             )}
           </TableBody>
- </OperationalTable>
+        </OperationalTable>
       </div>
     </div>
   )
