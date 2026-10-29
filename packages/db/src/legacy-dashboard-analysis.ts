@@ -9,6 +9,7 @@ export { requiredToolingCodes } from "./tooling-availability";
 import { qualityParameterCode } from "./quality-parameter-code";
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
 import { isActivePlannerDecision, isPlanningWorkday, isWorkingFriday, machineFamilyMatches, machineMasterFamily, planningCalendarExceptions, planningProductionDate, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
+import { isBlastingMachine } from "./production-cycle";
 import type { ProductionFloorCode } from "./production-floors";
 
 let numericCollation: Intl.Collator | undefined;
@@ -3958,7 +3959,7 @@ function initializeMachinePlanDetails(
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward || earlyDownstream, plannedStartDate, planningCalendar);
         if (earlyDownstream && physicalWipQty <= 0 && (effectiveStage === "quality_approval"
           || (["raw_material_at_machine", "presetting", "setting"].includes(effectiveStage)
-            && /\bblasting\s+machine\b/i.test(assignedMachineType)))) {
+            && isBlastingMachine(assignedMachineType)))) {
           taskReadiness.ready = false;
           taskReadiness.blocker = [taskReadiness.blocker, "No recorded Setup 1 WIP is available to start production"].filter(Boolean).join("; ");
         }
@@ -3999,6 +4000,9 @@ function initializeMachinePlanDetails(
         earlyDownstreamWipException: earlyDownstream,
         setupRemainingQty,
         cycleTime: safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")),
+        cycleBasis: rowText(cycle ?? {}, "cycleBasis"),
+        batchWeightKg: rowValue(cycle ?? {}, "batchWeightKg"),
+        batchTimeMinutes: rowValue(cycle ?? {}, "batchTimeMinutes"),
         loadingUnloading: safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING")),
         operationWeight: safeNumber(rowValue(cycle ?? {}, "operationWeight", "OPERATION WT.", "OPERATION WEIGHT")),
         stageWeight: safeNumber(rowValue(route ?? {}, "stageWeight", "STAGE WT.", "STAGE WEIGHT")),
@@ -4192,7 +4196,7 @@ function machinePlanDetails(...args: Parameters<typeof initializeMachinePlanDeta
   return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows, prepared.machineUnavailableWindows, toolingAvailability);
 }
 
-const planningPresentationFields = ["setupName", "description", "fgPoNo", "rmLocation", "cycleTime", "loadingUnloading", "operationWeight", "planningAssumption"] as const;
+const planningPresentationFields = ["setupName", "description", "fgPoNo", "rmLocation", "cycleTime", "cycleBasis", "batchWeightKg", "batchTimeMinutes", "loadingUnloading", "operationWeight", "planningAssumption"] as const;
 function planningPresentationKey(row: Record<string, unknown>) {
   return [rowText(row, "jcNo"), canonicalKey(row.partCode), rowText(row, "optionNumber"), rowText(row, "setupNo")].join("|");
 }
@@ -8345,7 +8349,9 @@ function routeMasterTableRow(row: Record<string, unknown>) {
 }
 
 function cycleMasterTableRow(row: Record<string, unknown>) {
-  const cycleTime = rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime");
+  const cycleTime = row.cycleBasis === "weight_batch"
+    ? rowValue(row, "cycleTime")
+    : rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime");
   const loading = rowValue(row, "LOADING", "LOADING SEC", "loading");
   const unloading = rowValue(row, "UNLOADING", "UNLOADING SEC", "unloading");
   const loadingUnloading = rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading");
@@ -8361,6 +8367,9 @@ function cycleMasterTableRow(row: Record<string, unknown>) {
     setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
     cycleTime,
+    cycleBasis: rowText(row, "cycleBasis"),
+    batchWeightKg: rowValue(row, "batchWeightKg"),
+    batchTimeMinutes: rowValue(row, "batchTimeMinutes"),
     loading,
     unloading,
     totalTime,

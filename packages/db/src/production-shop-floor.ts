@@ -48,6 +48,7 @@ import {
   normalizePlannerMovementActionType,
 } from "./job-card-workspace"
 import { calculateCasting } from "./pricing-calculation"
+import { weightBatchCycleTimeSeconds } from "./production-cycle"
 
 const firstReworkReleaseBlockedReason = "The first rework setup cannot wait for fresh RM. Use Move Setup to change machines, or Rework Rejected if the batch cannot be reworked."
 
@@ -1742,16 +1743,26 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           machineNumber: sessionSnapshot.machine_number,
           productionDate: shiftContext.productionDate,
         })
-        const cycleStandard = await client.query<{ cycle_time_seconds: string }>(
-          `SELECT cycle_time_seconds FROM manufacturing.operation_cycle_standards
+        const cycleStandard = await client.query<{
+          cycle_time_seconds: string
+          source_payload: Record<string, unknown> | null
+        }>(
+          `SELECT cycle_time_seconds, source_payload FROM manufacturing.operation_cycle_standards
            WHERE operation_setup_id = $1 AND effective_to IS NULL
            ORDER BY created_at DESC, id DESC LIMIT 1`,
           [setupId]
         )
-        const requestedCycleTime = Number(
-          cycleStandard.rows[0]?.cycle_time_seconds
-            ?? input.cycleTimeSeconds ?? input.sourcePayload?.cycleTime ?? 0
-        )
+        const cycleSource = cycleStandard.rows[0]?.source_payload
+        const cyclePayload = { ...cycleSource, ...objectRecord(cycleSource?.payload) }
+        const weightBatch = cyclePayload.cycleBasis === "weight_batch"
+        const requestedCycleTime = weightBatch
+          ? weightBatchCycleTimeSeconds({
+              batchWeightKg: cyclePayload.batchWeightKg,
+              batchTimeMinutes: cyclePayload.batchTimeMinutes,
+              pieceWeightGrams,
+            })
+          : Number(cycleStandard.rows[0]?.cycle_time_seconds
+              ?? input.cycleTimeSeconds ?? input.sourcePayload?.cycleTime ?? 0)
         const cycleTimeSeconds = Number.isFinite(requestedCycleTime)
           ? Math.max(requestedCycleTime, 0)
           : 0
@@ -1797,6 +1808,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           breakSchedule,
           carriedFromSessionId,
           cycleTime: cycleTimeSeconds,
+          cycleBasis: weightBatch ? "weight_batch" : "piece",
+          ...(weightBatch ? {
+            batchWeightKg: Number(cyclePayload.batchWeightKg),
+            batchTimeMinutes: Number(cyclePayload.batchTimeMinutes),
+          } : {}),
           dailySequence,
           jobCard: sessionSnapshot.job_card_number,
           jcNo: sessionSnapshot.job_card_number,
@@ -4772,6 +4788,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             mapped[key] = row[key] === null ? null : Number(row[key] ?? 0)
           }
           const payload = objectRecord(sessionPayload)
+          if (payload.cycleBasis === "weight_batch") {
+            mapped.cycleBasis = "weight_batch"
+            mapped.batchWeightKg = Number(payload.batchWeightKg)
+            mapped.batchTimeMinutes = Number(payload.batchTimeMinutes)
+          }
           if (row.status === "closed") {
             mapped.breakMinutes = Number(payload.breakMinutes ?? 0)
             if (payload.runtimeMinutes !== undefined) {
