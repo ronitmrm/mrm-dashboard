@@ -8,6 +8,7 @@ import {
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProductionCurrent,
   shopFloorRowIsProducedHistory,
+  shopFloorStageIdsForMachine,
 } from "./shop-floor-workflow";
 
 describe("shop-floor workflow action labels", () => {
@@ -30,6 +31,17 @@ describe("shop-floor workflow action labels", () => {
     expect(nextShopFloorStageId("presetting")).toBe("setting")
     expect(nextShopFloorStageId("tools_drawing")).toBe("setting")
     expect(nextShopFloorStageId("setting")).toBe("quality_approval")
+  })
+  it("starts blasting machines after material placement without Setting or Quality Approval", () => {
+    const machineType = "Blasting Machine"
+    expect(shopFloorStageIdsForMachine(machineType)).toEqual([
+      "raw_material_at_machine", "operator_started",
+    ])
+    expect(nextShopFloorStageId("planned", machineType)).toBe("raw_material_at_machine")
+    expect(nextShopFloorStageId("raw_material_at_machine", machineType)).toBe("operator_started")
+    expect(nextShopFloorStageId("setting", machineType)).toBe("operator_started")
+    expect(nextShopFloorStageId("operator_started", machineType)).toBeUndefined()
+    expect(nextShopFloorStageId("item_complete", machineType)).toBeUndefined()
   })
   it("does not label an already-started machine row as ready to start", () => {
     expect(shopFloorNoPendingActionLabel("operator_started")).toBe("Machine already started");

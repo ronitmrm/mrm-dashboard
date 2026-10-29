@@ -92,6 +92,11 @@ Setting answers. Historical Pre Setting evidence remains recorded; it does not
 complete Setting or block the next action. New Pre Setting events and checklist
 start-phase submissions are rejected in every unit.
 
+Blasting Machines use RM at Machine → Machine Start. They do not require
+Setting, a setup checklist, or Quality Approval before starting. Machine Start
+still assigns an active Worker and enforces material availability and machine
+ownership. Other machine types retain the normal lifecycle above.
+
 The task's permission in the selected Production Unit controls who may record
 Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine,
 Setting, Quality Approval, Machine Start, first-piece inspection, and

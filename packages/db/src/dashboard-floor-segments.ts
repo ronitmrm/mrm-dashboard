@@ -6,7 +6,7 @@ import { planningProductionDate } from "./planning-rules"
 type JsonRecord = Record<string, unknown>
 
 // Bump when planning/output semantics or the segment input schema changes.
-export const dashboardSegmentBuilderVersion = "floor-planning-13-job-card-moves"
+export const dashboardSegmentBuilderVersion = "floor-planning-14-blasting-start"
 
 export function floorSourceFingerprint(input: unknown, builderVersion: string, productionFloorCode?: ProductionFloorCode) {
   const serialized = JSON.stringify({ builderVersion, plantDate: planningProductionDate(productionFloorCode), input },

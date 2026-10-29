@@ -17,13 +17,32 @@ export function normalizeShopFloorStage(stage: unknown) {
   return stageAliases[text] ?? text;
 }
 
-export function nextShopFloorStageId(stage: unknown) {
-  const stages = ["raw_material_at_machine", "setting", "quality_approval", "operator_started", "item_complete"]
-  const normalizedStage = normalizeShopFloorStage(stage)
-  const current = stages.indexOf(
-    normalizedStage === "presetting" ? "raw_material_at_machine" : normalizedStage
+const stages = [
+  "raw_material_at_machine",
+  "setting",
+  "quality_approval",
+  "operator_started",
+  "item_complete",
+] as const
+
+export function shopFloorStageIdsForMachine(machineType: unknown) {
+  const blasting = /\bblasting\s+machine\b/i.test(String(machineType ?? ""))
+  return stages.filter(
+    (stage) => stage !== "item_complete" &&
+      (!blasting || stage === "raw_material_at_machine" || stage === "operator_started")
   )
-  return stages.slice(current + 1).find((candidate) => candidate !== "item_complete")
+}
+
+export function nextShopFloorStageId(stage: unknown, machineType?: unknown) {
+  const normalizedStage = normalizeShopFloorStage(stage)
+  const current = stages.findIndex(
+    (candidate) => candidate === (
+      normalizedStage === "presetting" ? "raw_material_at_machine" : normalizedStage
+    )
+  )
+  return shopFloorStageIdsForMachine(machineType).find(
+    (candidate) => stages.indexOf(candidate) > current
+  )
 }
 
 export function shopFloorNoPendingActionLabel(stage: unknown) {
