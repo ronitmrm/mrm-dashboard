@@ -263,6 +263,7 @@ import {
   shopFloorRowIsExplicitlyStopped,
   shopFloorRowIsProducedHistory,
   shopFloorRowIsProductionCurrent,
+  shopFloorStageIdsForMachine,
 } from "@/lib/shop-floor-workflow"
 import {
   priorityChangePlan,
@@ -8155,7 +8156,11 @@ function ShopFloorStatusPanel({
                       ) : (
                         <EmptyShopFloorSlot
                           label={
-                            row.next ? "Setup Required" : "No Running Item"
+                            row.next
+                              ? shopFloorStageIdsForMachine(row.next.machineType).includes("setting")
+                                ? "Setup Required"
+                                : pendingTaskLabel(row.next)
+                              : "No Running Item"
                           }
                           compact
                         />
@@ -9646,7 +9651,10 @@ function ShopFloorRowAction({
   if (nextStage && next.shopFloorTaskReady === false) {
     return (
       <div className="grid gap-2">
-        <ShopFloorProgress activeIndex={stageIndex} />
+        <ShopFloorProgress
+          activeIndex={stageIndex}
+          machineType={row?.machineType}
+        />
         <StatusBadge value="Task not ready" />
         <div className="text-sm text-muted-foreground">
           {displayValue(next.shopFloorTaskBlocker) ||
@@ -9658,7 +9666,10 @@ function ShopFloorRowAction({
 
   return (
     <div className="grid gap-2">
-      <ShopFloorProgress activeIndex={stageIndex} />
+      <ShopFloorProgress
+        activeIndex={stageIndex}
+        machineType={row?.machineType}
+      />
       {nextStage ? (
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
@@ -10137,14 +10148,21 @@ function FirstPieceReadingControl({
   )
 }
 
-function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
+function ShopFloorProgress({
+  activeIndex,
+  machineType,
+}: {
+  activeIndex: number
+  machineType: unknown
+}) {
   return (
     <div className="flex flex-wrap gap-1">
-      {shopFloorStages.map((stage, index) => {
-        const done = shopFloorStageIndex(stage.id) <= activeIndex
+      {shopFloorStageIdsForMachine(machineType).map((stage, index) => {
+        const done = shopFloorStageIndex(stage) <= activeIndex
         return (
           <Badge
-            key={stage.id}
+            key={stage}
+            title={shopFloorStages.find((item) => item.id === stage)?.label}
             variant="outline"
             className={
               done
@@ -18486,6 +18504,12 @@ function shopFloorRowStatus(
 }
 
 function shopFloorWorkflowLabel(row: DashboardPayload) {
+  if (
+    !shopFloorStageIdsForMachine(row.machineType).includes("setting") &&
+    nextShopFloorStage(row)?.id === "operator_started"
+  ) {
+    return "Machine start pending"
+  }
   if (normalizeShopFloorStage(row.shopFloorStage) === "presetting") {
     return "Setting pending"
   }
@@ -18653,7 +18677,7 @@ function roleTaskMatches(
 }
 
 function nextShopFloorStage(row: DashboardPayload) {
-  const nextId = nextShopFloorStageId(row.shopFloorStage)
+  const nextId = nextShopFloorStageId(row.shopFloorStage, row.machineType)
   return shopFloorStages.find((stage) => stage.id === nextId)
 }
 

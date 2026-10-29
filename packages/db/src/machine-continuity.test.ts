@@ -223,6 +223,17 @@ test("reserves Setup 2 early and releases machine start on the first recorded WI
     machine: "CNC-2", physicalWipQty: 100,
     earlyDownstreamWipException: true, shopFloorTaskReady: true,
   })
+
+  for (const row of plannedInput.dataEntries) {
+    if (row.entryType === "route") row.payload.machineType = ""
+    if (row.entryType === "machine_master") row.payload.machineType = "Blasting Machine"
+    if (row.entryType === "shop_floor_status") row.payload.stage = "raw_material_at_machine"
+  }
+  const blastingPlan = () => buildLegacyDashboardSnapshot({ ...plannedInput, planOverrides: [decision] })
+    .productionControl.machinePlanDetailRows.find((row) => row.setupNo === "2")
+  expect(blastingPlan()).toMatchObject({ machineType: "Blasting Machine", physicalWipQty: 0, shopFloorTaskReady: false })
+  plannedInput.productionEntries = runningInput.productionEntries
+  expect(blastingPlan()).toMatchObject({ physicalWipQty: 100, shopFloorTaskReady: true })
 })
 
 test("continues the next setup after another Job Card's matching tool work", () => {

@@ -3531,6 +3531,10 @@ function initializeMachinePlanDetails(
   const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
   const toolingByKey = latestMasterRows(toolingRows);
   const allocatedTooling = new Map(toolingAvailability.map(row => [canonicalKey(row.assetCode), safeNumber(row.allocatedQuantity)]));
+  const machineTypes = new Map(machineRows.map(row => [
+    canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO", "MACHINE NO.")),
+    rowText(row, "machineType", "MACHINE TYPE", "type", "TYPE"),
+  ]));
   const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
   const machineUnavailableWindows = activeMachineUnavailableWindows(machineConstraints, planningCalendar);
   const machineLoad = new Map<string, number>();
@@ -3866,6 +3870,7 @@ function initializeMachinePlanDetails(
       for (const assignment of machineAssignments) {
         const machine = assignment.machine;
         const machineKeyValue = canonicalKey(machine);
+        const assignedMachineType = machineType || machineTypes.get(machineKeyValue) || "";
         const parallelAssignmentOverride = appliedParallelOverrides.find((parallelOverride) =>
           canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")) === machineKeyValue);
         const effectivePlanOverride = parallelAssignmentOverride ?? override ?? appliedParallelOverrides[0];
@@ -3951,7 +3956,9 @@ function initializeMachinePlanDetails(
         const machineReleaseDate = itemComplete ? actualCompletionDate || plannedProductionEndDate : plannedProductionEndDate;
         if (!producedHistory && machineKeyValue && machineReleaseDate) machineNextSetupDate.set(machineKeyValue, maxDateValue(machineNextSetupDate.get(machineKeyValue) ?? "", nextMachineAvailableDate(machineReleaseDate)));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward || earlyDownstream, plannedStartDate, planningCalendar);
-        if (earlyDownstream && physicalWipQty <= 0 && effectiveStage === "quality_approval") {
+        if (earlyDownstream && physicalWipQty <= 0 && (effectiveStage === "quality_approval"
+          || (["raw_material_at_machine", "presetting", "setting"].includes(effectiveStage)
+            && /\bblasting\s+machine\b/i.test(assignedMachineType)))) {
           taskReadiness.ready = false;
           taskReadiness.blocker = [taskReadiness.blocker, "No recorded Setup 1 WIP is available to start production"].filter(Boolean).join("; ");
         }
@@ -3972,7 +3979,7 @@ function initializeMachinePlanDetails(
         const detail = {
         machine,
         routeMachine,
-        machineType,
+        machineType: assignedMachineType,
         setupNo: displaySetupNo,
         routeSetupNo: setupNo,
         setupName: rowText(route, "SETUP NAME", "setupName"),
