@@ -36,6 +36,7 @@ import { hasProductionFloorTaskCapability, productionFloorTaskCapabilities } fro
 import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
 import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
+import { toolingFields } from "../../../lib/planning-master-contract"
 import {
   authorizationRequestTelemetryForCurrentScope,
   withAuthorizationRequestTelemetry,
@@ -371,9 +372,15 @@ async function dataTemplateResponse(entryType: string, request: NextRequest) {
   if (entryType === "rm_inward") {
     return rmInwardTemplateResponse(request, fields)
   }
+  const templateFields = autoCodedMasterTemplateFields(entryType, fields).map(
+    (field) =>
+      entryType === "tooling" && request.nextUrl.searchParams.get("floor") === "forging"
+        ? toolingFields("forging").find((tool) => tool.name === field)?.label ?? field
+        : field
+  )
   return csvResponse(
     `${entryType}_template.csv`,
-    `${autoCodedMasterTemplateFields(entryType, fields).map(csvCell).join(",")}\n`
+    `${templateFields.map(csvCell).join(",")}\n`
   )
 }
 

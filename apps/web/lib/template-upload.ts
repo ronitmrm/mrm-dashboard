@@ -2,6 +2,7 @@ import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
 
 import { dedupeCsvImportRows } from "./auto-coded-master-import"
 import { csvDateValue, isCsvDateColumn } from "./csv-date"
+import { toolingFields } from "./planning-master-contract"
 
 export class TemplateUploadError extends Error {
   readonly status = 400
@@ -89,6 +90,12 @@ const machineMasterCsvAliases = new Map([
 function csvHeader(entryType: string, header: string) {
   const trimmed = header.trim()
   const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (entryType === "tooling") {
+    const field = toolingFields("forging").find(
+      (field) => field.label.toLowerCase().replace(/[^a-z0-9]/g, "") === normalized
+    )
+    if (field) return field.name
+  }
   if (entryType === "machine_master") {
     const alias = machineMasterCsvAliases.get(normalized)
     if (alias) return alias

@@ -2,6 +2,15 @@ type PlanningRow = Record<string, unknown>
 
 type PlanningMasterKind = "cycle" | "tooling"
 
+export function toolingFields(productionFloorCode?: string) {
+  const forging = productionFloorCode === "forging"
+  return [
+    { name: "fixture", label: forging ? "Main Die" : "Fixture" },
+    { name: "tooling", label: forging ? "Trimming Plate" : "Tooling" },
+    { name: "foamTool", label: forging ? "Trimming Punch" : "Foam Tool" },
+  ] as const
+}
+
 function text(value: unknown) {
   return String(value ?? "").trim()
 }

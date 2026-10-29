@@ -91,6 +91,7 @@ vi.mock("../../lib/auth/signed-in-machinist", () => ({
 }))
 
 import { GET } from "./[...path]/route"
+import { parseTemplateUpload } from "../../lib/template-upload"
 
 describe("dashboard-state route", () => {
   beforeEach(() => {
@@ -139,6 +140,38 @@ describe("dashboard-state route", () => {
     })
     expect(workOrderTemplate.status).toBe(200)
     expect((await workOrderTemplate.text()).split(/\r?\n/)[0]).toContain("requiredRmKg")
+  })
+
+  it("roundtrips forging tooling headings while preserving CNC's template", async () => {
+    dashboardMocks.readRequestAuthenticatedSession.mockResolvedValue({
+      user: { id: "user-1" },
+    })
+    dashboardMocks.readRequestGrantedCapabilitySet.mockResolvedValue(
+      new Set(["masters.forging.tooling.read", "masters.cnc.tooling.read"])
+    )
+    const response = await GET(new NextRequest(
+      "http://localhost/api/data-template?entryType=tooling&floor=forging"
+    ), { params: Promise.resolve({ path: ["data-template"] }) })
+    expect(response.status).toBe(200)
+    const header = (await response.text()).trim()
+    expect(header).toBe(
+      "partNo,optionNumber,setupNo,setupName,Main Die,Trimming Plate,Trimming Punch,remarks"
+    )
+    const csv = `${header}\nP1,1,1,Forging,MD001,TP001,PU001,\n`
+    expect(parseTemplateUpload(
+      "tooling", "tooling_template.csv", Buffer.from(csv).toString("base64"),
+      new Set(["tooling"])
+    ).rows).toEqual([{
+      partNo: "P1", optionNumber: 1, setupNo: 1, setupName: "Forging",
+      fixture: "MD001", tooling: "TP001", foamTool: "PU001", remarks: "",
+    }])
+    const cncResponse = await GET(new NextRequest(
+      "http://localhost/api/data-template?entryType=tooling&floor=cnc"
+    ), { params: Promise.resolve({ path: ["data-template"] }) })
+    expect(cncResponse.status).toBe(200)
+    expect((await cncResponse.text()).trim()).toBe(
+      "partNo,optionNumber,setupNo,setupName,fixture,tooling,foamTool,remarks"
+    )
   })
 
   it("passes floor and known-version bounds to the dashboard state reader", async () => {
