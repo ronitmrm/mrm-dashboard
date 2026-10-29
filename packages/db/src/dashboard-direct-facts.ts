@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { currentPartSourceJoins, currentPartSourcePayload } from "./part-code-projection"
 import type { PoolClient } from "pg"
 import {
   activeCorrectionTargetKeys,
@@ -101,9 +102,9 @@ export async function readDirectDashboardFacts(
   }>(
     `SELECT source.source_id, source.changed_at, source.production_floor_code,
        source.entry_type, source.source_kind, source.source_group,
-       source.source_payload || COALESCE(jsonb_strip_nulls(jsonb_build_object(
+       ${currentPartSourcePayload} || COALESCE(jsonb_strip_nulls(jsonb_build_object(
          'jobCard', COALESCE(session.job_card_number_snapshot, work_order.job_card_number),
-         'partCode', COALESCE(session.part_code_snapshot, item.uid, history_item.uid),
+         'partCode', COALESCE(item.uid, history_item.uid, session.part_code_snapshot),
          'optionNumber', COALESCE(session.option_number_snapshot, route.route_code),
          'setupNo', COALESCE(session.setup_number_snapshot, setup.setup_number::text),
          'machine', session.machine_number_snapshot, 'quantityGood', production.quantity_good
@@ -112,6 +113,7 @@ export async function readDirectDashboardFacts(
          ELSE jsonb_build_object('fromRouteCode', prior_route.route_code)
        END AS source_payload
      FROM derived.dashboard_source_records source
+     ${currentPartSourceJoins}
      LEFT JOIN manufacturing.production_entries production
        ON source.source_kind = 'physical' AND source.source_group = 'productionEntries'
        AND production.organization_id = source.organization_id AND production.source_id = source.source_id
@@ -120,7 +122,7 @@ export async function readDirectDashboardFacts(
        ON source.source_kind = 'physical' AND session.organization_id = source.organization_id
        AND session.id::text = source.source_id AND session.production_entry_id IS NOT NULL
        AND session.reversed_at IS NULL
-     LEFT JOIN manufacturing.work_orders work_order ON work_order.id = production.work_order_id
+     LEFT JOIN manufacturing.work_orders work_order ON work_order.id = COALESCE(production.work_order_id, session.work_order_id)
      LEFT JOIN catalog.items item ON item.id = work_order.item_id
      LEFT JOIN manufacturing.operation_setups setup ON setup.id = production.operation_setup_id
      LEFT JOIN manufacturing.route_options route ON route.id = COALESCE(setup.route_option_id, production.route_option_id)

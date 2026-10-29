@@ -1,5 +1,6 @@
 import { channel } from "node:diagnostics_channel"
 import { performance } from "node:perf_hooks"
+import { currentPartSourceJoins, currentPartSourcePayload } from "./part-code-projection"
 import { readToolingAllocations, readToolingOccupancy } from "./tooling-availability"
 import { dashboardSegmentBuilderVersion, floorSourceFingerprint, persistFloorSegments, readPublishedFloorSegments } from "./dashboard-floor-segments"
 import type { PoolClient } from "pg"
@@ -513,7 +514,7 @@ export async function readCanonicalDashboardSource(
   const result = await client.query<GroupedSourceRow>(
     `
       WITH data_entries AS (
-        SELECT source.source_id, source.source_payload, source.changed_at,
+        SELECT source.source_id, ${currentPartSourcePayload} AS source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code, counts.available
         FROM jsonb_to_recordset($2::jsonb)
@@ -526,7 +527,7 @@ export async function readCanonicalDashboardSource(
             AND production_floor_code = budget.floor_code
         ) counts
         CROSS JOIN LATERAL (
-          SELECT source_id, source_payload, changed_at, source_kind,
+          SELECT source_id, source_table, source_payload, changed_at, source_kind,
             source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'data_entry'
@@ -535,13 +536,14 @@ export async function readCanonicalDashboardSource(
           ORDER BY changed_at DESC, source_id DESC
           LIMIT budget.row_limit
         ) source
+        ${currentPartSourceJoins}
       ), physical_rows AS (
         SELECT source.source_id,
           source.source_payload || CASE WHEN session.id IS NULL THEN '{}'::jsonb
             ELSE jsonb_build_object(
               'jobCard', session.job_card_number_snapshot,
               'jcNo', session.job_card_number_snapshot,
-              'partCode', session.part_code_snapshot,
+              'partCode', COALESCE(production_item.uid, session.part_code_snapshot),
               'optionNumber', session.option_number_snapshot,
               'setupNo', session.setup_number_snapshot,
               'machine', session.machine_number_snapshot
@@ -591,7 +593,7 @@ export async function readCanonicalDashboardSource(
           AND production_entry.source_id = source.source_id
           AND production_entry.reversed_at IS NULL
         LEFT JOIN manufacturing.work_orders production_work_order
-          ON production_work_order.id = production_entry.work_order_id
+          ON production_work_order.id = COALESCE(production_entry.work_order_id, session.work_order_id)
         LEFT JOIN catalog.items production_item
           ON production_item.id = production_work_order.item_id
         LEFT JOIN manufacturing.operation_setups production_setup
@@ -694,13 +696,13 @@ export async function readCorrectionCandidateSource(
   const result = await client.query<SelectedSourceRow>(
     `
       WITH data_entries AS (
-        SELECT source.source_id, source.source_payload, source.changed_at,
+        SELECT source.source_id, ${currentPartSourcePayload} AS source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code
         FROM jsonb_to_recordset($2::jsonb)
           budget(category text, floor_code text, row_limit integer)
         CROSS JOIN LATERAL (
-          SELECT source_id, source_payload, changed_at, source_kind,
+          SELECT source_id, source_table, source_payload, changed_at, source_kind,
             source_group, entry_type
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'data_entry'
@@ -709,6 +711,7 @@ export async function readCorrectionCandidateSource(
           ORDER BY changed_at DESC, source_id DESC
           LIMIT budget.row_limit
         ) source
+        ${currentPartSourceJoins}
       ), physical_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,

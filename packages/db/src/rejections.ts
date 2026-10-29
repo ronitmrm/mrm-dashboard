@@ -258,12 +258,13 @@ export function createRejectionRepository(options: RepositoryPoolOptions) {
           values
         ),
         pool.query<RejectionRegisterRow>(
-          `SELECT e.id, s.job_card_number_snapshot AS "jobCard", s.part_code_snapshot AS "partCode",
+          `SELECT e.id, s.job_card_number_snapshot AS "jobCard", i.uid AS "partCode",
           (e.recorded_at AT TIME ZONE 'Asia/Kolkata')::date::text AS date, f.code AS unit, '' AS stage,
           e.type_name AS type, e.reason_name AS defect, e.remark_name AS reason, e.quantity AS pieces,
           CASE WHEN s.piece_weight_grams > 0 THEN (e.quantity * s.piece_weight_grams / 1000)::float8 END AS kg,
           'Calculated from session piece weight' AS "weightBasis"
           FROM manufacturing.production_session_rejection_events e JOIN manufacturing.production_sessions s ON s.id = e.production_session_id
+          JOIN manufacturing.work_orders w ON w.id = s.work_order_id JOIN catalog.items i ON i.id = w.item_id
           JOIN catalog.machines m ON m.id = s.machine_id JOIN manufacturing.production_floors f ON f.id = m.production_floor_id
           WHERE e.organization_id = $1 AND e.reversed_at IS NULL AND s.reversed_at IS NULL
             AND (e.recorded_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $2::date AND $3::date AND ($4 = '' OR f.code = $4)`,
