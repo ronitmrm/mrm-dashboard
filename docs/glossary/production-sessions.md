@@ -97,6 +97,14 @@ Setting, a setup checklist, or Quality Approval before starting. Machine Start
 still assigns an active Worker and enforces material availability and machine
 ownership. Other machine types retain the normal lifecycle above.
 
+Blasting Cycle Master records a standard net batch weight in kg and total batch
+time in minutes, including normal loading and unloading. The route still records
+the actual weight of one piece in grams. Planning and production targets use the
+batch rate; operators do not enter or calculate seconds per piece. Start and
+session details show the kg/minute batch standard, with the session target in kg.
+Recorded output continues to use the weighed kilograms and crate tare, while
+piece quantities keep the Job Card and downstream WIP connected.
+
 The task's permission in the selected Production Unit controls who may record
 Shop Floor, Inprocess Quality, Machinist, and Planner work. RM at Machine,
 Setting, Quality Approval, Machine Start, first-piece inspection, and

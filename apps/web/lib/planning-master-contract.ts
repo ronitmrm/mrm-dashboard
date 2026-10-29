@@ -1,3 +1,5 @@
+import { isBlastingMachine } from "@workspace/db/production-cycle"
+
 type PlanningRow = Record<string, unknown>
 
 type PlanningMasterKind = "cycle" | "tooling"
@@ -82,6 +84,14 @@ export function planningMasterPayload(
   }
 
   if (kind === "cycle") {
+    if (isBlastingMachine(routeLine.machineType)) {
+      return {
+        batchWeightKg: text(input.batchWeightKg),
+        batchTimeMinutes: text(input.batchTimeMinutes),
+        cycleBasis: "weight_batch",
+        ...routeIdentity,
+      }
+    }
     return {
       cycleTime: text(input.cycleTime),
       ...routeIdentity,

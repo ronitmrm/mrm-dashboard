@@ -1,5 +1,6 @@
 import { rejectDuplicateMaster } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
+import { isBlastingMachine, weightBatchCycleTimeSeconds } from "./production-cycle"
 
 import type { PoolClient } from "pg"
 
@@ -94,6 +95,49 @@ function sourcePayloadNumber(value: unknown, ...keys: string[]) {
     if (Number.isFinite(parsed)) return parsed
   }
   return 0
+}
+
+async function refreshWeightBatchCycleForSetup(
+  client: PoolClient,
+  setupId: string,
+  routePayload: Record<string, unknown>,
+  actorUserId?: string | null
+) {
+  if (!isBlastingMachine(routePayload.machineType)) return
+  const standard = await client.query<{
+    id: string
+    source_payload: Record<string, unknown>
+  }>(
+    `SELECT id, COALESCE(source_payload->'payload', source_payload) AS source_payload
+     FROM manufacturing.operation_cycle_standards
+     WHERE operation_setup_id = $1 AND effective_to IS NULL
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [setupId]
+  )
+  const cycle = standard.rows[0]
+  if (cycle?.source_payload?.cycleBasis !== "weight_batch") return
+  const cycleTime = weightBatchCycleTimeSeconds({
+    batchWeightKg: cycle.source_payload.batchWeightKg,
+    batchTimeMinutes: cycle.source_payload.batchTimeMinutes,
+    pieceWeightGrams: routePayload.stageWeight,
+  })
+  await client.query(
+    `UPDATE manufacturing.operation_cycle_standards
+     SET cycle_time_seconds = $1, updated_by_user_id = $2,
+       source_payload = CASE
+         WHEN jsonb_typeof(source_payload->'payload') = 'object'
+         THEN source_payload || jsonb_build_object('payload', (source_payload->'payload') || $3::jsonb)
+         ELSE COALESCE(source_payload, '{}'::jsonb) || $3::jsonb
+       END,
+       updated_at = now(), row_version = row_version + 1
+     WHERE id = $4`,
+    [cycleTime, actorUserId ?? null, {
+      cycleTime,
+      totalTime: cycleTime,
+      stageWeight: Number(routePayload.stageWeight),
+      cycleRevisionEffectiveAt: new Date().toISOString(),
+    }, cycle.id]
+  )
 }
 
 
@@ -1472,7 +1516,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [itemId, routeCode, productionFloorCode]
         )
-        const sourcePayload = {
+        const sourcePayload: Record<string, unknown> = {
           ...(typeof input.sourcePayload === "object" && input.sourcePayload !== null
             && !Array.isArray(input.sourcePayload) ? input.sourcePayload : input),
         }
@@ -1663,6 +1707,13 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 current.rows[0].id,
               ]
             )
+            if (sourcePayload.stageWeight !== undefined &&
+              Number(sourcePayload.stageWeight) !== Number(prior?.source_payload?.stageWeight)) {
+              await refreshWeightBatchCycleForSetup(
+                client, current.rows[0].id,
+                { ...prior?.source_payload, ...sourcePayload }, input.actorUserId
+              )
+            }
           } else {
             await client.query(
               `
@@ -1781,7 +1832,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       rejectDuplicates?: boolean
       recordId?: string
       actorUserId?: string | null
-      cycleTimeSeconds: number
+      cycleTimeSeconds?: number
       itemUid: string
       organizationId: string
       piecesPerCycle?: number
@@ -1792,9 +1843,6 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       sourcePayload?: unknown
     }) {
       return transaction(pool, async (client) => {
-        if (!(input.cycleTimeSeconds > 0)) {
-          throw new Error("Cycle time must be greater than zero.")
-        }
         const operationSetupId = await setupFor(
           client,
           input.organizationId,
@@ -1803,7 +1851,28 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.setupNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        await businessKeyLock(client, "manufacturing.cycle", operationSetupId)
+        // The setup row lock also serializes route edits and session snapshots.
+        const routeSetup = await client.query<{ source_payload: Record<string, unknown> | null }>(
+          `SELECT COALESCE(source_payload->'payload', source_payload) AS source_payload
+           FROM manufacturing.operation_setups WHERE id = $1`,
+          [operationSetupId]
+        )
+        const routePayload = routeSetup.rows[0]?.source_payload ?? {}
+        const payload = sourcePayloadRecord(input.sourcePayload ?? input)
+        const blasting = isBlastingMachine(routePayload.machineType)
+        const cycleTimeSeconds = blasting
+          ? weightBatchCycleTimeSeconds({
+              batchWeightKg: payload.batchWeightKg,
+              batchTimeMinutes: payload.batchTimeMinutes,
+              pieceWeightGrams: routePayload.stageWeight,
+            })
+          : Number(input.cycleTimeSeconds)
+        if (!Number.isFinite(cycleTimeSeconds) || cycleTimeSeconds <= 0) {
+          throw new Error("Cycle time must be greater than zero.")
+        }
+        if (!blasting && payload.cycleBasis === "weight_batch") {
+          throw new Error("Batch weight and time apply only to Blasting Machines.")
+        }
         const existing = await client.query<{
           id: string; source_id: string; pieces_per_cycle: string; setup_time_minutes: string
         }>(
@@ -1817,11 +1886,24 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [operationSetupId]
         )
-        const sourcePayload = input.sourcePayload ?? input
+        const sourcePayload = {
+          ...payload,
+          cycleTime: cycleTimeSeconds,
+          cycleBasis: blasting ? "weight_batch" : "piece",
+          batchWeightKg: blasting ? Number(payload.batchWeightKg) : null,
+          batchTimeMinutes: blasting ? Number(payload.batchTimeMinutes) : null,
+          ...(blasting ? {
+            loading: 0, unloading: 0, loadingUnloading: 0,
+            totalTime: cycleTimeSeconds, operationWeight: 0,
+            piecesPerCycle: 1, setupTimeMinutes: 0,
+            stageWeight: Number(routePayload.stageWeight),
+            machineType: routePayload.machineType,
+          } : {}),
+        }
         const values = [
-          input.cycleTimeSeconds,
-          input.piecesPerCycle ?? existing.rows[0]?.pieces_per_cycle ?? 1,
-          input.setupTimeMinutes ?? existing.rows[0]?.setup_time_minutes ?? 0,
+          cycleTimeSeconds,
+          blasting ? 1 : input.piecesPerCycle ?? existing.rows[0]?.pieces_per_cycle ?? 1,
+          blasting ? 0 : input.setupTimeMinutes ?? existing.rows[0]?.setup_time_minutes ?? 0,
           input.actorUserId ?? null,
         ]
         if (input.recordId && input.recordId !== existing.rows[0]?.id
@@ -1872,20 +1954,31 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         await client.query(
           `WITH updated_sessions AS (
              UPDATE manufacturing.production_sessions
-             SET cycle_time_seconds = $3,
+             SET cycle_time_seconds = CASE WHEN $4::jsonb->>'cycleBasis' = 'weight_batch'
+                   THEN ($4::jsonb->>'batchTimeMinutes')::numeric * 60 * piece_weight_grams
+                     / (($4::jsonb->>'batchWeightKg')::numeric * 1000)
+                   ELSE $3 END,
                updated_at = now(), row_version = row_version + 1,
                source_payload = COALESCE(source_payload, '{}'::jsonb)
-                 || jsonb_build_object('cycleTime', $3::numeric)
+                 || $4::jsonb || jsonb_build_object('cycleTime', CASE
+                   WHEN $4::jsonb->>'cycleBasis' = 'weight_batch'
+                   THEN ($4::jsonb->>'batchTimeMinutes')::numeric * 60 * piece_weight_grams
+                     / (($4::jsonb->>'batchWeightKg')::numeric * 1000)
+                   ELSE $3 END)
              WHERE organization_id = $1 AND operation_setup_id = $2
                AND status = 'open' AND reversed_at IS NULL
-             RETURNING production_entry_id
+             RETURNING production_entry_id, cycle_time_seconds
            )
            UPDATE manufacturing.production_entries entry
            SET source_payload = COALESCE(entry.source_payload, '{}'::jsonb)
-             || jsonb_build_object('cycleTime', $3::numeric)
+             || $4::jsonb || jsonb_build_object('cycleTime', session.cycle_time_seconds)
            FROM updated_sessions session
            WHERE entry.id = session.production_entry_id`,
-          [input.organizationId, operationSetupId, input.cycleTimeSeconds]
+          [input.organizationId, operationSetupId, cycleTimeSeconds, {
+            cycleBasis: sourcePayload.cycleBasis,
+            batchWeightKg: sourcePayload.batchWeightKg,
+            batchTimeMinutes: sourcePayload.batchTimeMinutes,
+          }]
         )
         await queueDashboardRefresh(client, input.organizationId)
         return result.rows[0]!

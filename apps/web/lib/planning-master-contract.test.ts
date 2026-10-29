@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { machineTypeForFamily } from "@workspace/db/planning-rules"
+import { parseTemplateUpload } from "./template-upload"
 
 import {
   machineFamilyOptions,
@@ -87,6 +88,19 @@ describe("planning master contract", () => {
       setupNo: "2",
       stageWeight: "125",
       tooling: "",
+    })
+  })
+
+  it("uses kilograms and minutes for a blasting route without a client-derived cycle", () => {
+    const route = { ...routeRows[0], machineType: "Blasting Machine" }
+    const csv = "Part No.,Option No.,Setup No.,Cycle Time Sec,Batch Weight Kg,Batch Time Minutes\nP-100,1,2,999,100,20\n"
+    const [imported] = parseTemplateUpload(
+      "cycle", "cycle.csv", Buffer.from(csv).toString("base64"), new Set(["cycle"])
+    ).rows
+    expect(imported).toMatchObject({ partNo: "P-100", optionNumber: 1, setupNo: 2 })
+    expect(planningMasterPayload("cycle", route, imported!)).toEqual({
+      ...route,
+      batchWeightKg: "100", batchTimeMinutes: "20", cycleBasis: "weight_batch",
     })
   })
 })

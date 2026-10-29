@@ -302,13 +302,14 @@ test("manual Setup Name saves reject an existing name in the selected unit", asy
 
 test("manual Cycle Time saves update the selected route setup without an edit record id", async () => {
   const pool = new Pool()
+  const routePayload = { machineType: "CNC", stageWeight: 200 }
   const query = vi.fn(async (sql: string) => ({
     rows: sql.includes("FROM catalog.items")
       ? [{ id: "item" }]
       : sql.includes("FROM manufacturing.route_options")
         ? [{ id: "route" }]
         : sql.includes("FROM manufacturing.operation_setups")
-          ? [{ id: "setup" }]
+          ? [{ id: "setup", source_payload: routePayload }]
           : sql.includes("FROM manufacturing.operation_cycle_standards")
             ? [{ id: "cycle", pieces_per_cycle: "1", setup_time_minutes: "0", source_id: "cycle-source" }]
             : sql.includes("UPDATE manufacturing.operation_cycle_standards")
@@ -331,13 +332,34 @@ test("manual Cycle Time saves update the selected route setup without an edit re
   )
   expect(query).toHaveBeenCalledWith(
     expect.stringMatching(/UPDATE manufacturing\.production_sessions[\s\S]*status = 'open'/),
-    ["organization", "setup", 80]
+    ["organization", "setup", 80, {
+      cycleBasis: "piece", batchWeightKg: null, batchTimeMinutes: null,
+    }]
   )
   expect(query).toHaveBeenCalledWith(
     expect.stringContaining("INSERT INTO derived.refresh_jobs"),
     expect.any(Array)
   )
   expect(query).toHaveBeenLastCalledWith("COMMIT")
+  routePayload.machineType = "Blasting Machine"
+  await createDashboardPlanningRepository({ pool }).upsertCycleStandard({
+    itemUid: "R131", organizationId: "organization", routeCode: "1", setupNumber: 1,
+    cycleTimeSeconds: 999,
+    sourcePayload: { batchWeightKg: 100, batchTimeMinutes: 20, stageWeight: 999, cycleTime: 999 },
+  })
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("UPDATE manufacturing.operation_cycle_standards"),
+    expect.arrayContaining([2.4, expect.objectContaining({
+      cycleBasis: "weight_batch", batchWeightKg: 100, batchTimeMinutes: 20,
+      cycleTime: 2.4, stageWeight: 200, operationWeight: 0,
+    })])
+  )
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("piece_weight_grams"),
+    ["organization", "setup", 2.4, {
+      cycleBasis: "weight_batch", batchWeightKg: 100, batchTimeMinutes: 20,
+    }]
+  )
   await pool.end()
 })
 

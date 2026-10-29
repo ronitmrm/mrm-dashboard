@@ -1,3 +1,5 @@
+import { isBlastingMachine } from "@workspace/db/production-cycle"
+
 const stageAliases: Record<string, string> = {
   rawmaterialatmachine: "raw_material_at_machine",
   raw_material_at_machine: "raw_material_at_machine",
@@ -26,7 +28,7 @@ const stages = [
 ] as const
 
 export function shopFloorStageIdsForMachine(machineType: unknown) {
-  const blasting = /\bblasting\s+machine\b/i.test(String(machineType ?? ""))
+  const blasting = isBlastingMachine(machineType)
   return stages.filter(
     (stage) => stage !== "item_complete" &&
       (!blasting || stage === "raw_material_at_machine" || stage === "operator_started")

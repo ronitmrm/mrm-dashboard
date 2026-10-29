@@ -68,6 +68,10 @@ function decodeDataUrl(value: string) {
 }
 
 const csvFieldsByEntryType = new Map([
+  ["cycle", [
+    "partNo", "optionNumber", "setupNo", "cycleTime", "batchWeightKg", "batchTimeMinutes",
+    "setupName", "machineFamily", "machineType", "stageWeight",
+  ]],
   ["machine_master", [
     "machineNo", "productionFloorCode", "machineFamily", "machineType", "machineName", "location",
     "machineModelNo", "machineMake", "machineLoad", "machineSerialNo", "machineInstallationDate",
@@ -95,6 +99,10 @@ function csvHeader(entryType: string, header: string) {
       (field) => field.label.toLowerCase().replace(/[^a-z0-9]/g, "") === normalized
     )
     if (field) return field.name
+  }
+  if (entryType === "cycle") {
+    if (normalized === "optionno") return "optionNumber"
+    if (normalized === "cycletimesec") return "cycleTime"
   }
   if (entryType === "machine_master") {
     const alias = machineMasterCsvAliases.get(normalized)

@@ -179,7 +179,8 @@ import {
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
 import { formatRmInwardDate } from "@/lib/rm-inward-date"
 import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
-import { StandardDialogContent } from "@/components/ui/golden-patterns"
+import { FormGrid, StandardDialogContent } from "@/components/ui/golden-patterns"
+import { isBlastingMachine } from "@workspace/db/production-cycle"
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -619,6 +620,8 @@ const dataEntrySpecs: DataEntrySpec[] = [
         step: "0.01",
         required: true,
       },
+      { name: "batchWeightKg", label: "Batch Weight Kg", type: "number", step: "0.001" },
+      { name: "batchTimeMinutes", label: "Batch Time Minutes", type: "number", step: "0.01" },
       { name: "setupName", label: "Setup Name" },
       { name: "machineFamily", label: "Machine Family" },
       { name: "machineType", label: "Machine Type" },
@@ -11796,6 +11799,7 @@ function masterTableColumns(
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {
+  if (key === "cycleTime" && row.cycleBasis === "weight_batch") return "-"
   if (key === "rmInwardDate") return formatRmInwardDate(row[key]) || "-"
   return displayValue(row[key])
 }
@@ -14488,6 +14492,7 @@ function PlanningMasterRelationForm({
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const selected = options.find((option) => option.key === selectedKey)?.value
+  const blastingCycle = kind === "cycle" && isBlastingMachine(selected?.machineType)
   const title = kind === "cycle" ? "Cycle Time Master" : "Tooling Master"
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -14568,7 +14573,36 @@ function PlanningMasterRelationForm({
                 <TileField label="Machine Type" value={selected.machineType} />
               </div>
             ) : null}
-            {kind === "cycle" ? (
+            {blastingCycle ? (
+              <div className="grid gap-2">
+                <FormGrid className="max-w-xl xl:grid-cols-2">
+                  <Field label="Batch weight (kg)">
+                    <Input
+                      name="batchWeightKg"
+                      type="number"
+                      min="0.001"
+                      step="0.001"
+                      required
+                      defaultValue={str(defaults.batchWeightKg)}
+                    />
+                  </Field>
+                  <Field label="Batch time (minutes)">
+                    <Input
+                      name="batchTimeMinutes"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      defaultValue={str(defaults.batchTimeMinutes)}
+                    />
+                  </Field>
+                </FormGrid>
+                <p className="text-sm text-muted-foreground">
+                  Enter the net product weight per batch and its normal total
+                  time, including loading and unloading.
+                </p>
+              </div>
+            ) : kind === "cycle" ? (
               <div className="max-w-xs">
                 <Field label="Cycle Time Sec">
                   <Input

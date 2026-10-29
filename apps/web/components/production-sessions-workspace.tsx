@@ -93,6 +93,14 @@ const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value
 const percent = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 })
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : []
 const first = (row: Row, keys: string[]) => keys.map((key) => text(row[key])).find(Boolean) ?? ""
+
+function productionCycleDescription(row: Row) {
+  if (row.cycleBasis === "weight_batch") {
+    return `${number(row.batchWeightKg)} kg / ${number(row.batchTimeMinutes)} min`
+  }
+  const seconds = first(row, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])
+  return seconds ? `${seconds} sec` : ""
+}
 const machine = (row: Row) => first(row, ["machineNumber", "machineNo", "machine", "machineCode"])
 const job = (row: Row) => first(row, ["jobCardNumber", "jobCard", "jcNo", "JC NO."])
 const part = (row: Row) => first(row, ["partCode", "partNo", "itemCode", "partUid"])
@@ -549,7 +557,7 @@ function StartSessionLookup({ options, selected, shift, floor, now, onSelect, on
         <PlanField label="Planned quantity" value={first(plan, ["orderPcs", "plannedQuantity", "quantity"])} />
         <PlanField label="Planning status" value={first(plan, ["runningStatus", "shopFloorStageLabel", "shopFloorStage"])} />
         <PlanField label="Planned run" value={`${formatCalendarDate(first(plan, ["plannedProductionStartDate", "plannedStartDate"])) || "-"} → ${formatCalendarDate(first(plan, ["plannedProductionEndDate", "plannedCompletionDate"])) || "-"}`} />
-        <PlanField label="Cycle time" value={first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"]) ? `${first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])} sec` : ""} />
+        <PlanField label={plan.cycleBasis === "weight_batch" ? "Batch standard" : "Cycle time"} value={productionCycleDescription(plan)} />
         <PlanField label="Piece weight" value={pieceWeight ? `${pieceWeight} g` : "Not configured"} />
         {session ? <><PlanField label="Operator" value={`${text(session.operatorCode)} · ${text(session.operatorName)}`} /><PlanField label="Started" value={formatDateTime(session.startedAt)} /><PlanField label="Session" value={text(session.sessionReference)} /></> : null}
       </div>
@@ -941,10 +949,12 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     ["End date", endedAt ? formatIstDate(endedAt) : "-"],
     ["End time", endedAt ? formatIstTime(endedAt) : status === "closing_required" ? "Closing required" : "Running"],
     ["Measurement", measurementMethod === "counter" ? "Machine counter" : "Weight"],
-    ["Target quantity", number(session.targetPieces)],
+    ["Target quantity", session.cycleBasis === "weight_batch"
+      ? `${Number((number(session.targetPieces) * number(session.pieceWeightGrams) / 1000).toFixed(3))} kg`
+      : number(session.targetPieces)],
     ["Productive runtime", `${number(session.runtimeMinutes)} min`],
     ["Scheduled break", `${number(session.breakMinutes)} min`],
-    ["Cycle time", `${number(session.cycleTimeSeconds)} sec`],
+    [session.cycleBasis === "weight_batch" ? "Batch standard" : "Cycle time", productionCycleDescription(session)],
     ["Downtime", `${number(session.downtimeMinutes)} min`],
     ["Total produced", pending ? "Pending" : number(session.totalPieces)],
     ["Efficiency", pending ? "Pending" : efficiency === null ? "-" : `${percent.format(efficiency * 100)}%`],
