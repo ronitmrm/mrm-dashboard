@@ -319,6 +319,7 @@ import {
   routeMasterLineKey,
   routeMasterLineOptions,
   setupNameOptions,
+  toolingFields,
 } from "@/lib/planning-master-contract"
 
 type DashboardPayload = Record<string, unknown>
@@ -10914,8 +10915,9 @@ function OperationalTablesPanel({
     [dataEntry, productionControl, selectedSpec]
   )
   const columns = useMemo(
-    () => (selectedSpec ? masterTableColumns(selectedSpec) : []),
-    [selectedSpec]
+    () =>
+      selectedSpec ? masterTableColumns(selectedSpec, productionFloorCode) : [],
+    [selectedSpec, productionFloorCode]
   )
   const filteredRows = useMemo(
     () =>
@@ -11394,8 +11396,9 @@ function MasterTablesPanel({
     [payload, productionControl, selectedSpec]
   )
   const columns = useMemo(
-    () => (selectedSpec ? masterTableColumns(selectedSpec) : []),
-    [selectedSpec]
+    () =>
+      selectedSpec ? masterTableColumns(selectedSpec, productionFloorCode) : [],
+    [selectedSpec, productionFloorCode]
   )
   const filteredRows = rows
   const deleteRecordId = deleteRow ? masterTableRecordId(deleteRow) : ""
@@ -11733,8 +11736,20 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
   )
 }
 
-function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
-  const columns = columnsForProductionMaster(spec.fields)
+function masterTableColumns(
+  spec: DataEntrySpec,
+  productionFloorCode?: ProductionFloorCode
+): MasterTableColumn[] {
+  const columns = columnsForProductionMaster(spec.fields).map((column) =>
+    spec.entryType === "tooling"
+      ? {
+          ...column,
+          label: toolingFields(productionFloorCode).find(
+            (field) => field.name === column.key
+          )?.label ?? column.label,
+        }
+      : column
+  )
   if (spec.entryType === "rework_rejected") return [
     { key: "jcNo", label: "Failed Rework Revision" },
     { key: "receiptReference", label: "Return Reference" },
@@ -14550,13 +14565,7 @@ function PlanningMasterRelationForm({
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-                {(
-                  [
-                    ["fixture", "Fixture"],
-                    ["tooling", "Tooling"],
-                    ["foamTool", "Foam Tool"],
-                  ] as const
-                ).map(([name, label]) => (
+                {toolingFields(productionFloorCode).map(({ name, label }) => (
                   <Field key={name} label={label}>
                     <SearchableSelect
                       className="h-9 rounded-md border bg-background px-3 text-sm"
