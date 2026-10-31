@@ -1,5 +1,5 @@
 import { assertMasterAvailable } from "./master-duplicate"
-import { assertSettingChecklistComplete } from "./setup-checklist-validation"
+import { assertSettingChecklistComplete, resolveSetupChecklistTemplate } from "./setup-checklist-validation"
 import { randomUUID } from "node:crypto"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 
@@ -21,6 +21,36 @@ type QualityContext = {
   operation_setup_id: string
   route_option_id: string
   work_order_id: string
+}
+
+type SetupChecklistSnapshotItem = {
+  itemId: string
+  itemKey: string
+  checkPoint: string
+  inputType: string
+  required: boolean
+  sequence: number
+  section: string
+  checklistCode: string
+  version: string
+}
+
+async function setupChecklistSnapshot(
+  client: Pick<PoolClient, "query">,
+  templateId: string
+) {
+  const items = await client.query<SetupChecklistSnapshotItem>(
+    `SELECT item.id AS "itemId", item.item_key AS "itemKey",
+       item.prompt AS "checkPoint", item.response_type AS "inputType",
+       item.required, item.sequence, 'Setting' AS section,
+       template.code AS "checklistCode", template.code AS version
+     FROM quality.setup_checklist_template_items item
+     JOIN quality.setup_checklist_templates template ON template.id = item.template_id
+     WHERE item.template_id = $1 AND item.active
+     ORDER BY item.sequence, item.item_key`,
+    [templateId]
+  )
+  return items.rows
 }
 
 type ParameterRow = {
@@ -1264,15 +1294,145 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       }
     },
 
+    async readMachineSetupChecklistAssignments(input: {
+      organizationId: string
+      productionFloorCode?: string
+    }) {
+      const floor = normalizeProductionFloorCode(input.productionFloorCode)
+      const [machines, checklists] = await Promise.all([
+        pool.query<{
+          machineNumber: string; machineType: string; location: string
+          checklistCode: string | null; checklistTitle: string | null
+        }>(
+          `SELECT machine.machine_number AS "machineNumber",
+             COALESCE(machine.source_payload->>'machineType', machine_type.name, '') AS "machineType",
+             COALESCE(machine.source_payload->>'location', '') AS location,
+             template.code AS "checklistCode", template.name AS "checklistTitle"
+           FROM catalog.machines machine
+           JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+           LEFT JOIN catalog.machine_types machine_type ON machine_type.id = machine.machine_type_id
+           LEFT JOIN quality.machine_setup_checklist_assignments assignment
+             ON assignment.machine_id = machine.id AND assignment.organization_id = $1
+           LEFT JOIN quality.setup_checklist_templates template ON template.id = assignment.template_id
+           WHERE machine.organization_id = $1 AND floor.code = $2 AND machine.active
+           ORDER BY machine.machine_number`,
+          [input.organizationId, floor]
+        ),
+        pool.query<{ code: string; title: string }>(
+          `SELECT DISTINCT ON (lower(template.code)) template.code, template.name AS title
+           FROM quality.setup_checklist_templates template
+           JOIN manufacturing.production_floors floor ON floor.id = template.production_floor_id
+           WHERE template.organization_id = $1 AND floor.code = $2 AND template.active
+             AND EXISTS (SELECT 1 FROM quality.setup_checklist_template_items item
+                         WHERE item.template_id = template.id AND item.active)
+           ORDER BY lower(template.code), template.revision DESC`,
+          [input.organizationId, floor]
+        ),
+      ])
+      return { rows: machines.rows, checklists: checklists.rows }
+    },
+
+    async assignMachineSetupChecklist(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode?: string
+      machineNumber: string
+      templateCode: string
+    }) {
+      return transaction(pool, async (client) => {
+        const floor = normalizeProductionFloorCode(input.productionFloorCode)
+        const machineId = await machineIdFor(client, input.organizationId,
+          requiredText(input.machineNumber, "Machine"), floor)
+        if (!machineId) throw new Error("Machine was not found.")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('quality.machine-setup-checklist'), hashtext($1))",
+          [machineId]
+        )
+        const code = input.templateCode.trim()
+        const template = code ? await client.query<{ id: string }>(
+          `SELECT template.id FROM quality.setup_checklist_templates template
+           JOIN manufacturing.production_floors floor ON floor.id = template.production_floor_id
+           WHERE template.organization_id = $1 AND floor.code = $2
+             AND lower(template.code) = lower($3) AND template.active
+             AND EXISTS (SELECT 1 FROM quality.setup_checklist_template_items item
+                         WHERE item.template_id = template.id AND item.active)
+           ORDER BY template.revision DESC LIMIT 1 FOR SHARE OF template`,
+          [input.organizationId, floor, code]
+        ) : { rows: [] }
+        if (code && !template.rows[0]) {
+          throw new Error("Choose an active setup checklist from this production unit.")
+        }
+        const templateId = template.rows[0]?.id ?? null
+        const previous = await client.query<{ template_id: string | null }>(
+          "SELECT template_id FROM quality.machine_setup_checklist_assignments WHERE machine_id = $1 FOR UPDATE",
+          [machineId]
+        )
+        await client.query(
+          `INSERT INTO quality.machine_setup_checklist_assignments
+             (machine_id, organization_id, template_id, created_by_user_id, updated_by_user_id)
+           VALUES ($1, $2, $3, $4, $4)
+           ON CONFLICT (machine_id) DO UPDATE SET template_id = EXCLUDED.template_id,
+             updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = now(),
+             row_version = quality.machine_setup_checklist_assignments.row_version + 1`,
+          [machineId, input.organizationId, templateId, input.actorUserId ?? null]
+        )
+        // Repair an unassigned current task only before any checklist was saved.
+        // A non-null choice belongs to that run and never follows later defaults.
+        if (templateId) await client.query(
+          `UPDATE manufacturing.shop_floor_setup_state state
+           SET setup_checklist_template_id = $3,
+             setup_checklist_pinned_at = COALESCE(state.setup_checklist_pinned_at, now())
+           WHERE state.organization_id = $1 AND state.machine_id = $2 AND state.active
+             AND state.setup_checklist_template_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM quality.setup_checklist_sessions session
+               WHERE session.work_order_id = state.work_order_id
+                 AND session.operation_setup_id = state.operation_setup_id
+                 AND session.machine_id = state.machine_id AND session.reversed_at IS NULL
+                 AND session.started_at >= COALESCE(state.setup_checklist_pinned_at, state.started_at, state.created_at))`,
+          [input.organizationId, machineId, templateId]
+        )
+        await client.query(
+          `INSERT INTO audit.events
+             (organization_id, event_type, target_schema, target_table, target_id,
+              actor_user_id, before_state, after_state, source_system, source_table, source_id)
+           VALUES ($1, 'quality.machine_setup_checklist.assigned', 'quality',
+             'machine_setup_checklist_assignments', $2, $3, $4, $5,
+             'mrm-dashboard', 'machine_setup_checklist_assignment', $6)`,
+          [input.organizationId, machineId, input.actorUserId ?? null,
+            previous.rows[0] ?? null, { template_id: templateId }, randomUUID()]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { ok: true }
+      })
+    },
+
     async readSetupChecklistPage(input: {
       organizationId: string
       productionFloorCode?: string
       sessionKey?: string | null
+      jobCardNumber?: string
+      operationSetupCode?: string
+      machineNumber?: string
     }) {
+      return transaction(pool, async (client) => {
       const productionFloorCode = normalizeProductionFloorCode(
         input.productionFloorCode
       )
-      const masters = await pool.query<{
+      const machineId = input.machineNumber
+        ? await machineIdFor(client, input.organizationId, input.machineNumber, productionFloorCode)
+        : null
+      const context = input.jobCardNumber && input.operationSetupCode
+        ? await qualityContextFor(client, input.organizationId, input.jobCardNumber,
+            input.operationSetupCode, productionFloorCode)
+        : null
+      const resolved = machineId && context
+        ? await resolveSetupChecklistTemplate(client, {
+            organizationId: input.organizationId, productionFloorCode, machineId,
+            workOrderId: context.work_order_id, operationSetupId: context.operation_setup_id,
+          })
+        : null
+      const sessionKey = resolved?.sessionKey ?? input.sessionKey ?? ""
+      const masters = await client.query<{
         checkPoint: string
         createdAt: Date
         inputType: string
@@ -1288,7 +1448,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           SELECT item.item_key AS "itemKey", item.prompt AS "checkPoint",
             item.response_type AS "inputType", item.sequence,
             CASE WHEN item.required THEN 'Yes' ELSE 'No' END AS "required",
-            CASE WHEN template.active AND item.active
+            CASE WHEN item.active
               THEN 'Active' ELSE 'Inactive' END AS "status",
             COALESCE(item.source_payload->'payload'->>'section',
               item.source_payload->>'section', 'Pre setting / setting') AS "section",
@@ -1301,14 +1461,24 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           JOIN quality.setup_checklist_template_items item
             ON item.template_id = template.id
           WHERE template.organization_id = $1
+            AND item.active
             AND template.production_floor_id = (
               SELECT id FROM manufacturing.production_floors
               WHERE organization_id = $1 AND code = $2
             )
+            AND template.id = COALESCE((
+              SELECT session.template_id FROM quality.setup_checklist_sessions session
+              JOIN quality.setup_checklist_templates saved_template
+                ON saved_template.id = session.template_id
+              WHERE session.organization_id = $1 AND lower(session.session_key) = lower($4)
+                AND saved_template.production_floor_id = template.production_floor_id
+                AND session.reversed_at IS NULL
+              ORDER BY session.started_at DESC LIMIT 1
+            ), $3::uuid)
           ORDER BY template.revision, template.code, item.sequence, item.item_key
           LIMIT 2000
         `,
-        [input.organizationId, productionFloorCode]
+        [input.organizationId, productionFloorCode, resolved?.templateId ?? null, sessionKey]
       )
       const setupChecklistMasterRows = masters.rows.map(
         ({ sourcePayload, ...row }) => ({
@@ -1318,8 +1488,8 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       )
 
       let setupChecklistSession: Record<string, unknown> | undefined
-      if (input.sessionKey) {
-        const sessions = await pool.query<{
+      if (sessionKey) {
+        const sessions = await client.query<{
           completedAt: Date | null
           endedBy: string | null
           id: string
@@ -1344,9 +1514,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               session.completed_at AS "completedAt",
               COALESCE(session.legacy_completer, completer.email) AS "endedBy",
               template.id::text AS "templateId",
-              COALESCE(template.source_payload->'payload'->>'version',
-                template.source_payload->>'version', template.code)
-                AS "masterVersion",
+              template.code AS "masterVersion",
               work_order.job_card_number AS "jcNo", item.uid AS "partCode",
               machine.machine_number AS "machine", machine_type.name AS "machineType",
               COALESCE(route.legacy_option_number, route.route_code)
@@ -1377,11 +1545,11 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               AND session.reversed_at IS NULL
             LIMIT 1
           `,
-          [input.organizationId, input.sessionKey, productionFloorCode]
+          [input.organizationId, sessionKey, productionFloorCode]
         )
         const session = sessions.rows[0]
         if (session) {
-          const itemRows = await pool.query<{
+          const itemRows = await client.query<{
             endBooleanValue: boolean | null
             endNumericValue: string | null
             endNotes: string | null
@@ -1399,11 +1567,9 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             startTextValue: string | null
           }>(
             `
-              SELECT item.item_key AS "itemKey", item.prompt,
-                item.response_type AS "inputType", item.required, item.sequence,
-                COALESCE(item.source_payload->'payload'->>'section',
-                  item.source_payload->>'section', 'Pre setting / setting') AS "section",
-                item.source_payload AS "sourcePayload",
+              SELECT item."itemKey", item."checkPoint" AS prompt,
+                item."inputType", item.required, item.sequence, item.section,
+                '{}'::jsonb AS "sourcePayload",
                 start_result.response_text AS "startTextValue",
                 start_result.response_numeric::text AS "startNumericValue",
                 start_result.response_boolean AS "startBooleanValue",
@@ -1412,15 +1578,19 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 end_result.response_numeric::text AS "endNumericValue",
                 end_result.response_boolean AS "endBooleanValue",
                 end_result.notes AS "endNotes"
-              FROM quality.setup_checklist_template_items item
+              FROM quality.setup_checklist_sessions saved_session
+              CROSS JOIN LATERAL jsonb_to_recordset(saved_session.items_snapshot) AS item(
+                "itemId" uuid, "itemKey" text, "checkPoint" text, "inputType" text,
+                required boolean, sequence integer, section text)
               LEFT JOIN quality.setup_checklist_results start_result
-                ON start_result.template_item_id = item.id
+                ON start_result.template_item_id = item."itemId"
                 AND start_result.session_id = $2 AND start_result.phase = 'start'
               LEFT JOIN quality.setup_checklist_results end_result
-                ON end_result.template_item_id = item.id
+                ON end_result.template_item_id = item."itemId"
                 AND end_result.session_id = $2 AND end_result.phase = 'end'
-              WHERE item.organization_id = $1 AND item.template_id = $3
-              ORDER BY item.sequence, item.item_key
+              WHERE saved_session.organization_id = $1 AND saved_session.id = $2
+                AND saved_session.template_id = $3
+              ORDER BY item.sequence, item."itemKey"
               LIMIT 500
             `,
             [input.organizationId, session.id, session.templateId]
@@ -1434,6 +1604,8 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             items: itemRows.rows.map(
               ({ sourcePayload: itemPayload, ...item }) => ({
                 ...payloadRecord(itemPayload),
+                checklistCode: session.masterVersion,
+                version: session.masterVersion,
                 checkPoint: item.prompt,
                 inputType: item.inputType,
                 itemKey: item.itemKey,
@@ -1462,7 +1634,19 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
         }
       }
 
-      return { setupChecklistMasterRows, setupChecklistSession }
+      const setupChecklistTemplateCode = setupChecklistSession
+        ? String(setupChecklistSession.masterVersion ?? "")
+        : resolved?.templateCode ?? ""
+      return {
+        setupChecklistMasterRows,
+        setupChecklistSession,
+        setupChecklistSessionKey: sessionKey,
+        setupChecklistTemplateCode,
+        setupChecklistBlocker: setupChecklistTemplateCode
+          ? setupChecklistMasterRows.length || setupChecklistSession ? "" : "The assigned checklist has no active points."
+          : "No setup checklist is assigned to this machine. Ask the master-data owner to assign one.",
+      }
+      })
     },
 
     async upsertRejectionType(input: {
@@ -2270,6 +2454,23 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.name,
           productionFloorId
         )
+        const priorTemplate = await client.query<{ id: string }>(
+          `SELECT template.id FROM quality.setup_checklist_templates template
+           WHERE template.organization_id = $1 AND template.production_floor_id = $2
+             AND template.code = $3 AND template.revision = $4
+           FOR UPDATE OF template`,
+          [input.organizationId, productionFloorId, code, input.revision]
+        )
+        const used = priorTemplate.rows[0] ? await client.query<{ used: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM quality.setup_checklist_sessions session
+                          WHERE session.template_id = $1)
+             OR EXISTS (SELECT 1 FROM manufacturing.shop_floor_setup_state state
+                        WHERE state.setup_checklist_template_id = $1 AND state.active) AS used`,
+          [priorTemplate.rows[0].id]
+        ) : { rows: [] }
+        if (used.rows[0]?.used) {
+          throw new Error("This checklist is already used by setup work. Create a new checklist and assign it to the relevant machines.")
+        }
         await assertMasterAvailable(
           client,
           input,
@@ -2370,34 +2571,108 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.machineNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        if (!machineId) throw new Error("A machine is required for the setup checklist.")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('quality.machine-setup-checklist'), hashtext($1))",
+          [machineId]
+        )
+        const resolved = await resolveSetupChecklistTemplate(client, {
+          organizationId: input.organizationId,
+          productionFloorCode: normalizeProductionFloorCode(input.productionFloorCode),
+          machineId, workOrderId: context.work_order_id,
+          operationSetupId: context.operation_setup_id,
+        })
+        if (!resolved?.pinnedAt) {
+          throw new Error("Record RM at Machine before completing the Setting checklist.")
+        }
+        if (resolved.sessionKey !== sessionKey) {
+          throw new Error("This setup task has changed. Reopen its current checklist before saving.")
+        }
+        if (!resolved.templateId || !resolved.templateCode) {
+          throw new Error("No setup checklist is assigned to this machine. Ask the master-data owner to assign one.")
+        }
+        if (requiredText(input.templateCode, "Setup checklist template").toLowerCase()
+          !== resolved.templateCode.toLowerCase()) {
+          throw new Error("This task uses a different checklist. Refresh it before saving.")
+        }
         const template = await client.query<{ id: string }>(
           `
             SELECT id FROM quality.setup_checklist_templates
-            WHERE organization_id = $1 AND lower(code) = lower($2) AND active
+            WHERE organization_id = $1 AND id = $2
               AND production_floor_id = (
                 SELECT id FROM manufacturing.production_floors
                 WHERE organization_id = $1 AND code = $3
               )
-            ORDER BY revision DESC LIMIT 1
+            FOR SHARE
           `,
           [
             input.organizationId,
-            requiredText(input.templateCode, "Setup checklist template"),
+            resolved.templateId,
             normalizeProductionFloorCode(input.productionFloorCode),
           ]
         )
         if (!template.rows[0]) {
           throw new Error("Setup checklist template was not found.")
         }
-        const existing = await client.query<{ id: string }>(
+        const existing = await client.query<{
+          id: string; template_id: string; machine_id: string | null
+          items_snapshot: SetupChecklistSnapshotItem[]
+          source_payload: unknown
+        }>(
           `
-            SELECT id FROM quality.setup_checklist_sessions
+            SELECT id, template_id, machine_id, items_snapshot, source_payload FROM quality.setup_checklist_sessions
             WHERE organization_id = $1 AND lower(session_key) = lower($2)
               AND operation_setup_id = $3
               AND reversed_at IS NULL FOR UPDATE
           `,
           [input.organizationId, sessionKey, context.operation_setup_id]
         )
+        if (existing.rows[0] && (existing.rows[0].template_id !== resolved.templateId
+          || existing.rows[0].machine_id !== machineId)) {
+          throw new Error("A saved checklist cannot be moved to a different template or machine.")
+        }
+        const itemsSnapshot = existing.rows[0]?.items_snapshot.length
+          ? existing.rows[0].items_snapshot
+          : await setupChecklistSnapshot(client, resolved.templateId)
+        if (!itemsSnapshot.length) throw new Error("The assigned setup checklist has no active points.")
+        const previousItems = payloadRows(payloadRecord(existing.rows[0]?.source_payload).items)
+        const previousAnswers = existing.rows[0] ? await client.query<{
+          template_item_id: string
+          response_boolean: boolean | null
+          response_numeric: string | null
+          response_text: string | null
+          notes: string | null
+        }>(
+          `SELECT template_item_id, response_boolean, response_numeric::text, response_text, notes
+           FROM quality.setup_checklist_results WHERE session_id = $1 AND phase = 'end'`,
+          [existing.rows[0].id]
+        ) : { rows: [] }
+        const answersByItem = new Map(previousAnswers.rows.map((answer) => [answer.template_item_id, answer]))
+        const sourcePayload = {
+          ...input.payload,
+          masterVersion: resolved.templateCode,
+          checklistCode: resolved.templateCode,
+          sessionId: sessionKey,
+          items: itemsSnapshot.map((point) => {
+            const previousPoint = previousItems.find((item) => item.itemKey === point.itemKey
+              || Number(item.sequence) === point.sequence)
+            const previousAnswer = answersByItem.get(point.itemId)
+            const submitted = input.results.find((answer) => answer.itemKey.toLowerCase() === point.itemKey.toLowerCase())
+              ?? input.results.find((answer) => answer.sequence === point.sequence
+                && (!answer.itemPrompt || answer.itemPrompt.toLowerCase() === point.checkPoint.toLowerCase()))
+            return {
+              ...previousPoint,
+              ...point,
+              required: point.required ? "Yes" : "No",
+              ...(previousAnswer ? {
+                endValue: relationalValue({ booleanValue: previousAnswer.response_boolean,
+                  numericValue: previousAnswer.response_numeric, textValue: previousAnswer.response_text }),
+                endItemRemark: previousAnswer.notes ?? "",
+              } : {}),
+              ...(submitted ? { endValue: submitted.value, endItemRemark: submitted.notes ?? "" } : {}),
+            }
+          }),
+        }
         const completedAt =
           input.phase === "end" && input.status.trim().toLowerCase() === "completed"
             ? input.completedAt || new Date().toISOString()
@@ -2406,21 +2681,20 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           ? await client.query<{ id: string }>(
               `
                 UPDATE quality.setup_checklist_sessions
-                SET template_id = $1, machine_id = $2, status = $3,
-                  completed_at = migration.try_timestamptz($4),
-                  completed_by_user_id = $5, legacy_completer = $6,
-                  source_payload = $7
-                WHERE id = $8 RETURNING id
+                SET status = $1,
+                  completed_at = migration.try_timestamptz($2),
+                  completed_by_user_id = $3, legacy_completer = $4,
+                  source_payload = $5, items_snapshot = $7
+                WHERE id = $6 RETURNING id
               `,
               [
-                template.rows[0].id,
-                machineId,
                 requiredText(input.status, "Setup checklist status"),
                 completedAt,
                 input.actorUserId ?? null,
                 input.completedBy ?? null,
-                input.payload,
+                sourcePayload,
                 existing.rows[0].id,
+                JSON.stringify(itemsSnapshot),
               ]
             )
           : await client.query<{ id: string }>(
@@ -2429,11 +2703,11 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                   organization_id, template_id, work_order_id,
                   operation_setup_id, machine_id, status, completed_at,
                   completed_by_user_id, legacy_completer, session_key,
-                  source_system, source_table, source_id, source_payload
+                  source_system, source_table, source_id, source_payload, items_snapshot
                 )
                 VALUES ($1, $2, $3, $4, $5, $6,
                   migration.try_timestamptz($7), $8, $9, $10,
-                  'mrm-dashboard', 'setup_checklist_session', $11, $12)
+                  'mrm-dashboard', 'setup_checklist_session', $11, $12, $13)
                 RETURNING id
               `,
               [
@@ -2448,38 +2722,16 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 input.completedBy ?? null,
                 sessionKey,
                 randomUUID(),
-                input.payload,
+                sourcePayload,
+                JSON.stringify(itemsSnapshot),
               ]
             )
         for (const itemResult of input.results) {
-          const item = await client.query<{ id: string }>(
-            `
-              SELECT id FROM quality.setup_checklist_template_items
-              WHERE template_id = $1 AND active AND (
-                lower(item_key) = lower($2)
-                OR (
-                  $3::integer IS NOT NULL
-                  AND sequence = $3::integer
-                  AND (
-                    NULLIF($4, '') IS NULL
-                    OR lower(prompt) = lower($4)
-                  )
-                )
-              )
-              ORDER BY
-                CASE WHEN lower(item_key) = lower($2) THEN 0 ELSE 1 END,
-                CASE WHEN lower(prompt) = lower(COALESCE($4, '')) THEN 0 ELSE 1 END,
-                id
-              LIMIT 1
-            `,
-            [
-              template.rows[0].id,
-              requiredText(itemResult.itemKey, "Checklist item key"),
-              itemResult.sequence ?? null,
-              itemResult.itemPrompt ?? null,
-            ]
-          )
-          if (!item.rows[0]) {
+          const key = requiredText(itemResult.itemKey, "Checklist item key").toLowerCase()
+          const item = itemsSnapshot.find((point) => point.itemKey.toLowerCase() === key)
+            ?? itemsSnapshot.find((point) => point.sequence === itemResult.sequence
+              && (!itemResult.itemPrompt || point.checkPoint.toLowerCase() === itemResult.itemPrompt.toLowerCase()))
+          if (!item) {
             throw new Error(
               `Setup checklist item ${itemResult.itemKey} was not found.`
             )
@@ -2504,7 +2756,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             [
               input.organizationId,
               result.rows[0]!.id,
-              item.rows[0].id,
+              item.itemId,
               columns.textValue,
               columns.numericValue,
               columns.booleanValue,

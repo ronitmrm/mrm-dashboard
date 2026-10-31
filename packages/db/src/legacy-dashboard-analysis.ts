@@ -4052,6 +4052,8 @@ function initializeMachinePlanDetails(
         setupCompletedBy: settingDone ? shopFloorDoneBy : "",
         setupChecklistRemark: "",
         shopFloorStage: effectiveStage,
+        setupChecklistSessionKey: shopFloorStatus ? rowText(shopFloorStatus, "setupChecklistSessionKey") : "",
+        setupChecklistCode: shopFloorStatus ? rowText(shopFloorStatus, "setupChecklistCode") : "",
         shopFloorStageLabel: effectiveStageLabel,
         shopFloorDoneBy,
         shopFloorWorker: shopFloorStatus ? rowText(shopFloorStatus, "worker") : "",

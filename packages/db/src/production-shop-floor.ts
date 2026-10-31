@@ -3,7 +3,11 @@ import { readJobCardRevisions, readJobCardRevisionHistory } from "./job-card-rev
 import { randomUUID } from "node:crypto"
 import { materialWaitPending, readJobCardMaterialBalances, readMaterialFlowReviews } from "./production-material"
 import { readMaterialMovementWaits } from "./material-movement-waits"
-import { assertSettingChecklistComplete } from "./setup-checklist-validation"
+import {
+  assertSettingChecklistComplete,
+  pinSetupChecklistTemplate,
+  resolveSetupChecklistTemplate,
+} from "./setup-checklist-validation"
 
 import type { PoolClient } from "pg"
 
@@ -5234,6 +5238,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           normalizeProductionFloorCode(input.productionFloorCode)
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('quality.machine-setup-checklist'), hashtext($1))",
+          [machineId]
+        )
         const stage = canonicalStage(input.stage)
         if (stage === "item_complete") await assertMaterialCompletion(client, input.organizationId, workOrder.work_order_id)
         if (stageIsActive(stage)) await assertSetupMaterialWait(client, input.organizationId, workOrder.work_order_id, setupId, machineId)
@@ -5246,19 +5254,6 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         if (stage === "presetting") {
           throw new ShopFloorConflictError("Use Setting only. Refresh the task and complete Setting.")
-        }
-        if (stage === "setting") {
-          const checklist = await client.query<{ id: string; template_id: string }>(
-            `SELECT session.id, session.template_id
-             FROM quality.setup_checklist_sessions session
-             JOIN quality.setup_checklist_templates template ON template.id = session.template_id
-             WHERE session.work_order_id = $1 AND session.operation_setup_id = $2
-               AND session.machine_id = $3 AND session.reversed_at IS NULL AND template.active
-             ORDER BY session.started_at DESC LIMIT 1 FOR UPDATE OF session`,
-            [workOrder.work_order_id, setupId, machineId]
-          )
-          if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
-          await assertSettingChecklistComplete(client, checklist.rows[0].template_id, checklist.rows[0].id)
         }
         if (["setting", "quality_approval", "operator_started"].includes(stage)) {
           await assertToolingAvailable(client, { organizationId: input.organizationId,
@@ -5302,6 +5297,32 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [workOrder.work_order_id, workOrder.route_option_id, setupId, machineId]
         )
         const existingOnMachine = current.rows.find((row) => row.machine_id === machineId)
+        const checklistContext = {
+          organizationId: input.organizationId,
+          productionFloorCode: normalizeProductionFloorCode(input.productionFloorCode),
+          machineId,
+          workOrderId: workOrder.work_order_id,
+          operationSetupId: setupId,
+        }
+        if (stage === "setting") {
+          const template = await resolveSetupChecklistTemplate(client, checklistContext)
+          if (!template?.templateId) {
+            throw new Error("Assign an active Setting checklist to this machine before Setting Done.")
+          }
+          if (!template.pinnedAt) {
+            throw new Error("Record RM at machine before completing Setting.")
+          }
+          const checklist = await client.query<{ id: string }>(
+            `SELECT session.id FROM quality.setup_checklist_sessions session
+             WHERE session.work_order_id = $1 AND session.operation_setup_id = $2
+               AND session.machine_id = $3 AND session.reversed_at IS NULL
+               AND session.template_id = $4 AND lower(session.session_key) = lower($5)
+             ORDER BY session.started_at DESC LIMIT 1 FOR UPDATE`,
+            [workOrder.work_order_id, setupId, machineId, template.templateId, template.sessionKey]
+          )
+          if (!checklist.rows[0]) throw new Error("Complete the required Setting checklist before Setting Done.")
+          await assertSettingChecklistComplete(client, template.templateId, checklist.rows[0].id)
+        }
         const earlierStageOnSameMachine = Boolean(existingOnMachine &&
           (stageRanks.get(existingOnMachine.stage) ?? -1) > (stageRanks.get(stage) ?? -1))
         const claimingMachine = active && !earlierStageOnSameMachine
@@ -5401,6 +5422,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 sourcePayload,
               ]
             )
+        if (stage === "raw_material_at_machine" && !earlierStageOnSameMachine) {
+          await pinSetupChecklistTemplate(client, {
+            ...checklistContext,
+            setupStateId: state.rows[0]!.id,
+            reset: Boolean(stateToUpdate && stateToUpdate.machine_id !== machineId),
+          })
+        }
+        const checklistSelection = await resolveSetupChecklistTemplate(client, checklistContext)
+        const stagePayload = {
+          ...sourcePayload,
+          ...(checklistSelection ? {
+            setupChecklistSessionKey: checklistSelection.sessionKey,
+            setupChecklistCode: checklistSelection.templateCode,
+          } : {}),
+        }
+        if (!earlierStageOnSameMachine) {
+          await client.query("UPDATE manufacturing.shop_floor_setup_state SET source_payload = $1 WHERE id = $2",
+            [stagePayload, state.rows[0]!.id])
+        }
         await client.query(
           `
             INSERT INTO manufacturing.shop_floor_stage_events (
@@ -5423,7 +5463,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             String(input.payload.doneBy || input.payload.worker || "") || null,
             String(input.payload.remark || "") || null,
             randomUUID(),
-            sourcePayload,
+            stagePayload,
           ]
         )
         await queueDashboardRefresh(client, input.organizationId)
@@ -5827,6 +5867,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           reason, reopenedAt: new Date().toISOString(), completedAt: null }
         const updated = await client.query<{ snapshot: Record<string, unknown> }>(`UPDATE manufacturing.shop_floor_setup_state
           SET stage = 'planned', active = false, completed_at = NULL, source_payload = $1,
+            setup_checklist_template_id = NULL, setup_checklist_pinned_at = NULL,
+            setup_checklist_legacy_session = false,
             updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
           WHERE id = $3 RETURNING to_jsonb(shop_floor_setup_state) AS snapshot`, [payload, input.actorUserId ?? null, state.id])
         await client.query(`INSERT INTO manufacturing.shop_floor_stage_events (organization_id, setup_state_id,

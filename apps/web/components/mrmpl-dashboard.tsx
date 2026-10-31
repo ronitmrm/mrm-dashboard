@@ -181,6 +181,7 @@ import { formatRmInwardDate } from "@/lib/rm-inward-date"
 import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
 import { FormGrid, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { isBlastingMachine } from "@workspace/db/production-cycle"
+import { MachineChecklistAssignments } from "@/components/machine-checklist-assignments"
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -2370,28 +2371,33 @@ function SetupChecklistShell({
       }
   const checklistPage = usePostgresOperationalPage(
     sessionId
-      ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
+      ? `/api/setup-checklist?${new URLSearchParams({
+          sessionId,
+          floor: productionFloorCode,
+          jcNo: jobCardNumber(row),
+          machine: displayValue(row.machine),
+          setupNo: displayValue(row.setupNo),
+        }).toString()}`
       : null
   )
   const checklistPageData = checklistPage.data
   const [localChecklistSession, setLocalChecklistSession] = useState<
     DashboardPayload | undefined
   >(undefined)
+  const [loadedLocalChecklistKey, setLoadedLocalChecklistKey] = useState("")
   const effectiveDoneBy = signedInMachinist?.name ?? ""
   const [remark, setRemark] = useState("")
   const [values, setValues] = useState<Record<string, string>>({})
   const [itemRemarks, setItemRemarks] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [status, setStatus] = useState<ActionStatus>(null)
+  const initializedChecklist = useRef("")
 
   const pageRecord = asRecord(checklistPageData)
-  const activeChecklistMasters = useMemo(
-    () =>
-      activeSetupChecklistMasterRows(
-        asArray(pageRecord.setupChecklistMasterRows)
-      ),
-    [pageRecord.setupChecklistMasterRows]
-  )
+  const resolvedSessionId = str(pageRecord.setupChecklistSessionKey) || sessionId
+  const selectedChecklistCode = str(pageRecord.setupChecklistTemplateCode)
+  const checklistBlocker = str(pageRecord.setupChecklistBlocker)
+  const activeChecklistMasters = asArray(pageRecord.setupChecklistMasterRows)
   const snapshotChecklistSessionRecord = asRecord(
     pageRecord.setupChecklistSession
   )
@@ -2400,7 +2406,11 @@ function SetupChecklistShell({
     ? snapshotChecklistSessionRecord
     : undefined
   const currentChecklistSession =
-    localChecklistSession ?? snapshotChecklistSession
+    snapshotChecklistSession ?? (
+      str(localChecklistSession?.sessionId) === resolvedSessionId &&
+      str(localChecklistSession?.checklistCode || localChecklistSession?.masterVersion) === selectedChecklistCode
+        ? localChecklistSession : undefined
+    )
   const savedChecklistItems = Array.isArray(currentChecklistSession?.items)
     ? (currentChecklistSession.items as DashboardPayload[])
     : setupChecklistItemsFromMaster(activeChecklistMasters)
@@ -2408,20 +2418,28 @@ function SetupChecklistShell({
     ...item,
     section: "Setting",
   }))
-  const canSave = Boolean(sessionId && effectiveDoneBy && checklistItems.length)
+  const canSave = Boolean(
+    checklistPageData && !checklistPage.error && !checklistBlocker &&
+    resolvedSessionId && selectedChecklistCode && effectiveDoneBy && checklistItems.length
+  )
   const isComplete =
     canSave && setupChecklistValuesComplete(checklistItems, values)
 
   useEffect(() => {
-    if (!isClientHydrated || !sessionId) return
+    if (!isClientHydrated || !checklistPageData || !resolvedSessionId) return
     const timeout = window.setTimeout(() => {
-      setLocalChecklistSession(readStoredSetupChecklistSession(sessionId))
+      setLocalChecklistSession(readStoredSetupChecklistSession(resolvedSessionId))
+      setLoadedLocalChecklistKey(resolvedSessionId)
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [isClientHydrated, sessionId])
+  }, [isClientHydrated, checklistPageData, resolvedSessionId])
 
   useEffect(() => {
+    if (!selectedChecklistCode || loadedLocalChecklistKey !== resolvedSessionId) return
+    const contextKey = `${resolvedSessionId}|${selectedChecklistCode}`
+    if (initializedChecklist.current === contextKey) return
     const timeout = window.setTimeout(() => {
+      initializedChecklist.current = contextKey
       if (!currentChecklistSession) {
         setValues({})
         setItemRemarks({})
@@ -2440,7 +2458,7 @@ function SetupChecklistShell({
       setRemark(str(currentChecklistSession.endRemark))
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [currentChecklistSession])
+  }, [currentChecklistSession, loadedLocalChecklistKey, resolvedSessionId, selectedChecklistCode])
 
   function updateValue(item: DashboardPayload, value: string) {
     const itemKey = setupChecklistItemKey(item)
@@ -2458,7 +2476,7 @@ function SetupChecklistShell({
   async function saveProgress() {
     if (!row || !canSave || isSaving) return
     const session = setupChecklistSessionForSetting({
-      row,
+      row: { ...row, setupChecklistSessionKey: resolvedSessionId },
       values,
       itemRemarks,
       items: checklistItems,
@@ -2470,6 +2488,8 @@ function SetupChecklistShell({
     })
     const payload = {
       ...setupChecklistSessionPayload(row, session),
+      sessionId: resolvedSessionId,
+      checklistCode: selectedChecklistCode,
       phase: "end",
     }
     setIsSaving(true)
@@ -2566,6 +2586,9 @@ function SetupChecklistShell({
                 <AlertMessage tone="destructive">
                   {checklistPage.error}
                 </AlertMessage>
+              ) : null}
+              {checklistBlocker ? (
+                <StandardState variant="error" title="Checklist assignment required" description={checklistBlocker} />
               ) : null}
               {status ? (
                 <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
@@ -14367,12 +14390,17 @@ function DataEntryForm({
   }
   if (spec.entryType === "setup_checklist_master") {
     return (
-      <SetupChecklistMasterForm
-        spec={spec}
-        submitAction={submitAction}
-        defaults={defaults}
-        rows={masterRows}
-      />
+      <div className="grid gap-4">
+        <SetupChecklistMasterForm
+          spec={spec}
+          submitAction={submitAction}
+          defaults={defaults}
+          rows={masterRows}
+        />
+        {productionFloorCode ? (
+          <MachineChecklistAssignments productionFloorCode={productionFloorCode} canManage />
+        ) : null}
+      </div>
     )
   }
   if (spec.entryType === "quality_parameter_master") {
@@ -20392,6 +20420,7 @@ function setupChecklistPageHref(
 }
 
 function setupChecklistSessionId(row: DashboardPayload) {
+  if (str(row.setupChecklistSessionKey)) return str(row.setupChecklistSessionKey)
   return [
     jobCardNumber(row),
     itemCode(row),
@@ -20428,6 +20457,9 @@ function setupChecklistSessionForRow(
   row: DashboardPayload
 ) {
   const sessionId = setupChecklistSessionId(row)
+  if (str(row.setupChecklistSessionKey)) {
+    return sessions.find((session) => str(session.sessionId) === sessionId)
+  }
   return (
     sessions.find((session) => str(session.sessionId) === sessionId) ??
     sessions.find((session) => setupChecklistSessionId(session) === sessionId)

@@ -88,6 +88,8 @@ function withLiveSetupStages(
     return {
       ...row,
       shopFloorStage: state.stage,
+      setupChecklistSessionKey: text(state.payload.setupChecklistSessionKey),
+      setupChecklistCode: text(state.payload.setupChecklistCode),
       shopFloorStageLabel: returnedToPlanning ? "Planned" : text(state.payload.stageLabel) || state.stage,
       shopFloorDoneBy: text(state.payload.doneBy),
       shopFloorWorker: text(state.payload.worker),
