@@ -108,8 +108,12 @@ remains visible and is not counted as unfinished production.
 Planned Finish Date shows the immutable first valid completion forecast created
 from a Job Card's first Raw Material receipt event. The receipt creates a durable
 baseline request; the first planning refresh that can calculate a finish date
-finalizes it exactly once. Dashboard refreshes, temporary missing source data,
-later receipts, production progress, and machine constraints never replace it.
+after Part Readiness is complete for every required setup finalizes it exactly
+once. Order age does not affect eligibility. A forecast for only the ready
+setups must not become the Job Card's saved Planned Finish Date while other
+required setups still have readiness gaps. Dashboard refreshes, temporary missing
+source data, later receipts, production progress, and machine constraints never
+replace it.
 Legacy Job Cards without a durable receipt-linked baseline display
 `Not recorded`; a current forecast must never be substituted or backfilled as
 historical evidence.
