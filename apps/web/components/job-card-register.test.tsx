@@ -18,10 +18,12 @@ test("counts every Job Card in one summary bucket, including readiness and parti
         { jcNo: "READY · Rev 1 · Replacement", rootJobCardNumber: "READY", revisionNumber: 1, orderPcs: 8, rmStatus: "Waiting" },
         { jcNo: "READINESS", rmStatus: "Received", routeStatus: "Missing route" },
         { jcNo: "ACTIVE", rawRows: 1 },
-        { jcNo: "PARTIAL", dispatchStatus: "Partially dispatched" },
+        { jcNo: "PARTIAL", dispatchStatus: "Partially dispatched", dispatchedPieces: 25 },
         { jcNo: "COMPLETE", partCode: "PART-1", optionNumber: "1", orderPcs: 100 },
-        { jcNo: "DISPATCHED", dispatchStatus: "Dispatched" },
-        { jcNo: "HISTORICAL", dispatchStatus: "Dispatch approved" },
+        { jcNo: "DISPATCHED", dispatchStatus: "Dispatched", dispatchedPieces: 1200 },
+        { jcNo: "DISPATCHED · Rev 1 · Rework", rootJobCardNumber: "DISPATCHED", revisionNumber: 1, dispatchStatus: "Dispatched", dispatchedPieces: 30 },
+        { jcNo: "DISPATCHED · Rev 1 · Replacement", rootJobCardNumber: "DISPATCHED", revisionNumber: 1, dispatchStatus: "Dispatched", dispatchedPieces: 5 },
+        { jcNo: "HISTORICAL", dispatchStatus: "Dispatch approved", dispatchedPieces: null, finalSetupGoodPieces: 999 },
       ]} />
   )
   const summary = markup.match(/data-slot="metric-summary"[\s\S]*?<\/section>/)?.[0].replace(/<[^>]*>/g, "")
@@ -30,6 +32,7 @@ test("counts every Job Card in one summary bucket, including readiness and parti
   expect(summary).toContain("In Production3")
   expect(summary).toContain("Production Complete1")
   expect(summary).toContain("Dispatched2")
+  expect(summary).toContain("Total Parts Dispatched1,260")
   expect(markup).toContain("Rev 1 · 2 revisions")
 })
 

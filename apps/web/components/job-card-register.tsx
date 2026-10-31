@@ -135,6 +135,7 @@ export function JobCardRegister({
     }
   }
   const finishDatesByJobCard = new Map(finishDateRows.map((row) => [jobCardKey(row), row]))
+  const totalDispatchedPieces = rows.reduce((total, row) => total + numeric(row.dispatchedPieces), 0)
   return (
  <SectionCard>
       <CardHeader className="gap-3">
@@ -170,6 +171,12 @@ export function JobCardRegister({
               label: "Dispatched",
               value: counts.dispatched,
               tone: "inactive"
+            },
+            {
+              label: "Total Parts Dispatched",
+              value: totalDispatchedPieces,
+              description: "pcs · recorded partial and full dispatches, all revisions",
+              tone: "positive"
             }
           ]}
         />
