@@ -66,6 +66,18 @@ belong to another unit; tasks may only select and complete their unit's template
 Editing a unit's checklist does not change another unit's checklist. Existing
 checklist and completion records retain their identities when assigned to a unit.
 
+Each individual machine has one assigned setup checklist from its production
+unit. Several machines may share a checklist. Authorized checklist-master staff
+manage these assignments; operators receive the assigned checklist automatically.
+New setup work cannot complete Setting without an active machine assignment.
+Machines such as Blasting Machines that skip Setting retain that lifecycle.
+
+A setup keeps its checklist when the machine's assignment changes. New assignments
+apply to the next setup. Saved and partly completed checklists retain their item
+definitions and answers. A checklist already used by setup work cannot be edited
+in place; create a new checklist and assign it for future setups. Existing machines
+initially retain the checklist previously selected for their production unit.
+
 Incomplete checklist answers may be saved as progress, but cannot be marked
 Completed. Completion requires every active required point for the Setting phase
 to have an explicit answer, validated against the unit's master on the server.

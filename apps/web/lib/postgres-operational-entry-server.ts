@@ -165,7 +165,8 @@ export async function readPostgresHourlyQualityPage(
 export async function readPostgresSetupChecklistPage(
   request: NextRequest,
   sessionKey?: string | null,
-  productionFloorCode?: string | null
+  productionFloorCode?: string | null,
+  context: { jobCardNumber?: string; machineNumber?: string; operationSetupCode?: string } = {}
 ) {
   const floor = normalizeProductionFloorCode(productionFloorCode)
   const actor = await authorizedActor(
@@ -180,6 +181,7 @@ export async function readPostgresSetupChecklistPage(
         organizationId,
         productionFloorCode: floor,
         sessionKey,
+        ...context,
       })
     },
     {
@@ -188,6 +190,38 @@ export async function readPostgresSetupChecklistPage(
       subsystem: "quality",
     }
   )
+}
+
+export async function readPostgresMachineSetupChecklistAssignments(
+  request: NextRequest,
+  productionFloorCode: unknown
+) {
+  const floor = requiredProductionFloor(productionFloorCode)
+  const actor = await authorizedActor(request,
+    productionMasterCapability("setup_checklist_master", "read", floor)!)
+  return withPostgresRepository(createQualityRepository(actor), async (repository) => {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    return repository.readMachineSetupChecklistAssignments({ organizationId, productionFloorCode: floor })
+  })
+}
+
+export async function savePostgresMachineSetupChecklistAssignment(
+  request: NextRequest,
+  input: { productionFloorCode: unknown; machineNumber: string; checklistCode: string }
+) {
+  const floor = requiredProductionFloor(input.productionFloorCode)
+  const actor = await authorizedActor(request,
+    productionMasterCapability("setup_checklist_master", "save", floor)!)
+  return withPostgresRepository(createQualityRepository(actor), async (repository) => {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    return repository.assignMachineSetupChecklist({
+      organizationId,
+      productionFloorCode: floor,
+      machineNumber: input.machineNumber,
+      templateCode: input.checklistCode,
+      actorUserId: actor.actorUserId,
+    })
+  })
 }
 
 export async function readPostgresEmployeeMaster(request: NextRequest) {

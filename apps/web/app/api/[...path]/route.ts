@@ -94,6 +94,8 @@ import {
   readPostgresEmployeeMaster,
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
+  readPostgresMachineSetupChecklistAssignments,
+  savePostgresMachineSetupChecklistAssignment,
   savePostgresMeasuringProgramAvailability,
   savePostgresQualityParameterSet,
 } from "@/lib/postgres-operational-entry-server"
@@ -492,6 +494,12 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "setup-checklist-assignment") {
+    const floor = requiredProductionFloor(body.productionFloorCode)
+    await authorizedDashboardSession(request,
+      productionMasterCapability("setup_checklist_master", "save", floor)!)
+    return
+  }
   if (path === "quality-measuring-program") {
     const floor = parseProductionFloorCode(body.productionFloorCode)
     if (!floor) throw new RouteError(400, "A valid Production Unit is required.")
@@ -915,9 +923,18 @@ async function get(request: NextRequest, context: RouteContext) {
         await readPostgresSetupChecklistPage(
           request,
           search.get("sessionId"),
-          search.get("floor")
+          search.get("floor"),
+          {
+            jobCardNumber: search.get("jcNo") || undefined,
+            machineNumber: search.get("machine") || undefined,
+            operationSetupCode: search.get("setupNo") || undefined,
+          }
         )
       )
+    }
+
+    if (path === "setup-checklist-assignments") {
+      return json(await readPostgresMachineSetupChecklistAssignments(request, search.get("floor")))
     }
 
     if (path === "employee-master") {
@@ -1094,6 +1111,14 @@ async function post(request: NextRequest, context: RouteContext) {
       plainRecord(await readDashboardJsonBody(request))
     )
     await preauthorizeDashboardMutation(request, path, plainRecord(body))
+
+    if (path === "setup-checklist-assignment") {
+      return json(await savePostgresMachineSetupChecklistAssignment(request, {
+        productionFloorCode: body.productionFloorCode,
+        machineNumber: requiredDashboardText(body.machineNumber, "Machine"),
+        checklistCode: text(body.checklistCode),
+      }))
+    }
 
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request, "operations.dashboard.read", { force: true }))
@@ -2851,6 +2876,8 @@ const knownDashboardApiPaths = new Set([
   "route-selection",
   "rework-route",
   "setup-checklist",
+  "setup-checklist-assignment",
+  "setup-checklist-assignments",
   "status",
   "training",
   "work-order-cancellation",
