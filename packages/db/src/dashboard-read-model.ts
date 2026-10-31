@@ -1125,6 +1125,10 @@ async function buildDashboardReadModel(
   for (const floor of productionFloors) {
     const snapshot = jsonRecord(productionFloorSnapshots[floor.code])
     const productionControl = jsonRecord(snapshot.productionControl)
+    const readinessGaps = new Set(
+      (Array.isArray(productionControl.masterGaps) ? productionControl.masterGaps : [])
+        .map(jsonRecord).map(finishBaselineKey)
+    )
     const dashboardRows = Array.isArray(productionControl.productionDashboardRows)
       ? productionControl.productionDashboardRows.map(jsonRecord)
       : []
@@ -1132,7 +1136,7 @@ async function buildDashboardReadModel(
       const baseline = pendingBaselines.get(
         `${floor.code}|${finishBaselineKey(row)}`
       )
-      if (!baseline) continue
+      if (!baseline || readinessGaps.has(finishBaselineKey(row))) continue
       const plannedFinishOn = dashboardDateIso(
         row.currentProbableDispatchDate
       )
