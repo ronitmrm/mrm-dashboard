@@ -1498,6 +1498,7 @@ function buildProductionControl({
       orderKg: round(orderKg),
       requiredRmKg,
       deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
+      committedDispatchDate: rowText(row, "committedDispatchDate"),
       missingSetupNo: setupStepKey(rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
       missingSetupName: rowText(firstMissingRoute, "SETUP NAME", "setupName"),
       machineUsed: rowText(firstMissingRoute, "MACHINE USED", "machineUsed"),
@@ -1926,6 +1927,7 @@ function buildProductionDashboardRows({
     return {
       jcNo: rowText(workOrder, "jcNo"),
       fgPoNo: rowText(workOrder, "fgPoNo"),
+      committedDispatchDate: rowText(workOrder, "committedDispatchDate"),
       partCode: rowText(workOrder, "partCode"),
       orderedQty: orderPcs > 0 ? orderPcs : orderKg,
       unit: orderPcs > 0 ? "PCS" : orderKg > 0 ? "KG" : "-",

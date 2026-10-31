@@ -3574,6 +3574,52 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async saveJobCardDispatchCommitment(input: {
+      actorUserId?: string | null
+      committedDispatchDate: string
+      expectedCommittedDispatchDate: string | null
+      jobCardNumber: string
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+    }) {
+      const committedDispatchDate = requiredText(input.committedDispatchDate, "Committed dispatch date")
+      const parsed = new Date(`${committedDispatchDate}T00:00:00Z`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(committedDispatchDate)
+        || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== committedDispatchDate) {
+        throw new Error("Enter a valid committed dispatch date.")
+      }
+      return transaction(pool, async (client) => {
+        const result = await client.query<{
+          id: string; sourcePayload: Record<string, unknown>
+        }>(`SELECT id, source_payload AS "sourcePayload"
+          FROM manufacturing.work_orders
+          WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+          FOR UPDATE`, [input.organizationId, requiredText(input.jobCardNumber, "Job card")])
+        const order = result.rows[0]
+        if (!order) throw new Error("Job Card was not found.")
+        if (productionFloorCodeForRecord(order) !== input.productionFloorCode) {
+          throw new ProductionUnitAccessError("Job Card belongs to another Production Unit.")
+        }
+        const previousDate = objectRecord(order.sourcePayload).committedDispatchDate ?? null
+        if (previousDate !== input.expectedCommittedDispatchDate) {
+          throw new ShopFloorConflictError("Dispatch commitment changed. Refresh the Job Card before saving.")
+        }
+        await client.query(`UPDATE manufacturing.work_orders
+          SET source_payload = COALESCE(source_payload, '{}'::jsonb)
+              || jsonb_build_object('committedDispatchDate', $1::text),
+            updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+          WHERE id = $3`, [committedDispatchDate, input.actorUserId ?? null, order.id])
+        await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
+            target_id, actor_user_id, before_state, after_state, source_system, source_table, source_id)
+          VALUES ($1, 'planning.dispatch_commitment.saved', 'manufacturing', 'work_orders', $2, $3,
+            $4, $5, 'mrm-dashboard', 'dispatch_commitments', $6)`,
+        [input.organizationId, order.id, input.actorUserId ?? null,
+          { committedDispatchDate: previousDate }, { committedDispatchDate }, randomUUID()])
+        await queueDashboardRefresh(client, input.organizationId)
+        return { jobCardNumber: input.jobCardNumber, committedDispatchDate }
+      })
+    },
+
     async saveJobCardDeliveryTarget(input: {
       actorUserId?: string | null
       jobCardNumber: string

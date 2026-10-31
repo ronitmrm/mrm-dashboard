@@ -540,6 +540,16 @@ cumulatively from preserved production history and the normal WIP rules.
 
 ## Delivery Target And Rating
 
+A **Dispatch Commitment** is the calendar date promised for dispatch of a
+specific Job Card revision. It is separate from the working-day delivery target
+and the current expected dispatch date. Set it in the Job Card's Delivery tab.
+Planning Control shows its reminder immediately, as Upcoming, Due today, or
+Overdue using the India calendar date. A partial dispatch or completed production
+does not close the reminder. It clears only when that Job Card's dispatch is
+complete; a reversed dispatch makes it open again. Commitments can be rescheduled
+but cannot be dismissed or cleared manually. Changing a commitment does not
+change machine priority; use Planner Actions to prioritise urgent work.
+
 The Product Master stores the default working days after full RM receipt. A Job
 Card can optionally override that default. Full RM receipt is the first receipt
 date when cumulative received kilograms reach the Work Order's entered Required

@@ -191,7 +191,7 @@ test("quantified dispatch stays partial until final production is complete and s
     workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
     productionEntries: [{ jobCard: "P-PARTIAL", partCode: "M-PARTIAL", optionNumber: "1", setupNo: "1", machine: "CNC-1", machineType: "CNC", operatorId: "OP", prodDate: "2026-09-24", outputQty: 100, actualQty: 100, rejectQty: 0, targetQty: 100 }],
     dataEntries: [
-      entry("work_order", { jcNo: "P-PARTIAL", partCode: "M-PARTIAL", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-24", rmInwardKg: 1 }),
+      entry("work_order", { jcNo: "P-PARTIAL", partCode: "M-PARTIAL", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-09-24", rmInwardKg: 1, committedDispatchDate: "2026-09-25" }),
       entry("route", { partNo: "M-PARTIAL", optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "JT" }),
       entry("cycle", { partNo: "M-PARTIAL", optionNumber: "1", setupNo: "1", cycleTime: 60 }),
       entry("machine_master", { machineNo: "CNC-1", machineType: "CNC", machineFamily: "JT", status: "Active" }),
@@ -201,6 +201,7 @@ test("quantified dispatch stays partial until final production is complete and s
   }
   const started = buildLegacyDashboardSnapshot(input).productionControl
   expect(started.workOrders[0]).toMatchObject({ dispatchStatus: "Partially dispatched", dispatchedPieces: 40, dispatchAvailablePieces: 60 })
+  expect(started.productionDashboardRows[0]).toMatchObject({ committedDispatchDate: "2026-09-25" })
   expect(started.productionDashboardRows[0]).toMatchObject({ status: "Partially dispatched", actualFinishDate: "", dispatchedPieces: 40, dispatchAvailablePieces: 60, dispatchedDate: "24/09/2026" })
 
   const completed = buildLegacyDashboardSnapshot({
@@ -217,6 +218,7 @@ test("quantified dispatch stays partial until final production is complete and s
   if (!("jobCardStatusTiles" in shipped)) throw new Error("Missing Job Card tiles")
   expect(shipped.jobCardStatusTiles[0]).toMatchObject({ dispatchStatus: "Shifted to dispatch", dispatchedPieces: 100, dispatchAvailablePieces: 0 })
   expect(shipped.productionDashboardRows[0]).toMatchObject({ status: "Dispatched", actualFinishDate: "24/09/2026", dispatchedPieces: 100, dispatchAvailablePieces: 0, dispatchedDate: "25/09/2026" })
+  expect(shipped.productionDashboardRows[0]).toMatchObject({ committedDispatchDate: "2026-09-25" })
 
   const overdrawn = buildLegacyDashboardSnapshot({
     ...input,
