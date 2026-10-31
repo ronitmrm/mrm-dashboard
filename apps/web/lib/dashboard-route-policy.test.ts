@@ -46,6 +46,9 @@ describe("dashboard route policy", () => {
     expect(dashboardMutationCapabilities("job-card-delivery-target")).toEqual([
       "planning.override.write",
     ])
+    expect(dashboardMutationCapabilities("job-card-dispatch-commitment")).toEqual([
+      "planning.override.write",
+    ])
     expect(dashboardMutationCapabilities("raw-material-rejection")).toEqual([
       "planning.raw_material_rejection.write",
     ])

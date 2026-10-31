@@ -1,6 +1,6 @@
 "use client"
 
-import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+import { formatCalendarDate, isIsoCalendarDate } from "@workspace/ui/lib/calendar-date"
 
 import { useState, type FormEvent } from "react"
 import Link from "next/link"
@@ -20,7 +20,7 @@ import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRo
 import { Textarea } from "@workspace/ui/components/textarea"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
 import { useConditionalRecords } from "@/hooks/use-conditional-records"
-import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
+import { formatIstDate, formatIstDateTime, istDateValue } from "@/lib/date-time"
 
 type Session = Record<string, unknown>
 type Workflow = Record<string, unknown>
@@ -33,10 +33,11 @@ const percentage = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
 const weight = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 })
 const kg = (value: number | null) => value === null ? "Blank weight required" : `${weight.format(value)} kg`
 
-export function PlanningControlReview({ floor, workflowRows, reworkRows = [], onClose, onResolve, onAcceptMaterial }: {
+export function PlanningControlReview({ floor, workflowRows, reworkRows = [], dispatchRows = [], onClose, onResolve, onAcceptMaterial }: {
   floor: ProductionFloorCode
   workflowRows: Workflow[]
   reworkRows?: Workflow[]
+  dispatchRows?: Workflow[]
   onClose: (session: Session, comment: string) => Promise<void>
   onResolve: (row: Workflow) => Promise<void>
   onAcceptMaterial: (row: Material, reason: string) => Promise<unknown>
@@ -60,6 +61,10 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
   const materials = (materialDelivery.data?.rows ?? []) as Material[]
   const materialFlowReviews = (materialDelivery.data?.materialFlowReviews ?? []) as MaterialFlowReview[]
   const workflows = workflowRows.filter(row => !resolvedKeys.includes(workflowKey(row)))
+  const commitments = dispatchRows.filter(row => typeof row.committedDispatchDate === "string"
+    && isIsoCalendarDate(row.committedDispatchDate) && row.status !== "Dispatched")
+    .sort((left, right) => String(left.committedDispatchDate).localeCompare(String(right.committedDispatchDate)))
+  const today = istDateValue()
   const loading = delivery.loading || materialDelivery.loading
   const loadError = [
     delivery.error ? `Session flags: ${delivery.error}` : "",
@@ -129,10 +134,10 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
         {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, session flags and workflow exceptions in this Production Unit." /> : null}
         {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError}
           action={<Button variant="outline" onClick={refresh}>Refresh flags</Button>} /> : null}
-        {!loading && !loadError && !materials.length && !materialFlowReviews.length && !sessions.length && !workflows.length && !reworkRows.length ? (
-          <StandardState title="No open planning reviews" description="No RM shortages, session flags or workflow exceptions need review." />
+        {!loading && !loadError && !materials.length && !materialFlowReviews.length && !sessions.length && !workflows.length && !reworkRows.length && !commitments.length ? (
+          <StandardState title="No open planning reviews" description="No dispatch commitments, RM shortages, session flags or workflow exceptions need review." />
         ) : null}
-        {materials.length || materialFlowReviews.length || sessions.length || workflows.length || reworkRows.length ? (
+        {commitments.length || materials.length || materialFlowReviews.length || sessions.length || workflows.length || reworkRows.length ? (
           <OperationalTable filterStorageKey={`planning-control-flags-${floor}`} containerClassName="max-h-[70vh] rounded-lg border">
             <TableHeader><TableRow>
               <TableHead>Flag Type</TableHead>
@@ -143,6 +148,26 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], on
               <TableHead className="min-w-72">Action</TableHead>
             </TableRow></TableHeader>
             <TableBody>
+              {commitments.map(row => {
+                const date = String(row.committedDispatchDate)
+                const status = date < today ? "Overdue" : date === today ? "Due today" : "Upcoming"
+                return <TableRow key={`dispatch:${String(row.jcNo)}`} data-row-id={`dispatch:${String(row.jcNo)}`}>
+                  <TableCell><StatusBadge tone={status === "Overdue" ? "danger" : "warning"} value="Dispatch reminder" /></TableCell>
+                  <TableCell>
+                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link>
+                    <div>{String(row.partCode)}</div><div className="text-xs text-muted-foreground">FG PO: {String(row.fgPoNo || "—")}</div>
+                  </TableCell>
+                  <TableCell>—</TableCell>
+                  <TableCell><div>{formatCalendarDate(date)}</div><StatusBadge value={status} tone={status === "Overdue" ? "danger" : status === "Due today" ? "warning" : "information"} /></TableCell>
+                  <TableCell>
+                    <div>Committed dispatch: {formatCalendarDate(date)}</div>
+                    <div>Expected dispatch: {formatCalendarDate(row.currentProbableDispatchDate)}</div>
+                    <div>{String(row.status)} · Dispatched: {row.dispatchedPieces == null ? "—" : `${quantity.format(Number(row.dispatchedPieces))} pcs`}</div>
+                    <div className="max-w-80 whitespace-normal text-xs text-muted-foreground">Stays open until dispatch is complete.</div>
+                  </TableCell>
+                  <TableCell><Button size="sm" variant="outline" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button></TableCell>
+                </TableRow>
+              })}
               {reworkRows.map(row => (
                 <TableRow key={`rework:${String(row.jcNo)}`} data-row-id={`rework:${String(row.jcNo)}`}>
                   <TableCell><StatusBadge tone="warning" value={row.materialPlanningReady === false ? "Replacement — Awaiting New RM" : "Revision — Route Selection Required"} /></TableCell>

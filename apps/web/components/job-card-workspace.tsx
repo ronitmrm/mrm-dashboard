@@ -21,6 +21,7 @@ import { dashboardTabHref } from "@/lib/unified-navigation"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 import { formatMasterDecimal, formatPiecesPerKg } from "./job-card-master-display"
 import { JobCardQualityRecords, SetupProduction } from "./job-card-workspace-sections"
+import { DispatchCommitmentForm } from "./dispatch-commitment-form"
 
 type Row = Record<string, unknown>
 type Workspace = {
@@ -483,7 +484,15 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
         </SectionCard></> : <StandardState title="Returned pieces available" description={`${quantity(rework.quantity)} pieces received for rework. Follow the selected setup sequence with first-piece and in-process inspection.`} />}
       </section> : null}
 
- {activeTab === "delivery" ? <section className="grid gap-4"><MetricSummary
+ {activeTab === "delivery" ? <section className="grid gap-4">
+   <DispatchCommitmentForm
+     key={`${workspace.selectedRevisionReference}:${text(rework.committedDispatchDate)}`}
+     committedDispatchDate={text(rework.committedDispatchDate)}
+     floor={floor}
+     jobCardNumber={workspace.selectedRevisionReference ?? jobCardNumber}
+     onSaved={load}
+   />
+   <MetricSummary
    scope="Current Job Card · Delivery Rating"
    items={[
      {

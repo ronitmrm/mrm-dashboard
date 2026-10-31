@@ -16424,6 +16424,7 @@ function PlanningControlPanel({
         key={productionFloorCode}
         floor={productionFloorCode}
         workflowRows={asArray(productionControl.workflowExceptionRows)}
+        dispatchRows={asArray(productionControl.productionDashboardRows)}
         reworkRows={asArray(productionControl.workOrders).filter(row => row.isRevision === true && row.optionSource === "Planner required")}
         onAcceptMaterial={(row, reason) =>
           submitAction("raw-material-short-accept", { jobCardNumber: row.jobCardNumber,

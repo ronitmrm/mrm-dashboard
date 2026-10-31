@@ -78,3 +78,23 @@ test("keeps session flags available when RM status cannot be loaded", () => {
   expect(markup).toContain("Close flag")
   expect(markup).not.toContain("No open planning reviews")
 })
+
+test("dispatch commitments remain through partial dispatch and clear only on completed dispatch", () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date("2026-10-31T20:00:00Z")) // Already 1 November in India.
+  try {
+    const markup = renderToStaticMarkup(<PlanningControlReview floor="cnc" workflowRows={[]}
+      dispatchRows={[
+        { jcNo: "D-PARTIAL", partCode: "M1", status: "Partially dispatched", committedDispatchDate: "2026-10-31", dispatchedPieces: 40 },
+        { jcNo: "D-TODAY", partCode: "M1", status: "Pending", committedDispatchDate: "2026-11-01" },
+        { jcNo: "D-FUTURE", partCode: "M1", status: "Pending", committedDispatchDate: "2026-11-05" },
+        { jcNo: "D-SHIPPED", partCode: "M1", status: "Dispatched", committedDispatchDate: "2026-10-31" },
+        { jcNo: "D-NO-DATE", partCode: "M1", status: "Pending" },
+      ]}
+      onClose={async () => {}} onResolve={async () => {}} onAcceptMaterial={async () => {}} />)
+    expect(markup.match(/Dispatch reminder/g)).toHaveLength(3)
+    for (const label of ["D-PARTIAL", "D-TODAY", "D-FUTURE", "Overdue", "Due today", "Upcoming", "Dispatched: 40 pcs"]) expect(markup).toContain(label)
+    expect(markup).not.toContain("D-SHIPPED")
+    expect(markup).not.toContain("D-NO-DATE")
+  } finally { vi.useRealTimers() }
+})

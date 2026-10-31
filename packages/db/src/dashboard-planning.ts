@@ -1333,7 +1333,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 UPDATE manufacturing.work_orders
                 SET work_order_number = $1, item_id = $2,
                   ordered_quantity = $3, due_date = migration.try_date($4),
-                  updated_by_user_id = $5, source_payload = $6,
+                  updated_by_user_id = $5, source_payload = $6::jsonb
+                    || jsonb_strip_nulls(jsonb_build_object('committedDispatchDate', source_payload->'committedDispatchDate')),
                   updated_at = now(),
                   row_version = row_version + 1
                 WHERE id = $7

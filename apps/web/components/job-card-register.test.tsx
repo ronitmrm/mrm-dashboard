@@ -37,7 +37,7 @@ test("shows the saved finish and changing current forecast for the matching Job 
   const render = (currentProbableDispatchDate: string) => renderToStaticMarkup(
     <JobCardRegister actionNeededCount={0} floor="cnc" onOpenMasterReadiness={() => {}}
       routeRows={[]} productionRows={[]}
-      rows={[{ jcNo: "P2132", partCode: "R131", poDate: "10/17/26" }]}
+      rows={[{ jcNo: "P2132", partCode: "R131", poDate: "10/17/26", committedDispatchDate: "2026-10-05" }]}
       finishDateRows={[
         { jcNo: "P2132", partCode: "R131", rmReceivedDate: "20-Sept-26", plannedDispatchDateAtRmReceipt: "25-Sept-26", currentProbableDispatchDate, actualFinishDate: "24-Sept-26" },
         { jcNo: "P2132", partCode: "OTHER", plannedDispatchDateAtRmReceipt: "1-Nov-26", currentProbableDispatchDate: "2-Nov-26", actualFinishDate: "4-Nov-26" },
@@ -48,6 +48,8 @@ test("shows the saved finish and changing current forecast for the matching Job 
   expect(initial).toContain("RM Received Date")
   expect(initial).toContain("20/09/2026")
   expect(initial).toContain("Current Estimated Finish")
+  expect(initial).toContain("Committed Dispatch Date")
+  expect(initial).toContain("05/10/2026")
   expect(initial).toContain("Actual Finish Date")
   expect(initial).toContain("FG PO Date")
   expect(initial).toContain("17/10/2026")
@@ -55,6 +57,7 @@ test("shows the saved finish and changing current forecast for the matching Job 
   expect(initial).toContain("28/09/2026")
   expect(initial).toContain("24/09/2026")
   const refreshed = render("30-Sept-26")
+  expect(refreshed).toContain("05/10/2026")
   expect(refreshed).toContain("25/09/2026")
   expect(refreshed).toContain("30/09/2026")
   expect(refreshed).not.toContain("28/09/2026")
@@ -72,6 +75,7 @@ test("does not invent an RM-receipt finish for a legacy Job Card", () => {
   )
 
   expect(markup).toContain("Not recorded")
+  expect(markup).toContain("Not set")
   expect(markup).toContain("29/09/2026")
   expect(markup).toContain("Progress unavailable")
   expect(markup).toContain("<span class=\"text-muted-foreground\">-</span>")

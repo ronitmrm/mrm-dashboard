@@ -12,6 +12,7 @@ import {
 } from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { validateProductionBreaks } from "@workspace/db/production-breaks"
+import { isIsoCalendarDate } from "@workspace/ui/lib/calendar-date"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -1152,6 +1153,21 @@ async function post(request: NextRequest, context: RouteContext) {
         rowsUpdated: 1,
         savedText: "Saved to PostgreSQL.",
       })
+    }
+
+    if (path === "job-card-dispatch-commitment") {
+      const floor = requiredProductionFloor(body.productionFloorCode)
+      const committedDispatchDate = requiredDashboardText(body.committedDispatchDate, "Committed dispatch date")
+      if (!isIsoCalendarDate(committedDispatchDate)) throw new RouteError(400, "Enter a valid committed dispatch date.")
+      const result = await withProductionRepository(request,
+        productionFloorTaskCapabilities[floor].job_card_delivery_target,
+        ({ actorUserId, organizationId, repository }) => repository.saveJobCardDispatchCommitment({
+          actorUserId, organizationId, productionFloorCode: floor,
+          jobCardNumber: requiredDashboardText(body.jcNo, "Job Card"),
+          committedDispatchDate,
+          expectedCommittedDispatchDate: optionalText(body.expectedCommittedDispatchDate) ?? null,
+        }))
+      return json({ ...result, message: "Dispatch commitment saved. Planning Control will show it until dispatch is complete." })
     }
 
     if (path === "job-card-delivery-target") {
@@ -2811,6 +2827,7 @@ const knownDashboardApiPaths = new Set([
   "dispatch-approval",
   "hourly-quality",
   "job-card-delivery-target",
+  "job-card-dispatch-commitment",
   "job-cards",
   "machine-constraint",
   "machine-constraint-review",

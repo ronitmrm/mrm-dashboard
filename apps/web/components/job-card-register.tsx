@@ -176,7 +176,7 @@ export function JobCardRegister({
         <div className="rounded-md border min-w-0">
  <OperationalTable containerClassName="max-h-[70vh]" excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead>RM Received Date</TableHead><TableHead className="text-right">Current Revision Qty</TableHead><TableHead>Current Revision Stage</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead title="Recorded Item Complete date of the final route setup">Actual Finish Date</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead>FG PO Date</TableHead><TableHead>RM Received Date</TableHead><TableHead className="text-right">Current Revision Qty</TableHead><TableHead>Current Revision Stage</TableHead><TableHead title="Dispatch date promised for the current Job Card revision, entered in its Delivery tab">Committed Dispatch Date</TableHead><TableHead title="Immutable first valid forecast linked to the first RM receipt; legacy unavailable values are not guessed">Planned Finish Date</TableHead><TableHead title="Latest completion forecast across all route setups; updates after planning recalculates">Current Estimated Finish</TableHead><TableHead title="Recorded Item Complete date of the final route setup">Actual Finish Date</TableHead><TableHead>Production Progress / Outcome</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>{progressRows.length ? progressRows.map((row) => {
               const jobCard = text(row.rootJobCardNumber) || first(row, ["jcNo", "JobCardNo", "jobCard"])
@@ -202,6 +202,7 @@ export function JobCardRegister({
                 <TableCell>{formatCalendarDate(first(finishDates ?? {}, ["rmReceivedDate"]))}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{stage}</TableCell>
+                <TableCell>{row.mixedActivities ? "Select activity in details" : formatCalendarDate(text(row.committedDispatchDate)) || <span className="text-muted-foreground">Not set</span>}</TableCell>
                 <TableCell>{row.mixedActivities ? "Select activity in details" : plannedFinish || <span className="text-muted-foreground">Not recorded</span>}</TableCell>
                 <TableCell>{row.mixedActivities ? "Select activity in details" : formatPlanningFinish(formatCalendarDate(finishDates?.currentProbableDispatchDate), finishDates?.currentProbableDispatchWorkingHours)}</TableCell>
                 <TableCell>{row.mixedActivities ? "Select activity in details" : actualFinish || <span className="text-muted-foreground">{dispatched || stage === "Production complete" ? "Not recorded" : "-"}</span>}</TableCell>
@@ -234,7 +235,7 @@ export function JobCardRegister({
                 <TableCell>{row.mixedActivities ? "Multiple activities" : first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
-            }) : <TableRow><TableCell colSpan={14} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
+            }) : <TableRow><TableCell colSpan={15} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
  </OperationalTable>
         </div>
       </CardContent>
