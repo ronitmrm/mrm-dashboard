@@ -149,6 +149,7 @@ export default async function StoreStockPage({
       <PageHeader
         title="Stock"
         actions={<>
+          {storeActions.has("store.receipts.receive") ? <Button asChild size="sm"><Link href="/store/stock/existing">Add Existing Stock</Link></Button> : null}
           <TableExcelDownloadButton
             fileName={`main-store-stock-${today}.xlsx`} tableId="main-store-stock" />
           {mode === "view" ? <StoreLocationCsvControls

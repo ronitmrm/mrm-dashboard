@@ -271,6 +271,17 @@ store. Main Store repair completion is recorded on the repair line in this
 register when the Unit ID returns; other Stores complete repair in their own
 workspace. Purchase Order entry and goods receipt are not separate workspaces.
 
+**Existing Stock Entry**: Records stock already owned but not yet in ERP, without
+a Purchase Order or goods receipt. Main Store selects an existing Asset Code,
+quantity, current condition and storage location. Original purchase date,
+supplier, price, bill reference/date, make, serial numbers, installation and
+warranty details are optional; unknown dates and prices remain unknown. Every
+Non Consumable unit receives a permanent Unit ID. The immutable entry records
+who entered it and when, separately from its historical purchase date, and posts
+one positive stock adjustment. Retrying a saved entry never duplicates stock.
+Usable units can then be allocated through normal Store movements. Items already
+recorded in ERP must use transfers rather than another Existing Stock Entry.
+
 **Store Receipt**: One Goods Receipt Note recorded against exactly one Store
 Purchase Order. It may contain one or more selected open goods lines from that
 order; each line inherits its Store Item Type and agreed unit price and cannot

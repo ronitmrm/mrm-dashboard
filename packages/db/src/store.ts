@@ -8,6 +8,7 @@ import {
   assertMasterAvailable,
 } from "./master-duplicate"
 import { createHash } from "node:crypto"
+import { recordExistingStock, listExistingStockEntries, type ExistingStockInput } from "./store-existing-stock"
 
 import type { PoolClient } from "pg"
 
@@ -4862,6 +4863,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           "Choose an Asset Code of the requested type for a pending request."
         )
       return result.rows[0]
+    },
+
+    recordExistingStock(input: ExistingStockInput) {
+      return withTransaction(pool, client => recordExistingStock(client, input))
+    },
+
+    listExistingStockEntries(organizationId: string) {
+      return listExistingStockEntries(pool, organizationId)
     },
 
     async receiveStock(input: {

@@ -277,7 +277,7 @@ export default async function StoreAssetWorkspacePage({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Info
               label="Purchase Order"
-              value={asset.orderNumber || "Legacy receipt"}
+              value={asset.orderNumber || "Existing stock"}
             />
             <Info
               label="Supplier"
