@@ -213,6 +213,48 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("records existing stock without a PO, preserves purchase details and prevents duplicate units", async () => {
+    const item = await store.createItemType({
+      ...(await createClassification("Existing Stock")), assetType: "NON_CONSUMABLE",
+      identificationName: "CE-01", organizationId, unit: "No.",
+    })
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const supplier = await store.createSupplier({ organizationId, name: `Existing Tool Supplier ${suffix}` })
+    const input = {
+      organizationId, recordedBy: "Existing stock test", entryKey: randomUUID(), itemTypeId: item.id,
+      locationId: location.id, quantity: 2, condition: "AVAILABLE", purchasedOn: "2020-03-15",
+      supplierId: supplier.id, unitPrice: "1200.00", billNumber: "OLD-01", billDate: "2020-03-15",
+      installedOn: "2020-03-20", warrantyPeriod: "365", serialNumbers: [`OLD-A-${suffix}`, `OLD-B-${suffix}`],
+    }
+    const saved = await store.recordExistingStock(input)
+    expect(saved.assetCodes).toHaveLength(2)
+    expect(await store.recordExistingStock(input)).toEqual({ ...saved, alreadySaved: true })
+    const units = await pool.query(`SELECT acquired_on::text, receipt_line_id,
+      acquisition_unit_price::text AS price, acquisition_supplier_id AS supplier
+      FROM store.assets WHERE existing_stock_entry_id = $1`, [saved.entryId])
+    expect(units.rows).toEqual(Array.from({ length: 2 }, () => ({
+      acquired_on: "2020-03-15", receipt_line_id: null, price: "1200.00", supplier: supplier.id,
+    })))
+    const movement = await pool.query(`SELECT count(*)::integer AS count, sum(quantity)::text AS quantity
+      FROM store.stock_movements WHERE existing_stock_entry_id = $1`, [saved.entryId])
+    expect(movement.rows[0]).toEqual({ count: 2, quantity: "2.000" })
+    await expect(store.recordExistingStock({ ...input, quantity: 3 })).rejects.toThrow("already saved")
+    await expect(store.recordExistingStock({ ...input, entryKey: randomUUID() })).rejects.toThrow("already recorded")
+    const unknown = await store.recordExistingStock({ organizationId, recordedBy: "Existing stock test",
+      entryKey: randomUUID(), itemTypeId: item.id, locationId: location.id, quantity: 1, condition: "BROKEN" })
+    const unit = (await store.getAssetWorkspace({ organizationId, assetCode: unknown.assetCodes[0]! }))!.asset
+    expect(unit.acquiredOn).toBeNull()
+    expect(unit.unitPrice).toBeNull()
+    expect(unit.status).toBe("BROKEN")
+    const consumable = await store.createItemType({ ...(await createClassification("Existing Consumable")),
+      assetType: "CONSUMABLE", organizationId, unit: "kg" })
+    const bulk = await store.recordExistingStock({ organizationId, recordedBy: "Existing stock test",
+      entryKey: randomUUID(), itemTypeId: consumable.id, locationId: location.id, quantity: 12.5, condition: "AVAILABLE" })
+    expect(bulk.assetCodes).toEqual([])
+    const stock = (await store.listItemTypes(organizationId)).find(row => row.id === consumable.id)!
+    expect(Number(stock.availableStock)).toBe(12.5)
+  })
+
   test("keeps new classification text on an uncoded item request", async () => {
     const request = await store.createCodeRequest({
       assetCategory: `New Category ${suffix}`,

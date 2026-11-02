@@ -1025,6 +1025,30 @@ export async function issueRemainingStoreRequisitionBatchAction(
   revalidateStore()
 }
 
+export async function recordExistingStoreStockAction(_state: { error: string | null }, formData: FormData): Promise<{ error: string | null }> {
+  try {
+    await withStore("store.receipts.receive", (repository, actorUserId, organizationId, _email, actorName) =>
+      repository.recordExistingStock({
+        organizationId, actorUserId, recordedBy: actorName,
+        entryKey: requiredText(formData, "entry_key"), itemTypeId: requiredText(formData, "item_type_id"),
+        locationId: requiredText(formData, "location_id"), quantity: positiveNumber(formData, "quantity"),
+        condition: requiredText(formData, "condition"), purchasedOn: optionalText(formData, "purchased_on"),
+        supplierId: optionalText(formData, "supplier_id"), unitPrice: optionalText(formData, "unit_price"),
+        billNumber: optionalText(formData, "bill_number"), billDate: optionalText(formData, "bill_date"),
+        manufacturerMake: optionalText(formData, "manufacturer_make"), installedOn: optionalText(formData, "installed_on"),
+        serialNumbers: (optionalText(formData, "serial_numbers") ?? "").split(/\r?\n/),
+        warrantyPeriod: optionalText(formData, "warranty_period"), warrantyUntil: optionalText(formData, "warranty_until"),
+        remark: optionalText(formData, "remark"),
+      }))
+  } catch (error) {
+    unstable_rethrow(error)
+    return { error: error instanceof Error ? error.message : "Existing stock could not be recorded." }
+  }
+  revalidateStore()
+  revalidatePath("/store/stock/existing")
+  redirect("/store/stock/existing?saved=1")
+}
+
 export async function receiveStoreStockAction(formData: FormData) {
   const guaranteeUploadId = pendingUploadId(formData, "guarantee_card")
   const purchaseOrderLineId = requiredText(formData, "purchase_order_line_id")
