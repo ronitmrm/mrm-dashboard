@@ -1089,7 +1089,6 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           WHERE parameter.organization_id = $1 AND floor.code = $2
           ORDER BY item.uid, route.route_code, setup.setup_number,
             parameter.sequence, parameter.parameter_code
-          LIMIT 2000
         `,
         [input.organizationId, productionFloorCode]
       )
