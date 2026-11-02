@@ -1,6 +1,9 @@
 "use server"
 
 import { withMasterSaveFeedback } from "@/lib/master-save-feedback"
+import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
+import { readMasterCsv } from "@/lib/master-data-csv"
+import { existingStockCsvInputs } from "@/lib/store/existing-stock-csv"
 
 import { createHash } from "node:crypto"
 
@@ -1025,6 +1028,37 @@ export async function issueRemainingStoreRequisitionBatchAction(
   revalidateStore()
 }
 
+export async function importExistingStoreStockCsvAction(formData: FormData) {
+  let rowNumber = 2
+  try {
+    await withStore("store.receipts.receive", async (_repository, actorUserId, organizationId, _email, recordedBy) => {
+      const file = formData.get("master_csv_file")
+      if (file instanceof File && file.size > 2 * 1024 * 1024) throw new Error("CSV must be smaller than 2 MB.")
+      const rows = await readMasterCsv(file, "Existing Stock CSV")
+      await withCsvImportTransaction(async () => {
+        const batch = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
+        try {
+        const [items, locations, suppliers] = await Promise.all([
+          batch.listItemTypes(organizationId), batch.listLocations(organizationId), batch.listSuppliers(organizationId),
+        ])
+        const inputs = existingStockCsvInputs(rows, { items, locations, suppliers }, organizationId)
+        const ordered = inputs.map((input, index) => ({ input, row: index + 2 })).sort((a, b) => a.input.itemTypeId.localeCompare(b.input.itemTypeId) || a.input.entryKey.localeCompare(b.input.entryKey))
+        for (const { input, row } of ordered) {
+          rowNumber = row
+          await batch.recordExistingStock({ ...input, organizationId, actorUserId, recordedBy })
+        }
+        } finally { await batch.close() }
+      })
+    })
+  } catch (error) {
+    unstable_rethrow(error)
+    const message = error instanceof Error ? error.message : "CSV import failed."
+    return { error: `${message.startsWith("CSV row") ? "" : `CSV row ${rowNumber}: `}${message} No rows were imported.` }
+  }
+  revalidateStore()
+  revalidatePath("/masters/store/existing-stock")
+}
+
 export async function recordExistingStoreStockAction(_state: { error: string | null }, formData: FormData): Promise<{ error: string | null }> {
   try {
     await withStore("store.receipts.receive", (repository, actorUserId, organizationId, _email, actorName) =>
@@ -1045,8 +1079,8 @@ export async function recordExistingStoreStockAction(_state: { error: string | n
     return { error: error instanceof Error ? error.message : "Existing stock could not be recorded." }
   }
   revalidateStore()
-  revalidatePath("/store/stock/existing")
-  redirect("/store/stock/existing?saved=1")
+  revalidatePath("/masters/store/existing-stock")
+  redirect("/masters/store/existing-stock?saved=1&masterUnit=universal&masterMain=store_masters&masterSub=EXISTING_STOCK")
 }
 
 export async function receiveStoreStockAction(formData: FormData) {

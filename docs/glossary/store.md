@@ -281,6 +281,15 @@ who entered it and when, separately from its historical purchase date, and posts
 one positive stock adjustment. Retrying a saved entry never duplicates stock.
 Usable units can then be allocated through normal Store movements. Items already
 recorded in ERP must use transfers rather than another Existing Stock Entry.
+**Master Data → Universal → Store → Add Existing Stock Entry** owns the entry
+form and its CSV upload/download. View Records shows recorded entries. The
+Stock Register shows the resulting inventory; old entry bookmarks redirect to
+the Master Data screen. Existing stock receipt permissions still apply.
+The CSV template uses existing Asset, Supplier and location codes. Each row requires
+a stable, company-unique Entry Reference. Re-uploading identical references and
+details does not add stock again; changed details are rejected. Dates use
+DD/MM/YYYY. Imports are atomic, limited to 100 rows and 100 physical units, and
+report invalid rows without saving part of the file.
 
 **Store Receipt**: One Goods Receipt Note recorded against exactly one Store
 Purchase Order. It may contain one or more selected open goods lines from that

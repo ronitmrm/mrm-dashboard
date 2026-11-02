@@ -29,6 +29,7 @@ export type MasterModuleAccess = {
   hrMasters: boolean
   operations: boolean
   storeMasters: boolean
+  storeExistingStock?: boolean
 }
 
 export type MasterOption = { id: string; label: string }
@@ -170,7 +171,7 @@ const universalMasterDefinitions = [
   },
   {
     id: "store_masters",
-    label: "Store Masters",
+    label: "Store",
     access: "storeMasters",
     scope: "universal",
     subMasters: storeMasterOptions.map(([id, label]) => ({ id, label })),
@@ -254,6 +255,7 @@ export function masterModuleAccess(
   directAccess: { storeMasters?: boolean } = {}
 ): MasterModuleAccess {
   return {
+    storeExistingStock: Boolean(navigationAccess.existingStockEntry),
     scopedReadKeys: navigationAccess.masterReadKeys,
     commercialProducts: navigationAccess.commercialHrefs.includes("/commercial/products"),
     commercialCustomers: navigationAccess.commercialHrefs.includes(
@@ -319,9 +321,9 @@ export function availableMainMasters(
   return masterDefinitions
     .filter(
       (definition) =>
-        definition.scope === scope && (access.scopedReadKeys
+        definition.scope === scope && ((definition.id === "store_masters" && access.storeExistingStock) || (access.scopedReadKeys
           ? (definition.subMasters ?? [definition]).some(({ id }) => access.scopedReadKeys!.includes(`masters.${unit}.${id}.read`))
-          : hasMasterAccess(definition.access, access))
+          : hasMasterAccess(definition.access, access)))
     )
     .map(({ id, label }) => ({ id, label }))
 }
@@ -332,7 +334,7 @@ export function subMastersFor(
 ): { fallback: boolean; options: MasterOption[] } | null {
   const definition = masterDefinitions.find(
     (candidate) =>
-      candidate.id === main && (access.scopedReadKeys ? true : hasMasterAccess(candidate.access, access))
+      candidate.id === main && ((candidate.id === "store_masters" && access.storeExistingStock) || (access.scopedReadKeys ? true : hasMasterAccess(candidate.access, access)))
   )
   if (!definition) return null
   const options =
@@ -343,6 +345,9 @@ export function subMastersFor(
           : !option.access || hasMasterAccess(option.access, access)
       )
       .map(({ id, label }) => ({ id, label })) ?? []
+  if (main === "store_masters" && access.storeExistingStock) {
+    options.push({ id: "EXISTING_STOCK", label: "Add Existing Stock Entry" })
+  }
   return options.length
     ? { fallback: false, options }
     : {
@@ -422,6 +427,11 @@ export function masterFormHref(
   }
 
   if (selection.main === "store_masters") {
+    if (selection.sub === "EXISTING_STOCK") {
+      params.set("masterView", view)
+      addContext(params, selection)
+      return `/masters/store/existing-stock?${params.toString()}`
+    }
     params.set("tab", view === "dataEntry" ? "dataEntryTab" : "masterTablesTab")
     params.set("floor", defaultProductionFloorCode)
     params.set("entry", selection.main)
@@ -496,7 +506,9 @@ export function masterSelectionSummary(selection: MasterSelection) {
   const main = masterDefinitions.find(({ id }) => id === selection.main)
   const mainLabel = main?.label ?? selection.main
   const subLabel =
-    main?.subMasters?.find(({ id }) => id === selection.sub)?.label ?? mainLabel
+    selection.main === "store_masters" && selection.sub === "EXISTING_STOCK"
+      ? "Add Existing Stock Entry"
+      : main?.subMasters?.find(({ id }) => id === selection.sub)?.label ?? mainLabel
   return `${unit} · ${mainLabel} · ${subLabel}`
 }
 export function masterSelectionHref(
@@ -550,6 +562,9 @@ export function masterSelectionMatchesDestination(
   pathname: string,
   values: Record<string, string | null | undefined>
 ) {
+  if (pathname === "/masters/store/existing-stock") {
+    return selection.main === "store_masters" && selection.sub === "EXISTING_STOCK" && selection.unit === universalMasterUnit
+  }
   if (pathname === "/") {
     const expectedEntry =
       selection.main === "rejection" ? selection.sub : selection.main
