@@ -46,6 +46,17 @@ export async function importStoreMasterCsvAction(formData: FormData) {
   let rowNumber = 2
   try {
     const rows = await readMasterCsv(formData.get("master_csv_file"))
+    if (master === "ITEM_TYPE") {
+      const codes = new Set<string>()
+      for (const [index, row] of rows.entries()) {
+        rowNumber = index + 2
+        const code = csvValue(row, "asset_code", "type_code").toLowerCase()
+        if (!code) continue
+        if (codes.has(code)) throw new Error(`Asset Code "${code}" occurs more than once.`)
+        codes.add(code)
+        if (codes.size > 100) throw new Error("Update at most 100 existing Asset Codes per upload.")
+      }
+    }
     await withCsvImportTransaction(async () => {
       const references = await readReferences(master)
       for (const [index, row] of rows.entries()) {
@@ -66,6 +77,9 @@ export async function importStoreMasterCsvAction(formData: FormData) {
     }
   }
   revalidatePath("/store/masters")
+  revalidatePath("/store/stock")
+  revalidatePath("/store/assets", "layout")
+  revalidatePath("/masters/store/existing-stock")
   revalidatePath("/")
 }
 
@@ -83,7 +97,10 @@ async function readReferences(master: StoreMasterKey) {
       ])
       return { kind: "prices" as const, suppliers, items }
     }
-    return { kind: "classification" as const, ...await repository.listAssetClassificationMasters(organizationId) }
+    return { kind: "classification" as const,
+      ...await repository.listAssetClassificationMasters(organizationId),
+      items: master === "ITEM_TYPE" ? await repository.listItemTypes(organizationId) : [],
+    }
   } finally {
     await repository.close()
   }
@@ -131,6 +148,28 @@ function resolveReferences(
     }
   }
   if (master === "MAKE_MODEL") return row
+  if (master === "ITEM_TYPE") {
+    const code = csvValue(row, "asset_code", "type_code")
+    if (code) {
+      const item = masters.items.find(item => item.typeCode.toLowerCase() === code.toLowerCase())
+      if (!item) throw new Error(`Asset Code "${code}" was not found. Existing-code updates never create another item.`)
+      return {
+        master_id: item.id,
+        asset_category_id: item.assetCategoryId,
+        asset_subcategory_id: item.assetSubcategoryId,
+        asset_name_id: referenceId(csvValue(row, "asset_name", "asset_name_id"),
+          masters.assetNames.filter(name => name.subcategoryId === item.assetSubcategoryId), "Asset Name in the current Subcategory"),
+        asset_type: item.assetType,
+        identification_name: item.identificationName,
+        make_model_id: item.makeModelId,
+        minimum_stock: item.minimumStock,
+        model_number: item.modelNumber ?? "",
+        rated_load: item.ratedLoad ?? "",
+        unit: item.unit,
+      }
+    }
+    row = { ...row, master_id: "" }
+  }
   const category = csvValue(row, "asset_category", "asset_category_name", "category", "asset_category_id", "category_id")
   if (master === "ASSET_NAME") {
     const categoryId = category ? referenceId(category, masters.categories, "Asset Category") : null
@@ -254,6 +293,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow, rowNumber: n
               .replace(/[\s-]+/g, "_"),
           },
           {
+            master_id: [],
             asset_category_id: [],
             asset_name_id: [],
             asset_subcategory_id: [],

@@ -1,5 +1,11 @@
 # Store
 
+Store Item Type CSV rows with an existing Asset Code update that item's Asset
+Name only. The name must exist within its current Subcategory. Code, unit IDs,
+quantities and other item details are preserved. Unknown or repeated codes are
+rejected; uploads are atomic and allow up to 100 existing codes. Blank-code rows
+retain the normal new-item creation flow.
+
 **Store Classification Master**: The maintained hierarchy of Asset Category,
 Asset Subcategory, and Asset Name, plus a Make/Model master. A Subcategory belongs to one Category, and
 an Asset Name belongs to one Subcategory. Store item creation selects these
