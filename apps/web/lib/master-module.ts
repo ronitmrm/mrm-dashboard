@@ -396,6 +396,7 @@ export function masterFormHref(
   if (selection.main === "production_break_schedule") {
     params.set("floor", selection.unit)
     params.set("masterView", view)
+    addContext(params, selection)
     return `/masters/production-breaks?${params.toString()}`
   }
   if (

@@ -5,8 +5,7 @@ import { Button } from "@workspace/ui/components/button"
 import { CardContent, CardDescription, CardHeader, CardTitle, SectionCard } from "@workspace/ui/components/card"
 import { TimeInput } from "@workspace/ui/components/time-input"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
-import Link from "next/link"
+import { Plus, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { PageHeader, StandardState } from "@/components/ui/golden-patterns"
@@ -79,7 +78,6 @@ export function ProductionBreakSchedule({
     <PageHeader
       title="Production Break Schedule"
       description="Daily break times in IST. Only overlapping minutes are removed from productive runtime; breaks are not downtime."
-      actions={<Button asChild variant="outline"><Link href="/masters"><ArrowLeft />Back to Masters</Link></Button>}
     />
     <SectionCard>
       <CardHeader>
