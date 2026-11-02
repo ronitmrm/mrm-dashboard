@@ -110,6 +110,19 @@ test("normalizes day-first Supplier Price dates before saving", async () => {
   expect(save.mock.lastCall?.[0].get("valid_from")).toBe("2026-09-19")
 })
 
+test("imports Supplier Price CSV using the visible form labels", async () => {
+  const result = await importCsv(
+    "SUPPLIER_PRICE",
+    "Store Item,Supplier,Unit Price,Effective From,Quote Reference\nNC001,Tool Supplier,100,19/09/2026,QUOTE-001"
+  )
+
+  expect(result).toBeUndefined()
+  expect(save.mock.lastCall?.[0].get("item_type_id")).toBe("item-id")
+  expect(save.mock.lastCall?.[0].get("supplier_id")).toBe("supplier-id")
+  expect(save.mock.lastCall?.[0].get("valid_from")).toBe("2026-09-19")
+  expect(save.mock.lastCall?.[0].get("quote_reference")).toBe("QUOTE-001")
+})
+
 test("rejects invalid calendar dates before saving any supplier prices", async () => {
   const result = await importCsv(
     "SUPPLIER_PRICE",
