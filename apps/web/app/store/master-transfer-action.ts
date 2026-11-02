@@ -124,7 +124,7 @@ function resolveReferences(
         "Supplier"
       ),
       item_type_id: referenceId(
-        csvValue(row, "asset_code", "item_code", "item_type_id"),
+        csvValue(row, "store_item", "asset_code", "item_code", "item_type_id"),
         masters.items.map((item) => ({ id: item.id, name: item.typeCode })),
         "Asset Code"
       ),
@@ -221,7 +221,7 @@ async function importRow(master: StoreMasterKey, row: MasterCsvRow, rowNumber: n
           {
             ...row,
             valid_from: csvDateValue(
-              csvValue(row, "valid_from"),
+              csvValue(row, "effective_from", "valid_from"),
               rowNumber,
               "Valid From"
             ),

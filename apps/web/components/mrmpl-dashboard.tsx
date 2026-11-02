@@ -493,11 +493,11 @@ const storeMasterCsvColumns = {
     "contact_details",
   ],
   SUPPLIER_PRICE: [
-    "supplier",
-    "asset_code",
-    "unit_price",
-    "valid_from",
-    "quote_reference",
+    "Store Item",
+    "Supplier",
+    "Unit Price",
+    "Effective From",
+    "Quote Reference",
   ],
   VENDOR: ["vendor_code", "vendor_name", "contact_details"],
 } as const
