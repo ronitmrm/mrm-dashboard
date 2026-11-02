@@ -13,6 +13,7 @@ import { operationalEntryPermissionOptions } from "./operational-entry-capabilit
 
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { storeNavigationAccess } from "./store-capabilities"
+import { resolveStoreActionCapabilities } from "./store-action-access"
 import { listGrantedCapabilities } from "./require-capability"
 import { hrMasterNavigation, hrNavigation } from "../unified-navigation"
 import { productionModuleIsEnabled } from "../production-module"
@@ -30,6 +31,7 @@ const administrationCapability = "administration.access.read"
 const artifactCapability = "artifacts.read"
 
 export type UnifiedNavigationAccess = {
+  existingStockEntry?: boolean
   qualityControlHrefs?: string[]
   isoCalibrationPlan?: boolean
   productionStoreFloorCodes?: ProductionFloorCode[]
@@ -52,6 +54,7 @@ async function readUnifiedNavigationAccess(
   userId: string
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
+    "store.receipts.receive", "store.purchase_register.write", "store.manage",
     ...qualityControlPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     isoCalibrationPlanPageAccess.readPermissionKey,
     ...brandingPageAccess.map(({ readPermissionKey }) => readPermissionKey),
@@ -117,6 +120,7 @@ async function readUnifiedNavigationAccess(
   )
 
   return {
+    existingStockEntry: grantedCapabilities.has("store.stock.read") && resolveStoreActionCapabilities([...grantedCapabilities]).has("store.receipts.receive"),
     qualityControlHrefs: qualityControlPageAccess.filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey)).map(({ href }) => href),
     isoCalibrationPlan:
       grantedCapabilities.has(isoCalibrationPlanPageAccess.readPermissionKey) ||

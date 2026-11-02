@@ -69,7 +69,7 @@ export function masterDataDashboardHref(
 export function masterDataNavigationLinks(
   access: UnifiedNavigationAccess
 ): MasterDataFallbackLink[] {
-  return access.masterReadKeys?.length
+  return access.masterReadKeys?.length || access.existingStockEntry
     ? [{ destination: "/masters?view=masterTables", id: "masterTablesTab", title: "View Records" }]
     : []
 }
