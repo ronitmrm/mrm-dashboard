@@ -193,6 +193,7 @@ export function StoreMasterWorkspace({
 
   return (
     <div className="grid gap-6">
+      {selectedMaster === "ITEM_TYPE" ? <p className="text-sm text-muted-foreground">For bulk Asset Name corrections, download CSV from View Records, keep only the affected rows, change Asset Name and upload from Data Entry. Keep Asset Code unchanged. Existing-code rows update only the Asset Name; the name must already exist in the item’s current Subcategory. Up to 100 existing codes per upload. Blank Asset Code creates a new item.</p> : null}
       {!selectionLocked ? (
  <SectionCard width="compact">
           <CardHeader>

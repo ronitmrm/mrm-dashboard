@@ -17,7 +17,11 @@ vi.mock("@workspace/db", () => ({
     organizationIdForCode: async () => "organization",
     close: async () => {},
     listSuppliers: async () => [{ id: "supplier-id", name: "Tool Supplier", code: "SUP-001" }],
-    listItemTypes: async () => [{ id: "item-id", typeCode: "NC001" }],
+    listItemTypes: async () => ["NC001", "NC002"].map((typeCode, index) => ({
+      id: index ? "item-two" : "item-id", typeCode, assetCategoryId: "category-id",
+      assetSubcategoryId: "subcategory-id", assetType: "NON_CONSUMABLE", identificationName: "Keep identification",
+      makeModelId: "appm11-id", minimumStock: "2", modelNumber: "Keep model", ratedLoad: "10 kg", unit: "No.",
+    })),
     listAssetClassificationMasters: async () => ({
       categories: [{ id: "category-id", name: "Production Tooling" }],
       subcategories: [
@@ -25,6 +29,8 @@ vi.mock("@workspace/db", () => ({
         { id: "other-subcategory", categoryId: "other-category", name: "Tools" },
       ],
       assetNames: [
+        { id: "new-name-one", subcategoryId: "subcategory-id", name: "Main Die" },
+        { id: "new-name-two", subcategoryId: "subcategory-id", name: "Trimming Punch" },
         { id: "other-name-id", subcategoryId: "other-subcategory", name: "Fixture" },
         { id: "name-id", subcategoryId: "subcategory-id", name: "Fixture" },
       ],
@@ -65,6 +71,23 @@ function upload(rows: string) {
 }
 
 beforeEach(() => save.mockReset())
+
+test("updates different Asset Names by existing code while preserving item details", async () => {
+  expect(await importCsv("ITEM_TYPE", "Asset Code,Asset Name,Make/Model,Unit\nNC001,Main Die,Changed,kg\nNC002,Trimming Punch,Changed,kg")).toBeUndefined()
+  expect(save.mock.calls.map(([data]) => [data.get("master_id"), data.get("asset_name_id")])).toEqual([
+    ["item-id", "new-name-one"], ["item-two", "new-name-two"],
+  ])
+  expect(save.mock.calls[0]?.[0].get("make_model_id")).toBe("appm11-id")
+  expect(save.mock.calls[0]?.[0].get("unit")).toBe("No.")
+  expect(save.mock.calls[0]?.[0].get("identification_name")).toBe("Keep identification")
+})
+
+test("rejects unknown or repeated Asset Codes without creating another item", async () => {
+  expect((await importCsv("ITEM_TYPE", "Asset Code,Asset Name\nNC999,Main Die"))?.error).toContain("was not found")
+  expect(save).not.toHaveBeenCalled()
+  expect((await importCsv("ITEM_TYPE", "Asset Code,Asset Name\nNC001,Main Die\nnc001,Trimming Punch"))?.error).toContain("more than once")
+  expect(save).not.toHaveBeenCalled()
+})
 
 async function importCsv(master: string, csv: string) {
   const data = new FormData()
