@@ -555,11 +555,11 @@ async function preauthorizeDashboardMutation(
     await authorizedDashboardSession(request, capability)
     return
   }
-  if (path === "rm-inward-delete") {
+  if (path === "rm-inward-delete" || path === "rm-inward-location") {
     const floor = requiredProductionFloor(body.productionFloorCode)
     await authorizedDashboardSession(
       request,
-      operationalEntryCapability("rm_inward", "delete", floor)
+      operationalEntryCapability("rm_inward", path === "rm-inward-delete" ? "delete" : "save", floor)
     )
     return
   }
@@ -1705,6 +1705,22 @@ async function post(request: NextRequest, context: RouteContext) {
           error instanceof Error ? error.message : "Master deletion failed."
         )
       }
+    }
+
+    if (path === "rm-inward-location") {
+      const floor = requiredProductionFloor(body.productionFloorCode)
+      const result = await withProductionRepository(
+        request,
+        operationalEntryCapability("rm_inward", "save", floor),
+        ({ actorUserId, organizationId, repository }) => repository.updateRawMaterialLocation({
+          actorUserId,
+          organizationId,
+          productionFloorCode: floor,
+          sourceId: requiredDashboardText(body.sourceId, "RM Inward entry"),
+          location: requiredDashboardText(body.location, "RM Location"),
+        })
+      )
+      return json({ ok: true, rowsUpdated: result.updated, message: "RM location saved." })
     }
 
     if (path === "rm-inward-delete") {
@@ -2866,6 +2882,7 @@ const knownDashboardApiPaths = new Set([
   "planner-priority",
   "raw-material-rejection",
   "rm-inward-delete",
+  "rm-inward-location",
   "production-sessions",
   "production-break-schedule",
   "quality-measuring-program",

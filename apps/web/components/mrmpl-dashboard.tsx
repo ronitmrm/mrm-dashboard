@@ -10944,6 +10944,10 @@ function OperationalTablesPanel({
   const [receiptToDelete, setReceiptToDelete] = useState<DashboardPayload | null>(null)
   const [receiptDeleteReason, setReceiptDeleteReason] = useState("")
   const [isDeletingReceipt, setIsDeletingReceipt] = useState(false)
+  const [receiptToEdit, setReceiptToEdit] = useState<DashboardPayload | null>(null)
+  const [receiptLocation, setReceiptLocation] = useState("")
+  const [isSavingLocation, setIsSavingLocation] = useState(false)
+  const [locationError, setLocationError] = useState("")
   const selectedSpec =
     specs.find((spec) => spec.entryType === entryType) ?? specs[0]
   const dataEntry = asRecord(payload.dataEntry)
@@ -10974,6 +10978,29 @@ function OperationalTablesPanel({
   const canDeleteReceipts =
     selectedSpec?.entryType === "rm_inward" &&
     canUseOperationalEntry("rm_inward", "delete", productionFloorCode)
+  const canEditReceiptLocations =
+    selectedSpec?.entryType === "rm_inward" &&
+    canUseOperationalEntry("rm_inward", "save", productionFloorCode)
+
+  async function saveReceiptLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const sourceId = receiptToEdit && masterTableRecordId(receiptToEdit)
+    if (!sourceId || !receiptLocation.trim() || isSavingLocation) return
+    setIsSavingLocation(true)
+    setLocationError("")
+    try {
+      await submitAction(
+        "rm-inward-location",
+        { productionFloorCode, sourceId, location: receiptLocation.trim() },
+        { throwOnError: true }
+      )
+      setReceiptToEdit(null)
+    } catch (error) {
+      setLocationError(error instanceof Error ? error.message : "Location could not be saved.")
+    } finally {
+      setIsSavingLocation(false)
+    }
+  }
 
   async function deleteReceipt() {
     const sourceId = receiptToDelete && masterTableRecordId(receiptToDelete)
@@ -11195,7 +11222,7 @@ function OperationalTablesPanel({
                         {column.label}
                       </TableHead>
                     ))}
-                    {canCancelWorkOrders || canDeleteReceipts ? (
+                    {canCancelWorkOrders || canDeleteReceipts || canEditReceiptLocations ? (
                       <TableHead className="h-10 w-28 px-2 py-1 text-right text-xs">
                         Actions
                       </TableHead>
@@ -11243,21 +11270,41 @@ function OperationalTablesPanel({
                           </Button>
                         </TableCell>
                       ) : null}
-                      {canDeleteReceipts ? (
+                      {canDeleteReceipts || canEditReceiptLocations ? (
                         <TableCell className="px-2 py-1.5 text-right align-top">
-                          <Button
-                            disabled={!masterTableRecordId(row)}
-                            onClick={() => {
-                              setReceiptToDelete(row)
-                              setReceiptDeleteReason("")
-                            }}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Trash2 className="size-3.5" />
-                            Delete
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            {canEditReceiptLocations ? (
+                              <Button
+                                disabled={!masterTableRecordId(row)}
+                                onClick={() => {
+                                  setReceiptToEdit(row)
+                                  setReceiptLocation(str(row.rmLocation))
+                                  setLocationError("")
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                <Pencil className="size-3.5" />
+                                Edit Location
+                              </Button>
+                            ) : null}
+                            {canDeleteReceipts ? (
+                              <Button
+                                disabled={!masterTableRecordId(row)}
+                                onClick={() => {
+                                  setReceiptToDelete(row)
+                                  setReceiptDeleteReason("")
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                <Trash2 className="size-3.5" />
+                                Delete
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       ) : null}
                     </TableRow>
@@ -11331,6 +11378,45 @@ function OperationalTablesPanel({
             </Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+      <Dialog
+        open={canEditReceiptLocations && Boolean(receiptToEdit)}
+        onOpenChange={(open) => {
+          if (!open && !isSavingLocation) setReceiptToEdit(null)
+        }}
+      >
+        <StandardDialogContent
+          title="Edit RM Location"
+          description="Update the storage location of this receipt."
+        >
+          <form className="grid gap-4" onSubmit={saveReceiptLocation}>
+            {locationError ? <StandardState variant="error" title="Location not saved" description={locationError} /> : null}
+            <p className="text-sm text-muted-foreground">
+              {receiptToEdit
+                ? `${displayValue(receiptToEdit.jcNo)} · ${formatRmInwardDate(receiptToEdit.rmInwardDate)} · ${displayValue(receiptToEdit.rmInwardKg)} kg`
+                : ""}
+            </p>
+            <div className="grid gap-2">
+              <Label htmlFor="receipt-location">RM Location</Label>
+              <Input
+                id="receipt-location"
+                disabled={isSavingLocation}
+                onChange={(event) => setReceiptLocation(event.target.value)}
+                placeholder="e.g. RM Store / Rack A3"
+                required
+                value={receiptLocation}
+              />
+            </div>
+            <DialogFooter>
+              <Button disabled={isSavingLocation} onClick={() => setReceiptToEdit(null)} type="button" variant="outline">
+                Cancel
+              </Button>
+              <Button disabled={!receiptLocation.trim() || isSavingLocation} type="submit">
+                {isSavingLocation ? "Saving..." : "Save Location"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </StandardDialogContent>
       </Dialog>
       <Dialog
         open={canDeleteReceipts && Boolean(receiptToDelete)}
