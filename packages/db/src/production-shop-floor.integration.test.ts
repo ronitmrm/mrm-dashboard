@@ -486,6 +486,29 @@ describe("production and shop-floor workflows", () => {
         after_state->'source_payload'->>'rmLocation' AS after FROM audit.events
         WHERE target_id = $1 AND event_type = 'raw_material_receipt.location_updated'`, [receipt.id])
       expect(audit.rows).toEqual([{ before: null, after: "001" }])
+      const edit = { organizationId, productionFloorCode: "conventional" as const, sourceId, location: "Rack B2" }
+      await expect(repository.updateRawMaterialLocation({ ...edit, productionFloorCode: "cnc" })).rejects.toThrow(/another Production Unit/)
+      await expect(repository.updateRawMaterialLocation({ ...edit, location: " " })).rejects.toThrow(/RM Location/)
+      await pool.query("UPDATE manufacturing.work_orders SET status = 'Open' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
+      const sibling = await repository.upsertRawMaterialReceipt({
+        organizationId, payload: { jcNo: fourthJobCard, rmLocation: "Other rack" }, quantityKg: 10,
+        receiptNumber: rmPoNumber, receivedOn: "2026-10-14", sourceId: `${sourceId}:sibling`,
+      })
+      try {
+        const beforeEdit = await stock()
+        const beforeEditJobs = await jobs()
+        expect(await repository.updateRawMaterialLocation(edit)).toEqual({ updated: 1 })
+        expect(await repository.updateRawMaterialLocation(edit)).toEqual({ updated: 0 })
+        expect((await stock()).rows).toEqual(beforeEdit.rows)
+        expect((await jobs()).rows).toEqual(beforeEditJobs.rows)
+        const locations = await pool.query("SELECT id, source_payload->>'rmLocation' AS location FROM manufacturing.raw_material_receipts WHERE id = ANY($1::uuid[]) ORDER BY location", [[receipt.id, sibling.id]])
+        expect(locations.rows).toEqual([{ id: sibling.id, location: "Other rack" }, { id: receipt.id, location: "Rack B2" }])
+        expect(await repository.updateRawMaterialLocation({ ...edit, location: "Rack C3" })).toEqual({ updated: 1 })
+        expect(await repository.updateRawMaterialLocations(input)).toEqual({ updated: 2 })
+      } finally {
+        await pool.query("DELETE FROM manufacturing.job_card_finish_baselines WHERE raw_material_receipt_id = $1", [sibling.id])
+        await pool.query("DELETE FROM manufacturing.raw_material_receipts WHERE id = $1", [sibling.id])
+      }
     } finally {
       await pool.query("UPDATE manufacturing.work_orders SET status = 'Open' WHERE organization_id = $1 AND job_card_number = $2", [organizationId, fourthJobCard])
       await pool.query("DELETE FROM audit.events WHERE target_id = $1", [receipt.id])

@@ -1461,13 +1461,65 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
              actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
            ) SELECT $1, 'raw_material_receipt.location_updated', 'manufacturing',
              'raw_material_receipts', change.id, $3, 'RM location CSV update',
-             change.before_state, change.after_state, 'mrm-dashboard', 'rm_location', change.id::text
-           FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, before_state jsonb, after_state jsonb)`,
+              change.before_state, change.after_state, 'mrm-dashboard', 'rm_location', change.event_id
+            FROM jsonb_to_recordset($2::jsonb) AS change(id uuid, event_id text, before_state jsonb, after_state jsonb)`,
           [input.organizationId, JSON.stringify(updated.rows.map(row => ({
-            id: row.id, before_state: beforeById.get(row.id), after_state: row.after_state,
+            id: row.id, event_id: randomUUID(), before_state: beforeById.get(row.id), after_state: row.after_state,
           }))), input.actorUserId ?? null]
         )
         return { updated: updated.rows.length }
+      })
+    },
+
+    async updateRawMaterialLocation(input: {
+      actorUserId?: string | null
+      organizationId: string
+      productionFloorCode: ProductionFloorCode
+      sourceId: string
+      location: string
+    }) {
+      const sourceId = requiredText(input.sourceId, "RM Inward entry")
+      const location = requiredText(input.location, "RM Location")
+      return transaction(pool, async client => {
+        const found = await client.query<{
+          id: string
+          source_payload: Record<string, unknown>
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT id, source_payload, to_jsonb(receipt) AS snapshot
+           FROM manufacturing.raw_material_receipts receipt
+           WHERE organization_id = $1 AND source_id = $2 AND reversed_at IS NULL
+             AND (source_table = 'dataEntries'
+               OR (source_system = 'mrm-dashboard' AND source_table = 'rm_inward'))
+           FOR UPDATE`,
+          [input.organizationId, sourceId]
+        )
+        if (found.rows.length !== 1) {
+          throw new ShopFloorConflictError("RM Inward entry was not found or is ambiguous. Refresh records and try again.")
+        }
+        const receipt = found.rows[0]!
+        if (productionFloorCodeForRecord({ sourcePayload: receipt.source_payload }) !== input.productionFloorCode) {
+          throw new ProductionUnitAccessError("This RM Inward entry belongs to another Production Unit.")
+        }
+        if (receipt.source_payload.rmLocation === location) return { updated: 0 }
+        const updated = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE manufacturing.raw_material_receipts receipt
+           SET source_payload = source_payload || jsonb_build_object('rmLocation', $2::text),
+             updated_at = now(), updated_by_user_id = $3, row_version = row_version + 1
+           WHERE id = $1 RETURNING to_jsonb(receipt) AS snapshot`,
+          [receipt.id, location, input.actorUserId ?? null]
+        )
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, before_state, after_state, source_system, source_table, source_id
+           ) VALUES ($1, 'raw_material_receipt.location_updated', 'manufacturing',
+             'raw_material_receipts', $2, $3, 'Individual RM location update', $4, $5,
+             'mrm-dashboard', 'rm_location', $6)`,
+          [input.organizationId, receipt.id, input.actorUserId ?? null,
+            receipt.snapshot, updated.rows[0]!.snapshot, randomUUID()]
+        )
+        return { updated: 1 }
       })
     },
 

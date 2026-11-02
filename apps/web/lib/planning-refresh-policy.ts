@@ -64,6 +64,7 @@ export function shouldQueuePlanningRefresh(path: string, body: Record<string, un
 }
 
 export function planningRefreshStatusMessage(autoRefresh: boolean, path = "", body: Record<string, unknown> = {}) {
+  if (path === "rm-inward-location") return "Planning recalculation not required.";
   if (path === "data-import" && body.entryType === "rm_inward" && body.importMode === "update_locations") return "Planning recalculation not required.";
   if (path === "data-import" && body.entryType === "work_order" && body.importMode === "update_required_rm") return "Planning recalculation not required.";
   if (path === "quality-measuring-program" || path === "production-session-efficiency-flag-close") return "Planning recalculation not required.";

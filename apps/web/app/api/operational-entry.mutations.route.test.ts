@@ -14,6 +14,7 @@ const dependencies = vi.hoisted(() => ({
   upsertRawMaterialReceipt: vi.fn(),
   upsertRawMaterialReceipts: vi.fn(),
   updateRawMaterialLocations: vi.fn(),
+  updateRawMaterialLocation: vi.fn(),
   reverseRawMaterialReceipt: vi.fn(),
   upsertCycleStandard: vi.fn(),
   upsertWorkOrder: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     upsertRawMaterialReceipt: dependencies.upsertRawMaterialReceipt,
     upsertRawMaterialReceipts: dependencies.upsertRawMaterialReceipts,
     updateRawMaterialLocations: dependencies.updateRawMaterialLocations,
+    updateRawMaterialLocation: dependencies.updateRawMaterialLocation,
     reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
     closeProductionSession: dependencies.closeProductionSession,
@@ -123,7 +125,7 @@ import { POST } from "./[...path]/route"
 import { ShopFloorConflictError } from "@workspace/db"
 
 function post(
-  path: "data-entry" | "data-import" | "dispatch-approval" | "rm-inward-delete" | "production-session-delete",
+  path: "data-entry" | "data-import" | "dispatch-approval" | "rm-inward-delete" | "rm-inward-location" | "production-session-delete",
   body: Record<string, unknown>
 ) {
   return POST(
@@ -654,6 +656,24 @@ describe("production entry mutation API authorization", () => {
     expect(imported.status).toBe(400)
     expect(dependencies.upsertRawMaterialReceipt).not.toHaveBeenCalled()
     expect(dependencies.upsertRawMaterialReceipts).not.toHaveBeenCalled()
+  })
+
+  it("saves one receipt location with unit save access and no planning refresh", async () => {
+    const body = { productionFloorCode: "cnc", sourceId: "receipt-source-1", location: "Rack A3" }
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.rm_inward.read", "entries.forging.rm_inward.save"])
+    expect((await post("rm-inward-location", body)).status).toBe(403)
+    expect(dependencies.updateRawMaterialLocation).not.toHaveBeenCalled()
+    dependencies.listAllGrantedCapabilities.mockResolvedValue(["entries.cnc.rm_inward.save"])
+    expect((await post("rm-inward-location", { ...body, location: "  " })).status).toBe(400)
+    dependencies.updateRawMaterialLocation.mockResolvedValue({ updated: 1 })
+    const response = await post("rm-inward-location", body)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, rowsUpdated: 1 })
+    expect(dependencies.updateRawMaterialLocation).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: "organization-1", ...body,
+    }))
+    expect(dependencies.upsertRawMaterialReceipt).not.toHaveBeenCalled()
+    expect(dependencies.requestRefresh).not.toHaveBeenCalled()
   })
 
   it("requires RM Inward delete access for the selected unit", async () => {
