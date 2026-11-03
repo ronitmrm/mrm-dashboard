@@ -20,6 +20,8 @@ const dependencies = vi.hoisted(() => ({
   upsertWorkOrder: vi.fn(),
   updateWorkOrderRequiredRm: vi.fn(),
   startProductionSession: vi.fn(),
+  readProductionBreakSchedule: vi.fn(),
+  saveProductionBreakSchedule: vi.fn(),
   closeProductionSession: vi.fn(),
   correctProductionSessionStart: vi.fn(),
   correctProductionSessionStartCount: vi.fn(),
@@ -54,6 +56,8 @@ vi.mock("@workspace/db", async (importOriginal) => ({
     updateRawMaterialLocation: dependencies.updateRawMaterialLocation,
     reverseRawMaterialReceipt: dependencies.reverseRawMaterialReceipt,
     startProductionSession: dependencies.startProductionSession,
+    readProductionBreakSchedule: dependencies.readProductionBreakSchedule,
+    saveProductionBreakSchedule: dependencies.saveProductionBreakSchedule,
     closeProductionSession: dependencies.closeProductionSession,
     correctProductionSessionStart: dependencies.correctProductionSessionStart,
     correctProductionSessionStartCount: dependencies.correctProductionSessionStartCount,
@@ -121,11 +125,12 @@ vi.mock("@/lib/postgres-operational-entry-server", () => ({
   },
 }))
 
-import { POST } from "./[...path]/route"
+import { GET, POST } from "./[...path]/route"
 import { ShopFloorConflictError } from "@workspace/db"
+import { masterCapability } from "../../lib/auth/master-capabilities"
 
 function post(
-  path: "data-entry" | "data-import" | "dispatch-approval" | "rm-inward-delete" | "rm-inward-location" | "production-session-delete",
+  path: "data-entry" | "data-import" | "dispatch-approval" | "rm-inward-delete" | "rm-inward-location" | "production-session-delete" | "production-break-schedule",
   body: Record<string, unknown>
 ) {
   return POST(
@@ -165,6 +170,38 @@ describe("production entry mutation API authorization", () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it.each(["cnc", "forging", "conventional"] as const)("loads and saves the %s break schedule", async (floor) => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([
+      masterCapability("production_break_schedule", "read", floor),
+      masterCapability("production_break_schedule", "save", floor),
+    ])
+    const breaks = [{ startTime: "11:00", endTime: "11:10" }]
+    dependencies.readProductionBreakSchedule.mockResolvedValue({ breaks })
+    dependencies.saveProductionBreakSchedule.mockResolvedValue({ breaks })
+    const response = await GET(new NextRequest(`http://localhost/api/production-break-schedule?floor=${floor}`), {
+      params: Promise.resolve({ path: ["production-break-schedule"] }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ breaks })
+    const saved = await post("production-break-schedule", { productionFloorCode: floor, breaks })
+    expect({ status: saved.status, body: await saved.json() }).toEqual({ status: 200, body: { breaks } })
+    expect(dependencies.saveProductionBreakSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: "organization-1", productionFloorCode: floor, breaks,
+    }))
+  })
+
+  it.each([
+    masterCapability("production_break_schedule", "read", "forging"),
+    masterCapability("production_break_schedule", "save", "cnc"),
+  ])("denies Forging break changes with only %s", async (capability) => {
+    dependencies.listAllGrantedCapabilities.mockResolvedValue([capability])
+    const response = await post("production-break-schedule", {
+      productionFloorCode: "forging", breaks: [],
+    })
+    expect(response.status).toBe(403)
+    expect(dependencies.saveProductionBreakSchedule).not.toHaveBeenCalled()
+  })
 
   it("shows the machine ownership conflict after RM-at-machine authorization succeeds", async () => {
     dependencies.listAllGrantedCapabilities.mockResolvedValue([

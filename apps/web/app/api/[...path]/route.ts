@@ -495,6 +495,14 @@ async function preauthorizeDashboardMutation(
   path: string,
   body: Record<string, unknown>
 ) {
+  if (path === "production-break-schedule") {
+    const floor = requiredProductionFloor(body.productionFloorCode)
+    await authorizedDashboardSession(
+      request,
+      masterCapability("production_break_schedule", "save", floor)
+    )
+    return
+  }
   if (path === "setup-checklist-assignment") {
     const floor = requiredProductionFloor(body.productionFloorCode)
     await authorizedDashboardSession(request,
