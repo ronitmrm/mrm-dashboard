@@ -108,7 +108,7 @@ export default async function EnquiryDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ line?: string; revision?: string }>
+  searchParams: Promise<{ line?: string; revision?: string; importApplied?: string }>
 }) {
   const { id } = await params
   const selectorParams = await searchParams
@@ -155,9 +155,14 @@ export default async function EnquiryDetailPage({
   const currentQuotation = loaded.quotations.at(-1)
   const selectedQuotation = selectorParams.revision === undefined ? currentQuotation : loaded.quotations.find(version=>String(version.revision)===selectorParams.revision)
   if (selectorParams.revision !== undefined && !selectedQuotation) notFound()
-  if (selectedQuotation?.status === 'Sent') return <QuotationHistory enquiryId={id} enquiryNumber={snapshot.enquiry.enquiryNumber}
+  const importFeedback = selectorParams.importApplied === "1" ? (
+    <p role="status" aria-live="polite" className="text-sm">
+      Import review applied successfully.
+    </p>
+  ) : null
+  if (selectedQuotation?.status === 'Sent') return <>{importFeedback}<QuotationHistory enquiryId={id} enquiryNumber={snapshot.enquiry.enquiryNumber}
     versions={loaded.quotations} selected={selectedQuotation} drawings={loaded.quoteDrawings} action={canRequestRevision && selectedQuotation.id===currentQuotation?.id
-      ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/>
+      ? <RequestRevision enquiryId={id} lines={snapshot.items} disabled={loaded.revisions.some(revision=>revision.status==='Open')}/> : null}/></>
   const canEditIntake = canRequestRevision && snapshot.enquiry.intakeEditable
   const canDeleteLines = snapshot.items.some(item => item.intakeEditable) && grants.includes('pricing.enquiries.delete')
   const canDeleteEnquiry = snapshot.enquiry.canDelete && grants.includes('pricing.enquiries.delete')
@@ -191,6 +196,7 @@ export default async function EnquiryDetailPage({
 
   return (
     <div className="grid min-w-0 w-full gap-6">
+      {importFeedback}
       {currentQuotation ? <QuotationTabs enquiryId={id} versions={loaded.quotations} selected={currentQuotation.revision}/> : null}
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">

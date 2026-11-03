@@ -17,6 +17,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { withCsvImportTransaction } from "@/lib/csv-import-transaction"
+import { formatCsvDates } from "../../../lib/csv-date"
 import {
   activeProductionWorker,
   signedInEmployee,
@@ -440,7 +441,7 @@ function csvRows(fields: string[], rows: Array<Record<string, unknown>>) {
   return (
     [
       fields.map(csvCell).join(","),
-      ...rows.map((row) =>
+      ...rows.map(formatCsvDates).map((row) =>
         fields.map((field) => csvCell(row[field])).join(",")
       ),
     ].join("\n") + "\n"

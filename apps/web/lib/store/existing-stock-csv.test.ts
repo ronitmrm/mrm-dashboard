@@ -12,7 +12,7 @@ const row = {
   quantity: "1",
   storage_location_code: "MAIN",
   condition: "Usable",
-  purchase_date: "15/03/2020",
+  purchase_date: "15-03-2020",
   supplier_code: "SUP001",
   price_per_unit: "1200.00",
   serial_numbers: "OLD-01",
@@ -55,9 +55,31 @@ describe("existing stock CSV", () => {
         refs,
         "org"
       )
-    ).toThrow("DD/MM/YYYY")
+    ).toThrow("DD-MM-YYYY")
     expect(() =>
-      existingStockCsvInputs([{ ...row, quantity: "101" }], refs, "org")
-    ).toThrow("100 physical")
+      existingStockCsvInputs([{ ...row, quantity: "2001" }], refs, "org")
+    ).toThrow("2,000 physical")
+  })
+  it("allows 2,000 rows and units, and rejects uploads over either limit", () => {
+    const rows = Array.from({ length: 2000 }, (_, index) => ({
+      ...row,
+      entry_reference: `OPEN-${index}`,
+      serial_numbers: "",
+    }))
+    expect(existingStockCsvInputs(rows, refs, "org")).toHaveLength(2000)
+    expect(() =>
+      existingStockCsvInputs(
+        [...rows, { ...row, entry_reference: "EXTRA" }],
+        refs,
+        "org"
+      )
+    ).toThrow("2,000 rows")
+    const units = rows
+      .slice(0, 4)
+      .map((entry) => ({ ...entry, quantity: "500" }))
+    expect(existingStockCsvInputs(units, refs, "org")).toHaveLength(4)
+    expect(() =>
+      existingStockCsvInputs([...units, rows[4]!], refs, "org")
+    ).toThrow("2,000 physical")
   })
 })

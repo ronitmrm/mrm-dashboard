@@ -1,4 +1,5 @@
-import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
+import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+import { parseCsvDate } from "./csv-date"
 
-export const parseRmInwardUploadDate = parseCalendarDateInput
+export const parseRmInwardUploadDate = parseCsvDate
 export const formatRmInwardDate = formatCalendarDate

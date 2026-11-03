@@ -54,10 +54,7 @@ function date(
   return result
 }
 
-export async function recordExistingStock(
-  client: PoolClient,
-  input: ExistingStockInput
-) {
+export function prepareExistingStock(input: ExistingStockInput) {
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(input.entryKey)) {
     throw new Error(
       "Existing stock entry reference is invalid. Reload the form."
@@ -122,6 +119,22 @@ export async function recordExistingStock(
   const checksum = createHash("sha256")
     .update(JSON.stringify(details))
     .digest("hex")
+  return { details, checksum }
+}
+
+export async function recordExistingStock(
+  client: PoolClient,
+  input: ExistingStockInput
+) {
+  const { details, checksum } = prepareExistingStock(input)
+  const {
+    serialNumbers,
+    purchasedOn,
+    installedOn,
+    billDate,
+    warrantyUntil,
+    unitPrice,
+  } = details
   await client.query(
     "SELECT pg_advisory_xact_lock(hashtext('store.existing-stock'), hashtext($1))",
     [`${input.organizationId}|${input.entryKey}`]

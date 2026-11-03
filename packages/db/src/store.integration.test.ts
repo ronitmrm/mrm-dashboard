@@ -213,6 +213,32 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("imports 2,000 existing stock rows in bulk, preserves history and rolls back failed files", async () => {
+    const item = await store.createItemType({ ...(await createClassification("Bulk Existing")),
+      assetType: "NON_CONSUMABLE", identificationName: "Bulk Die", organizationId, unit: "No." })
+    const consumable = await store.createItemType({ ...(await createClassification("Bulk Existing Consumable")),
+      assetType: "CONSUMABLE", organizationId, unit: "kg" })
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const input = { organizationId, recordedBy: "Bulk existing stock test", itemTypeId: item.id,
+      locationId: location.id, quantity: 1, condition: "AVAILABLE", purchasedOn: "2020-03-15", unitPrice: "1200.00" }
+    const rows = Array.from({ length: 1999 }, (_, index) => ({ ...input, entryKey: randomUUID(), quantity: index ? 1 : 2 }))
+    rows.push({ ...input, entryKey: randomUUID(), itemTypeId: consumable.id, quantity: 12.5 })
+    expect(await store.recordExistingStockBatch(rows)).toEqual({ imported: 2000, alreadySaved: 0 })
+    expect(await store.recordExistingStockBatch(rows)).toEqual({ imported: 0, alreadySaved: 2000 })
+    const units = await pool.query(`SELECT count(*)::integer AS count, min(acquired_on)::text AS purchased,
+      min(acquisition_unit_price)::text AS price FROM store.assets WHERE item_type_id = $1`, [item.id])
+    expect(units.rows[0]).toEqual({ count: 2000, purchased: "2020-03-15", price: "1200.00" })
+    const movements = await pool.query(`SELECT count(*)::integer AS count FROM store.stock_movements
+      WHERE item_type_id = ANY($1::uuid[])`, [[item.id, consumable.id]])
+    expect(movements.rows[0].count).toBe(2001)
+    await expect(store.recordExistingStockBatch([{ ...rows[0]!, quantity: 3 }])).rejects.toThrow("already saved")
+    const failed = [{ ...input, entryKey: randomUUID() }, { ...input, entryKey: randomUUID(), actorUserId: randomUUID() }]
+    await expect(store.recordExistingStockBatch(failed)).rejects.toThrow()
+    expect((await pool.query("SELECT id FROM store.existing_stock_entries WHERE entry_key = ANY($1::uuid[])",
+      [failed.map(row => row.entryKey)])).rowCount).toBe(0)
+    expect((await pool.query("SELECT next_asset_number FROM store.item_types WHERE id = $1", [item.id])).rows[0].next_asset_number).toBe(2001)
+  }, 20000)
+
   test("records existing stock without a PO, preserves purchase details and prevents duplicate units", async () => {
     const item = await store.createItemType({
       ...(await createClassification("Existing Stock")), assetType: "NON_CONSUMABLE",

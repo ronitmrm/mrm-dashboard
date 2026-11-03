@@ -1,3 +1,5 @@
+export const existingStockCsvLimit = 2000
+
 export const existingStockCsvColumns = [
   "Entry Reference",
   "Asset Code",

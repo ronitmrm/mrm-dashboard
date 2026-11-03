@@ -177,7 +177,7 @@ describe("employee assignment workbook", () => {
           "Ravi",
           "E-2",
           "Resigned",
-          "31/08/2026",
+          "31-08-2026",
         ],
       ],
       { origin: "A2" }
@@ -212,7 +212,7 @@ describe("employee assignment workbook", () => {
     )
   })
 
-  it("rejects a non-DD/MM/YYYY or impossible last working date before returning assignments", () => {
+  it("rejects a non-DD-MM-YYYY or impossible last working date before returning assignments", () => {
     const workbook = buildEmployeeAssignmentWorkbook({
       combinedRoles: [],
       posts,
@@ -236,11 +236,11 @@ describe("employee assignment workbook", () => {
       { origin: "A2" }
     )
     expect(() => parseEmployeeAssignmentWorkbook(workbook)).toThrow(
-      /row 2.*Last Working Date.*DD\/MM\/YYYY/
+      /row 2.*Last Working Date.*DD-MM-YYYY/
     )
-    XLSX.utils.sheet_add_aoa(sheet, [["31/02/2026"]], { origin: "I2" })
+    XLSX.utils.sheet_add_aoa(sheet, [["31-02-2026"]], { origin: "I2" })
     expect(() => parseEmployeeAssignmentWorkbook(workbook)).toThrow(
-      /row 2.*Last Working Date.*DD\/MM\/YYYY/
+      /row 2.*Last Working Date.*DD-MM-YYYY/
     )
   })
 })

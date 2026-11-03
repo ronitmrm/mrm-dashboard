@@ -34,7 +34,7 @@ export function parseTemplateUpload(
   }
   if (entryType === "rm_inward") {
     const failures = rows.flatMap((row, index) => {
-      const errors = text(row.rmInwardDate) ? [] : [`CSV row ${index + 2}: RM Inward Date is required in DD/MM/YYYY format (e.g. 21/09/2026).`]
+      const errors = text(row.rmInwardDate) ? [] : [`CSV row ${index + 2}: RM Inward Date is required in DD-MM-YYYY format (e.g. 21-09-2026).`]
       const quantity = Number(row.rmInwardKg)
       if (!Number.isFinite(quantity) || quantity <= 0) {
         errors.push(`Row ${index + 2}: RM Inward Kg "${text(row.rmInwardKg) || "blank"}" must be a positive number.`)
