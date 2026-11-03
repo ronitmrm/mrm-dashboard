@@ -14,7 +14,7 @@ export function ExistingStockCsvControls() {
       />
       <MasterDataCsvImportButton
         action={importExistingStoreStockCsvAction}
-        successMessage="Existing stock imported. Re-uploading the same Entry References does not add stock again."
+        successMessage="Existing stock CSV uploaded successfully. Re-uploading the same Entry References does not add stock again."
       />
     </>
   )

@@ -99,6 +99,11 @@ export default async function EnquiryImportReviewPage({
           Classification Is Read-Only. Every Nonblank Source Row Requires An
           Explicit Sales Decision Before The Import Is Applied.
         </p>
+        {review.status === "Pending" ? (
+          <p role="status" aria-live="polite" className="text-sm">
+            File uploaded successfully. Review the rows below before applying changes.
+          </p>
+        ) : null}
       </section>
 
  <SectionCard>

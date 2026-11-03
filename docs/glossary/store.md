@@ -294,7 +294,7 @@ the Master Data screen. Existing stock receipt permissions still apply.
 The CSV template uses existing Asset, Supplier and location codes. Each row requires
 a stable, company-unique Entry Reference. Re-uploading identical references and
 details does not add stock again; changed details are rejected. Dates use
-DD/MM/YYYY. Imports are atomic, limited to 100 rows and 100 physical units, and
+DD-MM-YYYY. Imports are atomic, limited to 2,000 rows and 2,000 physical units, and
 report invalid rows without saving part of the file.
 
 **Store Receipt**: One Goods Receipt Note recorded against exactly one Store

@@ -178,6 +178,7 @@ import {
 } from "@/lib/operational-entry-navigation"
 import { operationalEntrySelectionFromContext } from "@/lib/operational-entry-module"
 import { formatRmInwardDate } from "@/lib/rm-inward-date"
+import { formatCsvDate, isCsvDateColumn } from "@/lib/csv-date"
 import { formatCalendarDate, parseCalendarDateInput } from "@workspace/ui/lib/calendar-date"
 import { FormGrid, StandardDialogContent } from "@/components/ui/golden-patterns"
 import { isBlastingMachine } from "@workspace/db/production-cycle"
@@ -10703,6 +10704,7 @@ function DataEntryPanel({
   ) : (
     <>
       <MasterDataCsvClientImportButton
+        key={bulkEntryType}
         disabled={isImporting}
         label={bulkEntryType === "rm_inward" ? "Receive RM CSV" : "Upload CSV"}
         onFile={importEntryFile}
@@ -10752,7 +10754,7 @@ function DataEntryPanel({
       ) : null}
       {operationalTabs && bulkEntryType === "rm_inward" ? (
         <p className="text-xs text-muted-foreground">
-          All CSV dates must be DD/MM/YYYY (e.g. 21/09/2026).
+          All CSV dates must be DD-MM-YYYY (e.g. 21-09-2026).
           {" "}For existing receipts, fill RM Location in the View Records download
           and use Update locations CSV. This updates all receipts for each Job Card
           and date; received kg and planning stay unchanged.
@@ -11942,7 +11944,9 @@ function downloadMasterTableCsv(
   const body = rows.map((row) =>
     columns
       .map((column) => csvCell(
-        (spec.entryType === "rm_inward" || spec.entryType === "work_order") &&
+        isCsvDateColumn(column.key)
+          ? formatCsvDate(row[column.key])
+          : (spec.entryType === "rm_inward" || spec.entryType === "work_order") &&
         ["rmInwardKg", "orderPcs", "orderKg", "requiredRmKg"].includes(column.key)
           ? str(row[column.key])
           : masterTableCellText(row, column.key)

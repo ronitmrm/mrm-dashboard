@@ -1,6 +1,6 @@
 import { read, utils, writeFileXLSX, SSF } from "xlsx"
 import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
-import { csvDateValue } from "./csv-date"
+import { csvDateValue, formatCsvDate } from "./csv-date"
 import type {
   PlanningContext,
   ProposalInput,
@@ -9,7 +9,7 @@ import type {
 } from "./order-acceptance"
 
 type WorkbookRow = Record<string, string | number>
-const rmDateColumn = "RM ready date (DD/MM/YYYY)"
+const rmDateColumn = "RM ready date (DD-MM-YYYY)"
 async function workbookRows(file: File, sheetName?: string) {
   if (file.size > 5 * 1024 * 1024)
     throw new Error("Use an Excel file smaller than 5 MB.")
@@ -44,7 +44,7 @@ async function workbookRows(file: File, sheetName?: string) {
         throw new Error(
           `Row ${rowNumber}: ${rmDateColumn} must be a valid date.`
         )
-      date = `${String(decoded.d).padStart(2, "0")}/${String(decoded.m).padStart(2, "0")}/${String(decoded.y).padStart(4, "0")}`
+      date = `${String(decoded.d).padStart(2, "0")}-${String(decoded.m).padStart(2, "0")}-${String(decoded.y).padStart(4, "0")}`
     }
     return {
       ...row,
@@ -105,7 +105,7 @@ export function exportRmDates(input: ProposalInput, context: PlanningContext) {
             "Line reference": line.id,
             Product: line.part,
             "Quantity pcs": line.quantity,
-            [rmDateColumn]: formatCalendarDate(
+            [rmDateColumn]: formatCsvDate(
               input.existingRmDates[line.id] ?? ""
             ),
           })),
@@ -115,7 +115,7 @@ export function exportRmDates(input: ProposalInput, context: PlanningContext) {
           "Line reference": line.id,
           Product: line.part,
           "Quantity pcs": line.quantity,
-          [rmDateColumn]: formatCalendarDate(line.rmDate),
+          [rmDateColumn]: formatCsvDate(line.rmDate),
         })),
       ],
     },

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { csvDateValue } from "../csv-date"
 import { csvValue, type MasterCsvRow } from "../master-data-csv"
+import { existingStockCsvLimit } from "./existing-stock-csv-columns"
 
 type Reference = { id: string; code: string }
 export function existingStockCsvInputs(
@@ -12,7 +13,10 @@ export function existingStockCsvInputs(
   },
   organizationId: string
 ) {
-  if (rows.length > 100) throw new Error("Upload at most 100 rows at a time.")
+  if (rows.length > existingStockCsvLimit)
+    throw new Error(
+      `Upload at most ${existingStockCsvLimit.toLocaleString("en-IN")} rows at a time.`
+    )
   const seen = new Set<string>()
   let units = 0
   return rows.map((row, index) => {
@@ -49,7 +53,10 @@ export function existingStockCsvInputs(
       if (!Number.isInteger(quantity))
         fail("Non Consumables require a whole number quantity.")
       units += quantity
-      if (units > 100) fail("Upload at most 100 physical units at a time.")
+      if (units > existingStockCsvLimit)
+        fail(
+          `Upload at most ${existingStockCsvLimit.toLocaleString("en-IN")} physical units at a time.`
+        )
     }
     const condition = value("Condition").toLowerCase()
     if (!["usable", "available", "needs repair", "broken"].includes(condition))

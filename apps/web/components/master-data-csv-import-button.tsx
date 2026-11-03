@@ -58,7 +58,7 @@ export function MasterDataCsvImportButton({
   action,
   fields = {},
   fileField = "master_csv_file",
-  successMessage,
+  successMessage = "File uploaded successfully.",
   accept = ".csv,text/csv",
   label = "Upload CSV",
 }: {
@@ -106,8 +106,8 @@ export function MasterDataCsvImportButton({
           description={error}
         />
       ) : null}
-      {success && successMessage ? (
-        <p role="status" className="basis-full text-sm">
+      {success ? (
+        <p role="status" aria-live="polite" className="basis-full text-sm">
           {successMessage}
         </p>
       ) : null}
@@ -123,6 +123,8 @@ export function MasterDataCsvImportButton({
         type="file"
         onChange={(event) => {
           if (event.currentTarget.files?.length) {
+            setSuccess(false)
+            setError(undefined)
             formRef.current?.requestSubmit()
           }
         }}
@@ -149,14 +151,17 @@ export function MasterDataCsvClientImportButton({
   onFile,
   disabled = false,
   label = "Upload CSV",
+  successMessage = "CSV uploaded successfully.",
 }: {
   disabled?: boolean
   label?: string
+  successMessage?: string
   onFile: (file: File) => Promise<void>
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string>()
+  const [success, setSuccess] = useState(false)
   return (
     <>
       {error ? (
@@ -166,6 +171,11 @@ export function MasterDataCsvClientImportButton({
           title="CSV import stopped"
           description={error}
         />
+      ) : null}
+      {success ? (
+        <p role="status" aria-live="polite" className="basis-full text-sm">
+          {successMessage}
+        </p>
       ) : null}
       <input
         accept=".csv,text/csv"
@@ -179,8 +189,10 @@ export function MasterDataCsvClientImportButton({
           if (!file) return
           setPending(true)
           setError(undefined)
+          setSuccess(false)
           try {
             await onFile(file)
+            setSuccess(true)
             input.value = ""
           } catch (error) {
             unstable_rethrow(error)

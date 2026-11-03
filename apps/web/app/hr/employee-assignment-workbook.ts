@@ -182,7 +182,7 @@ function parseSheet(
         throw new Error(
           `${sheetName} row ${rowNumber}: Last Working Date must be a valid date.`
         )
-      dateText = `${String(decoded.d).padStart(2, "0")}/${String(decoded.m).padStart(2, "0")}/${String(decoded.y).padStart(4, "0")}`
+      dateText = `${String(decoded.d).padStart(2, "0")}-${String(decoded.m).padStart(2, "0")}-${String(decoded.y).padStart(4, "0")}`
     }
     const lastWorkingDate = csvDateValue(
       dateText,

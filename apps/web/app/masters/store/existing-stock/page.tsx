@@ -18,6 +18,9 @@ import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
+import { existingStockCsvLimit } from "@/lib/store/existing-stock-csv-columns"
+
+export const maxDuration = 300
 
 export default async function ExistingStockPage({
   searchParams,
@@ -75,10 +78,12 @@ export default async function ExistingStockPage({
             For bulk entry, download the CSV template. Use existing Asset,
             Supplier and Main Store location codes from Master Data. Give each
             row a unique Entry Reference (for example OPEN-001); keep it
-            unchanged on re-upload. Dates: DD/MM/YYYY. Separate multiple serial
-            numbers with |. Condition: Usable or Needs repair. Up to 100 rows
-            and 100 physical units per upload. Unknown purchase details may stay
-            blank. Any invalid row stops the entire import.
+            unchanged on re-upload. Dates: DD-MM-YYYY. Separate multiple serial
+            numbers with |. Condition: Usable or Needs repair. Up to{" "}
+            {existingStockCsvLimit.toLocaleString("en-IN")} rows and{" "}
+            {existingStockCsvLimit.toLocaleString("en-IN")} physical units per
+            upload. Unknown purchase details may stay blank. Any invalid row
+            stops the entire import.
           </p>
           <StoreExistingStockForm
             key={entryKey}

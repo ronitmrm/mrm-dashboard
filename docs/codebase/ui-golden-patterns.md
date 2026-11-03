@@ -101,8 +101,8 @@ advances to month, then two month digits advance to year. Deletion keeps the
 separators and paste fills the same day/month/year slots.
 Format dates with `formatIstDate` / `formatIstDateTime`, or
 `formatCalendarDate` for existing calendar-only values. Keep ISO dates and
-timestamps in storage and calculation; CSV calendar dates must pass the strict
-DD/MM/YYYY import validator before saving.
+timestamps in storage and calculation. CSV uploads and downloads use DD-MM-YYYY;
+the strict import validator checks calendar days before saving.
 
 ## Operational tables
 
@@ -201,6 +201,11 @@ CSV and workbook imports use the shared upload controls in
 through `withCsvImportFeedback`; the control shows that actionable message in an
 adjacent error `StandardState` and keeps the selected file available for
 correction or retry. Next.js navigation errors must still be rethrown.
+Successful CSV imports must show an adjacent, politely announced success message.
+The shared upload buttons provide a default; retain more specific confirmations
+where supplied. Clear the previous success when another upload starts, and never
+show success for a failed import or an unconfirmed preview. Redirecting import
+flows must show confirmation on the destination screen.
 
 Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 

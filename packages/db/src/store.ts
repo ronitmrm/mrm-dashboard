@@ -9,6 +9,7 @@ import {
 } from "./master-duplicate"
 import { createHash } from "node:crypto"
 import { recordExistingStock, listExistingStockEntries, type ExistingStockInput } from "./store-existing-stock"
+import { recordExistingStockBatch } from "./store-existing-stock-batch"
 
 import type { PoolClient } from "pg"
 
@@ -4867,6 +4868,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     recordExistingStock(input: ExistingStockInput) {
       return withTransaction(pool, client => recordExistingStock(client, input))
+    },
+
+    recordExistingStockBatch(inputs: ExistingStockInput[]) {
+      return withTransaction(pool, client => recordExistingStockBatch(client, inputs))
     },
 
     listExistingStockEntries(organizationId: string) {

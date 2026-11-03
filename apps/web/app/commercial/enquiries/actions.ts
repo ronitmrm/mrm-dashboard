@@ -1111,7 +1111,7 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
       })
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
-  redirect(`${enquiriesPath}/${enquiryId}`)
+  redirect(`${enquiriesPath}/${enquiryId}?importApplied=1`)
 }
 
 export async function completeFollowupAction(formData: FormData) {

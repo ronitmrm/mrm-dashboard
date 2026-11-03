@@ -1029,7 +1029,7 @@ export async function issueRemainingStoreRequisitionBatchAction(
 }
 
 export async function importExistingStoreStockCsvAction(formData: FormData) {
-  let rowNumber = 2
+  const rowNumber = 2
   try {
     await withStore("store.receipts.receive", async (_repository, actorUserId, organizationId, _email, recordedBy) => {
       const file = formData.get("master_csv_file")
@@ -1042,18 +1042,14 @@ export async function importExistingStoreStockCsvAction(formData: FormData) {
           batch.listItemTypes(organizationId), batch.listLocations(organizationId), batch.listSuppliers(organizationId),
         ])
         const inputs = existingStockCsvInputs(rows, { items, locations, suppliers }, organizationId)
-        const ordered = inputs.map((input, index) => ({ input, row: index + 2 })).sort((a, b) => a.input.itemTypeId.localeCompare(b.input.itemTypeId) || a.input.entryKey.localeCompare(b.input.entryKey))
-        for (const { input, row } of ordered) {
-          rowNumber = row
-          await batch.recordExistingStock({ ...input, organizationId, actorUserId, recordedBy })
-        }
+        await batch.recordExistingStockBatch(inputs.map(input => ({ ...input, organizationId, actorUserId, recordedBy })))
         } finally { await batch.close() }
       })
     })
   } catch (error) {
     unstable_rethrow(error)
     const message = error instanceof Error ? error.message : "CSV import failed."
-    return { error: `${message.startsWith("CSV row") ? "" : `CSV row ${rowNumber}: `}${message} No rows were imported.` }
+    return { error: `${message.startsWith("CSV row") ? "" : `CSV row ${rowNumber}: `}${message}${message.includes("No rows were imported.") ? "" : " No rows were imported."}` }
   }
   revalidateStore()
   revalidatePath("/masters/store/existing-stock")
