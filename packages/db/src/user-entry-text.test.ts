@@ -16,8 +16,12 @@ test("preserves the parallel-machine assignment mode enum", () => {
   expect(
     normalizeUserEnteredPayload({
       assignmentMode: "add_parallel_machine",
+      parallelReviewFingerprint: "abcdef012345",
+      parallelWipDecision: "start_early",
     })
   ).toEqual({
     assignmentMode: "add_parallel_machine",
+    parallelReviewFingerprint: "abcdef012345",
+    parallelWipDecision: "start_early",
   })
 })

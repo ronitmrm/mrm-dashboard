@@ -24,6 +24,7 @@ import { ShopFloorConflictError } from "./production-shop-floor"
 import { rawMaterialRejectionBalance } from "./rejection-domain"
 import { readRequiredRawMaterialKg } from "./job-card-workspace"
 import { createJobReworkRoute, rejectJobRework, type ReworkRouteSetup } from "./job-card-rework"
+import { readParallelMachineReview, validateParallelMachineReview, type ParallelMachineCandidate, type ParallelWipDecision } from "./parallel-machine-planning"
 import {
   normalizeProductionFloorCode,
   ProductionUnitAccessError,
@@ -33,7 +34,7 @@ import {
 } from "./production-floors"
 
 
-type InterruptedSetupInput = {
+export type InterruptedSetupInput = {
   jobCardNumber: string
   machineNumber: string
   setupNumber: number
@@ -55,7 +56,7 @@ type QueueBeforeSetupInput = {
   targetSetupNumber?: number | null
 }
 
-type QueuePlacementInput = {
+export type QueuePlacementInput = {
   queueBeforeSetups?: QueueBeforeSetupInput[]
   targetJobCardNumber: string
   targetMachineNumber: string
@@ -2915,6 +2916,17 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       })
     },
 
+    async reviewParallelMachine(input: ParallelMachineCandidate & { organizationId: string; productionFloorCode?: string }) {
+      return transaction(pool, async client => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        return readParallelMachineReview(client, input, {
+          jobCardNumber: input.jobCardNumber, setupNumber: input.setupNumber,
+          toMachineNumber: input.toMachineNumber, queuePlacements: input.queuePlacements,
+          interruptedSetups: input.interruptedSetups,
+        })
+      })
+    },
+
     async recordPlanOverride(input: {
       actorUserId?: string | null
       assignmentMode?: PlanOverrideAssignmentMode
@@ -2927,9 +2939,15 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       reason: string
       setupNumber?: number | null
       toMachineNumber: string
+      parallelWipDecision?: ParallelWipDecision
+      parallelReviewFingerprint?: string
     }) {
       return transaction(pool, async (client) => {
         const assignmentMode = input.assignmentMode ?? "move"
+        // Interactive approvals start their own serializable transaction. Other
+        // callers may already own a transaction (e.g. an approved delivery plan).
+        if (assignmentMode === "add_parallel_machine" && input.parallelReviewFingerprint)
+          await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         if (assignmentMode === "add_parallel_machine" && !input.setupNumber) {
           throw new Error("Setup number is required to add a parallel machine.")
         }
@@ -3126,7 +3144,17 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           if (existing.rows[0]?.setup_two_started) throw new Error("Setup 2 has already started; use its existing plan.")
           if (existing.rows[0]?.already_reserved) throw new Error("Setup 2 already has an early reservation. Reverse it before changing machines.")
         }
-        const sourcePayload = { ...input, assignmentMode, interruptedSetups }
+        if (assignmentMode === "add_parallel_machine") {
+          const review = await readParallelMachineReview(client, input, {
+            jobCardNumber: input.jobCardNumber, setupNumber: input.setupNumber!,
+            toMachineNumber: input.toMachineNumber, queuePlacements: input.queuePlacements,
+            interruptedSetups: input.interruptedSetups,
+          })
+          validateParallelMachineReview(review, input.parallelWipDecision, input.parallelReviewFingerprint)
+        }
+        const sourcePayload = { ...input, assignmentMode, interruptedSetups,
+          ...(assignmentMode === "add_parallel_machine" ? { allowEarlyWipStart: input.parallelWipDecision === "start_early" } : {}),
+        }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.plan_override_events (
