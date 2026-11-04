@@ -28,6 +28,7 @@ type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
 type DashboardBuildContext = {
   organizationId: string
+  productionFloorCode?: ProductionFloorCode
   forceRefresh?: boolean
   builderVersion?: string
   persistSegments?: boolean
@@ -509,7 +510,8 @@ function mapSelectedSourceRows(rows: SelectedSourceRow[]) {
 
 export async function readCanonicalDashboardSource(
   client: DashboardQueryClient,
-  organizationId: string
+  organizationId: string,
+  productionFloorCode?: ProductionFloorCode
 ): Promise<CanonicalDashboardSource> {
   const result = await client.query<GroupedSourceRow>(
     `
@@ -661,8 +663,10 @@ export async function readCanonicalDashboardSource(
     `,
     [
       organizationId,
-      JSON.stringify(floorSourceBudgets(dataEntrySourceBudgets)),
-      JSON.stringify(floorSourceBudgets(physicalSourceBudgets)),
+      JSON.stringify(floorSourceBudgets(dataEntrySourceBudgets).filter(budget => !productionFloorCode ||
+        budget.floor_code === productionFloorCode || companyWideMasterEntryTypes.has(budget.category))),
+      JSON.stringify(floorSourceBudgets(physicalSourceBudgets).filter(budget => !productionFloorCode ||
+        budget.floor_code === productionFloorCode)),
       JSON.stringify(productionFloors.map((floor) => floor.code)),
     ]
   )
@@ -784,7 +788,7 @@ export async function buildCanonicalDashboardReadModel(
   }
 }
 
-async function buildDashboardReadModel(
+export async function readCanonicalPlanningInputs(
   client: DashboardQueryClient,
   context: DashboardBuildContext
 ) {
@@ -794,7 +798,8 @@ async function buildDashboardReadModel(
     .map(segment => [segment.production_floor_code, segment]))
   const source = await readCanonicalDashboardSource(
     client,
-    context.organizationId
+    context.organizationId,
+    context.productionFloorCode
   )
   const currentShopFloorStates = await client.query<CurrentShopFloorStateRow>(
     `SELECT floor.code AS production_floor_code,
@@ -1013,6 +1018,15 @@ async function buildDashboardReadModel(
   }
 
   const preparedFloors = new Map(productionFloors.map(floor => [floor.code, prepareFloorInput(floor.code)]))
+  return { preparedFloors, source, sourceAsOf, previousSegments, dataEntries, finishBaselineRows }
+}
+
+async function buildDashboardReadModel(
+  client: DashboardQueryClient,
+  context: DashboardBuildContext
+) {
+  const { preparedFloors, source, sourceAsOf, previousSegments, dataEntries, finishBaselineRows } =
+    await readCanonicalPlanningInputs(client, context)
   function fingerprint(floorCode: ProductionFloorCode) {
     const prepared = preparedFloors.get(floorCode)!
     const { previousMachinePlanDetailRows: _continuity, ...sourceInput } = prepared.input

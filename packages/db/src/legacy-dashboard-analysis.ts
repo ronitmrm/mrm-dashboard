@@ -355,7 +355,8 @@ function plannerActionLogRows({
     ...plannerPriorities.map(row => ({ ...row, actionType: "Priority" })),
     ...machineConstraints.map(row => ({ ...row, actionType: "Machine Unavailable" })),
     ...planOverrides.map(row => ({ ...row,
-      actionType: isEarlyDownstreamOverride(row) ? "Early Downstream Setup" : isParallelMachineOverride(row) ? "Parallel Machine Added" : "Machine Switch",
+      actionType: isEarlyDownstreamOverride(row) ? "Early Downstream Setup" : isParallelMachineOverride(row)
+        ? row.allowEarlyWipStart === true ? "Parallel Machine Added — Early WIP Start" : "Parallel Machine Added" : "Machine Switch",
     })),
     ...routeChanges.map(row => ({ ...row, actionType: "Route Change" })),
     ...rawMaterialRejections.map(row => ({ ...row, actionType: "Raw Material Rejection" })),
@@ -1304,7 +1305,10 @@ function buildProductionControl({
         if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
         if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
         if (prodDate) setupRec.dates.add(prodDate);
-        setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
+        setupRec.outputQty += Math.max(
+          safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")),
+          safeNumber(rowValue(row, "quantityGood", "ACTUAL QTY IN PCS", "ACTUAL QTY")) + rejectionTotalFromRow(row),
+        );
         setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
         setupRec.rows += 1;
         if (machine) setupRec.machines.add(machine);
@@ -3586,8 +3590,11 @@ function initializeMachinePlanDetails(
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
       const override = overrideDecision.override;
-      const earlyDownstream = Boolean(override && isEarlyDownstreamOverride(override) && routeIndex > 0);
       const parallelOverrides = overrideDecision.parallelOverrides;
+      const earlyOverride = override && isEarlyDownstreamOverride(override) ? override
+        : [...new Map(parallelOverrides.map(decision => [canonicalKey(rowText(decision, "toMachine", "TO MACHINE")), decision])).values()]
+          .find(decision => decision.allowEarlyWipStart === true);
+      const earlyDownstream = Boolean(earlyOverride && routeIndex > 0);
       const planOverrideConflict = overrideDecision.conflict;
       const cycle = cycleByKey.get(masterKey(route));
       const productionActualAnyMachine = rawBySetupAnyMachine.get(productionSetupBaseKey({
@@ -3609,6 +3616,9 @@ function initializeMachinePlanDetails(
       const setupStock = historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo: displaySetupNo }))
         ?? historicalBySetup.get(productionSetupBaseKey({ jcNo: rowText(row, "jcNo"), partCode, setupNo }));
       const setupProcessedQty = setupStock?.outputQty ?? 0;
+      const carriedGoodQty = routeChangeRemainingSetups.length
+        ? Math.max((setupStock?.actualQty ?? 0) - setupGoodQty, 0) : 0;
+      const upstreamConsumedQty = routeChangeRemainingSetups.length ? setupProcessedQty : 0;
       const physicalWipQty = Math.max((upstreamActual?.actualQty ?? 0) - setupProcessedQty, 0);
       const upstreamPlans = previousRoute ? details.filter((plan) =>
         rowText(plan, "jcNo") === rowText(row, "jcNo")
@@ -3763,7 +3773,7 @@ function initializeMachinePlanDetails(
         planningCalendar,
       });
       if (earlyDownstream && !assignedMachines.some((machine) =>
-        canonicalKey(machine) === canonicalKey(rowText(override ?? {}, "toMachine", "TO MACHINE")))) {
+        canonicalKey(machine) === canonicalKey(rowText(earlyOverride ?? {}, "toMachine", "TO MACHINE")))) {
         routePlanningBlocked = true;
         continue;
       }
@@ -3804,15 +3814,17 @@ function initializeMachinePlanDetails(
         const targetMachine = canonicalKey(rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE"));
         return assignedMachines.some((machine) => canonicalKey(machine) === targetMachine);
       });
-      if (previousRoute) {
-        const actualWipReady = actualWipBufferAvailable({
-          orderPcs: setupOrderPcs,
+      const wipReadiness = previousRoute ? actualWipBufferReadiness({
+          orderPcs: routeChangeRemainingSetups.length ? Math.max(setupOrderPcs - setupGoodQty, 0) : setupOrderPcs,
           previousCycle: cycleByKey.get(masterKey(previousRoute)),
           nextCycle: cycle,
           nextMachineCount: assignedMachines.length,
           actuals: upstreamActual ? [upstreamActual] : [],
+          consumedQty: upstreamConsumedQty,
           planningCalendar,
-        });
+        }) : undefined;
+      if (wipReadiness) {
+        const actualWipReady = wipReadiness.ready;
         operationReadyCanPullForward = actualWipReady || (earlyDownstream && physicalWipQty > 0);
         if (!actualWipReady && !earlyDownstream && !setupHasExecution && !simulation) {
           routePlanningBlocked = true;
@@ -4082,6 +4094,7 @@ function initializeMachinePlanDetails(
         plannerParallelMachineTargets: appliedParallelOverrides.map((parallelOverride) => rowText(parallelOverride, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE")),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : earlyDownstream ? "Planner-approved early downstream setup" : parallelAssignmentOverride ? "Planner-added parallel machine" : appliedParallelOverrides.length ? "Planner-retained parallel machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
+        wipReadiness,
         planningAssumption: `${planningCalendar.productiveHoursPerDay} hrs/day; Universal Planning Calendar holidays and closed Fridays affect finish forecasts only; setup starts may use off dates; parallel setup WIP is pooled after each machine stream produces it; forecast WIP does not reserve a downstream physical machine unless the Planner approves early Setup 2; normally an unstarted downstream setup is assigned only after recorded WIP satisfies its pooled buffer; the early exception still requires recorded WIP before machine start and limits output to that supply; recorded WIP can feed the next setup on the same calendar date once its pooled buffer is ready; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup finish cannot precede previous setup finish; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; compatible sequential setups and matching Job Cards prefer the preceding machine when separate capacity does not finish earlier; automatic parallel machines require at least ${minimumParallelMachineWorkDays} production days each; a planner-added compatible machine overrides only that minimum-run split rule`,
         };
         Object.defineProperty(detail, "__planningMeta", {
@@ -4093,6 +4106,8 @@ function initializeMachinePlanDetails(
             canPullForward: operationReadyCanPullForward,
             orderPcs: machineOrderPcs,
             totalOrderPcs: setupOrderPcs,
+            carriedGoodQty,
+            upstreamConsumedQty,
             cycle,
             productionActual: !machineStarted && productionActual ? { ...productionActual, startDate: "" } : productionActual,
             previousSetupNo: setupStepKey(previousSetupNo, optionNumber) || previousSetupNo,
@@ -4107,6 +4122,7 @@ function initializeMachinePlanDetails(
       const bufferArgs = {
         productionStreams: routeProductionStreams,
         orderPcs: setupOrderPcs,
+        carriedGoodQty,
         previousCycle: cycle,
         nextCycle,
         nextMachineCount: 1,
@@ -5087,9 +5103,13 @@ function calculateRefreshSetupDependencyReadyDates(details: Array<Record<string,
       const productionEndDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionEndDate"))).filter(Boolean);
       const actuals = uniqueProductionActuals(group.rows.map((row) => planningMeta(row).productionActual).filter(Boolean) as PlanningProductionActual[]);
       const setupOrderPcs = Math.max(...group.rows.map((row) => planningMeta(row).totalOrderPcs ?? planningMeta(row).orderPcs ?? 0), 0);
+      const carriedGoodQty = Math.max(...group.rows.map(row => planningMeta(row).carriedGoodQty ?? 0), 0);
+      const consumedQty = Math.max(...(nextGroup?.rows ?? []).map(row => planningMeta(row).upstreamConsumedQty ?? 0), 0);
       const bufferReadyDate = nextGroup ? plannedWipBufferReadyDate({
         productionStreams,
         orderPcs: setupOrderPcs,
+        carriedGoodQty,
+        consumedQty,
         previousCycle: currentCycle,
         nextCycle,
         nextMachineCount: Math.max(1, nextGroup.rows.length),
@@ -6776,6 +6796,8 @@ function planningMeta(row: Record<string, unknown>) {
     continuityProtected?: boolean;
     orderPcs?: number;
     totalOrderPcs?: number;
+    carriedGoodQty?: number;
+    upstreamConsumedQty?: number;
     cycle?: Record<string, unknown>;
     productionActual?: PlanningProductionActual;
     machineUnavailableWindows?: MachineUnavailableWindow[];
@@ -7767,6 +7789,7 @@ function cycleRevisionEffectiveDate(
 export function plannedWipBufferReadyDate(input: Parameters<typeof calculateWipBufferReadyDate>[0]) {
   const computation = planningComputation(input.planningCalendar ?? defaultPlanningCalendar);
   const key = JSON.stringify([input.productionStreams, input.orderPcs,
+    input.carriedGoodQty ?? 0, input.consumedQty ?? 0,
     computation.identity(input.previousCycle), computation.identity(input.nextCycle), input.nextMachineCount ?? 1,
     (input.actuals ?? []).map(actual => [actual.machine, actual.startDate, actual.latestDate,
       actual.outputQty, actual.actualQty, [...actual.dates]])]);
@@ -7779,6 +7802,8 @@ function calculateWipBufferReadyDate({
   previousCycle,
   nextCycle,
   nextMachineCount = 1,
+  carriedGoodQty = 0,
+  consumedQty = 0,
   actuals = [],
   planningCalendar = defaultPlanningCalendar,
 }: {
@@ -7787,6 +7812,8 @@ function calculateWipBufferReadyDate({
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
   nextMachineCount?: number;
+  carriedGoodQty?: number;
+  consumedQty?: number;
   actuals?: PlanningProductionActual[];
   planningCalendar?: PlanningCalendar;
 }) {
@@ -7845,7 +7872,13 @@ function calculateWipBufferReadyDate({
   const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 
-  const actualQty = Math.min(orderPcs, sum(actualStreams.map((stream) => stream.quantity)));
+  // Route-change quantities describe the new execution only. Old good stock
+  // supplies downstream work without reserving its former machines. Deduct
+  // downstream output, including rejects, before evaluating the remaining run.
+  const supplyOrderPcs = orderPcs + carriedGoodQty;
+  orderPcs = Math.max(supplyOrderPcs - consumedQty, 0);
+  if (!orderPcs) return "";
+  const actualQty = Math.min(orderPcs, Math.max(0, sum(actualStreams.map(stream => stream.quantity)) + carriedGoodQty - consumedQty));
   const stoppedMachineUnlockQty = Math.min(orderPcs, nextDailyQty * minimumParallelMachineWorkDays);
   const stoppedMachineWipCanStartDownstream = !actualStreams.length || actualQty >= stoppedMachineUnlockQty;
   const bufferDays = previousDailyQty < nextDailyQty ? 3 : 2;
@@ -7854,10 +7887,11 @@ function calculateWipBufferReadyDate({
     ? supplyStreams.map((stream) => stream.startDate).sort()[0]
     : futurePlannedStreams.map((stream) => stream.startDate).sort()[0];
   if (!firstStart) return "";
-  let date = firstStart;
+  let date = carriedGoodQty || consumedQty ? maxDateValue(firstStart, currentPlanningProductionDate(planningCalendar)) : firstStart;
   const lastPossibleDate = addDays(maxDateValue(...supplyStreams.map((stream) => stream.endDate)), 1, planningCalendar)
     || addDays(date, Math.max(365, Math.ceil(orderPcs / previousDailyQty) + supplyStreams.length + 30), planningCalendar);
-  const availableWipQtyThroughDate = pooledWipSupplyThroughDate(supplyStreams, orderPcs, planningCalendar);
+  const supplyThroughDate = pooledWipSupplyThroughDate(supplyStreams, supplyOrderPcs, planningCalendar);
+  const availableWipQtyThroughDate = (date: string) => Math.min(orderPcs, Math.max(0, supplyThroughDate(date) + carriedGoodQty - consumedQty));
 
   while (date && date <= lastPossibleDate) {
     const producedQty = availableWipQtyThroughDate(date);
@@ -7977,11 +8011,16 @@ function pooledWipSupplyThroughDate(streams: WipProductionStream[], orderPcs: nu
   };
 }
 
-function actualWipBufferAvailable({
+function actualWipBufferAvailable(input: Parameters<typeof actualWipBufferReadiness>[0]) {
+  return actualWipBufferReadiness(input).ready;
+}
+
+function actualWipBufferReadiness({
   orderPcs,
   previousCycle,
   nextCycle,
   nextMachineCount = 1,
+  consumedQty = 0,
   actuals = [],
   planningCalendar = defaultPlanningCalendar,
 }: {
@@ -7989,13 +8028,12 @@ function actualWipBufferAvailable({
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
   nextMachineCount?: number;
+  consumedQty?: number;
   actuals?: Array<Pick<PlanningProductionActual, "latestDate" | "outputQty" | "actualQty" | "dates">>;
   planningCalendar?: PlanningCalendar;
 }) {
-  if (!orderPcs || !nextCycle || !actuals.length) return false;
   const previousDailyQty = cycleDailyQty(previousCycle, planningCalendar);
   const nextDailyQty = cycleDailyQty(nextCycle, planningCalendar) * Math.max(1, nextMachineCount);
-  if (!previousDailyQty || !nextDailyQty) return false;
   const actualDailyQty = sum(actuals.map((actual) => {
     const dateCount = actual.dates.size || 1;
     return Math.max(actual.actualQty, 0) / dateCount;
@@ -8005,8 +8043,14 @@ function actualWipBufferAvailable({
     : actualDailyQty || previousDailyQty;
   const bufferDays = effectivePreviousDailyQty < nextDailyQty ? 3 : 2;
   const requiredBufferQty = Math.min(orderPcs, nextDailyQty * bufferDays);
-  const actualQty = Math.min(orderPcs, sum(actuals.map((actual) => Math.max(actual.actualQty, 0))));
-  return actualQty >= requiredBufferQty;
+  const actualQty = Math.min(orderPcs, Math.max(0, sum(actuals.map((actual) => Math.max(actual.actualQty, 0))) - consumedQty));
+  return {
+    ready: Boolean(orderPcs && previousDailyQty && nextDailyQty && actualQty >= requiredBufferQty),
+    availableQty: actualQty,
+    requiredQty: requiredBufferQty,
+    bufferDays,
+    machineCount: Math.max(1, nextMachineCount),
+  };
 }
 
 function cycleDailyQty(
@@ -9093,6 +9137,8 @@ function refreshSetupDependencyReadyDates(
             meta.baseReadyDate,
             row.earlyDownstreamWipException,
             meta.totalOrderPcs,
+            meta.carriedGoodQty,
+            meta.upstreamConsumedQty,
             meta.orderPcs,
             meta.canPullForward,
             row.physicalWipQty,

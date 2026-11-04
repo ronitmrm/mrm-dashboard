@@ -14,6 +14,8 @@ import {
   type SetStateAction,
 } from "react"
 import { ReworkRouteEditor } from "@/components/rework-route-editor"
+import { ParallelMachineReadinessReview } from "@/components/parallel-machine-readiness-review"
+import type { ParallelMachineReview, ParallelWipDecision } from "@workspace/db"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -4896,7 +4898,7 @@ function ParallelMachinePlannerForm({
   submitAction,
 }: {
   productionControl: DashboardPayload
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  submitAction: SubmitAction
 }) {
   const plannedRows = asArray(productionControl.machinePlanDetailRows)
   const machineRows = asArray(productionControl.machinePlanningRows)
@@ -4917,6 +4919,10 @@ function ParallelMachinePlannerForm({
     Record<string, string>
   >({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [parallelCalculation, setParallelCalculation] = useState<{ key: string; review: ParallelMachineReview } | null>(null)
+  const [calculationBusy, setCalculationBusy] = useState(false)
+  const [calculationError, setCalculationError] = useState("")
+  const [parallelDecision, setParallelDecision] = useState<ParallelWipDecision | "">("")
   const itemOptions = useMemo(
     () =>
       uniqueValues(
@@ -5035,6 +5041,31 @@ function ParallelMachinePlannerForm({
       ),
     [queueAfterByRow, queueReviewGroups, selectedRows]
   )
+  const parallelCandidate = {
+    assignmentMode: "add_parallel_machine", target, setupNo, toMachine,
+    productionFloorCode: productionFloorFromLocation(),
+    interruptedSetups: selectedTargetRows.map(row => ({ jcNo: jobCardNumber(row), setupNo: displayValue(row.setupNo), machine: machineValue(row, "machine") })),
+    queuePlacements: proposedQueuePlacements,
+  }
+  const calculationKey = JSON.stringify([parallelCandidate, selectedRows, queueReviewGroups])
+  const calculatedReview = parallelCalculation?.key === calculationKey ? parallelCalculation.review : null
+
+  async function calculateReadiness() {
+    if (calculationBusy) return
+    setCalculationBusy(true)
+    setCalculationError("")
+    setParallelCalculation(null)
+    setParallelDecision("")
+    try {
+      const response = await fetch("/api/plan-override", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...parallelCandidate, preview: true }) })
+      const result: { review?: ParallelMachineReview; error?: string } = await response.json()
+      if (!response.ok || !result.review) throw new Error(result.error || "Unable to calculate start readiness.")
+      setParallelCalculation({ key: calculationKey, review: result.review })
+    } catch (error) {
+      setCalculationError(error instanceof Error ? error.message : "Unable to calculate start readiness.")
+    } finally { setCalculationBusy(false) }
+  }
+
   const canReview = Boolean(
     selectedItem &&
     target &&
@@ -5049,10 +5080,15 @@ function ParallelMachinePlannerForm({
     canReview &&
     reviewReady &&
     queueReviewConfirmed &&
-    Boolean(reason.trim())
+    Boolean(reason.trim()) &&
+    Boolean(calculatedReview && (calculatedReview.ready || parallelDecision)) &&
+    !calculationBusy
 
   function resetReview() {
     setReviewReady(false)
+    setParallelCalculation(null)
+    setParallelDecision("")
+    setCalculationError("")
     setQueueReviewConfirmed(false)
     setSelectedTargetInterruptions({})
     setQueueAfterByRow({})
@@ -5079,13 +5115,18 @@ function ParallelMachinePlannerForm({
         })),
         queuePlacements: proposedQueuePlacements,
         reason,
-      })
+        parallelReviewFingerprint: calculatedReview?.fingerprint,
+        parallelWipDecision: parallelDecision || undefined,
+      }, { throwOnError: true })
       setSelectedItem("")
       setTarget("")
       setSetupNo("")
       setToMachine("")
       setReason("")
       resetReview()
+    } catch (error) {
+      setCalculationError(error instanceof Error ? error.message : 'Unable to save the parallel plan.')
+      setParallelCalculation(null)
     } finally {
       setIsSubmitting(false)
     }
@@ -5248,6 +5289,8 @@ function ParallelMachinePlannerForm({
             }
             queueAfterByRow={queueAfterByRow}
             onQueueAfterChange={(rowKey, value) => {
+              setParallelCalculation(null)
+              setParallelDecision('')
               setQueueReviewConfirmed(false)
               setQueueAfterByRow((current) => {
                 const next = { ...current }
@@ -5267,6 +5310,7 @@ function ParallelMachinePlannerForm({
             <CheckCircle2 className="size-4" />
             {queueReviewConfirmed ? "Queue confirmed" : "Confirm queue"}
           </Button>
+          {queueReviewConfirmed ? <ParallelMachineReadinessReview review={calculatedReview} busy={calculationBusy} error={calculationError} decision={parallelDecision} onCalculate={() => void calculateReadiness()} onDecision={setParallelDecision} /> : null}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -5276,7 +5320,7 @@ function ParallelMachinePlannerForm({
           disabled={!canReview || isSubmitting || (reviewReady && !canSave)}
         >
           <Plus className="size-4" />
-          {reviewReady ? "Add Machine And Recalculate" : "Review Parallel Plan"}
+          {reviewReady ? parallelDecision === "start_early" ? "Approve Early Start And Add Machine" : parallelDecision === "queue" ? "Queue Machine For Calculated Start" : "Add Machine And Recalculate" : "Review Parallel Plan"}
         </Button>
         {reviewReady ? (
           <Button

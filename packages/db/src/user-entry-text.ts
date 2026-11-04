@@ -31,6 +31,8 @@ const preservedFieldNames = new Set([
   "operator",
   "option",
   "part",
+  "parallelreviewfingerprint",
+  "parallelwipdecision",
   "phase",
   "planningaction",
   "planningmode",

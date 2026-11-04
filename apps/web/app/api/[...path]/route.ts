@@ -1485,6 +1485,20 @@ async function post(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "plan-override") {
+      if (body.assignmentMode === "add_parallel_machine" && body.preview === true) {
+        const review = await withPlanningRepository(request, "planning.override.write",
+          ({ organizationId, repository }) => repository.reviewParallelMachine({
+            organizationId, productionFloorCode: requiredProductionFloor(body.productionFloorCode),
+            jobCardNumber: requiredDashboardText(body.target, "Job Card"),
+            setupNumber: planningSetupNumber(body.setupNo) || 0,
+            toMachineNumber: requiredDashboardText(body.toMachine, "Machine"),
+            interruptedSetups: normalizeInterruptedSetups(body.interruptedSetups),
+            queuePlacements: normalizeQueuePlacements(body.queuePlacements),
+          }))
+        return json({ review })
+      }
+      if (body.assignmentMode === "add_parallel_machine" && !text(body.parallelReviewFingerprint))
+        throw new RouteError(400, "Calculate and review the parallel plan before saving.")
       const result = await withPlanningRepository(
         request,
         "planning.override.write",
@@ -1508,6 +1522,9 @@ async function post(request: NextRequest, context: RouteContext) {
             reason: String(body.reason || "Planner machine override"),
             setupNumber: planningSetupNumber(body.setupNo),
             toMachineNumber: String(body.toMachine || ""),
+            parallelReviewFingerprint: text(body.parallelReviewFingerprint) || undefined,
+            parallelWipDecision: body.parallelWipDecision === "queue" || body.parallelWipDecision === "start_early"
+              ? body.parallelWipDecision : undefined,
           })
       )
       return json(

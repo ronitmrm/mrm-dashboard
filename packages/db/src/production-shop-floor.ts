@@ -904,8 +904,8 @@ async function assertEarlyDownstreamWip(
     excludeProductionEntryId?: string
   }
 ) {
-  const exception = await client.query<{ upstream_setup_id: string; target_machine_id: string }>(
-    `SELECT prior.id AS upstream_setup_id, decision.target_machine_id
+  const exception = await client.query<{ upstream_setup_id: string; target_machine_id: string; assignment_mode: string }>(
+    `SELECT prior.id AS upstream_setup_id, decision.target_machine_id, decision.assignment_mode
      FROM manufacturing.operation_setups setup
      JOIN LATERAL (
        SELECT id FROM manufacturing.operation_setups
@@ -914,9 +914,11 @@ async function assertEarlyDownstreamWip(
        ORDER BY sequence DESC LIMIT 1
      ) prior ON true
      JOIN LATERAL (
-       SELECT target_machine_id FROM manufacturing.plan_override_events
+       SELECT target_machine_id, source_payload->>'assignmentMode' AS assignment_mode FROM manufacturing.plan_override_events
        WHERE work_order_id = $1 AND operation_setup_id = setup.id
-         AND source_payload->>'assignmentMode' = 'early_downstream'
+         AND (source_payload->>'assignmentMode' = 'early_downstream'
+           OR (source_payload->>'assignmentMode' = 'add_parallel_machine'
+             AND source_payload->>'allowEarlyWipStart' = 'true'))
          AND reversed_at IS NULL
        ORDER BY occurred_at DESC LIMIT 1
      ) decision ON true
@@ -925,17 +927,20 @@ async function assertEarlyDownstreamWip(
   )
   const upstreamSetupId = exception.rows[0]?.upstream_setup_id
   if (!upstreamSetupId) return
-  if (exception.rows[0]?.target_machine_id !== input.machineId) {
+  if (exception.rows[0]?.assignment_mode === "early_downstream" && exception.rows[0]?.target_machine_id !== input.machineId) {
     throw new ShopFloorConflictError("Use the machine reserved by the Planner's early Setup 2 decision.")
   }
   await client.query("SELECT id FROM manufacturing.work_orders WHERE id = $1 FOR UPDATE", [input.workOrderId])
   const stock = await client.query<{ upstream_good: string; downstream_processed: string }>(
-    `SELECT COALESCE(sum(quantity_good) FILTER (WHERE operation_setup_id = $2), 0)::text AS upstream_good,
+    `SELECT COALESCE(sum(entry.quantity_good) FILTER (WHERE setup.setup_number = upstream.setup_number), 0)::text AS upstream_good,
             COALESCE(sum(quantity_good + quantity_rejected) FILTER (
-              WHERE operation_setup_id = $3 AND id IS DISTINCT FROM $4::uuid), 0)::text AS downstream_processed
-     FROM manufacturing.production_entries
-     WHERE work_order_id = $1 AND reversed_at IS NULL
-       AND operation_setup_id IN ($2, $3)`,
+              WHERE setup.setup_number = downstream.setup_number AND entry.id IS DISTINCT FROM $4::uuid), 0)::text AS downstream_processed
+     FROM manufacturing.production_entries entry
+     JOIN manufacturing.operation_setups setup ON setup.id = entry.operation_setup_id
+     JOIN manufacturing.operation_setups upstream ON upstream.id = $2
+     JOIN manufacturing.operation_setups downstream ON downstream.id = $3
+     WHERE entry.work_order_id = $1 AND entry.reversed_at IS NULL
+       AND setup.setup_number IN (upstream.setup_number, downstream.setup_number)`,
     [input.workOrderId, upstreamSetupId, input.operationSetupId, input.excludeProductionEntryId ?? null]
   )
   const available = Number(stock.rows[0]?.upstream_good ?? 0) - Number(stock.rows[0]?.downstream_processed ?? 0)

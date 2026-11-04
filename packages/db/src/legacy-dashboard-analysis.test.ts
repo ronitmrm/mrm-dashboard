@@ -1,6 +1,65 @@
 import { describe, expect, test } from "vitest"
 
-import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis"
+import { buildLegacyDashboardSnapshot, buildLegacyDashboardSnapshotWithPlanning } from "./legacy-dashboard-analysis"
+import { calculateParallelMachineReview, validateParallelMachineReview } from "./parallel-machine-planning"
+
+test("changed-route parallel setup uses carried stock without reclaiming old machines or reusing consumed pieces", () => {
+  const createdAt = "2026-11-01T10:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const production = (optionNumber: string, setupNo: string, machine: string, outputQty: number, actualQty = outputQty) => ({
+    jobCard: "P1264", partCode: "M1789", optionNumber, setupNo, machine, machineType: "CNC", operatorId: "OP",
+    prodDate: optionNumber === "1" ? "2026-10-31" : "2026-11-03", createdAt: optionNumber === "1" ? "2026-10-31T10:00:00Z" : "2026-11-03T10:00:00Z",
+    outputQty, actualQty, rejectQty: outputQty - actualQty, targetQty: 43600,
+  })
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const,
+    productionEntries: [production("1", "1", "OLD-1", 18011), production("2", "1", "NEW-1", 10000), production("2", "2", "NEXT-1", 1000)],
+    dataEntries: [
+      entry("work_order", { jcNo: "P1264", partCode: "M1789", orderPcs: 43600, rmInwardDate: "2026-10-01", rmInwardKg: 1 }),
+      ...["1", "2"].flatMap(optionNumber => [1, 2].flatMap(setupNo => [
+        entry("route", { partNo: "M1789", optionNumber, setupNo, machineType: "CNC", machineFamily: optionNumber === "1" ? "OLD" : setupNo === 1 ? "NEW" : "NEXT" }),
+        entry("cycle", { partNo: "M1789", optionNumber, setupNo, cycleTime: 60 }),
+        entry("tooling", { partNo: "M1789", optionNumber, setupNo }),
+      ])),
+      ...["OLD-1", "NEW-1", "NEXT-1", "NEXT-2"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: machineNo.split("-")[0], status: "Active" })),
+    ],
+    routeChanges: [{ jobCardNumber: "P1264", fromRouteCode: "1", newRouteCode: "2", remainingSetups: [{ setupNumber: 1, plan: true, quantity: 25000 }, { setupNumber: 2, plan: true, quantity: 43600 }], createdAt }],
+    planOverrides: [{ target: "P1264", setupNo: "2", toMachine: "NEXT-2", assignmentMode: "add_parallel_machine", createdAt: "2026-11-03T11:00:00Z" }],
+    currentShopFloorStatusRows: [
+      { jcNo: "P1264", partCode: "M1789", optionNumber: "1", setupNo: "1", machine: "OLD-1", stage: "planned", active: false, hasRecordedStart: true, createdAt },
+      ...["NEW-1", "NEXT-1"].map(machine => ({ jcNo: "P1264", partCode: "M1789", optionNumber: "2", setupNo: machine === "NEW-1" ? "1" : "2", machine, stage: "operator_started", active: true, hasRecordedStart: true, createdAt: "2026-11-03T10:00:00Z" })),
+    ],
+  }
+  const build = (source: Parameters<typeof buildLegacyDashboardSnapshotWithPlanning>[0] = input) => buildLegacyDashboardSnapshotWithPlanning(source, { calculationTime: Date.parse("2026-11-04T10:00:00Z"), forceFullCalculation: true }).snapshot.productionControl
+  const control = build()
+  expect(control.machinePlanDetailRows.find(row => row.machine === "NEXT-2")).toMatchObject({ physicalWipQty: 27011, shopFloorTaskReady: true, shopFloorTaskBlocker: "", setupPlannedDate: "04/11/2026" })
+  expect(control.machinePlanDetailRows.some(row => row.machine === "OLD-1")).toBe(false)
+  expect(control.machinePlanDetailRows.find(row => row.machine === "NEW-1")).toMatchObject({ totalOrderPcs: 25000, rawActualQty: 10000 })
+  const depleted = build({ ...input, productionEntries: [...input.productionEntries.slice(0, 2), production("2", "2", "NEXT-1", 27000, 26000)] })
+  expect(depleted.machinePlanDetailRows.find(row => row.machine === "NEXT-2")).toMatchObject({ physicalWipQty: 1011, shopFloorTaskReady: false })
+  const canonicalRejects = build({ ...input, productionEntries: [...input.productionEntries.slice(0, 2), { ...production("2", "2", "NEXT-1", 26000), quantityGood: 26000, rejectQty: 1000 }] })
+  expect(canonicalRejects.machinePlanDetailRows.find(row => row.machine === "NEXT-2")).toMatchObject({ physicalWipQty: 1011, shopFloorTaskReady: false })
+  const forecastInput = { ...input,
+    productionEntries: [...input.productionEntries,
+      { ...production("1", "1", "OLD-1", 0), prodDate: "2026-10-30" },
+      { ...production("2", "1", "NEW-1", 0), prodDate: "2026-11-02" }],
+    dataEntries: input.dataEntries.map(row => row.entryType === "cycle" && row.payload.setupNo === 2 ? { ...row, payload: { ...row.payload, cycleTime: 14 } } : row),
+  }
+  const forecast = build(forecastInput)
+  expect(forecast.machinePlanDetailRows.find(row => row.machine === "NEXT-2")).toMatchObject({ setupPlannedDate: "15/11/2026", shopFloorTaskReady: false })
+  expect(build({ ...forecastInput, previousMachinePlanDetailRows: forecast.machinePlanDetailRows }).machinePlanDetailRows).toEqual(forecast.machinePlanDetailRows)
+  const review = calculateParallelMachineReview(forecastInput, { jobCardNumber: "P1264", setupNumber: 2, toMachineNumber: "NEXT-2" }, Date.parse("2026-11-04T10:00:00Z"))
+  expect(review).toMatchObject({ ready: false, availableWip: 27011, bufferDays: 3, machineCount: 2, earlyStartAllowed: true })
+  expect(review.requiredWip).toBeCloseTo(34714.286, 2)
+  expect(review.blocker).toContain("short by 7,704 pcs")
+  expect(() => validateParallelMachineReview(review)).toThrow("Choose Queue")
+  expect(() => validateParallelMachineReview(review, "queue", review.fingerprint)).not.toThrow()
+  expect(() => validateParallelMachineReview(review, "start_early", review.fingerprint)).not.toThrow()
+  expect(() => validateParallelMachineReview(review, "queue", "outdated")).toThrow("changed")
+  const noStock = calculateParallelMachineReview({ ...forecastInput, productionEntries: [...forecastInput.productionEntries.filter(row => row.setupNo === "1"), production("2", "2", "NEXT-1", 28011)] }, { jobCardNumber: "P1264", setupNumber: 2, toMachineNumber: "NEXT-2" }, Date.parse("2026-11-04T10:00:00Z"))
+  expect(noStock.earlyStartAllowed).toBe(false)
+  expect(() => validateParallelMachineReview(noStock, "start_early")).toThrow("requires recorded WIP")
+})
 
 test("rework waits for manual sole-route selection while normal work auto-selects", () => {
   const createdAt = "2026-10-19T04:00:00Z"
