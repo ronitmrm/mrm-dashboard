@@ -1,0 +1,20 @@
+[Unit]
+Description=MRMPL ERP web (Next.js)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target redis-server.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=mrmdev
+WorkingDirectory=/home/mrmdev/srv/mrm-erp/apps/web
+EnvironmentFile=/home/mrmdev/.config/mrm/production.env
+EnvironmentFile=-/home/mrmdev/.config/mrm/release.env
+Environment=PATH=/home/mrmdev/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/mrmdev/srv/mrm-erp/apps/web/node_modules/.bin/next start -p 3001 -H 127.0.0.1
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

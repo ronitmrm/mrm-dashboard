@@ -1,0 +1,20 @@
+[Unit]
+Description=MRMPL ERP durable refresh worker
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target redis-server.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=mrmdev
+WorkingDirectory=/home/mrmdev/srv/mrm-erp
+EnvironmentFile=/home/mrmdev/.config/mrm/production.env
+EnvironmentFile=-/home/mrmdev/.config/mrm/release.env
+Environment=PATH=/home/mrmdev/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/mrmdev/.nvm/versions/node/v24.22.2/bin/pnpm runtime:worker
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
