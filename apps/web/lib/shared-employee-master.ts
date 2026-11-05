@@ -268,8 +268,11 @@ export function productionWorkerOptions(
   return employeeOptions(
     rows,
     (row) =>
-      /\bworker\b/i.test(String(row.designation)) &&
-      !/\bmanagement\b/i.test(String(row.designation)) &&
-      isShopFloorDepartment(row.department, row.departmentCode, productionFloorCode)
+      (/\bworker\b/i.test(String(row.designation)) &&
+        !/\bmanagement\b/i.test(String(row.designation)) &&
+        isShopFloorDepartment(row.department, row.departmentCode, productionFloorCode)) ||
+      (productionFloorCode === "forging" &&
+        productionFloorFromDepartment(row.department, row.departmentCode) === "forging" &&
+        isMachinistEmployee(row))
   )
 }
