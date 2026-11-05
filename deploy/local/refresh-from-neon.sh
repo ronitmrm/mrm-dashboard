@@ -36,6 +36,7 @@ DROP DATABASE IF EXISTS mrmpl;
 CREATE DATABASE mrmpl OWNER neondb_owner;
 GRANT CREATE ON DATABASE mrmpl TO mrmpl_staging_migration;
 SQL
+bash "$(dirname "$0")/restrict-production-connect.sh"
 
 echo "Restoring"
 pg_restore -d mrmpl -j 12 --exit-on-error --no-tablespaces -L "$dump.restore.list" "$dump"
