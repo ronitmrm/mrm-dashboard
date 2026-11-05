@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Installs and starts the MRMPL web + worker systemd services.
-# Run: sudo bash deploy/local/install-services.sh
+# Installs and (re)starts the MRMPL user services: web, worker, quick tunnel.
+# User-level systemd with lingering enabled, so services start at boot without login.
+# Run: bash deploy/local/install-services.sh
 set -euo pipefail
 
-if [[ $EUID -ne 0 ]]; then
-  echo "Run with sudo: sudo bash $0" >&2
-  exit 1
-fi
-
 here="$(cd "$(dirname "$0")" && pwd)"
+units=(mrm-web.service mrm-worker.service mrm-tunnel.service)
 
-install -m 644 "$here/systemd/mrm-web.service" "$here/systemd/mrm-worker.service" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable mrm-web mrm-worker
-systemctl restart mrm-web mrm-worker
-sleep 8
-systemctl --no-pager --lines=5 status mrm-web mrm-worker
+mkdir -p ~/.config/systemd/user
+for unit in "${units[@]}"; do
+  install -m 644 "$here/systemd/$unit" ~/.config/systemd/user/
+done
+systemctl --user daemon-reload
+systemctl --user enable "${units[@]}"
+systemctl --user restart mrm-web.service mrm-worker.service
+systemctl --user start mrm-tunnel.service
+bash "$here/sync-tunnel-url.sh"

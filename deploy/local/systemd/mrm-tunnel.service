@@ -1,0 +1,12 @@
+[Unit]
+Description=MRMPL ERP Cloudflare quick tunnel (testing only; hostname changes on every start)
+After=network-online.target mrm-web.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
