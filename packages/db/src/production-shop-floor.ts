@@ -28,6 +28,7 @@ import {
 import {
   isShopFloorDepartment,
   normalizeProductionFloorCode,
+  productionFloorFromDepartment,
   productionFloorCodeForRecord,
   ProductionUnitAccessError,
   type ProductionFloorCode,
@@ -756,6 +757,11 @@ async function requiredActiveEmployeeIdFor(
       department.name, department.code, productionFloorCode
     ))
     .map((department) => department.id)
+  const forgingDepartmentIds = productionFloorCode === "forging"
+    ? departments.rows.filter((department) =>
+        productionFloorFromDepartment(department.name, department.code) === "forging"
+      ).map((department) => department.id)
+    : []
   const projected = await client.query<{ id: string }>(
     `
       WITH active_post AS MATERIALIZED (
@@ -773,8 +779,15 @@ async function requiredActiveEmployeeIdFor(
         WHERE post.organization_id = $1
           AND lower(btrim(post.employee_code)) = lower($2)
           AND post.status = 'Occupied'
-          AND department.id = ANY($3::uuid[])
-          AND designation.name !~* '(^|[^a-z])(hod|manager|management)([^a-z]|$)'
+          AND (
+            (department.id = ANY($3::uuid[])
+              AND designation.name !~* '(^|[^a-z])(hod|manager|management)([^a-z]|$)')
+            OR (department.id = ANY($5::uuid[])
+              AND designation.name !~* '(^|[^a-z])management([^a-z]|$)'
+              AND (designation.name ~* 'machinist'
+                OR department.name ~* 'machinist'
+                OR upper(btrim(department.code)) = 'PPC-FGM'))
+          )
           AND nullif(btrim(post.employee_name), '') IS NOT NULL
         ORDER BY post.updated_at DESC, post.id
         LIMIT 1
@@ -838,6 +851,7 @@ async function requiredActiveEmployeeIdFor(
       normalizedEmployeeCode,
       departmentIds,
       actorUserId ?? null,
+      forgingDepartmentIds,
     ]
   )
   if (projected.rows[0]) return projected.rows[0].id
@@ -854,7 +868,7 @@ async function requiredActiveEmployeeIdFor(
     [organizationId, normalizedEmployeeCode]
   )
   if (!result.rows[0]) {
-    throw new Error("The selected active Shop Floor operator was not found.")
+    throw new Error("The selected active production operator was not found.")
   }
   return result.rows[0].id
 }

@@ -225,6 +225,21 @@ describe("shared Employee Master", () => {
     ])
   })
 
+  it("also offers active forging machinists as workers only in forging", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({ id: "1", status: "Occupied", departmentCode: "PPC-FGSF", designation: "Worker", employeeCode: "W-1", employeeName: "Worker" }),
+      post({ id: "2", status: "Occupied", departmentCode: "PPC-FGM", designation: "Assistant", employeeCode: "M-1", employeeName: "Machinist" }),
+      post({ id: "3", status: "Resigned", departmentCode: "PPC-FGM", designation: "Assistant", employeeCode: "M-2", employeeName: "Former machinist" }),
+      post({ id: "4", status: "Occupied", departmentCode: "PPC-CVM", designation: "Machinist", employeeCode: "M-3", employeeName: "Conventional machinist" }),
+      post({ id: "5", status: "Occupied", departmentCode: "PPC-FGM", designation: "Management", employeeCode: "M-4", employeeName: "Management" }),
+    ])
+    expect(productionWorkerOptions(rows, "forging")).toEqual([
+      { code: "M-1", name: "Machinist" },
+      { code: "W-1", name: "Worker" },
+    ])
+    expect(productionWorkerOptions(rows, "conventional")).toEqual([])
+  })
+
   it("offers only active quality employees from the selected production unit", () => {
     const rows = sharedEmployeeMasterRows([
       post({
