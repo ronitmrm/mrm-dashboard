@@ -1,6 +1,6 @@
 "use client"
 
-import { formatIstDateTime } from "../../lib/date-time"
+import { formatIstDateTime, istDateValue } from "../../lib/date-time"
 
 import { formatCalendarDate } from "@workspace/ui/lib/calendar-date"
 
@@ -43,12 +43,13 @@ function resignedAssignment(
 
 function initialEmploymentEvent(
   status?: string,
-  allowIdentityCorrection = false
+  allowIdentityCorrection = false,
+  exitType?: string | null
 ) {
   if (status === "Appointed") {
     return allowIdentityCorrection ? "Appointed" : ""
   }
-  if (status === "Resigned") return "Resigned"
+  if (status === "Resigned") return exitType === "Left Without Process" ? "Resigned Without Process" : "Resigned"
   if (status === "Occupied") {
     return allowIdentityCorrection ? "Joined" : ""
   }
@@ -114,7 +115,7 @@ export function SingleEmployeeAssignmentFields({
     initialTarget?.post.employeeCode ?? initialAssignment?.employeeCode ?? ""
   )
   const [event, setEvent] = useState(
-    initialEmploymentEvent(initialTarget?.post.status, allowIdentityCorrection)
+    initialEmploymentEvent(initialTarget?.post.status, allowIdentityCorrection, initialAssignment?.exitType)
   )
   const selected = targets.find(({ post }) => post.id === postId)
   const selectedAssignment = selected
@@ -127,10 +128,15 @@ export function SingleEmployeeAssignmentFields({
   const pendingReplacement = selected?.post.replacementAppointments?.find(
     (appointment) => appointment.status === "Pending"
   )
+  const lastWorkingDate = selected?.post.lastWorkingDate
   const canWithdrawResignation = allowIdentityCorrection &&
-    selected?.post.status === "Resigned" && Boolean(selectedAssignment && !selectedAssignment.endedOn)
+    selected?.post.status === "Resigned" &&
+    Boolean(selectedAssignment && !selectedAssignment.endedOn &&
+      lastWorkingDate && lastWorkingDate > istDateValue())
   const appointingReplacement =
     selected?.post.status === "Resigned" && event === "Appointed"
+  const enteringNewJoin = event === "Joined" &&
+    (selected?.post.status === "Resigned" || selected?.post.status === "Vacant")
   const managingReplacement =
     event === "Replacement Joined" || event === "Cancel Replacement"
   const awaitingJoiningConfirmation = Boolean(
@@ -171,12 +177,13 @@ export function SingleEmployeeAssignmentFields({
     setPostId(nextPostId)
     setEmployeeName(next?.post.employeeName ?? assignment?.employeeName ?? "")
     setEmployeeCode(next?.post.employeeCode ?? assignment?.employeeCode ?? "")
-    setEvent(initialEmploymentEvent(next?.post.status, allowIdentityCorrection))
+    setEvent(initialEmploymentEvent(next?.post.status, allowIdentityCorrection, assignment?.exitType))
   }
 
   function selectEvent(nextEvent: string) {
     setEvent(nextEvent)
-    if (nextEvent === "Appointed" && selected?.post.status === "Resigned") {
+    if ((nextEvent === "Appointed" && selected?.post.status === "Resigned") ||
+        (nextEvent === "Joined" && (selected?.post.status === "Resigned" || selected?.post.status === "Vacant"))) {
       setEmployeeName("")
       setEmployeeCode("")
     } else if (
@@ -258,13 +265,12 @@ export function SingleEmployeeAssignmentFields({
       ) : null}
       {selected?.post.status === "Resigned" && !pendingReplacement ? (
         <FieldDescription>
-          Select Appointed to reserve an incoming employee. The resigning
-          employee and last working date will remain unchanged.
+          Select Joined if the incoming employee has started, or Appointed to reserve the post.
         </FieldDescription>
       ) : null}
       {pendingReplacement ? (
         <FieldDescription>
-          Select Confirm Replacement Joined and enter {pendingReplacement.employeeName}&apos;s own Employee ID.
+          Select Joined to confirm {pendingReplacement.employeeName}&apos;s start and enter their Employee ID.
           Both employees remain listed until the outgoing employee&apos;s last working date.
         </FieldDescription>
       ) : null}
@@ -301,9 +307,9 @@ export function SingleEmployeeAssignmentFields({
           onChange={(change) => setEmployeeName(change.target.value)}
           readOnly={
             managingReplacement ||
-            (assigned && !canCorrectIdentity && !appointingReplacement)
+            (assigned && !canCorrectIdentity && !appointingReplacement && !enteringNewJoin)
           }
-          required={appointingReplacement}
+          required={appointingReplacement || enteringNewJoin}
           value={employeeName}
         />
         {canCorrectIdentity ? (
@@ -355,14 +361,12 @@ export function SingleEmployeeAssignmentFields({
           {awaitingJoiningConfirmation ? (
             <>
               <NativeSelectOption value="">Select Yes Or No</NativeSelectOption>
-              <NativeSelectOption value="Joined">
-                Yes — Candidate Joined
-              </NativeSelectOption>
+              <NativeSelectOption value="Joined">Joined</NativeSelectOption>
               <NativeSelectOption value="Appointed">
                 No — Keep As Appointed
               </NativeSelectOption>
               <NativeSelectOption value="Removed" disabled={candidateAppointment}>
-                Remove Appointment — Becomes Vacant
+                Cancel Appointment
               </NativeSelectOption>
             </>
           ) : (
@@ -377,12 +381,14 @@ export function SingleEmployeeAssignmentFields({
                   : "Appointed — Not Joined"}
               </NativeSelectOption>
               <NativeSelectOption
-                value="Joined"
-                disabled={Boolean(pendingReplacement) || selected?.post.status === "Resigned"}
+                value={pendingReplacement ? "Replacement Joined" : "Joined"}
               >
-                Joined — Becomes Occupied
+                Joined
               </NativeSelectOption>
               <NativeSelectOption value="Resigned" disabled={selected?.post.status !== "Occupied" && selected?.post.status !== "Resigned"}>Resigned</NativeSelectOption>
+              <NativeSelectOption value="Resigned Without Process" disabled={selected?.post.status !== "Occupied" && selected?.post.status !== "Resigned"}>
+                Resigned Without Process
+              </NativeSelectOption>
               {canWithdrawResignation ? (
                 <NativeSelectOption value="Resignation Withdrawn" disabled={Boolean(pendingReplacement)}>
                   Withdraw Resignation — Keep Employee
@@ -396,21 +402,13 @@ export function SingleEmployeeAssignmentFields({
               {canCorrectDesignation ? (
                 <NativeSelectOption value="Designation Corrected">Designation Correction</NativeSelectOption>
               ) : null}
-              <NativeSelectOption
-                value="Removed"
-                disabled={Boolean(pendingReplacement) || candidateAppointment}
-              >
-                Remove Assignment — Becomes Vacant
-              </NativeSelectOption>
-              {pendingReplacement ? (
-                <>
-                  <NativeSelectOption value="Replacement Joined">
-                    Confirm Replacement Joined
-                  </NativeSelectOption>
-                  <NativeSelectOption value="Cancel Replacement">
-                    Cancel Pending Replacement
-                  </NativeSelectOption>
-                </>
+              {appointed || pendingReplacement ? (
+                <NativeSelectOption
+                  value={pendingReplacement ? "Cancel Replacement" : "Removed"}
+                  disabled={candidateAppointment || Boolean(pendingReplacement?.applicationId)}
+                >
+                  Cancel Appointment
+                </NativeSelectOption>
               ) : null}
             </>
           )}
@@ -421,7 +419,7 @@ export function SingleEmployeeAssignmentFields({
             Appointed Until Actual Joining Is Confirmed With An Employee ID.
           </FieldDescription>
         ) : null}
-        {candidateAppointment ? (
+        {candidateAppointment || pendingReplacement?.applicationId ? (
           <FieldDescription>
             Use Did Not Join in Employee Master or the candidate&apos;s job to cancel
             this accepted appointment, record the reason and reopen recruitment.
@@ -442,7 +440,8 @@ export function SingleEmployeeAssignmentFields({
           </FieldDescription>
         </Field>
       ) : null}
-      {event === "Resigned" ? (
+      {event === "Resigned" || event === "Resigned Without Process" ? (
+        <>
         <Field className="w-full min-w-0">
           <FieldLabel htmlFor="last-working-date">Planned Last Working Date</FieldLabel>
           <Input
@@ -450,22 +449,28 @@ export function SingleEmployeeAssignmentFields({
             key={postId}
             id="last-working-date"
             name="last_working_date"
+            min={selectedAssignment?.joinedOn ?? selected?.post.joiningDate ?? undefined}
             required
             type="date"
           />
           <FieldDescription>
-            The Approved Post Becomes Vacant After This Date.
+            The employee stays assigned through this last working day. The approved post becomes vacant automatically after this date.
           </FieldDescription>
         </Field>
+        <Field className="w-full min-w-0">
+          <FieldLabel htmlFor="exit-note">Exit Note</FieldLabel>
+          <Input id="exit-note" name="exit_note" />
+        </Field>
+        </>
       ) : null}
       {event === "Joined" || event === "Replacement Joined" ? (
         <>
           <Field className="w-full min-w-0">
             <FieldLabel htmlFor="actual-joining-date">Actual Joining Date</FieldLabel>
             <Input
-              defaultValue={selected?.post.joiningDate ?? ""}
+              defaultValue={enteringNewJoin || event === "Replacement Joined" ? "" : selected?.post.joiningDate ?? ""}
               id="actual-joining-date"
-              key={postId}
+              key={`${postId}-${event}`}
               name="joining_date"
               required
               type="date"
@@ -473,7 +478,7 @@ export function SingleEmployeeAssignmentFields({
           </Field>
           <Field className="w-full min-w-0">
             <FieldLabel htmlFor="probation-due-on">Probation Ends On</FieldLabel>
-            <Input defaultValue={selectedAssignment?.probationDueOn ?? ""}
+            <Input defaultValue={enteringNewJoin || event === "Replacement Joined" ? "" : selectedAssignment?.probationDueOn ?? ""}
               id="probation-due-on" key={`${postId}-${event}`} name="probation_due_on" type="date" />
             <FieldDescription>
               The saved joining record supplies this date. For a new join, leave
@@ -521,37 +526,6 @@ export function SingleEmployeeAssignmentFields({
           <Field className="w-full min-w-0">
             <FieldLabel htmlFor="role-change-note">Role Change Note</FieldLabel>
             <Input id="role-change-note" name="exit_note" />
-          </Field>
-        </>
-      ) : null}
-      {event === "Removed" &&
-      (selected?.post.status === "Occupied" || selected?.post.status === "Resigned") ? (
-        <>
-          <Field className="w-full min-w-0">
-            <FieldLabel htmlFor="actual-last-working-date">Actual Last Working Date</FieldLabel>
-            <Input
-              id="actual-last-working-date"
-              name="last_working_date"
-              required
-              type="date"
-            />
-          </Field>
-          <Field className="w-full min-w-0">
-            <FieldLabel htmlFor="exit-type">How Did They Leave?</FieldLabel>
-            <NativeSelect
-              defaultValue={selected.post.status === "Resigned" ? "Resigned" : ""}
-              id="exit-type"
-              name="exit_type"
-              required
-            >
-              <NativeSelectOption value="">Select Exit Type</NativeSelectOption>
-              <NativeSelectOption value="Resigned">Resigned Through Process</NativeSelectOption>
-              <NativeSelectOption value="Left Without Process">Left Without Process</NativeSelectOption>
-            </NativeSelect>
-          </Field>
-          <Field className="w-full min-w-0">
-            <FieldLabel htmlFor="exit-note">Exit Note</FieldLabel>
-            <Input id="exit-note" name="exit_note" />
           </Field>
         </>
       ) : null}

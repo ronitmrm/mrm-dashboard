@@ -10,7 +10,7 @@ export const individualPostsSheetName = "Individual Posts"
 
 export type EmployeeAssignmentWorkbookRow = {
   employeeCode: string | null
-  employeeEvent: "Appointed" | "Joined" | "Resigned" | "Removed"
+  employeeEvent: "Appointed" | "Joined" | "Resigned" | "Resigned Without Process" | "Removed"
   employeeName: string | null
   lastWorkingDate: string | null
   rowNumber: number
@@ -18,7 +18,7 @@ export type EmployeeAssignmentWorkbookRow = {
   targetType: "combined" | "individual"
 }
 
-const validEvents = new Set(["Appointed", "Joined", "Resigned", "Removed"])
+const validEvents = new Set(["Appointed", "Joined", "Resigned", "Resigned Without Process", "Removed"])
 
 function worksheet(rows: Array<Array<string>>, widths: number[]) {
   const sheet = XLSX.utils.aoa_to_sheet(rows)
@@ -196,7 +196,7 @@ function parseSheet(
     }
     if (!validEvents.has(employeeEvent)) {
       throw new Error(
-        `${sheetName} row ${rowNumber}: Employment Event must be Appointed, Joined, Resigned, or Removed.`
+        `${sheetName} row ${rowNumber}: Employment Event must be Appointed, Joined, Resigned, Resigned Without Process, or Removed (appointments only).`
       )
     }
     if (employeeEvent !== "Removed" && !employeeName && !employeeCode) {
@@ -204,9 +204,9 @@ function parseSheet(
         `${sheetName} row ${rowNumber}: Employee Name or Employee Code is required.`
       )
     }
-    if (employeeEvent === "Resigned" && !lastWorkingDate) {
+    if ((employeeEvent === "Resigned" || employeeEvent === "Resigned Without Process") && !lastWorkingDate) {
       throw new Error(
-        `${sheetName} row ${rowNumber}: Last Working Date is required for Resigned.`
+        `${sheetName} row ${rowNumber}: Last Working Date is required for ${employeeEvent}.`
       )
     }
     parsed.push({

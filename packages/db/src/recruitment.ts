@@ -778,14 +778,22 @@ async function closeOpenJobsForManualAssignment(
 
 function assertEmployeeAssignmentTransition(
   post: { status: string; appointedApplicationId?: string | null },
-  employeeEvent: string
+  employeeEvent: string,
+  allowReplacement = false
 ) {
   const event = employeeEvent.trim() || "Appointed"
+  if (event === "Removed" && (post.status === "Occupied" || post.status === "Resigned")) {
+    throw new Error("Use Resigned or Resigned Without Process with a last working date to end this assignment.")
+  }
+  if ((event === "Resigned" || event === "Resigned Without Process") &&
+      post.status !== "Occupied" && post.status !== "Resigned") {
+    throw new Error("Only a joined employee can resign.")
+  }
   if (post.status === "Occupied" && event === "Appointed") {
     throw new Error("This employee has already joined. Keep Joined to correct their details, or use Designation Correction.")
   }
-  if (post.status === "Resigned" && event === "Joined") {
-    throw new Error("Use Withdraw Resignation to retain this employee, or Confirm Replacement Joined for an incoming employee.")
+  if (post.status === "Resigned" && event === "Joined" && !allowReplacement) {
+    throw new Error("Use the individual assignment form to record joining against a resigned post.")
   }
   if (post.status === "Appointed" && post.appointedApplicationId && event === "Removed") {
     throw new Error("Use Did Not Join to cancel this candidate appointment and reopen its recruitment job.")
@@ -860,7 +868,7 @@ async function assignEmployeeInTransaction(
   }
   for (const post of targets.rows) {
     assertEmployeeAssignmentTransition({ status: post.status,
-      appointedApplicationId: post.appointed_application_id }, input.employeeEvent || "Appointed")
+      appointedApplicationId: post.appointed_application_id }, input.employeeEvent || "Appointed", allowReplacement)
   }
   if (input.employeeEvent === "Resignation Withdrawn") {
     const reason = required(input.exitNote, "Reason for withdrawing resignation")
@@ -870,6 +878,10 @@ async function assignEmployeeInTransaction(
         post.employee_code !== currentPost.employee_code ||
         post.employee_name !== currentPost.employee_name)) {
       throw new Error("Only the same resigning employee can withdraw their resignation.")
+    }
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+    if (targets.rows.some((post) => post.last_working_date! <= today)) {
+      throw new Error("Resignation can only be withdrawn before the last working date.")
     }
     const pending = await client.query(
       `SELECT id FROM recruitment.post_replacements
@@ -942,18 +954,16 @@ async function assignEmployeeInTransaction(
     return { selectedPost: { id: currentPost.id }, updatedPostCount: result.rows.length }
   }
   if (
-    input.employeeEvent === "Removed" &&
-    targets.rows.some((post) => post.status === "Occupied" || post.status === "Resigned")
+    input.employeeEvent === "Resigned" || input.employeeEvent === "Resigned Without Process"
   ) {
-    const endOn = required(input.lastWorkingDate, "Actual last working date")
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(endOn)) {
-      throw new Error("Enter a valid actual last working date.")
+    const endOn = required(input.lastWorkingDate, "Last working date")
+    const date = new Date(`${endOn}T00:00:00Z`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endOn) || Number.isNaN(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== endOn) {
+      throw new Error("Enter a valid last working date.")
     }
     if (targets.rows.some((post) => post.joining_date && endOn < post.joining_date)) {
-      throw new Error("Actual last working date cannot precede joining date.")
-    }
-    if (input.exitType !== "Resigned" && input.exitType !== "Left Without Process") {
-      throw new Error("Select how the employee left.")
+      throw new Error("Last working date cannot precede joining date.")
     }
   }
   if (input.employeeEvent === "Role Changed") {
@@ -1059,7 +1069,7 @@ async function assignEmployeeInTransaction(
     !correctsExistingIdentity
   ) {
     throw new Error(
-      "This post is assigned to another employee. Mark the current employee as Removed or Resigned and vacate the post before assigning a different person."
+      "This post is assigned to another employee. Record their resignation and last working date, then vacate the post before assigning a different person."
     )
   }
   const assignment = deriveRecruitmentEmployeeAssignment({
@@ -1114,6 +1124,15 @@ async function assignEmployeeInTransaction(
   if (result.rows.length !== targetIds.length) {
     throw new Error("Not every approved post in the assignment was updated.")
   }
+  if (assignment.status === "Resigned") {
+    await client.query(
+      `UPDATE recruitment.employee_post_assignments
+       SET exit_type = $1, exit_note = $2, updated_at = now()
+       WHERE organization_id = $3 AND post_id = ANY($4::uuid[]) AND ended_on IS NULL`,
+      [employeeEvent === "Resigned Without Process" ? "Left Without Process" : "Resigned",
+        optional(input.exitNote), input.organizationId, targetIds]
+    )
+  }
   if (correctsExistingIdentity && assignment.status === "Occupied" &&
       (optional(input.probationDueOn) || optional(input.joiningDate))) {
     await client.query(
@@ -1139,7 +1158,7 @@ async function assignEmployeeInTransaction(
         eventType: input.employeeEvent === "Role Changed"
           ? "recruitment.employee.role_changed"
           : `recruitment.employee.${assignment.status.toLowerCase()}`,
-        reason: input.employeeEvent === "Role Changed" ? optional(input.exitNote) : null,
+        reason: input.employeeEvent === "Role Changed" || assignment.status === "Resigned" ? optional(input.exitNote) : null,
         metadata: {
           assignmentScope: currentPost.combined_role_id
             ? "combined-role"
@@ -1152,6 +1171,9 @@ async function assignEmployeeInTransaction(
           postId: post.id,
           status: assignment.status,
           lastWorkingDate: assignment.lastWorkingDate,
+          exitType: assignment.status === "Resigned"
+            ? employeeEvent === "Resigned Without Process" ? "Left Without Process" : "Resigned" : null,
+          exitNote: assignment.status === "Resigned" ? optional(input.exitNote) : null,
           roleChangedOn: input.employeeEvent === "Role Changed"
             ? optional(input.lastWorkingDate) : null,
         },

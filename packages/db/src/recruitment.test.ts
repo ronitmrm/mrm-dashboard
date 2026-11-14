@@ -284,7 +284,7 @@ test("rejects a probation extension that does not move the end date forward", as
   expect(query.mock.calls.some(([sql]) => sql.trimStart().startsWith("UPDATE") || sql.includes("INSERT INTO audit.events"))).toBe(false)
 })
 
-test("removing a joined employee requires an actual end date and exit type", async () => {
+test("joined employees must resign instead of removing the assignment", async () => {
   const query = vi.fn(async (statement: string) => ({ rows: statement.includes("SELECT id, employee_name, employee_code")
     ? [{ id: "post-1", employee_name: "Employee One", employee_code: "101",
       status: "Occupied", combined_role_id: null, can_replace: false,
@@ -296,7 +296,7 @@ test("removing a joined employee requires an actual end date and exit type", asy
   })
   await expect(repository.assignEmployee({
     organizationId: "org-1", postId: "post-1", employeeEvent: "Removed",
-  })).rejects.toThrow("Actual last working date")
+  })).rejects.toThrow("Use Resigned or Resigned Without Process")
   expect(query.mock.calls.some(([statement]) => statement.includes("UPDATE recruitment.posts"))).toBe(false)
 })
 
@@ -509,12 +509,32 @@ describe("assignEmployee", () => {
     post.status = "Resigned"
     post.last_working_date = "2099-01-01"
     await expect(repository.assignEmployee({ ...input, employeeEvent: "Joined" }))
-      .rejects.toThrow("Withdraw Resignation")
+      .rejects.toThrow("different Employee ID")
+    post.last_working_date = "2000-01-01"
+    await expect(repository.assignEmployee({ ...input, employeeEvent: "Resignation Withdrawn", exitNote: "Stayed" }))
+      .rejects.toThrow("before the last working date")
     post.status = "Appointed"
     post.appointed_application_id = "application-1"
     await expect(repository.assignEmployee({ ...input, employeeEvent: "Removed" }))
       .rejects.toThrow("Did Not Join")
     expect(query.mock.calls.some(([sql]) => sql.trimStart().startsWith("UPDATE"))).toBe(false)
+  })
+
+  test("joins a new employee directly to a resigned post and records the outgoing assignment", async () => {
+    const query = vi.fn(async (sql: string) => ({ rows:
+      sql.includes("SELECT id, employee_name, employee_code") ? [{
+        id: "post-1", status: "Resigned", combined_role_id: null,
+        employee_name: "Outgoing Employee", employee_code: "65", last_working_date: "2026-09-01",
+      }] : [] }))
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({ pool: { connect: async () => client } as unknown as Pool })
+    await expect(repository.assignEmployee({ organizationId: "org-1", postId: "post-1",
+      employeeEvent: "Joined", employeeName: "Incoming Employee", employeeCode: "66",
+      joiningDate: "2026-09-02" })).resolves.toEqual({ id: "post-1" })
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("to_jsonb(post), 'Joined'"),
+      ["org-1", ["post-1"], "Incoming Employee", "66", null])
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.posts"),
+      ["Incoming Employee", "66", "Occupied", null, "org-1", ["post-1"], null, "2026-09-02"])
   })
 
   test.each([
@@ -2865,12 +2885,12 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
     })
   })
 
-  test("retains the employee identity when they resign", () => {
+  test.each(["Resigned", "Resigned Without Process"])("retains the employee identity for %s", (employeeEvent) => {
     expect(
       deriveRecruitmentEmployeeAssignment({
         currentEmployeeCode: "104",
         currentEmployeeName: "New employee",
-        employeeEvent: "Resigned",
+        employeeEvent,
         lastWorkingDate: "2026-08-31",
       })
     ).toEqual({
@@ -2896,11 +2916,11 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
     })
   })
 
-  test("requires a last working date for a resignation", () => {
+  test.each(["Resigned", "Resigned Without Process"])("requires a last working date for %s", (employeeEvent) => {
     expect(() =>
       deriveRecruitmentEmployeeAssignment({
         currentEmployeeCode: "104",
-        employeeEvent: "Resigned",
+        employeeEvent,
       })
     ).toThrow("Last working date is required")
   })

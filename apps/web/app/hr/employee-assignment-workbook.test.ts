@@ -156,7 +156,7 @@ describe("employee assignment workbook", () => {
     )
 
     expect(() => parseEmployeeAssignmentWorkbook(workbook)).toThrow(
-      "Employment Event must be Appointed, Joined, Resigned, or Removed"
+      "Employment Event must be Appointed, Joined, Resigned, Resigned Without Process, or Removed (appointments only)"
     )
   })
 

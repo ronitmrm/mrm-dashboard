@@ -195,7 +195,7 @@ Employee Assignment's Appointed event and accepted Job Candidate Appointment
 details record the replacement separately. Candidate reservations retain their
 application link and agreed joining terms. Did Not Join cancels only that
 candidate's pending reservation and reopens the same job; the outgoing employee
-is unchanged. Confirming Replacement Joined retains the application link for
+is unchanged. Selecting Joined for a pending replacement retains the application link for
 employment history. Candidate reservations are cancelled through Did Not Join.
 HR may cancel a manual pending appointment without affecting the outgoing employee.
 HR explicitly confirms Replacement Joined with the incoming employee's own
@@ -258,14 +258,16 @@ its planned last working date, and the withdrawal time and reason remain visible
 in the editor. Employee Assignment History shows the original resignation and
 each cancellation as separate dated rows with their reasons, alongside the
 assignment's current state. Its summary counts assignments rather than history
-events. Actual departures cannot be
-withdrawn. Any pending replacement appointment must be cancelled first; the
+events. Withdrawal is available only before the last working date and while
+the assignment is still open. Any pending replacement appointment must be cancelled first; the
 withdrawal closes open recruitment for the retained employee's posts.
-Joined employees cannot be changed back to Appointed. Resigned employees use
-Withdraw Resignation to stay employed or Confirm Replacement Joined for an
-incoming employee. Accepted candidate appointments use Did Not Join to cancel
-the reservation and reopen recruitment. These safeguards apply to individual
-edits and assignment workbook uploads.
+Joined employees cannot be changed back to Appointed. In the individual
+assignment form, use Joined with the incoming employee's own Employee ID and
+actual joining date. When a replacement is pending, Joined uses that
+appointment. Both paths retain the outgoing employee's assignment history.
+Cancel Appointment releases a manual appointment or replacement reservation.
+Accepted candidate appointments use Did Not Join to cancel the reservation and
+reopen recruitment.
 
 Employee Data begins with a confirmed Joined assignment and an Employee ID; an
 appointment alone does not create an employee data row. HR may fill the row later.
