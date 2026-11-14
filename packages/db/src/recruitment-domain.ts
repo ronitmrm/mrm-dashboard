@@ -88,6 +88,7 @@ export function deriveRecruitmentEmployeeAssignment(input: {
     Appointed: "Appointed",
     Joined: "Occupied",
     Resigned: "Resigned",
+    "Resigned Without Process": "Resigned",
   } as const
   const status = statuses[event as keyof typeof statuses]
   if (!status) throw new Error("Employee event is invalid.")

@@ -328,6 +328,33 @@ test("a joined or replaced appointment cannot release posts or reopen the job", 
   ).toBe("Closed")
 }, 60_000)
 
+test.each(["Resigned", "Resigned Without Process"])("%s retains combined posts until the last working day and preserves exit details on replacement", async (employeeEvent) => {
+  const f = await fixture(true)
+  const context = { organizationId: f.organizationId, postId: f.postIds[0]! }
+  await repository.assignEmployee({ ...context, employeeEvent,
+    lastWorkingDate: "2099-10-25", exitNote: "Departure recorded" })
+  for (const post of (await repository.listPosts(f.organizationId)).filter((post) => f.postIds.some((id) => id === post.id))) {
+    expect(post).toMatchObject({ status: "Resigned", employeeCode: "123", lastWorkingDate: "2099-10-25" })
+  }
+  if (employeeEvent === "Resigned") {
+    await repository.assignEmployee({ ...context, employeeEvent: "Appointed", employeeName: "Replacement Employee" })
+    await repository.assignEmployee({ ...context, employeeEvent: "Replacement Joined", employeeCode: "456", joiningDate: "2099-10-26" })
+  } else {
+    await repository.assignEmployee({ ...context, employeeEvent: "Joined",
+      employeeName: "Replacement Employee", employeeCode: "456", joiningDate: "2099-10-26" })
+  }
+  const incoming = (await repository.listPosts(f.organizationId)).filter((post) => f.postIds.some((id) => id === post.id))
+  expect(incoming).toHaveLength(2)
+  for (const post of incoming) expect(post).toMatchObject({
+    status: "Occupied", employeeCode: "456", joiningDate: "2099-10-26",
+    replacementAppointments: [expect.objectContaining({ status: "Joined", outgoingEmployeeCode: "123" })],
+  })
+  const outgoing = (await repository.listEmployeeAssignments(f.organizationId)).filter((row) => row.employeeCode === "123")
+  expect(outgoing).toHaveLength(2)
+  for (const row of outgoing) expect(row).toMatchObject({ endedOn: "2099-10-25",
+    exitType: employeeEvent === "Resigned" ? "Resigned" : "Left Without Process", exitNote: "Departure recorded" })
+}, 60_000)
+
 test("withdrawing resignation restores combined posts and preserves assignment and resignation history", async () => {
   const f = await fixture(true)
   const before = (await repository.listEmployeeAssignments(f.organizationId))
