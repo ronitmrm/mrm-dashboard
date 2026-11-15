@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Deploys a commit of the ERP to this server.
 #
-#   bash deploy/local/deploy.sh [git-ref]      (default: main)
+#   bash deploy/local/deploy.sh [branch-or-sha]      (default: main)
+#
+# DEPLOY_SOURCE overrides where code is fetched from (default: GitHub), e.g. a
+# local checkout for rehearsals.
 #
 # Builds the new release beside the running one, snapshots the database, applies
 # migrations, switches ~/srv/mrm-erp to the new release, restarts, and health-checks.
@@ -10,6 +13,7 @@
 set -euo pipefail
 
 ref="${1:-main}"
+source="${DEPLOY_SOURCE:-https://github.com/ronitmrm/mrm-dashboard.git}"
 srv="$HOME/srv"
 repo="$srv/mrm-erp.git"
 releases="$srv/releases"
@@ -27,8 +31,8 @@ if [[ -e "$current" && ! -L "$current" ]]; then
   exit 1
 fi
 
-[[ -d "$repo" ]] || git clone --bare https://github.com/ronitmrm/mrm-dashboard.git "$repo"
-git -C "$repo" fetch --prune origin '+refs/heads/*:refs/heads/*'
+[[ -d "$repo" ]] || git init -q --bare "$repo"
+git -C "$repo" fetch -q --prune "$source" '+refs/heads/*:refs/heads/*'
 sha="$(git -C "$repo" rev-parse --verify "$ref^{commit}")"
 release="$releases/$sha"
 previous=""
