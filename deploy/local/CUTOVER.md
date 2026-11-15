@@ -1,0 +1,51 @@
+# Cutover: Vercel/Neon/Railway/GCS → this server
+
+Target URL: `https://erp.mayankrawmint.com:8443` (public 80/443 belong to the factory firewall).
+One scheduled downtime. Neon `staging` stays untouched as the rollback point.
+
+## Before the downtime
+
+1. **Cloudflare zone for the certificate.** Buy a cheap domain on Cloudflare (free plan).
+   Create an API token with *Zone → DNS → Edit* on that zone only. Write `~/.config/mrm/caddy.env` (0600):
+   ```
+   APP_HOST=erp.mayankrawmint.com
+   ACME_EMAIL=<ops mailbox>
+   ACME_DELEGATED_DOMAIN=_acme-challenge.erp.<cloudflare-zone>
+   CLOUDFLARE_API_TOKEN=<token>
+   ```
+2. **Domain admin, once:** CNAME `_acme-challenge.erp.mayankrawmint.com` → `_acme-challenge.erp.<cloudflare-zone>`.
+   Does not affect the live site. A day before the downtime: lower the `erp` record TTL to 300.
+3. **Windows, once (admin PowerShell):** `deploy/local/windows-setup.ps1`
+   (opens 8443 to WSL, starts WSL at boot, disables sleep).
+4. **Code on `main`.** The `migration` branch must be merged so `deploy.sh` (which deploys `main`)
+   ships local-disk storage. Safe for Vercel: Google Cloud stays the default without `ARTIFACT_STORAGE_DIRECTORY`.
+5. **Pre-issue the certificate:** `bash deploy/local/install-services.sh`, then from outside the
+   factory: `curl --resolve erp.mayankrawmint.com:8443:203.76.186.224 https://erp.mayankrawmint.com:8443/api/auth/ok`.
+6. **Rehearse** steps 3–7 below once and time them.
+
+## Downtime
+
+1. Freeze writes: pause the Vercel project, stop the Railway worker.
+2. `sudo systemctl enable --now postgresql redis-server`
+3. `bash deploy/local/refresh-from-neon.sh --replace-local-database` (row counts must match exactly).
+4. `bash deploy/local/deploy.sh main` (applies migrations, including the local-disk provider check).
+5. Files: refresh the token (`vercel env pull --environment=production` into
+   `~/.config/mrm-migration/vercel-production.env`), then from `~/srv/mrm-erp/apps/web` with
+   `production.env` and `VERCEL_OIDC_TOKEN` loaded:
+   `pnpm artifact:storage:copy-local --mode=copy` then `--mode=switch`. Both must exit 0.
+6. `touch ~/.config/mrm/local-authoritative` (refresh-from-neon refuses to run after this).
+7. In `~/.config/mrm/production.env` set `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` to
+   `https://erp.mayankrawmint.com:8443`, then `bash deploy/local/install-services.sh`.
+8. Domain admin: change `erp` from the Vercel CNAME to `A 203.76.186.224`.
+9. Smoke test from mobile data: login, each module, download and upload a file.
+   Everyone signs in again; old bookmarks without `:8443` land on the firewall's page.
+
+## Rollback (only before users enter real data locally)
+
+Point `erp` back at the Vercel CNAME, unpause Vercel, start Railway. Anything entered locally is lost.
+
+## After
+
+- Deploys: `bash deploy/local/deploy.sh` after each merge to `main`.
+- Snapshots: nightly at 02:30 in `~/srv/backups` (same disk), plus one before every deploy.
+- After a stable week or two: downgrade Vercel, Railway, Upstash. Keep Neon longer.
