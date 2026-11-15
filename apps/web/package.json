@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "artifact:auth:refresh": "node --conditions=react-server --import tsx scripts/refresh-artifact-oidc.ts",
+    "artifact:storage:copy-local": "node --conditions=react-server --import tsx scripts/copy-artifacts-to-local-disk.ts",
     "artifact:storage:migrate": "node --conditions=react-server --import tsx scripts/migrate-artifact-storage.ts",
     "artifact:uploads:cleanup": "node --conditions=react-server --import tsx scripts/cleanup-pending-artifact-uploads.ts",
     "dev": "next dev --webpack -p 3001",

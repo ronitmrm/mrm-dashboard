@@ -23,7 +23,7 @@ import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { readMasterCsv } from "@/lib/master-data-csv"
 import { validateCsvDateCells } from "../../../lib/csv-date"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -267,7 +267,7 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
         const sha256 = createHash("sha256").update(source.bytes).digest("hex")
         const artifacts = createArtifactService({
           connectionString: readAuthEnvironment().connectionString,
-          provider: createGoogleCloudArtifactProvider(),
+          provider: createArtifactStorage(),
         })
         try {
           return await artifacts.store({
@@ -394,7 +394,7 @@ export async function markProformaInvoiceSentAction(formData: FormData) {
   })
   const artifacts = createArtifactService({
     connectionString: environment.connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     await repository.markProformaInvoiceSent({

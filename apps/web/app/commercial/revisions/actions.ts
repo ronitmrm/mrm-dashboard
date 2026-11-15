@@ -16,7 +16,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { ecnDesignHref, ecnHref } from "@/lib/pricing/ecn-routes"
 import { optionalText, requiredText } from "@/lib/form-data"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -74,7 +74,7 @@ async function persistEcnDrawing(input: {
     const sha256 = createHash("sha256").update(source.bytes).digest("hex")
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       return await artifacts.store({

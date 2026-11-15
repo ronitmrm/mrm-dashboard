@@ -23,7 +23,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { requiredText } from "@/lib/form-data"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -93,7 +93,7 @@ export async function submitMaintenanceRequestAction(formData: FormData) {
   if (uploadIds.length) {
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       const retain = async (

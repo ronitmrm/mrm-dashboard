@@ -16,7 +16,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { commercialTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { buildQuotePdf, loadQuoteMarketContext } from "@/lib/pricing/quote-pdf"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 
 const customerCostingPath = "/commercial/customer-costing"
 const productCostingPath = "/commercial/product-costing"
@@ -262,7 +262,7 @@ export async function sendQuoteAction(formData: FormData) {
   })
   const artifacts = createArtifactService({
     connectionString: environment.connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     const issued = await costing.issueQuote({

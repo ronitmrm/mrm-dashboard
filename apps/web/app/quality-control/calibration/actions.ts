@@ -8,7 +8,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { signedInPerformer } from "@/lib/auth/signed-in-machinist"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -158,7 +158,7 @@ async function saveCertificate(input: {
   const authorization = await pendingUploadAuthorizationForUser(input.actorUserId)
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     return await consumePendingArtifactUpload({

@@ -11,7 +11,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { accountableStorePermission } from "@/lib/auth/department-store-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { requireStoreAction } from "@/lib/auth/store-action-access"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
 
 function required(data: FormData, key: string) {
@@ -101,7 +101,7 @@ export async function issueCalibrationServiceOrderAction(data: FormData) {
     if (!prepared.alreadyIssued) {
       const artifacts = createArtifactService({
         connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
+        provider: createArtifactStorage(),
       })
       try {
         await storeIssuedPurchaseOrderPdf(artifacts, actorUserId)({

@@ -9,7 +9,7 @@ import { NextResponse } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   MAX_MAINTENANCE_WORK_PHOTOS,
   maintenanceWorkPhotoQuery,
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       }
       const artifacts = createArtifactService({
         connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
+        provider: createArtifactStorage(),
       })
       try {
         for (const [index, uploadId] of uploadIds.entries()) {

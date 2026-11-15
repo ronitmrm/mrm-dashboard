@@ -26,7 +26,7 @@ import { hrTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { buildEmploymentLetterPdf } from "@/lib/hr/employment-letter-pdf"
 import { istDateTimeInputToIso } from "@/lib/date-time"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import {
   consumePendingArtifactUpload,
   pendingUploadAuthorizationForUser,
@@ -527,7 +527,7 @@ export async function saveCandidateAction(formData: FormData) {
         const sha256 = createHash("sha256").update(source.bytes).digest("hex")
         const artifacts = createArtifactService({
           connectionString: readAuthEnvironment().connectionString,
-          provider: createGoogleCloudArtifactProvider(),
+          provider: createArtifactStorage(),
         })
         try {
           return await artifacts.store({

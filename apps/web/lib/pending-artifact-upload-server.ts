@@ -19,7 +19,7 @@ import {
   type PendingUploadSafeProgress,
 } from "./artifact-upload-contract"
 import { getAuth } from "./auth/auth"
-import { createGoogleCloudArtifactProvider } from "./google-cloud-artifact-provider"
+import { createArtifactStorage } from "./artifact-storage-providers"
 import {
   authorizePendingUploadIntent,
   normalizePendingUploadMetadata,
@@ -69,7 +69,7 @@ type Dependencies = {
 function dependencies(overrides: Dependencies = {}) {
   return {
     now: overrides.now ?? (() => new Date()),
-    provider: overrides.provider ?? createGoogleCloudArtifactProvider(),
+    provider: overrides.provider ?? createArtifactStorage(),
     repository:
       overrides.repository ??
       createPendingArtifactUploadRepository({ pool: getWebPostgresPool() }),

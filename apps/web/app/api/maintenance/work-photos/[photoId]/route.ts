@@ -7,7 +7,7 @@ import {
 } from "@/lib/artifact-delivery"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import { parseMaintenanceWorkPhotoTarget } from "@/lib/maintenance-work-photo-target"
 
 const photoIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -82,7 +82,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
     }
     const artifacts = createArtifactService({
       connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       await artifacts.delete({

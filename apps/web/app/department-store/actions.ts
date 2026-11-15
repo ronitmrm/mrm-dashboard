@@ -11,7 +11,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 import { isPastOrTodayIstDate } from "@/lib/date-time"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
 import { withCsvImportFeedback } from "@/lib/csv-import-action-feedback"
 import { readMasterCsv } from "@/lib/master-data-csv"
@@ -315,7 +315,7 @@ export async function createDepartmentRepairOrderAction(
     const store = createStoreRepository({ connectionString: readAuthEnvironment().connectionString })
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       return await store.createRepairPurchaseOrdersFromSelection({

@@ -36,7 +36,7 @@ import {
   technicalReviewChecklistFromFormData,
   technicalReviewReturnPath,
 } from "@/lib/pricing/technical-review"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
 import {
   consumePendingArtifactUpload,
@@ -122,7 +122,7 @@ async function persistAttachment(input: {
     const sha256 = createHash("sha256").update(source.bytes).digest("hex")
     const service = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       return await service.store({
@@ -988,7 +988,7 @@ export async function importEnquiryLinesAction(formData: FormData) {
     const sourceSha256 = createHash("sha256").update(source.bytes).digest("hex")
     const artifacts = createArtifactService({
       connectionString: readAuthEnvironment().connectionString,
-      provider: createGoogleCloudArtifactProvider(),
+      provider: createArtifactStorage(),
     })
     try {
       const artifact = await artifacts.store({

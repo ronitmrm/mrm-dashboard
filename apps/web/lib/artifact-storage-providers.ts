@@ -7,6 +7,21 @@ import {
 } from "@workspace/db"
 
 import { createGoogleCloudArtifactProvider } from "./google-cloud-artifact-provider"
+import { createLocalDiskArtifactProvider } from "./local-disk-artifact-provider"
+
+type Environment = Record<string, string | undefined>
+
+function localDiskDirectory(environment: Environment) {
+  return environment.ARTIFACT_STORAGE_DIRECTORY?.trim() || undefined
+}
+
+/** Where new files are stored: the server disk when configured, else Google Cloud. */
+export function createArtifactStorage(environment: Environment = process.env) {
+  const directory = localDiskDirectory(environment)
+  return directory
+    ? createLocalDiskArtifactProvider(directory)
+    : createGoogleCloudArtifactProvider(environment)
+}
 
 function lazyProvider(
   identifier: ArtifactStorageProviderIdentifier,
@@ -29,11 +44,17 @@ function lazyProvider(
 export function createStoredArtifactProvider(
   identifier: ArtifactStorageProviderIdentifier
 ) {
-  if (identifier !== "google-cloud-storage") {
-    throw new ArtifactStorageError(
-      "provider-failure",
-      "The retained file uses a storage provider that is unavailable after cutover."
+  const directory = localDiskDirectory(process.env)
+  if (identifier === "local-disk" && directory) {
+    return lazyProvider(identifier, () =>
+      createLocalDiskArtifactProvider(directory)
     )
   }
-  return lazyProvider(identifier, () => createGoogleCloudArtifactProvider())
+  if (identifier === "google-cloud-storage") {
+    return lazyProvider(identifier, () => createGoogleCloudArtifactProvider())
+  }
+  throw new ArtifactStorageError(
+    "provider-failure",
+    "The retained file uses a storage provider that is unavailable after cutover."
+  )
 }

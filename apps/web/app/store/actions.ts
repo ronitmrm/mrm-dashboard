@@ -37,7 +37,7 @@ import {
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
 import { storePurchaseOrderIssuanceId } from "@/lib/store-purchase-order-input"
-import { createGoogleCloudArtifactProvider } from "@/lib/google-cloud-artifact-provider"
+import { createArtifactStorage } from "@/lib/artifact-storage-providers"
 import { storeIssuedPurchaseOrderPdf } from "@/lib/store/issued-purchase-order-pdf"
 import type { PendingUploadIntent } from "@/lib/artifact-upload-contract"
 import {
@@ -146,7 +146,7 @@ async function retainStoreReceiptGuaranteeCard(input: {
 }) {
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     await consumePendingArtifactUpload({
@@ -280,7 +280,7 @@ async function storeSupplierQuoteArtifact(input: {
 }) {
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     const sha256 = createHash("sha256").update(input.bytes).digest("hex")
@@ -654,7 +654,7 @@ async function storeItemDrawingArtifact(input: {
 }) {
   const artifacts = createArtifactService({
     connectionString: readAuthEnvironment().connectionString,
-    provider: createGoogleCloudArtifactProvider(),
+    provider: createArtifactStorage(),
   })
   try {
     const sha256 = createHash("sha256").update(input.bytes).digest("hex")
@@ -1240,7 +1240,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
     async (repository, actorUserId, organizationId) => {
       const artifacts = createArtifactService({
         connectionString: readAuthEnvironment().connectionString,
-        provider: createGoogleCloudArtifactProvider(),
+        provider: createArtifactStorage(),
       })
       try {
         return await repository.createPurchaseOrdersFromSelection({

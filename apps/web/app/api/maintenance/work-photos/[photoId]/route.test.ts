@@ -27,7 +27,7 @@ vi.mock("@/lib/artifact-delivery", () => ({
 }))
 vi.mock("@/lib/auth/auth", () => ({ readAuthEnvironment: () => ({ connectionString: "postgres://test" }) }))
 vi.mock("@/lib/auth/require-capability", () => ({ requireCapability: mocks.requireCapability }))
-vi.mock("@/lib/google-cloud-artifact-provider", () => ({ createGoogleCloudArtifactProvider: () => ({}) }))
+vi.mock("@/lib/artifact-storage-providers", () => ({ createArtifactStorage: () => ({}) }))
 vi.mock("@/lib/maintenance-work-photo-target", () => ({
   parseMaintenanceWorkPhotoTarget: () => ({ kind: "machine", taskKey: "task-1" }),
 }))

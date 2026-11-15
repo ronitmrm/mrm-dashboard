@@ -5,6 +5,7 @@ import { Pool, type PoolClient } from "pg"
 
 export type ArtifactStorageProviderIdentifier =
   | "google-cloud-storage"
+  | "local-disk"
   | "uploadthing"
 
 export type ArtifactByteLocator = {

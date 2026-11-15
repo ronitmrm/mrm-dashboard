@@ -61,10 +61,14 @@ function positiveInteger(value: number, fallback: number, maximum: number) {
   return Math.min(value, maximum)
 }
 
+const artifactProviderLabels = {
+  "google-cloud-storage": "Google Cloud Storage",
+  "local-disk": "Server disk",
+  uploadthing: "UploadThing",
+} as const satisfies Record<ArtifactStorageProviderIdentifier, string>
+
 function artifactProviderLabel(provider: ArtifactStorageProviderIdentifier) {
-  return provider === "google-cloud-storage"
-    ? "Google Cloud Storage"
-    : "UploadThing"
+  return artifactProviderLabels[provider]
 }
 
 const moduleExpression = `CASE usage.target_schema
