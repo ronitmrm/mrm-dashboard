@@ -1,0 +1,8 @@
+[Unit]
+Description=MRMPL ERP nightly on-disk snapshot
+After=postgresql.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/mrm/production.env
+ExecStart=/usr/bin/bash %h/srv/mrm-erp/deploy/local/snapshot.sh nightly

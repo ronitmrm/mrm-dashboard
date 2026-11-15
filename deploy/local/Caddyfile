@@ -1,0 +1,22 @@
+# Public HTTPS entry point. The router forwards public :8443 to this machine.
+# Ports 80/443 are not available, so the certificate is issued through a DNS
+# challenge delegated (one CNAME at the main DNS host) to a Cloudflare zone we control.
+# Values come from ~/.config/mrm/caddy.env.
+{
+	http_port 8081
+	https_port 8443
+	email {$ACME_EMAIL}
+	auto_https disable_redirects
+}
+
+{$APP_HOST}:8443 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		dns_challenge_override_domain {$ACME_DELEGATED_DOMAIN}
+		resolvers 1.1.1.1
+	}
+	encode zstd gzip
+	@retiredWebhook path /api/user-daily-attendance/test-webhook /api/user-daily-attendance/test-webhook/
+	respond @retiredWebhook 410
+	reverse_proxy 127.0.0.1:3001
+}
