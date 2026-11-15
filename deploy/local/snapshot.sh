@@ -7,6 +7,7 @@
 # directory (files are immutable, so unchanged ones cost no extra space).
 # Keeps the newest 14 nightly and 5 pre-deploy snapshots.
 set -euo pipefail
+shopt -s nullglob
 
 label="${1:-nightly}"
 artifacts="${ARTIFACT_STORAGE_DIRECTORY:-$HOME/srv/mrm-artifacts}"
@@ -19,12 +20,15 @@ mkdir -p "$root/database" "$root/artifacts"
 pg_dump -d mrmpl -Fc -Z zstd:3 -f "$root/database/$name.dump.partial"
 mv "$root/database/$name.dump.partial" "$root/database/$name.dump"
 
-latest="$(ls -1d "$root"/artifacts/*/ 2>/dev/null | tail -1 || true)"
+previous_snapshots=("$root"/artifacts/*/)
+latest="${previous_snapshots[-1]:-}"
 rsync -a --delete ${latest:+--link-dest="$latest"} "$artifacts/" "$root/artifacts/$name/"
 
 prune() {
-  local directory="$1" pattern="$2" keep="$3"
-  ls -1d "$directory"/$pattern 2>/dev/null | sort | head -n "-$keep" | xargs -r rm -rf
+  local entries=("$1"/$2)
+  local excess=$((${#entries[@]} - $3))
+  ((excess > 0)) && rm -rf "${entries[@]:0:excess}"
+  return 0
 }
 for kind in database artifacts; do
   prune "$root/$kind" "*-nightly*" 14
