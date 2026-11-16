@@ -333,7 +333,7 @@ export function EmployeeAssignmentHistory({
     })),
     ...(assignment.designationHistory ?? []).map((event, index) => ({
       id: `${assignment.id}:designation:${index}`, assignment,
-      status: "Designation Corrected", plannedEndOn: null, endedOn: null,
+      status: event.type ?? "Designation Corrected", plannedEndOn: null, endedOn: null,
       recordedAt: event.recordedAt, note: event.note,
       probationChange: null, designationChange: event,
     })),
@@ -354,7 +354,7 @@ export function EmployeeAssignmentHistory({
       <SectionCard>
         <CardHeader>
           <CardTitle>Employee Assignment History</CardTitle>
-          <CardDescription>Assignments, resignations, cancelled resignations, probation extensions and designation corrections appear as separate rows. Summary counts reflect assignments.</CardDescription>
+          <CardDescription>Assignments, resignations, cancelled resignations, probation extensions, transfers and designation corrections appear as separate rows. Summary counts reflect assignments.</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <OperationalTable filterStorageKey="hr-employee-assignment-history" containerClassName="max-h-[36rem] rounded-md border">
@@ -376,7 +376,7 @@ export function EmployeeAssignmentHistory({
                   <TableCell>{formatCalendarDate(row.plannedEndOn ?? "—")}</TableCell>
                   <TableCell>{formatCalendarDate(row.endedOn ?? "—")}</TableCell>
                   <TableCell data-filter-value={status}>
-                    <StatusBadge value={status} tone={status === "Resigned Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" || status === "Probation Extended" || status === "Designation Corrected" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
+                    <StatusBadge value={status} tone={status === "Resigned Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" || status === "Probation Extended" || status === "Designation Corrected" || status === "Transferred" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
                     {row.probationChange ? <span className="block text-xs text-muted-foreground">Probation: {formatCalendarDate(row.probationChange.previousDueOn ?? "Not recorded")} → {formatCalendarDate(row.probationChange.nextDueOn)}</span> : null}
                     {row.designationChange ? <span className="block text-xs text-muted-foreground">{row.designationChange.previousDesignation} ({row.designationChange.previousPostCode}) → {row.designationChange.designation} ({row.designationChange.postCode})</span> : null}
                     {row.recordedAt ? <span className="block text-xs text-muted-foreground">{formatIstDateTime(row.recordedAt)} IST</span> : null}

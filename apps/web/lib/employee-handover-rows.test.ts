@@ -65,7 +65,9 @@ it("shows both employee identities during handover and removes only the outgoing
     id: "pending:replacement", sourcePostId: "post", postCode: "OCMM-AS-1", employeeName: "Narendra",
     employeeCode: null, status: "Appointed", joiningDate: "2026-09-15", lastWorkingDate: null,
   })
-  expect(employeeHandoverRows([post]).map(({ employeeCode }) => employeeCode)).toEqual(["205", "69"])
+  expect(employeeHandoverRows([post]).map(({ postCode, employeeCode, status }) =>
+    [postCode, employeeCode, status]
+  )).toEqual([["OCMM-AS-1", "205", "Occupied"], ["OCMM-AS-1", "69", "Resigned"]])
   post.replacementAppointments![0]!.outgoingStillEmployed = false
   expect(employeeHandoverRows([post])).toEqual([post])
   expect(post.replacementAppointments).toHaveLength(1)
