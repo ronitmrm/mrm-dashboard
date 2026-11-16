@@ -801,6 +801,22 @@ describe("production and shop-floor workflows", () => {
       startCount: 10_000,
       startedAt: "2026-08-15T06:00:00+05:30",
     })
+    const futureDowntime = {
+      startedAt: new Date(Date.now() + 60_000).toISOString(),
+      endedAt: new Date(Date.now() + 120_000).toISOString(),
+      enteredRole: "machinist",
+      organizationId,
+      reasonCode: "DC-01",
+      reasonName: "Tool adjustment",
+      sessionId: first.id,
+    }
+    await expect(repository.startProductionSessionDowntime(futureDowntime))
+      .rejects.toThrow("Downtime start cannot be in the future.")
+    await expect(repository.recordProductionSessionDowntime(futureDowntime))
+      .rejects.toThrow("Downtime start cannot be in the future.")
+    await expect(repository.recordProductionSessionDowntime({
+      ...futureDowntime, startedAt: "2026-08-15T07:00:00+05:30",
+    })).rejects.toThrow("Downtime end cannot be in the future.")
     await repository.recordProductionSessionDowntime({
       endedAt: "2026-08-15T07:10:00+05:30",
       enteredRole: "machinist",
@@ -945,6 +961,10 @@ describe("production and shop-floor workflows", () => {
       sessionId: second.id,
       startedAt: "2026-08-15T14:15:00+05:30",
     })
+    await expect(repository.endProductionSessionDowntime({
+      endOutcome: "resolved", endedAt: futureDowntime.endedAt,
+      organizationId, sessionId: second.id,
+    })).rejects.toThrow("Downtime end cannot be in the future.")
     await expect(
       repository.endProductionSessionDowntime({
         endOutcome: "resolved",

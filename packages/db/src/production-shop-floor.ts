@@ -225,6 +225,14 @@ function requiredTimestamp(value: string, label: string) {
   return timestamp
 }
 
+function requiredDowntimeTimestamp(value: string, label: string) {
+  const timestamp = requiredTimestamp(value, label)
+  if (timestamp.getTime() > Date.now()) {
+    throw new Error(`${label} cannot be in the future.`)
+  }
+  return timestamp
+}
+
 function nonNegativeWholeNumber(value: number | undefined, label: string) {
   if (value === undefined || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative whole number.`)
@@ -2026,8 +2034,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     }) {
       return transaction(pool, async (client) => {
         const enteredRole = productionEntryRole(input.enteredRole)
-        const startedAt = requiredTimestamp(input.startedAt, "Downtime start")
-        const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
+        const startedAt = requiredDowntimeTimestamp(input.startedAt, "Downtime start")
+        const endedAt = requiredDowntimeTimestamp(input.endedAt, "Downtime end")
         const durationMinutes = Math.round(
           (endedAt.getTime() - startedAt.getTime()) / 60_000
         )
@@ -2208,7 +2216,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     }) {
       return transaction(pool, async (client) => {
         const enteredRole = productionEntryRole(input.enteredRole)
-        const startedAt = requiredTimestamp(input.startedAt, "Downtime start")
+        const startedAt = requiredDowntimeTimestamp(input.startedAt, "Downtime start")
         const session = await client.query<{ session_reference: string; started_at: Date; status: string }>(
           `
             SELECT session_reference, started_at, status
@@ -2379,7 +2387,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     }) {
       return transaction(pool, async (client) => {
         const endOutcome = productionDowntimeEndOutcome(input.endOutcome)
-        const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
+        const endedAt = requiredDowntimeTimestamp(input.endedAt, "Downtime end")
         const event = await client.query<{
           floor_code: ProductionFloorCode
           has_accident_loss: boolean
@@ -2456,7 +2464,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       resolvedAt: string
     }) {
       return transaction(pool, async (client) => {
-        const resolvedAt = requiredTimestamp(input.resolvedAt, "Resolution time")
+        const resolvedAt = requiredDowntimeTimestamp(input.resolvedAt, "Resolution time")
         const event = await client.query<{
           carry_forward_resolved_at: Date | null
           ended_at: Date
