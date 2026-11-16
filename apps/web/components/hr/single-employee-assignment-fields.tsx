@@ -71,7 +71,7 @@ export function SingleEmployeeAssignmentFields({
   posts: RecruitmentPostRow[]
   showTargetSelector?: boolean
 }) {
-  const { combinedTargets, individualTargets, targets } = useMemo(() => {
+  const { combinedTargets, individualTargets, postByCode, targets } = useMemo(() => {
     const activeCombinedRoles = combinedRoles.filter(
       (role) => role.status === "Active"
     )
@@ -96,6 +96,7 @@ export function SingleEmployeeAssignmentFields({
     return {
       combinedTargets: combined,
       individualTargets: individual,
+      postByCode,
       targets: [...combined, ...individual],
     }
   }, [combinedRoles, posts])
@@ -162,7 +163,7 @@ export function SingleEmployeeAssignmentFields({
       post.employeeCode === selected?.post.employeeCode
     )
   )
-  const canCorrectDesignation = Boolean(selected?.post.status === "Occupied" &&
+  const canMoveAssignment = Boolean(selected?.post.status === "Occupied" &&
     !selected.post.combinedRoleId && selected.post.employeeCode && selectedAssignment && !pendingReplacement)
   const designationTargets = individualTargets.filter(({ post }) =>
     post.id !== postId && post.status === "Vacant" && !post.combinedRoleId &&
@@ -170,6 +171,15 @@ export function SingleEmployeeAssignmentFields({
     post.designation !== selected?.post.designation &&
     !post.replacementAppointments?.some((appointment) => appointment.status === "Pending")
   )
+  const transferTargets = event === "Transferred" ? targets.filter(({ combinedRole, post }) => {
+    const members = combinedRole ? combinedRole.postCodes.map((code) => postByCode.get(code)) : [post]
+    return members.every((member) => member && member.id !== postId &&
+      member.combinedRoleId === (combinedRole?.id ?? null) &&
+      !member.replacementAppointments?.some((appointment) => appointment.status === "Pending") &&
+      ((member.status === "Vacant" && (!member.appointedApplicationId || member.lastWorkingDate)) ||
+        (member.status === "Resigned" && member.lastWorkingDate && member.employeeCode !== selected?.post.employeeCode))
+    )
+  }) : []
 
   function selectTarget(nextPostId: string) {
     const next = targets.find(({ post }) => post.id === nextPostId)
@@ -399,8 +409,11 @@ export function SingleEmployeeAssignmentFields({
                   Role Changed — Release This Post Only
                 </NativeSelectOption>
               ) : null}
-              {canCorrectDesignation ? (
-                <NativeSelectOption value="Designation Corrected">Designation Correction</NativeSelectOption>
+              {canMoveAssignment ? (
+                <>
+                  <NativeSelectOption value="Designation Corrected">Designation Correction</NativeSelectOption>
+                  <NativeSelectOption value="Transferred">Transfer Employee</NativeSelectOption>
+                </>
               ) : null}
               {appointed || pendingReplacement ? (
                 <NativeSelectOption
@@ -510,6 +523,32 @@ export function SingleEmployeeAssignmentFields({
           <Field className="w-full min-w-0">
             <FieldLabel htmlFor="designation-correction-reason">Correction Reason</FieldLabel>
             <Input id="designation-correction-reason" name="exit_note" maxLength={1000} required />
+          </Field>
+        </>
+      ) : null}
+      {event === "Transferred" ? (
+        <>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="transfer-destination-post">Transfer To</FieldLabel>
+            <NativeSelect id="transfer-destination-post" name="destination_post_id" defaultValue="" required>
+              <NativeSelectOption value="">Select Post Or Combined Job</NativeSelectOption>
+              {transferTargets.map(({ combinedRole, post }) => (
+                <NativeSelectOption key={post.id} value={post.id}>
+                  {combinedRole
+                    ? `${combinedRole.vacancyCode} · ${combinedRole.name} · ${combinedRole.postCodes.join(", ")}`
+                    : `${post.postCode} · ${post.department} · ${post.designation}`}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <FieldDescription>
+              {transferTargets.length
+                ? "Saving transfers the employee and frees their current post. If the destination employee is serving notice, both appear under the same post code through the last working day."
+                : "No approved post or combined job is available for transfer."}
+            </FieldDescription>
+          </Field>
+          <Field className="w-full min-w-0">
+            <FieldLabel htmlFor="employee-transfer-reason">Transfer Reason</FieldLabel>
+            <Input id="employee-transfer-reason" name="exit_note" maxLength={1000} required />
           </Field>
         </>
       ) : null}

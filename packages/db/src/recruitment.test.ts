@@ -366,6 +366,36 @@ test("designation correction moves the retained assignment and records its previ
   await expect(repository.listEmployeeAssignments("org-1")).resolves.toMatchObject([{ id: snapshot.id, designationHistory: [history] }])
 })
 
+test("transfer to a combined job keeps the original assignment and records each overlapping handover", async () => {
+  const source = { id: "source", post_code: "MM-AS-1", status: "Occupied",
+    combined_role_id: null, employee_code: "65", employee_name: "Incoming Employee" }
+  const primary = { id: "primary", post_code: "ST-HO-1", status: "Resigned",
+    combined_role_id: "combined", active_role_member: true, is_primary: true,
+    employee_code: "20", last_working_date: "2099-11-30" }
+  const secondary = { ...primary, id: "secondary", post_code: "ST-2-HO-1", is_primary: false, status: "Occupied" }
+  const assignment = { id: "retained", joined_on: "2024-07-13", snapshot: { post_code: source.post_code } }
+  const query = vi.fn(async (sql: string) => ({ rows:
+    sql.includes("JOIN recruitment.posts requested") ? [source, primary, secondary] :
+    sql.includes("SELECT assignment.id, assignment.employee_name") ? [assignment] :
+    sql.includes("RETURNING to_jsonb(assignment)") ? [{ snapshot: { post_code: primary.post_code } }] : [] }))
+  const client = { query, release: vi.fn() } as unknown as PoolClient
+  const repository = createRecruitmentRepository({ pool: { connect: async () => client } as unknown as Pool })
+  const input = { organizationId: "org-1", postId: source.id, destinationPostId: primary.id,
+    expectedEmployeeCode: "65", reason: "Department transfer" }
+
+  await expect(repository.transferEmployee(input)).rejects.toThrow("Every destination post")
+  expect(query).not.toHaveBeenCalledWith(expect.stringContaining("UPDATE recruitment.posts"), expect.anything())
+
+  secondary.status = "Resigned"
+  await expect(repository.transferEmployee(input)).resolves.toEqual({ id: primary.id })
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("to_jsonb(post), 'Joined'"),
+    ["org-1", [primary.id, secondary.id], source.employee_name, "65", null])
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("SET post_id = $1, post_code = $2"),
+    [primary.id, primary.post_code, assignment.id, "org-1"])
+  expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO recruitment.employee_post_assignments"),
+    [assignment.id, [secondary.id]])
+})
+
 test("designation correction rejects an occupied destination before changing either assignment", async () => {
   const query = vi.fn(async (sql: string) => ({ rows: sql.includes("SELECT post.id, post.post_code") ? [
     { id: "old-post", status: "Occupied", employee_code: "65", combined_role_id: null, department_id: "hr", designation_id: "assistant" },

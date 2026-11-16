@@ -79,15 +79,20 @@ async function termAnchor(client: Pool | PoolClient, organizationId: string, ass
   if (!rawCode?.trim()) return null
   const history = await client.query<{
     id: string; employee_code: string; joined_on: string | null; ended_on: string | null
+    term_details_saved: boolean
   }>(
-    `SELECT id, employee_code, joined_on::text, ended_on::text
-     FROM recruitment.employee_post_assignments
-     WHERE organization_id = $1 AND employee_code = $2`,
+    `SELECT assignment.id, assignment.employee_code, assignment.joined_on::text, assignment.ended_on::text,
+       term.assignment_id IS NOT NULL AS term_details_saved
+     FROM recruitment.employee_post_assignments assignment
+     LEFT JOIN recruitment.employee_term_details term ON term.assignment_id = assignment.id
+       AND term.organization_id = assignment.organization_id
+     WHERE assignment.organization_id = $1 AND assignment.employee_code = $2`,
     [organizationId, rawCode]
   )
   return groupEmployeeTerms(history.rows.map((row) => ({
     id: row.id, employeeCode: row.employee_code,
     joinedOn: row.joined_on, endedOn: row.ended_on,
+    termDetailsSaved: row.term_details_saved,
   }))).find((group) => group.assignments.some((row) => row.id === assignmentId))?.anchorId ?? null
 }
 

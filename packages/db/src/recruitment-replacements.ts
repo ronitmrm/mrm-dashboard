@@ -25,6 +25,21 @@ type AssignmentTarget = {
   employee_code: string | null
 }
 
+export async function recordJoinedReplacements(
+  client: PoolClient,
+  input: { organizationId: string; actorUserId?: string | null; employeeName: string; employeeCode: string },
+  postIds: string[]
+) {
+  await client.query(
+    `INSERT INTO recruitment.post_replacements
+       (organization_id, post_id, employee_name, employee_code, outgoing_assignment, status,
+        completed_at, created_by_user_id, updated_by_user_id)
+     SELECT $1, id, $3, $4, to_jsonb(post), 'Joined', now(), $5, $5
+     FROM recruitment.posts post WHERE organization_id = $1 AND id = ANY($2::uuid[])`,
+    [input.organizationId, postIds, input.employeeName, input.employeeCode, input.actorUserId ?? null]
+  )
+}
+
 export async function applyReplacementAssignment(
   client: PoolClient,
   input: {
@@ -106,14 +121,7 @@ export async function applyReplacementAssignment(
           date.toISOString().slice(0, 10) !== joiningDate) {
         throw new Error("Enter a valid actual joining date.")
       }
-      await client.query(
-        `INSERT INTO recruitment.post_replacements
-           (organization_id, post_id, employee_name, employee_code, outgoing_assignment, status,
-            completed_at, created_by_user_id, updated_by_user_id)
-         SELECT $1, id, $3, $4, to_jsonb(post), 'Joined', now(), $5, $5
-         FROM recruitment.posts post WHERE organization_id = $1 AND id = ANY($2::uuid[])`,
-        [input.organizationId, ids, employeeName, employeeCode, input.actorUserId ?? null]
-      )
+      await recordJoinedReplacements(client, { ...input, employeeName, employeeCode }, ids)
     } else {
       // Freeze the outgoing assignment before publishing the incoming employee.
       await client.query(

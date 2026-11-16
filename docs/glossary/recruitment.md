@@ -316,6 +316,15 @@ and completion, employee details and retained letters stay with it. The former
 post becomes vacant. Pending replacements must be cancelled first. Assignment
 History retains the old/new post codes and designations, reason and recorded time.
 
+Transfer Employee moves an employee from their occupied standalone Approved Post
+to an eligible standalone post or active combined job and frees the former
+post. It keeps the original employment record and records the move and reason
+in Assignment History. In a combined job, every member must be vacant or held
+by a resigning employee with a last working date. Pending replacements must be
+resolved first. When a transfer takes place during notice, Employee Master shows
+both employees under the same post code through the outgoing employee's last
+working day.
+
 For each joined assignment, HR sees a reminder as probation end approaches.
 Employee Master shows the probation end date saved for that employee's joined
 assignment. The date comes from the accepted Offer Letter probation period when

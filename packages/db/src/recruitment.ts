@@ -34,6 +34,7 @@ import {
 import { properCaseUserText } from "./user-entry-text"
 import {
   applyReplacementAssignment,
+  recordJoinedReplacements,
   type ReplacementAppointment,
 } from "./recruitment-replacements"
 
@@ -250,6 +251,7 @@ export type RecruitmentEmployeeAssignmentRow = {
     note: string | null
   }>
   designationHistory?: Array<{
+    type?: "Transferred" | "Designation Corrected"
     recordedAt: string
     previousPostCode: string
     postCode: string
@@ -3809,6 +3811,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
          ) probation_events ON true
          LEFT JOIN LATERAL (
            SELECT json_agg(json_build_object(
+             'type', CASE WHEN event.event_type = 'recruitment.employee.transferred'
+               THEN 'Transferred' ELSE 'Designation Corrected' END,
              'recordedAt', event.occurred_at::text,
              'previousPostCode', event.before_state->>'post_code',
              'postCode', event.after_state->>'post_code',
@@ -3821,7 +3825,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND event.target_schema = 'recruitment'
              AND event.target_table = 'employee_post_assignments'
              AND event.target_id = assignment.id
-             AND event.event_type = 'recruitment.employee.designation_corrected'
+             AND event.event_type IN ('recruitment.employee.designation_corrected',
+               'recruitment.employee.transferred')
          ) designation_events ON true
          WHERE assignment.organization_id = $1
          ORDER BY assignment.created_at DESC, assignment.id DESC`,
@@ -4031,6 +4036,143 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetId: assignment.id, targetTable: "employee_post_assignments",
         })
         return { id: destinationPostId }
+      })
+    },
+
+    async transferEmployee(input: MutationContext & {
+      postId: string
+      destinationPostId: string
+      expectedEmployeeCode: string
+      reason: string
+    }) {
+      const postId = required(input.postId, "Current approved post")
+      const destinationPostId = required(input.destinationPostId, "Destination approved post")
+      const employeeCode = required(input.expectedEmployeeCode, "Employee ID")
+      const reason = required(input.reason, "Transfer reason")
+      if (postId === destinationPostId) throw new Error("Choose a different approved post.")
+      if (reason.length > 1000) throw new Error("Keep the transfer reason within 1,000 characters.")
+      const actor = input.actorUserId ?? null
+
+      return transaction(pool, async (client) => {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])])
+        const { rows: posts } = await client.query<{
+          id: string; post_code: string; designation: string; vacancy_code: string
+          status: string; combined_role_id: string | null; active_role_member: boolean; is_primary: boolean
+          employee_code: string | null; employee_name: string | null; appointed_application_id: string | null
+          last_working_date: string | null
+        }>(
+          `SELECT post.id, post.post_code, designation.name AS designation,
+             post.vacancy_code, post.status, post.combined_role_id,
+             (member.post_id IS NOT NULL) AS active_role_member,
+             COALESCE(member.is_primary, false) AS is_primary,
+             post.employee_code, post.employee_name, post.appointed_application_id,
+             post.last_working_date::text
+           FROM recruitment.posts post
+           JOIN recruitment.posts requested ON requested.organization_id = $1 AND requested.id = $3
+           JOIN recruitment.designations designation ON designation.id = post.designation_id
+           LEFT JOIN recruitment.combined_roles role ON role.id = requested.combined_role_id
+             AND role.organization_id = $1 AND role.status = 'Active'
+           LEFT JOIN recruitment.combined_role_posts member ON member.combined_role_id = role.id
+             AND member.post_id = post.id
+           WHERE post.organization_id = $1 AND (post.id IN ($2, $3) OR member.post_id IS NOT NULL)
+           ORDER BY post.id FOR UPDATE OF post`,
+          [input.organizationId, postId, destinationPostId]
+        )
+        const source = posts.find((post) => post.id === postId)
+        const destination = posts.find((post) => post.id === destinationPostId)
+        if (!source || source.status !== "Occupied" || source.combined_role_id || source.employee_code !== employeeCode) {
+          throw new Error("Refresh and select this employee's occupied standalone post.")
+        }
+        if (!destination || (destination.combined_role_id && !destination.is_primary)) {
+          throw new Error("Choose an approved post or the primary post of an active combined job.")
+        }
+        const destinations = posts.filter((post) => post.id !== postId)
+        if (destinations.some((post) =>
+          post.combined_role_id !== destination.combined_role_id ||
+          (destination.combined_role_id && !post.active_role_member) ||
+          !(post.status === "Vacant" && !post.employee_code && !post.employee_name && !post.appointed_application_id ||
+            post.status === "Resigned" && post.last_working_date && post.employee_code !== employeeCode &&
+            (post.employee_code || post.employee_name))
+        )) {
+          throw new Error("Every destination post must be vacant or held by a resigning employee with a last working date.")
+        }
+        const destinationIds = destinations.map((post) => post.id)
+        const replacements = await client.query(
+          `SELECT id FROM recruitment.post_replacements
+           WHERE organization_id = $1 AND post_id = ANY($2::uuid[]) AND status = 'Pending'
+           ORDER BY post_id FOR UPDATE`, [input.organizationId, [postId, ...destinationIds]]
+        )
+        if (replacements.rows.length) throw new Error("Resolve the pending replacement before transferring this employee.")
+
+        const { rows: assignments } = await client.query<{
+          id: string; employee_name: string; joined_on: string | null; application_id: string | null
+          snapshot: Record<string, unknown>
+        }>(
+          `SELECT assignment.id, assignment.employee_name, assignment.joined_on::text,
+             assignment.application_id, to_jsonb(assignment) AS snapshot
+           FROM recruitment.employee_post_assignments assignment
+           WHERE assignment.organization_id = $1 AND assignment.post_id = $2
+             AND assignment.employee_code = $3 AND assignment.ended_on IS NULL FOR UPDATE`,
+          [input.organizationId, postId, employeeCode]
+        )
+        const assignment = assignments[0]
+        if (assignments.length !== 1 || !assignment) throw new Error("A single current joined assignment is required for transfer.")
+
+        const employeeName = source.employee_name ?? assignment.employee_name
+        const resignedIds = destinations.filter((post) => post.status === "Resigned").map((post) => post.id)
+        if (resignedIds.length) {
+          await recordJoinedReplacements(client, { ...input, employeeName, employeeCode }, resignedIds)
+        }
+        const transferred = await client.query<{ snapshot: Record<string, unknown> }>(
+          `UPDATE recruitment.employee_post_assignments assignment
+           SET post_id = $1, post_code = $2, updated_at = now()
+           WHERE id = $3 AND organization_id = $4
+           RETURNING to_jsonb(assignment) AS snapshot`,
+          [destination.id, destination.post_code, assignment.id, input.organizationId]
+        )
+        const secondaryIds = destinationIds.filter((id) => id !== destination.id)
+        if (secondaryIds.length) {
+          await client.query(
+            `INSERT INTO recruitment.employee_post_assignments
+               (organization_id, post_id, post_code, application_id, employee_name,
+                 employee_code, joined_on, probation_due_on, legacy_probation_completed)
+             SELECT assignment.organization_id, post.id, post.post_code, assignment.application_id,
+               assignment.employee_name, assignment.employee_code, assignment.joined_on,
+               assignment.probation_due_on, assignment.legacy_probation_completed
+             FROM recruitment.employee_post_assignments assignment
+             JOIN recruitment.posts post ON post.organization_id = assignment.organization_id
+             WHERE assignment.id = $1 AND post.id = ANY($2::uuid[])`,
+            [assignment.id, secondaryIds]
+          )
+        }
+        await client.query(
+          `UPDATE recruitment.posts SET employee_name = $1, employee_code = $2, joining_date = $3::date,
+             appointed_application_id = $4, status = 'Occupied', last_working_date = NULL,
+             updated_by_user_id = $5, updated_at = now(), row_version = row_version + 1
+           WHERE id = ANY($6::uuid[]) AND organization_id = $7`,
+          [employeeName, employeeCode, assignment.joined_on,
+            source.appointed_application_id ?? assignment.application_id, actor, destinationIds, input.organizationId]
+        )
+        // The source's current assignment already moved. Skip recreating it as an exit.
+        await client.query("SELECT set_config('mrm.designation_correction', 'true', true)")
+        await client.query(
+          `UPDATE recruitment.posts SET employee_name = NULL, employee_code = NULL, joining_date = NULL,
+             appointed_application_id = NULL, status = 'Vacant', last_working_date = NULL,
+             updated_by_user_id = $1, updated_at = now(), row_version = row_version + 1
+           WHERE id = $2 AND organization_id = $3`,
+          [actor, postId, input.organizationId]
+        )
+        await client.query("SELECT set_config('mrm.designation_correction', 'false', true)")
+        await closeOpenJobsForManualAssignment(client, { ...input, employeeEvent: "Transferred" }, destinationIds)
+        await audit(client, {
+          ...input, eventType: "recruitment.employee.transferred", reason,
+          beforeState: { ...assignment.snapshot, designation: source.designation },
+          afterState: { ...transferred.rows[0]!.snapshot, designation: destination.designation },
+          metadata: { sourcePostId: postId, destinationPostIds: destinationIds, vacancyCode: destination.vacancy_code },
+          targetId: assignment.id, targetTable: "employee_post_assignments",
+        })
+        return { id: destination.id }
       })
     },
 

@@ -331,21 +331,27 @@ export async function updateCombinedRoleAction(formData: FormData) {
 }
 
 export async function assignEmployeeAction(formData: FormData) {
+  const employeeEvent = value(formData, "employee_event")
   await mutate(
     formData,
     masterCapability("employee_assignments", "save"),
-    (repository, context) => value(formData, "employee_event") === "Designation Corrected"
-      ? repository.correctEmployeeDesignation({
-        ...context,
-        postId: value(formData, "post_id"),
-        destinationPostId: value(formData, "destination_post_id"),
-        expectedEmployeeCode: value(formData, "employee_code"),
-        reason: value(formData, "exit_note"),
-      })
-      : repository.assignEmployee({
+    (repository, context) => {
+      if (employeeEvent === "Designation Corrected" || employeeEvent === "Transferred") {
+        const input = {
+          ...context,
+          postId: value(formData, "post_id"),
+          destinationPostId: value(formData, "destination_post_id"),
+          expectedEmployeeCode: value(formData, "employee_code"),
+          reason: value(formData, "exit_note"),
+        }
+        return employeeEvent === "Transferred"
+          ? repository.transferEmployee(input)
+          : repository.correctEmployeeDesignation(input)
+      }
+      return repository.assignEmployee({
         ...context,
         employeeCode: value(formData, "employee_code"),
-        employeeEvent: value(formData, "employee_event"),
+        employeeEvent,
         employeeName: value(formData, "employee_name"),
         exitNote: value(formData, "exit_note"),
         exitType:
@@ -360,6 +366,7 @@ export async function assignEmployeeAction(formData: FormData) {
         postId: value(formData, "post_id"),
         probationDueOn: value(formData, "probation_due_on"),
       })
+    }
   )
 }
 

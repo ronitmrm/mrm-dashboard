@@ -3,6 +3,7 @@ type Assignment = {
   employeeCode: string | null
   joinedOn: string | null
   endedOn: string | null
+  termDetailsSaved?: boolean
 }
 
 export function groupEmployeeTerms<T extends Assignment>(assignments: T[]) {
@@ -45,6 +46,10 @@ export function groupEmployeeTerms<T extends Assignment>(assignments: T[]) {
         groups.push(current)
       }
       current!.assignments.push(assignment)
+      if (assignment.termDetailsSaved &&
+          !current!.assignments.some((row) => row.id === current!.anchorId && row.termDetailsSaved)) {
+        current!.anchorId = assignment.id
+      }
       if (current!.endedOn !== null) {
         current!.endedOn = assignment.endedOn === null
           ? null

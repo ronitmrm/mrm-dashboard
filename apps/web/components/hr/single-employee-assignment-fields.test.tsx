@@ -28,6 +28,7 @@ test("prefills the probation end date saved when the employee joined", () => {
     initialPostId={post.id} posts={[post]} showTargetSelector={false} />)
   expect(html).toMatch(/name="probation_due_on"[^>]*value="2026-12-15"/)
   expect(html).toContain('value="Designation Corrected"')
+  expect(html).toContain('value="Transferred"')
   expect(html).toMatch(/value="Appointed"[^>]*disabled/)
   expect(html).toContain('value="Resigned Without Process"')
   expect(html).not.toContain('value="Removed"')
