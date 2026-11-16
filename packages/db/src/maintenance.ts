@@ -1252,6 +1252,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
     }) {
       return transaction(pool, async (client) => {
         const startedAt = requiredTimestamp(input.startedAt, "Breakdown start")
+        if (startedAt > new Date()) throw new Error("Breakdown cannot start in the future.")
         const taskKey = requiredText(input.taskKey, "Breakdown task key")
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtext('maintenance.breakdown'), hashtext(lower($1)))",
@@ -1481,6 +1482,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
         if (current.status !== "In Progress") {
           throw new Error("Only an in-progress breakdown can be completed.")
         }
+        if (completedAt > new Date()) throw new Error("Breakdown completion cannot be in the future.")
         if (completedAt <= current.started_at) {
           throw new Error("Breakdown completion must be after its start.")
         }

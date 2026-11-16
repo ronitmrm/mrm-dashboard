@@ -336,7 +336,7 @@ the availability restriction from today without reversing saved setup movements
 or queue placements. This planner action does not close a production session's
 downtime or start production.
 
-Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
+Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. The server rejects downtime start, end, and resolution times in the future, including for linked Maintenance breakdowns. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
 
 An Accident is a downtime started on a running session with an existing downtime
 reason and a required account of what happened. The report may identify multiple
