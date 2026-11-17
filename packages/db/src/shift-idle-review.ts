@@ -97,10 +97,9 @@ const evidenceSql = `
 `
 
 export function createShiftIdleReviewRepository(options: RepositoryPoolOptions) {
-  const { close } = repositoryPool(options)
+  const { pool: readPool, close } = repositoryPool(options)
 
-  async function readMachines(input: ShiftKey, machineId: string | null = null) {
-    const { pool } = repositoryPool(options)
+  async function readMachines(pool: typeof readPool, input: ShiftKey, machineId: string | null = null) {
     const endedAt = productionShiftEndInstant({ ...input, productionFloorCode: "cnc" })
     const startedAt = new Date(endedAt.getTime() - 8 * 60 * 60 * 1000)
     const window = { start: startedAt.toISOString(), end: endedAt.toISOString() }
@@ -122,7 +121,7 @@ export function createShiftIdleReviewRepository(options: RepositoryPoolOptions) 
   return {
     close,
     async read(input: ShiftKey) {
-      const machines = await readMachines(input)
+      const machines = await readMachines(readPool, input)
       return { fleetSize: machines.length, machines }
     },
     async save(input: ShiftKey & {
@@ -135,7 +134,7 @@ export function createShiftIdleReviewRepository(options: RepositoryPoolOptions) 
       return withRepositoryTransaction(options, async () => {
         const { pool } = repositoryPool(options)
         await pool.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-        const [machine] = await readMachines(input, input.machineId)
+        const [machine] = await readMachines(pool, input, input.machineId)
         if (!machine || machine.untimedOutput) return undefined
         const ranges = shiftReasonRanges(machine.segments)
         if (!ranges.length || shiftReasonVersion(ranges) !== input.version) return undefined

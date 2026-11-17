@@ -33,8 +33,17 @@ export type ShiftGapReview = ShiftInterval & {
 }
 export type ShiftSegment = ShiftInterval & { kind: ShiftCoverageKind; review?: ShiftGapReview }
 
+const reviewThresholdMs = 30 * 60 * 1000
+
+function unexplainedShiftMs(segments: ShiftSegment[]) {
+  return segments.reduce((total, segment) => segment.kind === "gap"
+    ? total + Date.parse(segment.end) - Date.parse(segment.start)
+    : total, 0)
+}
+
 export function shiftReasonRanges(segments: ShiftSegment[]) {
-  return segments.filter(({ kind }) => kind === "gap" || kind === "reviewed")
+  const requiresReview = unexplainedShiftMs(segments) > reviewThresholdMs
+  return segments.filter(({ kind }) => kind === "reviewed" || (requiresReview && kind === "gap"))
 }
 
 export function shiftReasonVersion(ranges: ShiftSegment[]) {
@@ -58,6 +67,13 @@ export type ShiftIdleMachine = {
   stage: string | null
   untimedOutput: boolean
   segments: ShiftSegment[]
+}
+
+export function shiftIdleQueue(machine: ShiftIdleMachine) {
+  if (machine.untimedOutput) return null
+  const uncoveredMs = unexplainedShiftMs(machine.segments)
+  if (uncoveredMs > reviewThresholdMs) return "review"
+  return uncoveredMs > 0 ? "unaccounted" : null
 }
 
 export type ShiftIdleReview = {

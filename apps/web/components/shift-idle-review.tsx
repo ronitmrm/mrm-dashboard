@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react"
 import {
-  cncShifts, isShiftIdleReason, shiftCoverageKinds, shiftIdleReasons, shiftReasonRanges, shiftReasonVersion,
+  cncShifts, isShiftIdleReason, shiftCoverageKinds, shiftIdleQueue, shiftIdleReasons, shiftReasonRanges, shiftReasonVersion,
   type ShiftCoverageKind, type ShiftGapReview, type ShiftIdleMachine, type ShiftIdleReview, type ShiftSegment,
 } from "@workspace/db/shift-idle-reasons"
 import { StatusBadge } from "@workspace/ui/components/badge"
@@ -12,9 +12,13 @@ import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { formatIstDate } from "@/lib/date-time"
 import { PlanningRecordCells, PlanningRecordHeaders } from "./planning-record-columns"
 
 const endpoint = "/api/shift-idle-review"
+type ReviewFilters = { date: string; shift: string }
+type ReviewPage = { reviews: ShiftIdleReview[]; nextDate: string | null }
+const allShifts: ReviewFilters = { date: "", shift: "" }
 const stageLabels: Record<string, string> = {
   raw_material_at_machine: "Raw material at machine",
   presetting: "Presetting",
@@ -52,112 +56,123 @@ function timeRange(segment: ShiftSegment) {
   return `${clock.format(new Date(segment.start))}–${clock.format(new Date(segment.end))}`
 }
 
-function needsReview(machine: ShiftIdleMachine) {
-  return machine.untimedOutput || machine.segments.some(({ kind }) => kind === "gap" || kind === "unclosed")
-}
-
-export function ShiftIdleReviewPanel({ initialReview }: { initialReview?: { date: string; shift: string; machine: string } }) {
-  const [query, setQuery] = useState(() => initialReview
-    ? `?${new URLSearchParams({ date: initialReview.date, shift: initialReview.shift })}` : "")
-  const [reload, setReload] = useState(0)
-  const [review, setReview] = useState<ShiftIdleReview | null>(null)
+export function ShiftIdleReviewPanel({ initialReview, view = "queue" }: {
+  initialReview?: { date: string; shift: string; machine: string }
+  view?: "queue" | "unaccounted"
+}) {
+  const unaccounted = view === "unaccounted"
+  const [filters, setFilters] = useState<ReviewFilters>(initialReview ?? allShifts)
+  const [request, setRequest] = useState({ filters, olderDate: "" })
+  const [page, setPage] = useState<ReviewPage>({ reviews: [], nextDate: null })
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(0)
-  const [filter, setFilter] = useState<"pending" | "saved" | "all">(initialReview ? "saved" : "pending")
   const [focusMachine, setFocusMachine] = useState(initialReview?.machine ?? "")
 
   useEffect(() => {
     const controller = new AbortController()
+    const { filters: { date, shift }, olderDate } = request
+    const params = new URLSearchParams({ view })
+    if (date) params.set("date", date)
+    if (shift) params.set("shift", shift)
+
     async function load() {
       try {
-        const response = await fetch(`${endpoint}${query}`, { signal: controller.signal, cache: "no-store" })
-        if (!response.ok) throw new Error((await response.json()).error)
-        const data: ShiftIdleReview = await response.json()
-        if (!controller.signal.aborted) setReview(data)
+        let cursor = olderDate
+        do {
+          if (cursor) params.set("olderDate", cursor)
+          const response = await fetch(`${endpoint}?${params}`, { signal: controller.signal, cache: "no-store" })
+          if (!response.ok) throw new Error((await response.json()).error)
+          const data: ReviewPage = await response.json()
+          if (controller.signal.aborted) return
+          setPage((current) => ({ nextDate: data.nextDate, reviews: [...current.reviews, ...data.reviews] }))
+          cursor = data.nextDate ?? ""
+        } while (cursor)
       } catch (error) {
         if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Try again.")
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     void load()
     return () => controller.abort()
-  }, [query, reload])
+  }, [request, view])
 
-  function loadShift(nextQuery: string) {
+  function loadReviews(nextFilters: ReviewFilters, olderDate = "") {
     setError("")
-    setReview(null)
-    setFocusMachine("")
-    setQuery(nextQuery)
-    setReload((value) => value + 1)
+    setLoading(true)
+    if (!olderDate) setPage({ reviews: [], nextDate: null })
+    setRequest({ filters: nextFilters, olderDate })
   }
 
-  function selectShift(event: FormEvent<HTMLFormElement>) {
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const params = new URLSearchParams({ date: String(form.get("date")), shift: String(form.get("shift")) })
-    loadShift(`?${params}`)
+    setFocusMachine("")
+    loadReviews(filters)
   }
 
-  if (error) return (
-    <StandardState variant="error" title="Could not load shift coverage" description={error}
-      action={<Button onClick={() => loadShift("")}>Load latest completed shift</Button>} />
-  )
-  if (!review) return <StandardState variant="loading" title="Loading shift coverage" description="Checking production and maintenance records." />
+  function updateReason(review: ShiftIdleReview, machineId: string, saved: ShiftGapReview[]) {
+    setPage((current) => ({
+      ...current,
+      reviews: current.reviews.map((shift) => shift.productionDate === review.productionDate && shift.shift === review.shift ? {
+        ...shift,
+        machines: shift.machines.map((machine) => machine.machineId === machineId ? {
+          ...machine,
+          segments: machine.segments.map((segment) => {
+            const match = saved.find(({ start, end }) => start === segment.start && end === segment.end)
+            return match ? { ...segment, kind: "reviewed", review: match } : segment
+          }),
+        } : machine),
+      } : shift),
+    }))
+  }
 
-  const pending = review.machines.filter(needsReview)
-  const savedMachines = review.machines.filter((machine) => machine.segments.some((segment) => segment.review))
-  const visible = (filter === "all" ? review.machines : filter === "saved" ? savedMachines : pending)
-    .filter((machine) => !focusMachine || machine.machineNumber === focusMachine)
+  const rows = page.reviews.flatMap((review) => review.machines.map((machine) => ({ review, machine })))
+  const visible = rows.filter(({ machine }) =>
+    shiftIdleQueue(machine) === (unaccounted ? "unaccounted" : "review") && (!focusMachine || machine.machineNumber === focusMachine))
   return (
     <div className="grid min-w-0 gap-4">
-      <form onSubmit={selectShift} key={`${review.productionDate}-${review.shift}`}>
+      <form aria-label={unaccounted ? "Unaccounted time filters" : "Machine review filters"} onSubmit={applyFilters}>
         <FieldGroup className="flex-row flex-wrap items-end gap-3">
           <Field className="w-auto">
             <FieldLabel htmlFor="idle-review-date">Production date</FieldLabel>
-            <Input id="idle-review-date" name="date" type="date" defaultValue={review.productionDate} required />
+            <Input id="idle-review-date" type="date" value={filters.date}
+              onChange={(event) => setFilters({ ...filters, date: event.target.value })} />
           </Field>
           <Field className="w-auto">
             <FieldLabel htmlFor="idle-review-shift">Shift</FieldLabel>
-            <NativeSelect id="idle-review-shift" name="shift" defaultValue={review.shift}>
+            <NativeSelect id="idle-review-shift" value={filters.shift}
+              onChange={(event) => setFilters({ ...filters, shift: event.target.value })}>
+              <NativeSelectOption value="">All shifts</NativeSelectOption>
               {cncShifts.map((shift) => <NativeSelectOption key={shift} value={shift}>{shift}</NativeSelectOption>)}
             </NativeSelect>
           </Field>
-          <Button type="submit" disabled={saving > 0}>View shift</Button>
-          <Button type="button" variant="ghost" onClick={() => loadShift("")} disabled={saving > 0}>Latest completed shift</Button>
+          <Button type="submit" disabled={saving > 0}>Apply filters</Button>
+          <Button type="button" variant="ghost" disabled={saving > 0 || !(filters.date || filters.shift || request.filters.date || request.filters.shift)}
+            onClick={() => { setFilters(allShifts); setFocusMachine(""); loadReviews(allShifts) }}>Clear date and shift</Button>
         </FieldGroup>
       </form>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm" role="status">
-          <strong>{pending.length} of {review.fleetSize} machines</strong> need review for this 8-hour shift
-        </p>
-        <div className="flex flex-wrap items-center gap-1" aria-label="Machine filter">
-          {([["pending", "Needs review"], ["saved", "Saved reasons"], ["all", "All machines"]] as const).map(([value, label]) => (
-            <Button key={value} type="button" size="sm" variant={filter === value ? "secondary" : "ghost"}
-              aria-pressed={filter === value && !focusMachine} disabled={saving > 0}
-              onClick={() => { setFocusMachine(""); setFilter(value) }}>{label}</Button>
-          ))}
-        </div>
-      </div>
+      {visible.length ? <p className="text-sm" role="status">
+        {visible.length} {unaccounted ? "machine shifts with unaccounted time" : visible.length === 1 ? "machine review needs a reason" : "machine reviews need a reason"}
+        {loading ? " · Loading more shifts…" : ""}
+      </p> : null}
       {visible.length ? (
-        <OperationalTable aria-label="CNC shift coverage" containerClassName="rounded-lg border">
-          <TableHeader><TableRow><PlanningRecordHeaders /><TableHead>Shift breakdown</TableHead></TableRow></TableHeader>
+        <OperationalTable aria-label={unaccounted ? "CNC unaccounted time" : "CNC shift coverage"} containerClassName="rounded-lg border">
+          <TableHeader><TableRow><TableHead>Production date</TableHead><TableHead>Shift</TableHead><PlanningRecordHeaders /><TableHead>Shift breakdown</TableHead></TableRow></TableHeader>
           <TableBody>
-            {visible.map((machine) => (
-              <ShiftCoverageRow key={machine.machineId} machine={machine} review={review}
+            {visible.map(({ machine, review }) => (
+              <ShiftCoverageRow key={`${review.productionDate}-${review.shift}-${machine.machineId}`} machine={machine} review={review} unaccounted={unaccounted}
                 onSaving={(active) => setSaving((count) => count + (active ? 1 : -1))}
-                onSaved={(saved) => setReview((current) => current ? {
-                  ...current,
-                  machines: current.machines.map((row) => row.machineId === machine.machineId ? {
-                    ...row, segments: row.segments.map((segment) => {
-                      const match = saved.find(({ start, end }) => start === segment.start && end === segment.end)
-                      return match ? { ...segment, kind: "reviewed", review: match } : segment
-                    }),
-                  } : row),
-                } : current)} />
+                onSaved={(saved) => updateReason(review, machine.machineId, saved)} />
             ))}
           </TableBody>
         </OperationalTable>
-      ) : <StandardState title={filter === "saved" ? "No saved reasons" : "No machines to review"}
-        description={filter === "saved" ? "Saved reasons for this shift will appear here." : "Select All machines to see the full shift breakdown."} />}
+      ) : null}
+      {loading && !visible.length ? <StandardState variant="loading" title={unaccounted ? "Loading unaccounted time" : "Loading machine reviews"} description="Checking production and maintenance records." /> : null}
+      {error ? <StandardState variant="error" title={unaccounted ? "Could not load unaccounted time" : "Could not load machine reviews"} description={error}
+        action={<Button disabled={saving > 0} onClick={() => loadReviews(request.filters, page.nextDate ?? "")}>Retry</Button>} /> : null}
+      {!loading && !error && !visible.length ? <StandardState title={unaccounted ? "No unaccounted time to show" : "No machines need a reason"}
+        description="Change the production date or shift to see other records." /> : null}
     </div>
   )
 }
@@ -167,34 +182,37 @@ type RowCallbacks = {
   onSaving: (active: boolean) => void
 }
 
-function ShiftCoverageRow({ machine, review, onSaved, onSaving }: RowCallbacks & {
+function ShiftCoverageRow({ machine, review, unaccounted, onSaved, onSaving }: RowCallbacks & {
   machine: ShiftIdleMachine
   review: ShiftIdleReview
+  unaccounted: boolean
 }) {
   const totals = new Map<ShiftCoverageKind, number>()
   for (const segment of machine.segments)
     totals.set(segment.kind, (totals.get(segment.kind) ?? 0) + milliseconds(segment))
+  const labelFor = (kind: ShiftCoverageKind) => unaccounted && kind === "gap" ? "Unaccounted time" : coverageLabels[kind]
   return (
     <TableRow>
+      <TableCell>{formatIstDate(review.productionDate)}</TableCell>
+      <TableCell>{review.shift}</TableCell>
       <PlanningRecordCells floor="cnc" machine={machine.machineNumber} part={machine.item} setup={machine.setup} job={machine.jobCard} />
       <TableCell className="min-w-72 whitespace-normal">
         {machine.stage ? <div className="mb-2 text-xs text-muted-foreground">{stageLabels[machine.stage] ?? machine.stage}</div> : null}
         <div aria-hidden="true" className="flex h-2 overflow-hidden rounded-full bg-muted">
           {machine.segments.map((segment) => (
             <span key={segment.start} className={timelineColors[segment.kind]}
-              title={`${timeRange(segment)} ${coverageLabels[segment.kind]}`}
+              title={`${timeRange(segment)} ${labelFor(segment.kind)}`}
               style={{ flexGrow: milliseconds(segment), flexBasis: 0 }} />
           ))}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs tabular-nums">
-          {shiftCoverageKinds.filter(([kind]) => totals.has(kind)).map(([kind, label]) =>
-            kind === "gap" || kind === "unclosed"
-              ? <StatusBadge key={kind} tone="warning" value={`${duration(totals.get(kind)!)} ${label.toLowerCase()}`} />
-              : <span key={kind} className="text-muted-foreground">{label} <strong className="font-medium text-foreground">{duration(totals.get(kind)!)}</strong></span>
+          {shiftCoverageKinds.filter(([kind]) => totals.has(kind)).map(([kind]) =>
+            (kind === "gap" && !unaccounted) || kind === "unclosed"
+              ? <StatusBadge key={kind} tone="warning" value={`${duration(totals.get(kind)!)} ${labelFor(kind).toLowerCase()}`} />
+              : <span key={kind} className="text-muted-foreground">{labelFor(kind)} <strong className="font-medium text-foreground">{duration(totals.get(kind)!)}</strong></span>
           )}
         </div>
-        {machine.untimedOutput ? <p className="mt-2 text-xs">Production output has no start or end time. Complete the production record before assigning a reason.</p> : null}
-        <MachineReason machine={machine} review={review} onSaved={onSaved} onSaving={onSaving} />
+        {!unaccounted ? <MachineReason machine={machine} review={review} onSaved={onSaved} onSaving={onSaving} /> : null}
         <details className="mt-2">
           <summary className="w-fit cursor-pointer text-xs font-medium text-primary">View time ranges</summary>
           <ul className="mt-2 grid gap-2">
@@ -202,7 +220,7 @@ function ShiftCoverageRow({ machine, review, onSaved, onSaving }: RowCallbacks &
               <li key={segment.start} className="border-t py-2">
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
                   <span className="font-medium">{timeRange(segment)} IST</span>
-                  <span>{duration(milliseconds(segment))} {coverageLabels[segment.kind].toLowerCase()}</span>
+                  <span>{duration(milliseconds(segment))} {labelFor(segment.kind).toLowerCase()}</span>
                 </div>
                 {segment.review ? <div className="mt-1 text-xs text-muted-foreground">
                   {shiftIdleReasons.find(([value]) => value === segment.review?.reason)?.[1]}

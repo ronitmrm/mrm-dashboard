@@ -48,7 +48,11 @@ const render = (defaultQueue?: string, floor: "cnc" | "forging" = "cnc") => rend
 test("opens Machine Review only for CNC Planning Control", () => {
   const markup = render("shift-coverage")
   expect(markup).toContain("Machine Review")
-  expect(markup).toContain("Loading shift coverage")
+  expect(markup).toContain("Loading machine reviews")
+  expect(markup).toContain("Machine review filters")
+  expect(markup).toContain("All shifts")
+  for (const label of ["Needs review", "Saved reasons", "All machines", "Latest completed shift", "Load older shifts"])
+    expect(markup).not.toContain(label)
   expect(markup).not.toContain("Close flag")
   expect(render("shift-coverage", "forging")).not.toContain("Machine Review")
 })
@@ -56,6 +60,8 @@ test("opens Machine Review only for CNC Planning Control", () => {
 test("offers an inline edit for a saved machine reason in Completed", () => {
   const markup = render("completed")
   expect(markup).toContain("Completed planning reviews")
+  expect(markup).toContain("Unaccounted time")
+  expect(markup).toContain("Unaccounted time filters")
   for (const header of ["Machine Number", "Item Code", "Setup Number", "Job Card Number"])
     expect(markup).toContain(header)
   expect(markup).toContain("/dashboard/job-cards/P2046?floor=cnc")
