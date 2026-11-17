@@ -150,71 +150,31 @@ export function CommercialShell({
       style={
         {
           "--header-height": `${headerHeight}px`,
-          "--sidebar-width": cncDepartment ? "14.5rem" : "19rem",
+          "--sidebar-width": "19rem",
         } as React.CSSProperties
       }
     >
-      <Sidebar
-        variant="sidebar"
-        className={
-          cncDepartment
-            ? "[--sidebar-accent-foreground:#f7f7f2] [--sidebar-accent:#ffffff19] [--sidebar-border:#ffffff35] [--sidebar-foreground:#f7f7f2] [--sidebar:#056247] dark:[--sidebar:#103c2b]"
-            : undefined
-        }
-      >
-        <SidebarHeader
-          className={
-            cncDepartment
-              ? "bg-[#056247] px-[22px] pt-7 pb-0 text-[#f7f7f2] dark:bg-[#103c2b]"
-              : "border-b border-black/10 bg-[var(--color-logo-surface)] px-3 py-3"
-          }
-        >
-          <Link
-            className={
-              cncDepartment
-                ? "grid justify-items-start gap-1 border-b border-dotted border-white/40 pb-6"
-                : "flex items-center px-2 py-2"
-            }
-            href="/home"
-          >
+      <Sidebar variant="sidebar">
+        <SidebarHeader className="border-b border-black/10 bg-[var(--color-logo-surface)] px-3 py-3">
+          <Link className="flex items-center px-2 py-2" href="/home">
             <Image
               src="/mrm-green.svg"
               alt="Mrmpl"
               width={792}
               height={176}
               priority
-              className={
-                cncDepartment
-                  ? "h-auto w-[181px] max-w-full object-contain brightness-0 invert"
-                  : "h-8 w-auto max-w-full object-contain"
-              }
+              className="h-8 w-auto max-w-full object-contain"
             />
-            {cncDepartment ? (
-              <span className="text-base leading-tight">
-                Precision Metal Fittings
-              </span>
-            ) : null}
           </Link>
         </SidebarHeader>
-        <SidebarContent
-          className={
-            cncDepartment ? "bg-[#056247] dark:bg-[#103c2b]" : undefined
-          }
-        >
+        <SidebarContent>
           <UnifiedSidebarNavigation
             activeDashboardTab={activeDashboardTab}
             activeProductionFloor={activeProductionFloor}
-            cncWorkspace={Boolean(cncDepartment)}
             navigationAccess={navigationAccess}
           />
         </SidebarContent>
-        <SidebarFooter
-          className={
-            cncDepartment
-              ? "border-t border-white/25 bg-[#056247] p-3 dark:bg-[#103c2b] [&_.text-muted-foreground]:text-[#d4e6dc] [&_a]:text-[#f7f7f2] [&_button]:text-[#f7f7f2]"
-              : "border-t border-sidebar-border p-3"
-          }
-        >
+        <SidebarFooter className="border-t border-sidebar-border p-3">
           <UserAccountFooter user={user} />
         </SidebarFooter>
         <SidebarRail />
