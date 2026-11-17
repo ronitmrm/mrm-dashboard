@@ -4,6 +4,9 @@ import { PersonalDashboard } from "@/components/personal-dashboard"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { isCncDashboardCard } from "@/lib/cnc-dashboard"
+import { cncDashboardFilters } from "@/lib/cnc-dashboard-data"
+import { loadCncDashboard } from "@/lib/cnc-department-data"
 import {
   availableDashboardMetricIds,
   dashboardMetricCatalog,
@@ -20,22 +23,13 @@ import {
 } from "@/lib/personal-dashboard"
 
 import { savePersonalDashboard } from "./actions"
-import {
-  QualityChartGrid,
-  QualityReportFilters,
-} from "@/components/dashboard/quality-report-charts"
-import { isQualityChartId } from "@/lib/quality-reports"
-import {
-  loadQualityReports,
-  type QualityReportQuery,
-} from "@/lib/quality-report-data"
 
 export const dynamic = "force-dynamic"
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<QualityReportQuery & { saved?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await requireAuthenticatedSession("/home")
   const repository = createUserDashboardRepository({
@@ -75,15 +69,18 @@ export default async function HomePage({
       selectedWidgets.some(({ id }) => id === widget.id) ||
       analyticsSourceWidgetIds.has(widget.id)
   )
-  const metrics = await loadPersonalDashboardMetrics(dataWidgets)
-  const metricValues = dashboardMetricValues(metrics)
   const query = await searchParams
-  const chartIds = selectedWidgets
-    .map((widget) => widget.id)
-    .filter(isQualityChartId)
-  const quality = chartIds.length
-    ? await loadQualityReports(access, query)
-    : null
+  const cncFilters = cncDashboardFilters(query)
+  const cncCardIds = selectedWidgets
+    .map(({ id }) => id)
+    .filter(isCncDashboardCard)
+  const [metrics, cncData] = await Promise.all([
+    loadPersonalDashboardMetrics(dataWidgets),
+    cncCardIds.length && cncFilters.from <= cncFilters.to
+      ? loadCncDashboard(cncFilters, cncCardIds)
+      : null,
+  ])
+  const metricValues = dashboardMetricValues(metrics)
 
   return (
     <div className="grid gap-6">
@@ -91,24 +88,15 @@ export default async function HomePage({
         analytics={analytics}
         availableWidgets={availableWidgets}
         availableMetricIds={availableMetricIds}
+        cncData={cncData}
+        cncFilters={cncFilters}
         metrics={metrics}
         metricValues={metricValues}
         onSave={savePersonalDashboard}
         saved={query.saved === "1"}
         selectedWidgetIds={selectedWidgets.map(({ id }) => id)}
         userName={session.user.name}
-      >
-        {quality ? (
-          <section className="grid gap-4" aria-label="My quality charts">
-            <QualityReportFilters {...quality} />
-            <QualityChartGrid
-              ids={chartIds}
-              data={quality.data}
-              pinnable={false}
-            />
-          </section>
-        ) : null}
-      </PersonalDashboard>
+      />
     </div>
   )
 }

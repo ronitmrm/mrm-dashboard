@@ -1,13 +1,12 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState } from "react"
 import { useFormStatus } from "react-dom"
 import Link from "next/link"
 import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
-  BarChart3,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -54,8 +53,6 @@ import {
 } from "@workspace/ui/components/native-select"
 
 import {
-  ChartCard,
-  DashboardBarChart,
   DashboardEmptyState,
   DashboardGrid,
   PageHeader,
@@ -66,7 +63,15 @@ import type {
   PersonalDashboardWidgetId,
 } from "../lib/personal-dashboard"
 import type { PersonalDashboardMetrics } from "../lib/personal-dashboard-data"
-import { isQualityChartId } from "../lib/quality-reports"
+import {
+  isCncDashboardCard,
+  type CncDashboardData,
+  type CncDashboardFilters,
+} from "../lib/cnc-dashboard"
+import {
+  CncDashboardCard,
+  CncDashboardFilterBar,
+} from "./dashboard/cnc-dashboard-cards"
 import {
   dashboardMetricCatalog,
   evaluateDashboardFormula,
@@ -100,10 +105,11 @@ const moduleTones: Record<PersonalDashboardWidget["module"], MetricCardTone> = {
 }
 
 export function PersonalDashboard({
-  children,
   analytics,
   availableWidgets,
   availableMetricIds,
+  cncData,
+  cncFilters,
   metricValues,
   metrics,
   onSave,
@@ -111,10 +117,11 @@ export function PersonalDashboard({
   selectedWidgetIds,
   userName,
 }: {
-  children?: ReactNode
   analytics: DashboardAnalyticsConfiguration
   availableWidgets: PersonalDashboardWidget[]
   availableMetricIds: DashboardMetricId[]
+  cncData: CncDashboardData | null
+  cncFilters: CncDashboardFilters
   metrics: PersonalDashboardMetrics
   metricValues: DashboardMetricValues
   onSave: (formData: FormData) => Promise<void>
@@ -135,6 +142,11 @@ export function PersonalDashboard({
     const widget = availableById.get(id)
     return widget ? [widget] : []
   })
+  const displayedWidgets = selectedWidgetIds.flatMap((id) => {
+    const widget = availableById.get(id)
+    return widget ? [widget] : []
+  })
+  const hasCncCards = displayedWidgets.some(({ id }) => isCncDashboardCard(id))
 
   function toggle(id: PersonalDashboardWidgetId) {
     setSelectedIds((current) =>
@@ -181,6 +193,9 @@ export function PersonalDashboard({
                   type="hidden"
                   value={JSON.stringify(selectedIds)}
                 />
+                <input name="from" type="hidden" value={cncFilters.from} />
+                <input name="to" type="hidden" value={cncFilters.to} />
+                <input name="shift" type="hidden" value={cncFilters.shift} />
                 <input
                   name="analytics"
                   type="hidden"
@@ -202,7 +217,7 @@ export function PersonalDashboard({
                       <span className="grid gap-0.5">
                         <span className="font-medium">{widget.title}</span>
                         <span className="text-xs text-muted-foreground">
-                          {widget.module}
+                          {widget.dashboardCategory ?? widget.module}
                         </span>
                       </span>
                     </label>
@@ -271,13 +286,37 @@ export function PersonalDashboard({
         </Alert>
       ) : null}
 
-      {children}
-      {analytics.widgets.length ? (
-        <DashboardSection
-          description="Pinned measures, comparisons, and your calculated KPIs."
-          title="My Analytics"
-        >
-          <DashboardGrid columns="three">
+      <DashboardSection
+        className={
+          hasCncCards
+            ? "rounded-2xl bg-[#f7f7f2] p-3 sm:p-5 dark:bg-muted/25"
+            : undefined
+        }
+      >
+        {hasCncCards ? (
+          <CncDashboardFilterBar
+            filters={cncFilters}
+            sessionCount={cncData?.sessionCount}
+          />
+        ) : null}
+        {displayedWidgets.length || analytics.widgets.length ? (
+          <DashboardGrid columns={hasCncCards ? "four" : "three"}>
+            {displayedWidgets.map((widget) =>
+              isCncDashboardCard(widget.id) ? (
+                <CncDashboardCard
+                  data={cncData}
+                  href={widget.href}
+                  id={widget.id}
+                  key={widget.id}
+                />
+              ) : (
+                <DashboardCard
+                  key={widget.id}
+                  metrics={metrics[widget.id]}
+                  widget={widget}
+                />
+              )
+            )}
             {analytics.widgets.map((widget) => (
               <AnalyticsWidgetCard
                 key={widget.id}
@@ -285,25 +324,6 @@ export function PersonalDashboard({
                 widget={widget}
               />
             ))}
-          </DashboardGrid>
-        </DashboardSection>
-      ) : null}
-
-      <DashboardSection
-        description="Your selected modules, live summaries, and direct work shortcuts."
-        title="My Workspace"
-      >
-        {orderedSelection.length ? (
-          <DashboardGrid columns="three">
-            {orderedSelection
-              .filter((widget) => !isQualityChartId(widget.id))
-              .map((widget) => (
-                <DashboardCard
-                  key={widget.id}
-                  metrics={metrics[widget.id]}
-                  widget={widget}
-                />
-              ))}
           </DashboardGrid>
         ) : (
           <DashboardEmptyState
@@ -339,52 +359,29 @@ function AnalyticsWidgetCard({
     )
   }
 
-  if (widget.kind === "formula") {
-    const result = evaluateDashboardFormula(widget, metricValues)
-    const left = dashboardMetricCatalog[widget.leftMetricId]
-    const right = dashboardMetricCatalog[widget.rightMetricId]
-    const operator = {
-      add: "+",
-      percent: "÷",
-      subtract: "−",
-    }[widget.operator]
-    return (
-      <MetricCard
-        description={left.title + " " + operator + " " + right.title}
-        error={result.ok ? undefined : result.error}
-        label={widget.title}
-        tone="brand"
-        unit={result.ok && result.format === "percent" ? "%" : undefined}
-        value={
-          result.ok
-            ? result.value.toLocaleString("en-IN", {
-                maximumFractionDigits: 2,
-              })
-            : "—"
-        }
-      />
-    )
-  }
-
-  const rows = widget.metricIds.flatMap((metricId) => {
-    const value = metricValues[metricId]
-    return Number.isFinite(value)
-      ? [
-          {
-            label: dashboardMetricCatalog[metricId].title,
-            value: Number(value),
-          },
-        ]
-      : []
-  })
+  const result = evaluateDashboardFormula(widget, metricValues)
+  const left = dashboardMetricCatalog[widget.leftMetricId]
+  const right = dashboardMetricCatalog[widget.rightMetricId]
+  const operator = {
+    add: "+",
+    percent: "÷",
+    subtract: "−",
+  }[widget.operator]
   return (
-    <ChartCard
-      description="Live comparison using the same canonical values as the source pages."
-      empty={!rows.length}
-      title={widget.title}
-    >
-      <DashboardBarChart rows={rows} />
-    </ChartCard>
+    <MetricCard
+      description={left.title + " " + operator + " " + right.title}
+      error={result.ok ? undefined : result.error}
+      label={widget.title}
+      tone="brand"
+      unit={result.ok && result.format === "percent" ? "%" : undefined}
+      value={
+        result.ok
+          ? result.value.toLocaleString("en-IN", {
+              maximumFractionDigits: 2,
+            })
+          : "—"
+      }
+    />
   )
 }
 function AnalyticsBuilder({
@@ -400,13 +397,6 @@ function AnalyticsBuilder({
   const secondMetric = availableMetricIds[1] ?? firstMetric
   const [metricToAdd, setMetricToAdd] = useState<DashboardMetricId | "">(
     firstMetric
-  )
-  const [chartTitle, setChartTitle] = useState("")
-  const [chartFirst, setChartFirst] = useState<DashboardMetricId | "">(
-    firstMetric
-  )
-  const [chartSecond, setChartSecond] = useState<DashboardMetricId | "">(
-    secondMetric
   )
   const [formulaTitle, setFormulaTitle] = useState("")
   const [formulaLeft, setFormulaLeft] = useState<DashboardMetricId | "">(
@@ -436,27 +426,6 @@ function AnalyticsBuilder({
         metricId: metricToAdd,
       },
     ])
-  }
-
-  function addChart() {
-    if (!chartFirst || !chartSecond || chartFirst === chartSecond || atLimit) {
-      return
-    }
-    const title =
-      chartTitle.trim() ||
-      dashboardMetricCatalog[chartFirst].title +
-        " vs " +
-        dashboardMetricCatalog[chartSecond].title
-    onChange([
-      ...widgets,
-      {
-        id: `chart:${crypto.randomUUID()}`,
-        kind: "chart",
-        metricIds: [chartFirst, chartSecond],
-        title,
-      },
-    ])
-    setChartTitle("")
   }
 
   function addFormula() {
@@ -502,11 +471,11 @@ function AnalyticsBuilder({
           Analytics Widgets
         </h3>
         <p className="text-sm text-muted-foreground">
-          Add canonical KPIs, compare values in a chart, or calculate a KPI.
+          Add a KPI or calculate a value from two metrics.
         </p>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-2">
         <div className="grid content-start gap-3 rounded-lg border p-3">
           <div>
             <p className="font-medium">KPI Card</p>
@@ -530,58 +499,6 @@ function AnalyticsBuilder({
             variant="outline"
           >
             <Plus aria-hidden="true" /> Add KPI
-          </Button>
-        </div>
-
-        <div className="grid content-start gap-3 rounded-lg border p-3">
-          <div>
-            <p className="font-medium">Comparison Chart</p>
-            <p className="text-xs text-muted-foreground">
-              Compare two compatible counts.
-            </p>
-          </div>
-          <Label htmlFor="dashboard-chart-title">Title</Label>
-          <Input
-            id="dashboard-chart-title"
-            maxLength={80}
-            onChange={(event) => setChartTitle(event.target.value)}
-            placeholder="Optional chart title"
-            value={chartTitle}
-          />
-          <Label htmlFor="dashboard-chart-first">First metric</Label>
-          <NativeSelect
-            className="w-full"
-            id="dashboard-chart-first"
-            onChange={(event) =>
-              setChartFirst(event.target.value as DashboardMetricId)
-            }
-            value={chartFirst}
-          >
-            {metricOptions}
-          </NativeSelect>
-          <Label htmlFor="dashboard-chart-second">Second metric</Label>
-          <NativeSelect
-            className="w-full"
-            id="dashboard-chart-second"
-            onChange={(event) =>
-              setChartSecond(event.target.value as DashboardMetricId)
-            }
-            value={chartSecond}
-          >
-            {metricOptions}
-          </NativeSelect>
-          <Button
-            disabled={
-              !chartFirst ||
-              !chartSecond ||
-              chartFirst === chartSecond ||
-              atLimit
-            }
-            onClick={addChart}
-            type="button"
-            variant="outline"
-          >
-            <BarChart3 aria-hidden="true" /> Add Chart
           </Button>
         </div>
 
@@ -664,11 +581,7 @@ function AnalyticsBuilder({
                 key={widget.id}
               >
                 <Badge variant="outline">
-                  {widget.kind === "metric"
-                    ? "KPI"
-                    : widget.kind === "chart"
-                      ? "Chart"
-                      : "Formula"}
+                  {widget.kind === "metric" ? "KPI" : "Formula"}
                 </Badge>
                 <span className="min-w-0 flex-1 truncate">{title}</span>
                 <Button
@@ -706,7 +619,7 @@ function AnalyticsBuilder({
         </div>
       ) : (
         <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-          No analytics selected. Add a KPI, chart, or calculation above.
+          No analytics selected. Add a KPI or calculation above.
         </p>
       )}
       {atLimit ? (

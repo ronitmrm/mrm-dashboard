@@ -943,7 +943,10 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
-    async listMachineMaintenancePlan(organizationId: string, from: string, to: string) {
+    async listMachineMaintenancePlan(organizationId: string, from: string, to: string, filters?: {
+      productionFloorCode?: string
+      outstandingOnly?: boolean
+    }) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to)
         throw new Error("Select a valid date range.")
       const result = await pool.query<{
@@ -994,9 +997,11 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           AND definition.organization_id = $1
         JOIN catalog.machines machine ON machine.id = schedule.machine_id AND machine.organization_id = $1
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        WHERE ($4::text IS NULL OR floor.code = $4)
+          AND (NOT $5::boolean OR planned.status NOT IN ('Completed', 'Cancelled'))
         ORDER BY planned.due_on, machine.machine_number, planned.id
       `,
-        [organizationId, from, to]
+        [organizationId, from, to, filters?.productionFloorCode ?? null, filters?.outstandingOnly ?? false]
       )
       return result.rows
     },

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   Children,
   useEffect,
@@ -45,11 +46,12 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@workspace/ui/components/sidebar"
 import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
-import { qualityReportNavigation, qualityReportFloors } from "@/lib/quality-reports"
+import { availableCncDashboardDepartments } from "@/lib/personal-dashboard"
 import { departmentStoreHref } from "@/lib/auth/department-store-capabilities"
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import { sidebarModuleLabels } from "@/lib/sidebar-module-labels"
@@ -88,6 +90,14 @@ const submoduleButtonClassName =
   "group/submodule h-8 rounded-md px-2.5 text-sidebar-foreground/70 transition-[transform,background-color,color,box-shadow] duration-[var(--dur-fast)] hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-[var(--color-brand-tint)] data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)] data-[active=true]:hover:bg-[var(--color-brand-tint)]"
 
 type SectionId = SidebarSectionId
+const cncDepartmentIcons = {
+  production: Factory,
+  machinist: Wrench,
+  quality: ListChecks,
+  "shop-floor": Boxes,
+  maintenance: Wrench,
+  planning: TableProperties,
+}
 type ExpandedSections = ExpandedSidebarSections
 
 const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
@@ -173,12 +183,14 @@ function serverExpandedSectionsSnapshot() {
 export function UnifiedSidebarNavigation({
   activeDashboardTab,
   activeProductionFloor = defaultProductionFloorCode,
+  cncWorkspace = false,
   navigationAccess,
   onDashboardTabSelect,
 }: {
   activeDashboardTab?: DashboardTabId
   activeMasterEntryType?: string
   activeProductionFloor?: ProductionFloorCode
+  cncWorkspace?: boolean
   navigationAccess: UnifiedNavigationAccess
   onDashboardTabSelect?: (
     tab: DashboardTabId,
@@ -186,6 +198,7 @@ export function UnifiedSidebarNavigation({
   ) => void
 }) {
   const pathname = usePathname()
+  const { setOpenMobile } = useSidebar()
   const searchParams = useSearchParams()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [menuSearch, setMenuSearch] = useState("")
@@ -384,10 +397,27 @@ export function UnifiedSidebarNavigation({
     normalizedMenuSearch,
     "administration artifacts files access account password security"
   )
+  const departmentDashboards = availableCncDashboardDepartments(
+    navigationAccess
+  ).filter(
+    ({ label }) =>
+      cncWorkspace || !normalizedMenuSearch ||
+      `${label.toLowerCase()} dashboard`.includes(normalizedMenuSearch)
+  )
   const dashboardMatchesSearch =
     !normalizedMenuSearch ||
-    "dashboard home my dashboard quality inspector approvals machine rejection defects shift".includes(normalizedMenuSearch)
+    "dashboard home my dashboard".includes(normalizedMenuSearch) ||
+    departmentDashboards.length > 0
+  const dashboardFilters = new URLSearchParams()
+  if (pathname.startsWith("/home")) {
+    for (const key of ["from", "to", "shift"]) {
+      const value = searchParams.get(key)
+      if (value) dashboardFilters.set(key, value)
+    }
+  }
+  const dashboardQuery = dashboardFilters.size ? `?${dashboardFilters}` : ""
   useEffect(() => {
+    if (cncWorkspace) return
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
@@ -397,12 +427,83 @@ export function UnifiedSidebarNavigation({
 
     window.addEventListener("keydown", focusMenuSearch)
     return () => window.removeEventListener("keydown", focusMenuSearch)
-  }, [])
+  }, [cncWorkspace])
 
   function setSectionOpen(section: SectionId, open: boolean) {
     const next = expandedSidebarSections(open ? section : undefined)
     window.localStorage.setItem(storageKey, JSON.stringify(next))
     window.dispatchEvent(new Event(stateChangedEvent))
+  }
+
+  if (cncWorkspace) {
+    return (
+      <nav
+        aria-label="CNC dashboard views"
+        className="px-[22px] pt-7 pb-4 [--sidebar-accent-foreground:#f7f7f2] [--sidebar-accent:#ffffff19] [--sidebar-foreground:#f7f7f2]"
+      >
+        <p className="mb-4 px-3 text-[10px] leading-tight font-semibold tracking-[.16em] text-sidebar-foreground/80 uppercase">
+          Production
+          <br />
+          workspace
+        </p>
+        <SidebarMenu className="gap-1.5">
+          {Object.keys(cncDepartmentIcons).map((department) => {
+            const entry = departmentDashboards.find(
+              ({ id }) => id === department
+            )
+            if (!entry) return null
+            const { id, label, href } = entry
+            const Icon = cncDepartmentIcons[id] ?? LayoutDashboard
+            const active = pathname === href
+            return (
+              <SidebarMenuItem key={id}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={active}
+                  className="h-12 gap-3 rounded-[10px] px-3.5 font-normal text-sidebar-foreground data-active:bg-[#f7f7f2] data-active:font-semibold data-active:text-[#056247] data-active:shadow-[inset_4px_0_#b8d446] [&>svg]:size-[18px]"
+                >
+                  <Link
+                    aria-current={active ? "page" : undefined}
+                    href={href + dashboardQuery}
+                    onNavigate={() => setOpenMobile(false)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>
+                      {id === "production"
+                        ? "Overview"
+                        : id === "quality"
+                          ? "Quality Control"
+                          : label}
+                    </span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              className="h-12 gap-3 rounded-[10px] px-3.5 text-sidebar-foreground"
+            >
+              <Link
+                href={personalDashboardNavigation.href + dashboardQuery}
+                onNavigate={() => setOpenMobile(false)}
+              >
+                <LayoutDashboard aria-hidden="true" />
+                <span>My Dashboard</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <div className="mt-7 rounded-[14px] bg-[#103c1e] p-4 text-xs leading-relaxed text-[#f7f7f2]">
+          <p className="mb-1 text-[10px] tracking-[.16em] text-[#b8d446] uppercase">
+            Active module
+          </p>
+          <p className="text-sm font-semibold">PPAC CNC-01</p>
+          <p>CNC machining operations</p>
+        </div>
+      </nav>
+    )
   }
 
   return (
@@ -452,32 +553,35 @@ export function UnifiedSidebarNavigation({
             if (!normalizedMenuSearch) setSectionOpen("dashboard", open)
           }}
         >
-          {[
-            { href: personalDashboardNavigation.href, label: "My Dashboard" },
-            ...(qualityReportFloors(navigationAccess).length
-              ? qualityReportNavigation
-              : []),
-          ]
-            .filter(
-              (item) =>
-                !normalizedMenuSearch ||
-                item.label.toLowerCase().includes(normalizedMenuSearch) ||
-                "dashboard".includes(normalizedMenuSearch)
-            )
-            .map((item) => (
-              <SidebarMenuSubItem key={item.href}>
+          <SidebarMenuSubItem>
+            <SidebarMenuSubButton
+              asChild
+              className={submoduleButtonClassName}
+              isActive={pathname === personalDashboardNavigation.href}
+            >
+              <a href={personalDashboardNavigation.href + dashboardQuery}>
+                <LayoutDashboard aria-hidden="true" />
+                <span>My Dashboard</span>
+              </a>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+          {departmentDashboards.map(({ id, label, href }) => {
+            const Icon = cncDepartmentIcons[id] ?? LayoutDashboard
+            return (
+              <SidebarMenuSubItem key={id}>
                 <SidebarMenuSubButton
                   asChild
                   className={submoduleButtonClassName}
-                  isActive={pathname === item.href}
+                  isActive={pathname === href}
                 >
-                  <a href={item.href}>
-                    <LayoutDashboard aria-hidden="true" />
-                    <span>{item.label}</span>
+                  <a href={href + dashboardQuery}>
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
                   </a>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
-            ))}
+            )
+          })}
         </NavigationSection>
       ) : null}
 

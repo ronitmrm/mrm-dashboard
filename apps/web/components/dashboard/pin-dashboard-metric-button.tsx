@@ -5,30 +5,41 @@ import { Check, LoaderCircle, Pin } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 
-import { pinDashboardMetric } from "@/app/home/actions"
+import { pinCncDashboardCard, pinDashboardMetric } from "@/app/home/actions"
+import type { CncDashboardCardId } from "@/lib/cnc-dashboard"
 import type { DashboardMetricId } from "@/lib/dashboard-analytics"
 
 const initialState = { message: "", status: "idle" }
 
-export function PinDashboardMetricButton({
-  metricId,
-}: {
-  metricId: DashboardMetricId
-}) {
+export function PinDashboardMetricButton(
+  props:
+    | { metricId: DashboardMetricId }
+    | { cardId: CncDashboardCardId; alreadyPinned: boolean; title: string }
+) {
+  const card = "cardId" in props ? props : null
   const [state, action, pending] = useActionState(
-    pinDashboardMetric,
+    card ? pinCncDashboardCard : pinDashboardMetric,
     initialState
   )
-  const pinned = state.status === "pinned" || state.status === "already-pinned"
+  const pinned =
+    card?.alreadyPinned ||
+    state.status === "pinned" ||
+    state.status === "already-pinned"
   const label = pending
     ? "Adding to My Dashboard"
     : pinned
-      ? state.message
-      : "Add to My Dashboard"
+      ? state.message || "Already on My Dashboard"
+      : card
+        ? `Add ${card.title} to My Dashboard`
+        : "Add to My Dashboard"
 
   return (
     <form action={action}>
-      <input name="metricId" type="hidden" value={metricId} />
+      {"cardId" in props ? (
+        <input name="cardId" type="hidden" value={props.cardId} />
+      ) : (
+        <input name="metricId" type="hidden" value={props.metricId} />
+      )}
       <Button
         aria-label={label}
         disabled={pending || pinned}
@@ -48,6 +59,11 @@ export function PinDashboardMetricButton({
       <span aria-live="polite" className="sr-only">
         {state.message}
       </span>
+      {state.status === "error" ? (
+        <p role="alert" className="text-xs text-destructive">
+          {state.message}
+        </p>
+      ) : null}
     </form>
   )
 }

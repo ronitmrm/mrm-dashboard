@@ -1,15 +1,20 @@
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
-import type { DashboardTabId } from "./unified-navigation"
+import {
+  dashboardNavigationDestination,
+  type DashboardTabId,
+} from "./unified-navigation"
 import { isProductionFloorTab } from "./auth/production-floor-capabilities"
 import {
-  qualityCharts,
-  qualityReportFloors,
-  isQualityChartId,
-  type QualityChartId,
-} from "./quality-reports"
+  cncDashboardCards,
+  cncDashboardCardIds,
+  cncDashboardCardSource,
+  cncDashboardDepartments,
+  isCncDashboardCard,
+  type CncDashboardCardId,
+} from "./cnc-dashboard"
 
 export type PersonalDashboardWidgetId =
-  | QualityChartId
+  | CncDashboardCardId
   | "access-administration"
   | "commercial-costing"
   | "commercial-customer-bulk-revision"
@@ -60,21 +65,27 @@ export type PersonalDashboardWidget = {
     | "Store"
     | "Maintenance"
   requiredHref?: string
+  dashboardCategory?: string
   scope: "administration" | "commercial" | "hr" | "operations" | "store"
   summary: "commercial" | "hr" | "none" | "store"
   title: string
 }
 
 const widgetCatalog: readonly PersonalDashboardWidget[] = [
-  ...(Object.keys(qualityCharts) as QualityChartId[]).map((id) => ({
-    id,
-    title: qualityCharts[id].title,
-    description: "Quality chart with shared date and unit filters.",
-    href: `/home/quality/${qualityCharts[id].group}`,
-    module: "Production" as const,
-    scope: "operations" as const,
-    summary: "none" as const,
-  })),
+  ...cncDashboardCardIds.map((id): PersonalDashboardWidget => {
+    const [title, dashboardCategory, description] = cncDashboardCards[id]
+    return {
+      id,
+      title,
+      dashboardCategory,
+      description,
+      href: dashboardNavigationDestination(cncDashboardCardSource(id), "cnc")
+        .href,
+      module: "Production",
+      scope: "operations",
+      summary: "none",
+    }
+  }),
   {
     id: "commercial-overview",
     title: "Commercial Overview",
@@ -435,8 +446,13 @@ export function availablePersonalDashboardWidgets(
 ) {
   return widgetCatalog
     .filter((widget) => {
-      if (isQualityChartId(widget.id))
-        return qualityReportFloors(access).length > 0
+      if (isCncDashboardCard(widget.id)) {
+        const source = cncDashboardCardSource(widget.id)
+        return source === "maintenanceTab"
+          ? Boolean(access.maintenanceHrefs?.includes("/?tab=maintenanceTab"))
+          : access.operations &&
+              Boolean(access.productionFloorTabIds?.cnc?.includes(source))
+      }
       if (widget.scope === "administration") return access.administration
       if (widget.scope === "operations") {
         if (widget.id === "master-data")
@@ -490,12 +506,43 @@ export function availablePersonalDashboardWidgets(
     })
 }
 
+export function availableCncDashboardDepartments(
+  access: UnifiedNavigationAccess
+) {
+  const categories = new Set(
+    availablePersonalDashboardWidgets(access).map(
+      (widget) => widget.dashboardCategory
+    )
+  )
+  return (
+    Object.keys(
+      cncDashboardDepartments
+    ) as (keyof typeof cncDashboardDepartments)[]
+  )
+    .filter((id) => categories.has(cncDashboardDepartments[id]))
+    .map((id) => ({
+      id,
+      label: cncDashboardDepartments[id],
+      href: `/home/${id}`,
+    }))
+}
+
 const defaultWidgetIds: readonly PersonalDashboardWidgetId[] = [
   "production-dashboard",
   "commercial-overview",
   "hr-job-posts",
   "store-overview",
   "access-administration",
+]
+
+const defaultCncWidgetIds: readonly CncDashboardCardId[] = [
+  "cnc-pieces-produced",
+  "cnc-pieces-rejected",
+  "cnc-logged-downtime",
+  "cnc-open-sessions",
+  "cnc-shift-comparison",
+  "cnc-downtime-reasons",
+  "cnc-machine-output",
 ]
 
 export function resolvePersonalDashboardSelection(
@@ -506,9 +553,10 @@ export function resolvePersonalDashboardSelection(
     availableWidgets.map((widget) => [widget.id, widget])
   )
   const requestedIds =
-    savedIds === null
-      ? defaultWidgetIds.filter((id) => availableById.has(id))
-      : savedIds
+    savedIds ??
+    (availableById.has("cnc-pieces-produced")
+      ? defaultCncWidgetIds
+      : defaultWidgetIds)
   const selected: PersonalDashboardWidget[] = []
   const seen = new Set<string>()
 

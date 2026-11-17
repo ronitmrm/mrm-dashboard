@@ -14,11 +14,11 @@ export function createUserDashboardRepository(options: RepositoryPoolOptions) {
   return {
     close,
 
-    async load(userId: string) {
+    async load(userId: string, options?: { forUpdate: boolean }) {
       const result = await pool.query<DashboardPreferenceRow>(
         `SELECT dashboard_widgets
          FROM identity.users
-         WHERE id = $1`,
+         WHERE id = $1${options?.forUpdate ? " FOR UPDATE" : ""}`,
         [userId]
       )
       return result.rows[0]?.dashboard_widgets ?? null

@@ -128,7 +128,7 @@ describe("dashboard analytics", () => {
     expect(configuration.widgets).toEqual([])
   })
 
-  it("builds a comparison chart from two or more authorized metrics", () => {
+  it("drops stored comparison charts while keeping pinned KPIs", () => {
     const configuration = resolveDashboardAnalyticsConfiguration(
       {
         version: 1,
@@ -145,10 +145,9 @@ describe("dashboard analytics", () => {
             title: "  Commercial   comparison  ",
           },
           {
-            id: "incomplete-chart",
-            kind: "chart",
-            metricIds: ["commercial.ordered", "store.low-stock"],
-            title: "Unavailable comparison",
+            id: "ordered",
+            kind: "metric",
+            metricId: "commercial.ordered",
           },
         ],
       },
@@ -157,10 +156,9 @@ describe("dashboard analytics", () => {
 
     expect(configuration.widgets).toEqual([
       {
-        id: "commercial-chart",
-        kind: "chart",
-        metricIds: ["commercial.ordered", "commercial.enquiries"],
-        title: "Commercial comparison",
+        id: "ordered",
+        kind: "metric",
+        metricId: "commercial.ordered",
       },
     ])
   })
@@ -183,8 +181,10 @@ describe("dashboard analytics", () => {
         },
         {
           id: "store-attention",
-          kind: "chart",
-          metricIds: ["store.open-requests", "store.low-stock"],
+          kind: "formula",
+          leftMetricId: "store.open-requests",
+          operator: "add",
+          rightMetricId: "store.low-stock",
           title: "Store attention",
         },
       ])

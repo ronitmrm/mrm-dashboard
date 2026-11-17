@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
+import { cncDashboardCardIds, cncDashboardCardSource } from "./cnc-dashboard"
 import {
   availablePersonalDashboardWidgets,
+  availableCncDashboardDepartments,
   resolvePersonalDashboardSelection,
 } from "./personal-dashboard"
 
@@ -25,11 +27,40 @@ describe("personal dashboard", () => {
       masterReadKeys: [],
     })
     expect(widgets.map(({ id, href }) => ({ id, href }))).toEqual([
+      ...cncDashboardCardIds
+        .filter((id) => cncDashboardCardSource(id) === "productionSessionsTab")
+        .map((id) => ({
+          id,
+          href: "/dashboard/production-sessions?floor=cnc",
+        })),
       {
         id: "production-sessions",
         href: "/dashboard/production-sessions?floor=cnc",
       },
     ])
+    expect(
+      resolvePersonalDashboardSelection(null, widgets).map(({ id }) => id)
+    ).toContain("cnc-shift-comparison")
+  })
+
+  it("shows department views and cards only for the corresponding CNC and maintenance permissions", () => {
+    const access = {
+      ...noAccess,
+      operations: true,
+      productionFloorTabIds: {
+        cnc: ["qualityControlTasksTab"],
+        conventional: ["machinistTasksTab"],
+      },
+      maintenanceHrefs: ["/?tab=maintenanceTab"],
+    } satisfies UnifiedNavigationAccess
+    expect(
+      availableCncDashboardDepartments(access).map(({ id }) => id)
+    ).toEqual(["quality", "maintenance"])
+    const ids = availablePersonalDashboardWidgets(access).map(({ id }) => id)
+    expect(ids).toContain("cnc-qc-pending")
+    expect(ids).toContain("cnc-open-breakdowns")
+    expect(ids).not.toContain("cnc-pieces-rejected")
+    expect(ids).not.toContain("cnc-setup-pending")
   })
   it("offers only information the signed-in user may open", () => {
     const widgets = availablePersonalDashboardWidgets({
@@ -52,17 +83,25 @@ describe("personal dashboard", () => {
     ])
   })
 
-  it("restores the user's saved order and removes cards they can no longer access", () => {
+  it("restores saved order and skips retired or inaccessible cards", () => {
     const available = availablePersonalDashboardWidgets({
       ...noAccess,
       operations: true,
       store: true,
       productionTabIds: ["productionDashboardTab"],
+      productionFloorTabIds: {
+        cnc: ["qualityControlTasksTab", "firstPieceInspectionTab"],
+      },
     })
 
     expect(
       resolvePersonalDashboardSelection(
-        ["store-stock", "production-dashboard", "commercial-overview"],
+        [
+          "store-stock",
+          "quality-production",
+          "production-dashboard",
+          "commercial-overview",
+        ],
         available
       ).map(({ id }) => id)
     ).toEqual(["store-stock", "production-dashboard"])
