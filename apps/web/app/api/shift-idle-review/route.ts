@@ -1,0 +1,100 @@
+import { NextResponse, type NextRequest } from "next/server"
+import { createShiftIdleReviewRepository } from "@workspace/db"
+import { productionShiftAt, productionShiftEndInstant } from "@workspace/db/production-session-domain"
+import { isCncShift, isShiftIdleReason } from "@workspace/db/shift-idle-reasons"
+
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import { productionFloorPageCapability } from "@/lib/auth/production-floor-capabilities"
+import { productionFloorTaskCapability } from "@/lib/auth/production-floor-task-capabilities"
+import { DashboardReadError, withDashboardReadRepository } from "@/lib/postgres-dashboard-read-server"
+
+const floor = "cnc"
+const reviewCapability = productionFloorPageCapability(floor, "planningControlTab")
+const editCapability = productionFloorTaskCapability(floor, "plan_override")
+
+function validateShift(productionDate: unknown, shift: unknown, now: Date) {
+  if (typeof productionDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(productionDate) || !isCncShift(shift))
+    throw new DashboardReadError(400, "Select a valid production date and shift.")
+  const day = new Date(`${productionDate}T00:00:00Z`)
+  if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== productionDate)
+    throw new DashboardReadError(400, "Select a valid production date.")
+  if (productionShiftEndInstant({ productionDate, shift, productionFloorCode: floor }) > now)
+    throw new DashboardReadError(400, "This shift has not ended yet.")
+  return { productionDate, shift }
+}
+
+function errorResponse(error: unknown) {
+  if (error && typeof error === "object" && "code" in error && error.code === "40001")
+    return NextResponse.json({ error: "The records changed. Reload the shift and try again." }, { status: 409 })
+  return error instanceof DashboardReadError
+    ? NextResponse.json({ error: error.message }, { status: error.status })
+    : NextResponse.json({ error: "Unable to access the shift review. Try again." }, { status: 500 })
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    return await withDashboardReadRepository(request, async ({ organizationId, granted }) => {
+      const now = new Date()
+      const lastShift = productionShiftAt(floor, new Date(now.getTime() - 8 * 60 * 60 * 1000))!
+      const params = request.nextUrl.searchParams
+      const key = params.has("date") || params.has("shift")
+        ? validateShift(params.get("date"), params.get("shift"), now)
+        : validateShift(lastShift.productionDate, lastShift.shift, now)
+      const repository = createShiftIdleReviewRepository({ connectionString: readAuthEnvironment().connectionString })
+      try {
+        const review = await repository.read({ ...key, organizationId })
+        return NextResponse.json({ ...key, ...review, canEdit: granted.has(editCapability) }, {
+          headers: { "Cache-Control": "no-store" },
+        })
+      } finally {
+        await repository.close()
+      }
+    }, reviewCapability, floor)
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const origin = request.headers.get("origin")
+    if (origin && origin !== request.nextUrl.origin)
+      throw new DashboardReadError(403, "Use this action from the application.")
+    return await withDashboardReadRepository(request, async ({ organizationId, actorUserId, granted }) => {
+      if (!granted.has(editCapability))
+        throw new DashboardReadError(403, "You do not have permission to save shift reasons.")
+      const raw = await request.text()
+      if (raw.length > 65536) throw new DashboardReadError(413, "Request is too large.")
+      let body: unknown
+      try {
+        body = JSON.parse(raw)
+      } catch {
+        throw new DashboardReadError(400, "Invalid shift review.")
+      }
+      if (!body || typeof body !== "object") throw new DashboardReadError(400, "Invalid shift review.")
+      const { productionDate, shift, machineId, reason, note, version } = body as Record<string, unknown>
+      const key = validateShift(productionDate, shift, new Date())
+      if (typeof machineId !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(machineId))
+        throw new DashboardReadError(400, "Select a valid machine.")
+      if (!isShiftIdleReason(reason)) throw new DashboardReadError(400, "Select an idle reason.")
+      if (typeof note !== "string" || note.trim().length > 500)
+        throw new DashboardReadError(400, "Use up to 500 characters for the note.")
+      if (reason === "other" && !note.trim()) throw new DashboardReadError(400, "Describe the reason in the note.")
+      if (typeof version !== "string" || !version)
+        throw new DashboardReadError(400, "Reload the review and try again.")
+      const repository = createShiftIdleReviewRepository({ connectionString: readAuthEnvironment().connectionString })
+      try {
+        const reviews = await repository.save({
+          ...key, organizationId, actorUserId, machineId, reason, note: note.trim() || null, version,
+        })
+        if (!reviews)
+          throw new DashboardReadError(409, "This machine's review or production record changed. Reload the shift and try again.")
+        return NextResponse.json({ reviews })
+      } finally {
+        await repository.close()
+      }
+    }, reviewCapability, floor)
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
