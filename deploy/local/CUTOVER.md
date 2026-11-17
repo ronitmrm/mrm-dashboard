@@ -17,18 +17,18 @@ One scheduled downtime. Neon `staging` stays untouched as the rollback point.
    Does not affect the live site. A day before the downtime: lower the `erp` record TTL to 300.
 3. **Windows, once (admin PowerShell):** `deploy/local/windows-setup.ps1`
    (opens 8443 to WSL, starts WSL at boot, disables sleep).
-4. **Code on `main`.** The `migration` branch must be merged so `deploy.sh` (which deploys `main`)
-   ships local-disk storage. Safe for Vercel: Google Cloud stays the default without `ARTIFACT_STORAGE_DIRECTORY`.
-5. **Pre-issue the certificate:** `bash deploy/local/install-services.sh`, then from outside the
+4. **Pre-issue the certificate:** `bash deploy/local/install-services.sh`, then from outside the
    factory: `curl --resolve erp.mayankrawmint.com:8443:203.76.186.224 https://erp.mayankrawmint.com:8443/api/auth/ok`.
-6. **Rehearse** steps 3–7 below once and time them.
+5. **Rehearse** steps 3–7 below once and time them
+   (`DEPLOY_SOURCE=~/Code/mrm bash deploy/local/deploy.sh migration` deploys without touching GitHub).
 
 ## Downtime
 
-1. Freeze writes: pause the Vercel project, stop the Railway worker.
+1. Freeze writes: pause the Vercel project and disconnect its Git integration, stop the Railway worker.
 2. `sudo systemctl enable --now postgresql redis-server`
 3. `bash deploy/local/refresh-from-neon.sh --replace-local-database` (row counts must match exactly).
-4. `bash deploy/local/deploy.sh main` (applies migrations, including the local-disk provider check).
+4. Merge `migration` into `main`, then `bash deploy/local/deploy.sh main`
+   (applies migrations, including the local-disk provider check).
 5. Files: refresh the token (`vercel env pull --environment=production` into
    `~/.config/mrm-migration/vercel-production.env`), then from `~/srv/mrm-erp/apps/web` with
    `production.env` and `VERCEL_OIDC_TOKEN` loaded:
