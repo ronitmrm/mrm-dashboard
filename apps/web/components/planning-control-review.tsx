@@ -2,9 +2,9 @@
 
 import { formatCalendarDate, isIsoCalendarDate } from "@workspace/ui/lib/calendar-date"
 
-import { useState, type FormEvent } from "react"
+import { useState, type FormEvent, type ReactNode } from "react"
 import Link from "next/link"
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2, RefreshCw } from "lucide-react"
 import type { createProductionShopFloorRepository } from "@workspace/db"
 import { productionSessionEfficiency } from "@workspace/db/production-session-domain"
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
@@ -19,8 +19,11 @@ import { StandardState } from "@workspace/ui/components/standard-state"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { StandardDialogContent } from "@/components/ui/golden-patterns"
+import { ShiftIdleReviewPanel } from "./shift-idle-review"
+import { PlanningControlCompleted } from "./planning-control-completed"
+import { PlanningRecordCells, PlanningRecordHeaders } from "./planning-record-columns"
 import { useConditionalRecords } from "@/hooks/use-conditional-records"
-import { formatIstDate, formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { formatIstDate, istDateValue } from "@/lib/date-time"
 
 type Session = Record<string, unknown>
 type Workflow = Record<string, unknown>
@@ -32,12 +35,50 @@ const quantity = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 })
 const percentage = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
 const weight = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 })
 const kg = (value: number | null) => value === null ? "Blank weight required" : `${weight.format(value)} kg`
+const queues = [
+  ["production", "Production"],
+  ["material", "Material"],
+  ["dispatch", "Dispatch"],
+  ["shift-coverage", "Machine Review"],
+  ["completed", "Completed"],
+] as const
+type Queue = (typeof queues)[number][0]
 
-export function PlanningControlReview({ floor, workflowRows, reworkRows = [], dispatchRows = [], onClose, onResolve, onAcceptMaterial }: {
+function ReviewRow({ id, floor, job, part, machine, setup, summary, details, action }: {
+  id: string
+  floor: ProductionFloorCode
+  job: unknown
+  part: unknown
+  machine?: unknown
+  setup?: unknown
+  summary: ReactNode
+  details?: ReactNode
+  action: ReactNode
+}) {
+  return (
+    <TableRow data-row-id={id}>
+      <PlanningRecordCells floor={floor} machine={machine} part={part} setup={setup} job={job} />
+      <TableCell className="w-full min-w-52 whitespace-normal align-top">
+        <div className="grid justify-items-start gap-1">{summary}</div>
+        {details ? (
+          <details className="mt-1 text-xs text-muted-foreground">
+            <summary className="w-fit cursor-pointer">Details</summary>
+            <div className="mt-1 grid gap-1">{details}</div>
+          </details>
+        ) : null}
+      </TableCell>
+      <TableCell className="min-w-40 whitespace-normal align-top">{action}</TableCell>
+    </TableRow>
+  )
+}
+
+export function PlanningControlReview({ floor, workflowRows, reworkRows = [], dispatchRows = [], defaultQueue, machineReview, onClose, onResolve, onAcceptMaterial }: {
   floor: ProductionFloorCode
   workflowRows: Workflow[]
   reworkRows?: Workflow[]
   dispatchRows?: Workflow[]
+  defaultQueue?: string | null
+  machineReview?: { date: string; shift: string; machine: string }
   onClose: (session: Session, comment: string) => Promise<void>
   onResolve: (row: Workflow) => Promise<void>
   onAcceptMaterial: (row: Material, reason: string) => Promise<unknown>
@@ -47,29 +88,37 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], di
     undefined, undefined, true
   )
   const materialDelivery = useConditionalRecords(`/api/raw-material-review?floor=${encodeURIComponent(floor)}`)
+  const availableQueues = queues.filter(([key]) => key !== "shift-coverage" || floor === "cnc")
+  const [queue, setQueue] = useState<Queue>(() => availableQueues.find(([key]) => key === defaultQueue)?.[0] ?? "production")
   const [comments, setComments] = useState<Record<string, string>>({})
   const [closedIds, setClosedIds] = useState<string[]>([])
   const [resolvedKeys, setResolvedKeys] = useState<string[]>([])
   const [savingId, setSavingId] = useState("")
   const [error, setError] = useState("")
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null)
+  const [acceptedMaterialKeys, setAcceptedMaterialKeys] = useState<string[]>([])
   const [materialReason, setMaterialReason] = useState("")
   const [materialError, setMaterialError] = useState("")
   const sessions = Array.isArray(delivery.data?.rows)
     ? (delivery.data.rows as Session[]).filter(session => !closedIds.includes(String(session.id)))
     : []
-  const materials = (materialDelivery.data?.rows ?? []) as Material[]
+  const materials = ((materialDelivery.data?.rows ?? []) as Material[]).filter((row) =>
+    !row.shortAccepted && !acceptedMaterialKeys.includes(`${row.id}:${row.rowVersion}`))
   const materialFlowReviews = (materialDelivery.data?.materialFlowReviews ?? []) as MaterialFlowReview[]
   const workflows = workflowRows.filter(row => !resolvedKeys.includes(workflowKey(row)))
   const commitments = dispatchRows.filter(row => typeof row.committedDispatchDate === "string"
     && isIsoCalendarDate(row.committedDispatchDate) && row.status !== "Dispatched")
     .sort((left, right) => String(left.committedDispatchDate).localeCompare(String(right.committedDispatchDate)))
   const today = istDateValue()
-  const loading = delivery.loading || materialDelivery.loading
-  const loadError = [
-    delivery.error ? `Session flags: ${delivery.error}` : "",
-    materialDelivery.error ? `RM status: ${materialDelivery.error}` : "",
-  ].filter(Boolean).join(" ")
+  const counts = {
+    production: sessions.length + workflows.length,
+    material: materials.length + materialFlowReviews.length + reworkRows.length,
+    dispatch: commitments.length,
+    "shift-coverage": null,
+    completed: null,
+  }
+  const loading = queue === "production" ? delivery.loading : queue === "material" && materialDelivery.loading
+  const loadError = queue === "production" ? delivery.error : queue === "material" ? materialDelivery.error : ""
 
   function refresh() {
     delivery.refresh()
@@ -118,6 +167,7 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], di
     setMaterialError("")
     try {
       await onAcceptMaterial(selectedMaterial, materialReason.trim())
+      setAcceptedMaterialKeys((keys) => [...keys, `${selectedMaterial.id}:${selectedMaterial.rowVersion}`])
       setSelectedMaterial(null)
       setMaterialReason("")
       materialDelivery.refresh()
@@ -128,163 +178,142 @@ export function PlanningControlReview({ floor, workflowRows, reworkRows = [], di
   }
 
   return (
-    <SectionCard>
-      <CardHeader><CardTitle>Planning Review</CardTitle></CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        {loading ? <StandardState variant="loading" title="Loading planning flags" description="Checking RM status, session flags and workflow exceptions in this Production Unit." /> : null}
-        {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError}
-          action={<Button variant="outline" onClick={refresh}>Refresh flags</Button>} /> : null}
-        {!loading && !loadError && !materials.length && !materialFlowReviews.length && !sessions.length && !workflows.length && !reworkRows.length && !commitments.length ? (
-          <StandardState title="No open planning reviews" description="No dispatch commitments, RM shortages, session flags or workflow exceptions need review." />
-        ) : null}
-        {commitments.length || materials.length || materialFlowReviews.length || sessions.length || workflows.length || reworkRows.length ? (
-          <OperationalTable filterStorageKey={`planning-control-flags-${floor}`} containerClassName="max-h-[70vh] rounded-lg border">
-            <TableHeader><TableRow>
-              <TableHead>Flag Type</TableHead>
-              <TableHead>Job Card / Part / Setup</TableHead>
-              <TableHead>Machine</TableHead>
-              <TableHead>Session / Date</TableHead>
-              <TableHead className="min-w-64">Details</TableHead>
-              <TableHead className="min-w-72">Action</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {commitments.map(row => {
-                const date = String(row.committedDispatchDate)
-                const status = date < today ? "Overdue" : date === today ? "Due today" : "Upcoming"
-                return <TableRow key={`dispatch:${String(row.jcNo)}`} data-row-id={`dispatch:${String(row.jcNo)}`}>
-                  <TableCell><StatusBadge tone={status === "Overdue" ? "danger" : "warning"} value="Dispatch reminder" /></TableCell>
-                  <TableCell>
-                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link>
-                    <div>{String(row.partCode)}</div><div className="text-xs text-muted-foreground">FG PO: {String(row.fgPoNo || "—")}</div>
-                  </TableCell>
-                  <TableCell>—</TableCell>
-                  <TableCell><div>{formatCalendarDate(date)}</div><StatusBadge value={status} tone={status === "Overdue" ? "danger" : status === "Due today" ? "warning" : "information"} /></TableCell>
-                  <TableCell>
-                    <div>Committed dispatch: {formatCalendarDate(date)}</div>
-                    <div>Expected dispatch: {formatCalendarDate(row.currentProbableDispatchDate)}</div>
-                    <div>{String(row.status)} · Dispatched: {row.dispatchedPieces == null ? "—" : `${quantity.format(Number(row.dispatchedPieces))} pcs`}</div>
-                    <div className="max-w-80 whitespace-normal text-xs text-muted-foreground">Stays open until dispatch is complete.</div>
-                  </TableCell>
-                  <TableCell><Button size="sm" variant="outline" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button></TableCell>
-                </TableRow>
-              })}
-              {reworkRows.map(row => (
-                <TableRow key={`rework:${String(row.jcNo)}`} data-row-id={`rework:${String(row.jcNo)}`}>
-                  <TableCell><StatusBadge tone="warning" value={row.materialPlanningReady === false ? "Replacement — Awaiting New RM" : "Revision — Route Selection Required"} /></TableCell>
-                  <TableCell><Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo))}?floor=${floor}`}>{String(row.jcNo)}</Link><div>{String(row.partCode)}</div></TableCell>
-                  <TableCell>—</TableCell><TableCell>{formatCalendarDate(row.receivedOn)}</TableCell>
-                  <TableCell>{quantity.format(Number(row.orderPcs))} returned pieces · Original: {String(row.originalJobCardNumber)}</TableCell>
-                  <TableCell><Button size="sm" variant="outline" asChild><Link href={row.materialPlanningReady === false ? `/?tab=operationalEntryTab&floor=${floor}&entry=rm_inward` : `/?tab=masterGapsTab&floor=${floor}`}>{row.materialPlanningReady === false ? "Receive new RM for this revision" : "Select route in Part Readiness"}</Link></Button></TableCell>
-                </TableRow>
+    <SectionCard className="min-w-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <CardTitle>Planning review</CardTitle>
+        {queue !== "shift-coverage" && queue !== "completed" ? <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={loading}>
+          <RefreshCw /> Refresh
+        </Button> : null}
+      </CardHeader>
+      <CardContent className="min-w-0">
+          <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Planning review queues">
+              {availableQueues.map(([key, label]) => (
+                <Button className="shrink-0" key={key} type="button" size="sm"
+                  variant={queue === key ? "default" : "ghost"} aria-pressed={queue === key}
+                  onClick={() => { setQueue(key); setError("") }}>
+                  {label}{counts[key] === null ? null : <span className="text-xs tabular-nums opacity-80">{counts[key]}</span>}
+                </Button>
               ))}
-              {materials.map(row => (
-                <TableRow key={`rm:${row.id}`} data-row-id={`rm:${row.id}`}>
-                  <TableCell><StatusBadge tone={row.shortAccepted ? "information" : "warning"} value="RM status" /></TableCell>
-                  <TableCell>
-                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(row.jobCardNumber)}?floor=${floor}`}>{row.jobCardNumber}</Link>
-                    <div>{row.partCode}</div>
-                  </TableCell>
-                  <TableCell>—</TableCell><TableCell>—</TableCell>
-                  <TableCell className="tabular-nums">
-                    <div>Required: {kg(row.requiredKg)} · Received: {kg(row.receivedKg)}</div>
-                    {row.rejectedKg ? <div>Rejected: {kg(row.rejectedKg)} · Usable: {kg(row.usableKg)}</div> : null}
-                    <div>Pending: {kg(row.pendingKg)}</div>
-                    <StatusBadge tone={row.shortAccepted ? "information" : "warning"} value={row.shortAccepted ? "Short RM accepted" : "RM pending"} />
-                  </TableCell>
-                  <TableCell>{row.shortAccepted ? (
-                    <span className="block max-w-72 break-words" title={formatIstDateTime(String(row.acceptance?.acceptedAt ?? ""))}>{String(row.acceptance?.reason ?? "Accepted by planner")}</span>
-                  ) : <Button size="sm" variant="outline" disabled={Boolean(savingId) || row.requiredKg === null}
-                    onClick={() => { setSelectedMaterial(row); setMaterialReason(""); setMaterialError("") }}>Accept short RM</Button>}</TableCell>
-                </TableRow>
-              ))}
-              {materialFlowReviews.map(row => (
-                <TableRow key={`material-flow:${row.id}`} data-row-id={`material-flow:${row.id}`}>
-                  <TableCell><StatusBadge tone="warning" value="Material flow conflict" /></TableCell>
-                  <TableCell>
-                    <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(row.jobCardNumber)}?floor=${floor}`}>{row.jobCardNumber}</Link>
-                    <div>{row.partCode}</div>
-                    <div className="text-xs text-muted-foreground">Option {row.optionNumber} · Setup {row.setupNumber}</div>
-                  </TableCell>
-                  <TableCell className="font-medium">{row.machineNumber}</TableCell>
-                  <TableCell>—</TableCell>
-                  <TableCell>
-                    <div className="max-w-80 whitespace-normal">Setup {row.upstreamSetupNumber} is Item Complete, but Setup {row.setupNumber} was released awaiting material.</div>
-                    <div className="tabular-nums">Upstream good: {quantity.format(row.upstreamGoodPieces)} · Setup processed: {quantity.format(row.setupProcessedPieces)}</div>
-                    <div className="max-w-80 whitespace-normal text-xs text-muted-foreground">Review production counts. Reopen the upstream setup if unfinished work remains.</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" asChild><Link href={`/dashboard/production-sessions?floor=${floor}${row.sessionId ? `&session=${encodeURIComponent(row.sessionId)}` : ""}`}>Review sessions</Link></Button>
-                      <Button size="sm" variant="outline" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {sessions.map(session => {
-                const id = String(session.id)
-                const reference = String(session.sessionReference ?? id)
-                const efficiency = productionSessionEfficiency({ totalPieces: Number(session.totalPieces), targetPieces: Number(session.targetPieces) })
-                return (
-                  <TableRow key={`session:${id}`} data-row-id={`session:${id}`}>
-                    <TableCell><StatusBadge tone="warning" value="Session flag" /></TableCell>
-                    <TableCell>
-                      <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(session.jobCardNumber))}?floor=${floor}`}>{String(session.jobCardNumber)}</Link>
-                      <div>{String(session.partCode)}</div>
-                      <div className="text-xs text-muted-foreground">Option {String(session.optionNumber)} · Setup {String(session.setupNumber)}</div>
-                    </TableCell>
-                    <TableCell className="font-medium">{String(session.machineNumber)}</TableCell>
-                    <TableCell>
-                      <Link className="font-mono text-xs underline underline-offset-4" href={`/dashboard/production-sessions?floor=${floor}&session=${encodeURIComponent(id)}`}>{reference}</Link>
-                      <div className="mt-1 text-xs text-muted-foreground">{formatIstDate(String(session.productionDate))}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{String(session.operatorCode)} · {String(session.operatorName)}</div>
-                      <div className="text-xs text-muted-foreground">Shift {String(session.shift)}</div>
-                      <div className="tabular-nums">Produced: {quantity.format(Number(session.totalPieces))} · Target: {quantity.format(Number(session.targetPieces))}</div>
-                      <div>Efficiency: <StatusBadge tone="warning" value={efficiency === null ? "Unavailable" : `${percentage.format(efficiency * 100)}%`} /></div>
-                    </TableCell>
-                    <TableCell>
-                      <form className="grid gap-2" onSubmit={event => void closeFlag(event, session)}>
-                        <Label className="sr-only" htmlFor={`efficiency-comment-${id}`}>Closure comment for {reference}</Label>
-                        <Textarea id={`efficiency-comment-${id}`} required rows={2} value={comments[id] ?? ""} placeholder="Review / action taken"
-                          disabled={Boolean(savingId)} onChange={event => setComments(current => ({ ...current, [id]: event.target.value }))} />
-                        <Button type="submit" variant="outline" className="w-fit" disabled={Boolean(savingId) || !(comments[id] ?? "").trim()}>
-                          {savingId === `session:${id}` ? "Closing…" : "Close flag"}
-                        </Button>
-                      </form>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {workflows.map(row => {
-                const key = workflowKey(row)
-                return (
-                  <TableRow key={`workflow:${key}`} data-row-id={`workflow:${key}`}>
-                    <TableCell><StatusBadge tone="warning" value="Workflow exception" /></TableCell>
-                    <TableCell>
-                      <Link className="font-medium underline underline-offset-4" href={`/dashboard/job-cards/${encodeURIComponent(String(row.jcNo ?? ""))}?floor=${floor}`}>{String(row.jcNo ?? "—")}</Link>
-                      <div>{String(row.partCode ?? "—")}</div>
-                      <div className="text-xs text-muted-foreground">Option {String(row.optionNumber ?? "—")} · Setup {String(row.setupNo ?? "—")}</div>
-                      <div className="text-xs text-muted-foreground">{String(row.setupName ?? "")}</div>
-                    </TableCell>
-                    <TableCell className="font-medium">{String(row.machine ?? "—")}</TableCell>
-                    <TableCell>—</TableCell>
-                    <TableCell>
-                      <div>{String(row.shopFloorWorker || "—")}</div>
-                      <div className="tabular-nums">{quantity.format(Number(row.rawRows))} production rows</div>
-                      <div className="text-xs text-muted-foreground">Output {quantity.format(Number(row.rawOutputQty))} / Actual {quantity.format(Number(row.rawActualQty))}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Button type="button" size="sm" variant="outline" disabled={Boolean(savingId)} onClick={() => void resolveWorkflow(row)}>
-                        <CheckCircle2 className="size-4" />{savingId === `workflow:${key}` ? "Resolving…" : "Resolve workflow"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </OperationalTable>
-        ) : null}
+          </nav>
+          <section aria-label={availableQueues.find(([key]) => key === queue)?.[1]} className="grid min-w-0 gap-3 pt-4">
+            {queue === "shift-coverage" ? <ShiftIdleReviewPanel initialReview={machineReview} /> : null}
+            {queue === "completed" ? <PlanningControlCompleted floor={floor} /> : null}
+            {loading ? <StandardState variant="loading" title="Loading reviews" description="Checking the selected queue." /> : null}
+            {loadError || error ? <StandardState variant="error" title="Could not complete the review" description={error || loadError || ""}
+              action={<Button variant="outline" onClick={refresh}>Refresh</Button>} /> : null}
+            {!loading && !loadError && counts[queue] === 0 ? (
+              <StandardState title="Nothing to review" description="There are no entries in this queue." />
+            ) : null}
+            {counts[queue] ? (
+              <OperationalTable key={queue} filterStorageKey={`planning-control-flags-${floor}-${queue}`} containerClassName="max-h-[70vh] rounded-lg border">
+                <TableHeader><TableRow>
+                  <PlanningRecordHeaders />
+                  <TableHead>{queue === "dispatch" ? "Dispatch commitment" : "What needs review"}</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {queue === "dispatch" ? commitments.map(row => {
+                    const date = String(row.committedDispatchDate)
+                    const status = date < today ? "Overdue" : date === today ? "Due today" : "Upcoming"
+                    const id = `dispatch:${String(row.jcNo)}`
+                    return <ReviewRow key={id} id={id} floor={floor} job={row.jcNo} part={row.partCode}
+                      summary={<>
+                        <StatusBadge value={status} tone={status === "Overdue" ? "danger" : status === "Due today" ? "warning" : "information"} />
+                        <div>Committed {formatCalendarDate(date)} · Expected {formatCalendarDate(row.currentProbableDispatchDate)}</div>
+                      </>}
+                      details={<>
+                        <div>FG PO {String(row.fgPoNo || "—")}</div>
+                        <div>{String(row.status)} · Dispatched {row.dispatchedPieces == null ? "—" : `${quantity.format(Number(row.dispatchedPieces))} pcs`}</div>
+                      </>}
+                      action={<Button size="sm" variant="outline" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button>} />
+                  }) : null}
+                  {queue === "material" ? <>
+                    {materialFlowReviews.map(row => {
+                      const id = `material-flow:${row.id}`
+                      return <ReviewRow key={id} id={id} floor={floor} job={row.jobCardNumber} part={row.partCode} machine={row.machineNumber} setup={row.setupNumber}
+                        summary={<><StatusBadge tone="warning" value="Material flow conflict" />
+                          <div>Setup released awaiting material</div></>}
+                        details={<>
+                          <div>Option {row.optionNumber} · Upstream Setup {row.upstreamSetupNumber} is Item Complete</div>
+                          <div>Upstream good {quantity.format(row.upstreamGoodPieces)} · Setup processed {quantity.format(row.setupProcessedPieces)}</div>
+                          <div>Review counts and reopen the upstream setup if work remains.</div>
+                        </>}
+                        action={<div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" asChild><Link href={`/dashboard/production-sessions?floor=${floor}${row.sessionId ? `&session=${encodeURIComponent(row.sessionId)}` : ""}`}>Review sessions</Link></Button>
+                          <Button size="sm" variant="ghost" asChild><Link href={`/?tab=productionControlTab&floor=${floor}`}>Planner Actions</Link></Button>
+                        </div>} />
+                    })}
+                    {reworkRows.map(row => {
+                      const id = `rework:${String(row.jcNo)}`
+                      const awaitingMaterial = row.materialPlanningReady === false
+                      return <ReviewRow key={id} id={id} floor={floor} job={row.jcNo} part={row.partCode}
+                        summary={<><StatusBadge tone="warning" value={awaitingMaterial ? "Awaiting replacement material" : "Route selection required"} />
+                          <div>{quantity.format(Number(row.orderPcs))} returned pieces</div></>}
+                        details={<div>Original job card {String(row.originalJobCardNumber)} · Received {formatCalendarDate(row.receivedOn)}</div>}
+                        action={<Button size="sm" variant="outline" asChild><Link href={awaitingMaterial ? `/?tab=operationalEntryTab&floor=${floor}&entry=rm_inward` : `/?tab=masterGapsTab&floor=${floor}`}>
+                          {awaitingMaterial ? "Receive material" : "Select route"}
+                        </Link></Button>} />
+                    })}
+                    {materials.map(row => {
+                      const id = `rm:${row.id}`
+                      return <ReviewRow key={id} id={id} floor={floor} job={row.jobCardNumber} part={row.partCode}
+                        summary={<><StatusBadge tone="warning" value="Raw material pending" />
+                          <div className="tabular-nums">Pending {kg(row.pendingKg)}</div></>}
+                        details={<>
+                          <div>Required {kg(row.requiredKg)} · Received {kg(row.receivedKg)}</div>
+                          {row.rejectedKg ? <div>Rejected {kg(row.rejectedKg)} · Usable {kg(row.usableKg)}</div> : null}
+                        </>}
+                        action={<Button size="sm" variant="outline" disabled={Boolean(savingId) || row.requiredKg === null}
+                          onClick={() => { setSelectedMaterial(row); setMaterialReason(""); setMaterialError("") }}>Accept short RM</Button>} />
+                    })}
+                  </> : null}
+                  {queue === "production" ? <>
+                    {sessions.map(session => {
+                      const id = String(session.id)
+                      const reference = String(session.sessionReference ?? id)
+                      const efficiency = productionSessionEfficiency({ totalPieces: Number(session.totalPieces), targetPieces: Number(session.targetPieces) })
+                      return <ReviewRow key={`session:${id}`} id={`session:${id}`} floor={floor} job={session.jobCardNumber} part={session.partCode}
+                        machine={session.machineNumber} setup={session.setupNumber}
+                        summary={<>
+                          <StatusBadge tone="warning" value={efficiency === null ? "Efficiency unavailable" : `Efficiency ${percentage.format(efficiency * 100)}%`} />
+                          <div>Shift {String(session.shift)}</div>
+                        </>}
+                        details={<>
+                          <Link className="underline underline-offset-4" href={`/dashboard/production-sessions?floor=${floor}&session=${encodeURIComponent(id)}`}>{reference} · {formatIstDate(String(session.productionDate))}</Link>
+                          <div>Option {String(session.optionNumber)} · {String(session.operatorCode)} {String(session.operatorName)}</div>
+                          <div>Produced {quantity.format(Number(session.totalPieces))} · Target {quantity.format(Number(session.targetPieces))}</div>
+                        </>}
+                        action={<details>
+                          <summary className="w-fit cursor-pointer font-medium text-primary">Review flag</summary>
+                          <form className="mt-2 grid min-w-44 gap-2" onSubmit={event => void closeFlag(event, session)}>
+                            <Label className="sr-only" htmlFor={`efficiency-comment-${id}`}>Closure comment for {reference}</Label>
+                            <Textarea id={`efficiency-comment-${id}`} required rows={2} value={comments[id] ?? ""} placeholder="Action taken"
+                              disabled={Boolean(savingId)} onChange={event => setComments(current => ({ ...current, [id]: event.target.value }))} />
+                            <Button type="submit" size="sm" variant="outline" className="w-fit" disabled={Boolean(savingId) || !(comments[id] ?? "").trim()}>
+                              {savingId === `session:${id}` ? "Closing…" : "Close flag"}
+                            </Button>
+                          </form>
+                        </details>} />
+                    })}
+                    {workflows.map(row => {
+                      const key = workflowKey(row)
+                      const id = `workflow:${key}`
+                      return <ReviewRow key={id} id={id} floor={floor} job={row.jcNo} part={row.partCode}
+                        machine={row.machine} setup={row.setupNo}
+                        summary={<StatusBadge tone="warning" value="Workflow exception" />}
+                        details={<>
+                          <div>Option {String(row.optionNumber ?? "—")} · {String(row.setupName || "—")} · {String(row.shopFloorWorker || "—")}</div>
+                          <div>{quantity.format(Number(row.rawRows))} production rows · Output {quantity.format(Number(row.rawOutputQty))} · Actual {quantity.format(Number(row.rawActualQty))}</div>
+                        </>}
+                        action={<Button type="button" size="sm" variant="outline" disabled={Boolean(savingId)} onClick={() => void resolveWorkflow(row)}>
+                          <CheckCircle2 />{savingId === id ? "Resolving…" : "Resolve workflow"}
+                        </Button>} />
+                    })}
+                  </> : null}
+                </TableBody>
+              </OperationalTable>
+            ) : null}
+          </section>
         <Dialog open={selectedMaterial !== null} onOpenChange={open => { if (!open && !savingId) setSelectedMaterial(null) }}>
           <StandardDialogContent title="Accept short RM" description={`${selectedMaterial?.jobCardNumber ?? ""}: allow Item Complete with the received RM. Original order and receipt quantities stay recorded.`}>
             <form onSubmit={acceptMaterial} className="grid gap-4">

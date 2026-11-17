@@ -16580,11 +16580,18 @@ function PlanningControlPanel({
   productionControl: DashboardPayload
   submitAction: SubmitAction
 }) {
+  const searchParams = useSearchParams()
+  const queue = searchParams.get("review")
+  const date = searchParams.get("date")
+  const shift = searchParams.get("shift")
+  const machine = searchParams.get("machine")
   return (
     <section className="grid gap-4">
       <PlanningControlReview
-        key={productionFloorCode}
+        key={JSON.stringify([productionFloorCode, queue, date, shift, machine])}
         floor={productionFloorCode}
+        defaultQueue={queue}
+        machineReview={queue === "shift-coverage" && date && shift && machine ? { date, shift, machine } : undefined}
         workflowRows={asArray(productionControl.workflowExceptionRows)}
         dispatchRows={asArray(productionControl.productionDashboardRows)}
         reworkRows={asArray(productionControl.workOrders).filter(row => row.isRevision === true && row.optionSource === "Planner required")}

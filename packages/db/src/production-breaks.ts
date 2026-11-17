@@ -60,22 +60,7 @@ export function productionBreakMinutes(input: {
     return { breakMinutes: 0, additionalBreakMinutes: 0 }
   }
   const session = { startedAt: input.startedAt, endedAt: input.endedAt }
-  const firstDay = Math.floor((input.startedAt.getTime() + IST_OFFSET_MS) / DAY_MS)
-  const lastDay = Math.floor((input.endedAt.getTime() + IST_OFFSET_MS) / DAY_MS)
-  const intervals: TimeInterval[] = []
-  for (let day = firstDay; day <= lastDay; day += 1) {
-    const midnight = day * DAY_MS - IST_OFFSET_MS
-    for (const item of input.breaks) {
-      const start = midnight + minuteOfDay(item.startTime) * MINUTE_MS
-      const end = midnight + minuteOfDay(item.endTime) * MINUTE_MS
-      if (start < input.endedAt.getTime() && end > input.startedAt.getTime()) {
-        intervals.push({
-          startedAt: new Date(Math.max(start, input.startedAt.getTime())),
-          endedAt: new Date(Math.min(end, input.endedAt.getTime())),
-        })
-      }
-    }
-  }
+  const intervals = productionBreakIntervals(input.breaks, session)
   const downtime = mergedIntervals(input.downtime)
   const breakMs = intervals.reduce((total, item) => total +
     intersectionMilliseconds(item, session), 0)
@@ -85,4 +70,25 @@ export function productionBreakMinutes(input: {
     breakMinutes: Math.round(breakMs / MINUTE_MS),
     additionalBreakMinutes: Math.round((breakMs - overlapMs) / MINUTE_MS),
   }
+}
+
+export function productionBreakIntervals(breaks: ProductionBreak[], window: TimeInterval) {
+  const { startedAt, endedAt } = window
+  const firstDay = Math.floor((startedAt.getTime() + IST_OFFSET_MS) / DAY_MS)
+  const lastDay = Math.floor((endedAt.getTime() + IST_OFFSET_MS) / DAY_MS)
+  const intervals: TimeInterval[] = []
+  for (let day = firstDay; day <= lastDay; day += 1) {
+    const midnight = day * DAY_MS - IST_OFFSET_MS
+    for (const item of breaks) {
+      const start = midnight + minuteOfDay(item.startTime) * MINUTE_MS
+      const end = midnight + minuteOfDay(item.endTime) * MINUTE_MS
+      if (start < endedAt.getTime() && end > startedAt.getTime()) {
+        intervals.push({
+          startedAt: new Date(Math.max(start, startedAt.getTime())),
+          endedAt: new Date(Math.min(end, endedAt.getTime())),
+        })
+      }
+    }
+  }
+  return intervals
 }

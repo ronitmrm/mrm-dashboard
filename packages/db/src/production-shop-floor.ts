@@ -5720,10 +5720,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
         [JSON.stringify(acceptance), input.actorUserId ?? null, order.work_order_id])
         await client.query(`INSERT INTO audit.events (organization_id, event_type, target_schema, target_table,
-          target_id, actor_user_id, reason, before_state, after_state, source_system, source_table, source_id)
+          target_id, actor_user_id, reason, before_state, after_state, metadata, source_system, source_table, source_id)
           VALUES ($1, 'production.rm_short.accepted', 'manufacturing', 'work_orders', $2, $3, $4, $5, $6,
-            'mrm-dashboard', 'rm_short_acceptance', $7)`,
-        [input.organizationId, order.work_order_id, input.actorUserId ?? null, reason, material, acceptance, randomUUID()])
+            jsonb_build_object('productionFloorCode', $8::text), 'mrm-dashboard', 'rm_short_acceptance', $7)`,
+        [input.organizationId, order.work_order_id, input.actorUserId ?? null, reason, material, acceptance, randomUUID(),
+          input.productionFloorCode])
         await queueDashboardRefresh(client, input.organizationId)
         return { ok: true, jobCardNumber: input.jobCardNumber }
       })
