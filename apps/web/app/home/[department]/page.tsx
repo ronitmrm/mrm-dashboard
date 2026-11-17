@@ -96,7 +96,7 @@ export default async function DepartmentDashboard({
       pinnedIds: pinned,
     }
     return (
-      <div className="mx-auto w-full max-w-[1500px]">
+      <div className="w-full min-w-0">
         {departmentId === "quality" ? (
           <CncQualityDashboard {...props} />
         ) : (

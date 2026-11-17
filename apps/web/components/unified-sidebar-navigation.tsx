@@ -183,14 +183,12 @@ function serverExpandedSectionsSnapshot() {
 export function UnifiedSidebarNavigation({
   activeDashboardTab,
   activeProductionFloor = defaultProductionFloorCode,
-  cncWorkspace = false,
   navigationAccess,
   onDashboardTabSelect,
 }: {
   activeDashboardTab?: DashboardTabId
   activeMasterEntryType?: string
   activeProductionFloor?: ProductionFloorCode
-  cncWorkspace?: boolean
   navigationAccess: UnifiedNavigationAccess
   onDashboardTabSelect?: (
     tab: DashboardTabId,
@@ -401,7 +399,7 @@ export function UnifiedSidebarNavigation({
     navigationAccess
   ).filter(
     ({ label }) =>
-      cncWorkspace || !normalizedMenuSearch ||
+      !normalizedMenuSearch ||
       `${label.toLowerCase()} dashboard`.includes(normalizedMenuSearch)
   )
   const dashboardMatchesSearch =
@@ -417,7 +415,6 @@ export function UnifiedSidebarNavigation({
   }
   const dashboardQuery = dashboardFilters.size ? `?${dashboardFilters}` : ""
   useEffect(() => {
-    if (cncWorkspace) return
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
@@ -427,83 +424,12 @@ export function UnifiedSidebarNavigation({
 
     window.addEventListener("keydown", focusMenuSearch)
     return () => window.removeEventListener("keydown", focusMenuSearch)
-  }, [cncWorkspace])
+  }, [])
 
   function setSectionOpen(section: SectionId, open: boolean) {
     const next = expandedSidebarSections(open ? section : undefined)
     window.localStorage.setItem(storageKey, JSON.stringify(next))
     window.dispatchEvent(new Event(stateChangedEvent))
-  }
-
-  if (cncWorkspace) {
-    return (
-      <nav
-        aria-label="CNC dashboard views"
-        className="px-[22px] pt-7 pb-4 [--sidebar-accent-foreground:#f7f7f2] [--sidebar-accent:#ffffff19] [--sidebar-foreground:#f7f7f2]"
-      >
-        <p className="mb-4 px-3 text-[10px] leading-tight font-semibold tracking-[.16em] text-sidebar-foreground/80 uppercase">
-          Production
-          <br />
-          workspace
-        </p>
-        <SidebarMenu className="gap-1.5">
-          {Object.keys(cncDepartmentIcons).map((department) => {
-            const entry = departmentDashboards.find(
-              ({ id }) => id === department
-            )
-            if (!entry) return null
-            const { id, label, href } = entry
-            const Icon = cncDepartmentIcons[id] ?? LayoutDashboard
-            const active = pathname === href
-            return (
-              <SidebarMenuItem key={id}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={active}
-                  className="h-12 gap-3 rounded-[10px] px-3.5 font-normal text-sidebar-foreground data-active:bg-[#f7f7f2] data-active:font-semibold data-active:text-[#056247] data-active:shadow-[inset_4px_0_#b8d446] [&>svg]:size-[18px]"
-                >
-                  <Link
-                    aria-current={active ? "page" : undefined}
-                    href={href + dashboardQuery}
-                    onNavigate={() => setOpenMobile(false)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>
-                      {id === "production"
-                        ? "Overview"
-                        : id === "quality"
-                          ? "Quality Control"
-                          : label}
-                    </span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          })}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="h-12 gap-3 rounded-[10px] px-3.5 text-sidebar-foreground"
-            >
-              <Link
-                href={personalDashboardNavigation.href + dashboardQuery}
-                onNavigate={() => setOpenMobile(false)}
-              >
-                <LayoutDashboard aria-hidden="true" />
-                <span>My Dashboard</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="mt-7 rounded-[14px] bg-[#103c1e] p-4 text-xs leading-relaxed text-[#f7f7f2]">
-          <p className="mb-1 text-[10px] tracking-[.16em] text-[#b8d446] uppercase">
-            Active module
-          </p>
-          <p className="text-sm font-semibold">PPAC CNC-01</p>
-          <p>CNC machining operations</p>
-        </div>
-      </nav>
-    )
   }
 
   return (
@@ -559,10 +485,18 @@ export function UnifiedSidebarNavigation({
               className={submoduleButtonClassName}
               isActive={pathname === personalDashboardNavigation.href}
             >
-              <a href={personalDashboardNavigation.href + dashboardQuery}>
+              <Link
+                aria-current={
+                  pathname === personalDashboardNavigation.href
+                    ? "page"
+                    : undefined
+                }
+                href={personalDashboardNavigation.href + dashboardQuery}
+                onNavigate={() => setOpenMobile(false)}
+              >
                 <LayoutDashboard aria-hidden="true" />
                 <span>My Dashboard</span>
-              </a>
+              </Link>
             </SidebarMenuSubButton>
           </SidebarMenuSubItem>
           {departmentDashboards.map(({ id, label, href }) => {
@@ -574,10 +508,14 @@ export function UnifiedSidebarNavigation({
                   className={submoduleButtonClassName}
                   isActive={pathname === href}
                 >
-                  <a href={href + dashboardQuery}>
+                  <Link
+                    aria-current={pathname === href ? "page" : undefined}
+                    href={href + dashboardQuery}
+                    onNavigate={() => setOpenMobile(false)}
+                  >
                     <Icon aria-hidden="true" />
                     <span>{label}</span>
-                  </a>
+                  </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             )
