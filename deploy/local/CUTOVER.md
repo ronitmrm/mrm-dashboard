@@ -5,15 +5,14 @@ One scheduled downtime. Neon `staging` stays untouched as the rollback point.
 
 ## Before the downtime
 
-1. **Cloudflare zone for the certificate.** Buy a cheap domain on Cloudflare (free plan).
-   Create an API token with *Zone → DNS → Edit* on that zone only. Write `~/.config/mrm/caddy.env` (0600):
+1. **Cloudflare zone for the certificate:** `mrmerp.fyi` (done). API token with *Zone → Zone → Read*
+   and *Zone → DNS → Edit*, limited to `mrmerp.fyi`. `~/.config/mrm/caddy.env` (0600):
    ```
    APP_HOST=erp.mayankrawmint.com
-   ACME_EMAIL=<ops mailbox>
-   ACME_DELEGATED_DOMAIN=_acme-challenge.erp.<cloudflare-zone>
+   ACME_DELEGATED_DOMAIN=_acme-challenge.erp.mrmerp.fyi
    CLOUDFLARE_API_TOKEN=<token>
    ```
-2. **Domain admin, once:** CNAME `_acme-challenge.erp.mayankrawmint.com` → `_acme-challenge.erp.<cloudflare-zone>`.
+2. **Domain admin, once:** CNAME `_acme-challenge.erp.mayankrawmint.com` → `_acme-challenge.erp.mrmerp.fyi`.
    Does not affect the live site. A day before the downtime: lower the `erp` record TTL to 300.
 3. **Windows, once (admin PowerShell):** `deploy/local/windows-setup.ps1`
    (opens 8443 to WSL, starts WSL at boot, disables sleep).

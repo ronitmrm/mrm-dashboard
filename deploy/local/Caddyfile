@@ -5,7 +5,6 @@
 {
 	http_port 8081
 	https_port 8443
-	email {$ACME_EMAIL}
 	auto_https disable_redirects
 }
 
@@ -13,7 +12,10 @@
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		dns_challenge_override_domain {$ACME_DELEGATED_DOMAIN}
-		resolvers 1.1.1.1
+		# The factory network intercepts port-53 DNS, so skip the local propagation check;
+		# Let's Encrypt validates from outside after the fixed delay.
+		propagation_delay 30s
+		propagation_timeout -1
 	}
 	encode zstd gzip
 	@retiredWebhook path /api/user-daily-attendance/test-webhook /api/user-daily-attendance/test-webhook/
