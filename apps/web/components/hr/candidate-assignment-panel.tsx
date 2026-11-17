@@ -39,6 +39,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { FileText, MessageSquareText, Pencil } from "lucide-react"
 
 import { logCandidateEventAction } from "@/app/hr/actions"
+import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { CandidateAssignmentForm } from "@/components/hr/candidate-assignment-form"
 import { ExcelColumnFilter } from "@workspace/ui/components/excel-column-filter"
 
@@ -157,6 +158,9 @@ export function CandidatesTable({
                 {canWrite ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
+                {canEditCandidate ? (
+                  <TableHead className="text-right">Edit</TableHead>
+                ) : null}
               </TableRow>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 {columns.map(({ key, label }) => (
@@ -168,30 +172,18 @@ export function CandidatesTable({
                   </TableHead>
                 ))}
                 {canWrite ? <TableHead /> : null}
+                {canEditCandidate ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows.map((row) => (
                 <TableRow key={row.candidate.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button asChild className="h-auto p-0" variant="link">
-                        <Link href={`/hr/candidates/${row.candidate.id}`}>
-                          {row.name}
-                        </Link>
-                      </Button>
-                      {canEditCandidate ? (
-                        <Button asChild size="sm" variant="outline">
-                          <Link
-                            aria-label={`Edit ${row.name}`}
-                            href={`/hr/candidates/${row.candidate.id}#edit-candidate`}
-                          >
-                            <Pencil data-icon="inline-start" />
-                            Edit
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
+                    <Button asChild className="h-auto p-0" variant="link">
+                      <Link href={`/hr/candidates/${row.candidate.id}`}>
+                        {row.name}
+                      </Link>
+                    </Button>
                   </TableCell>
                   <TableCell className="font-mono">{row.phone}</TableCell>
                   <TableCell>{row.email}</TableCell>
@@ -206,14 +198,14 @@ export function CandidatesTable({
                   <TableCell>
                     {row.candidate.hasResume ? (
                       <Button asChild size="sm" variant="outline">
-                        <a
+                        <AttachmentViewerLink
+                          fileName={row.candidate.resumeFileName ?? `${row.name} resume.pdf`}
                           href={`/hr/candidates/${row.candidate.id}/resume`}
-                          rel="noreferrer"
-                          target="_blank"
+                          mediaType="application/pdf"
                         >
                           <FileText data-icon="inline-start" />
                           Resume
-                        </a>
+                        </AttachmentViewerLink>
                       </Button>
                     ) : (
                       "No Resume"
@@ -235,13 +227,26 @@ export function CandidatesTable({
                       </Button>
                     </TableCell>
                   ) : null}
+                  {canEditCandidate ? (
+                    <TableCell className="text-right">
+                      <Button asChild size="sm" variant="outline">
+                        <Link
+                          aria-label={`Edit ${row.name}`}
+                          href={`/hr/candidates/${row.candidate.id}#edit-candidate`}
+                        >
+                          <Pencil data-icon="inline-start" />
+                          Edit
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!visibleRows.length ? (
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 14 : 13}
+                    colSpan={columns.length + Number(canWrite) + Number(canEditCandidate)}
                   >
                     No Candidates Match The Selected Filters.
                   </TableCell>
