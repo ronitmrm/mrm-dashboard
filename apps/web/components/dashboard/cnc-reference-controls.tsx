@@ -131,9 +131,9 @@ export function ReferenceMetricDetail({
         <MetricCard
           className={cn(
             "min-h-36 w-full rounded-2xl pr-10 [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_span.tabular-nums]:text-3xl",
+            className,
             featured &&
-              "border-primary bg-primary [&_.text-muted-foreground]:text-primary-foreground/90 [&_span.tabular-nums]:text-primary-foreground",
-            className
+              "border-primary bg-primary hover:bg-primary [&_.text-muted-foreground]:text-primary-foreground/90 [&_span.tabular-nums]:text-primary-foreground"
           )}
           description={
             <>

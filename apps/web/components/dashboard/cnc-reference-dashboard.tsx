@@ -153,11 +153,14 @@ function Columns({
           </span>
         </div>
       ) : null}
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-3 overflow-x-auto pt-5 pb-2">
         {groups.map(({ label, actual, capacity }) => (
           <div
             key={label}
-            className="grid min-w-[72px] flex-1 gap-1 text-center"
+            className={cn(
+              "grid flex-1 gap-1 text-center",
+              comparison ? "min-w-28" : "min-w-[72px]"
+            )}
           >
             <div className="flex h-36 items-end justify-center gap-1.5 border-b border-border px-1">
               <div
