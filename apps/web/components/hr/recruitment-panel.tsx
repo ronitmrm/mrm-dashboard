@@ -892,11 +892,12 @@ function LogCandidatePanel({
   canWrite,
   canLogCandidateEvent,
   candidates,
+  masterControls,
   masters,
   masterView,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "canLogCandidateEvent" | "candidates" | "masters" | "masterView"
+  "canWrite" | "canLogCandidateEvent" | "candidates" | "masterControls" | "masters" | "masterView"
 >) {
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
@@ -1045,6 +1046,7 @@ function LogCandidatePanel({
       ) : null}
       {showMasterTables ? (
         <CandidatesTable
+          canEditCandidate={masterControls.update}
           canWrite={canLogCandidateEvent}
           candidates={candidates}
           masterView={activeView}
@@ -1173,6 +1175,7 @@ function RecruitmentPanelContent(props: RecruitmentPanelProps) {
           canWrite={props.canWrite}
           canLogCandidateEvent={props.canLogCandidateEvent}
           candidates={props.candidates}
+          masterControls={props.masterControls}
           masters={props.masters}
           masterView={props.masterView}
         />
