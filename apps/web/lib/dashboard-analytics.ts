@@ -133,12 +133,6 @@ export type DashboardMetricWidget = {
   metricId: DashboardMetricId
 }
 
-export type DashboardChartWidget = {
-  id: string
-  kind: "chart"
-  metricIds: DashboardMetricId[]
-  title: string
-}
 export type DashboardFormulaOperator = "add" | "subtract" | "percent"
 
 export type DashboardFormulaWidget = {
@@ -151,7 +145,6 @@ export type DashboardFormulaWidget = {
 }
 
 export type DashboardAnalyticsWidget =
-  | DashboardChartWidget
   | DashboardMetricWidget
   | DashboardFormulaWidget
 
@@ -172,9 +165,7 @@ export function dashboardMetricIdsForWidgets(
     const widgetMetricIds =
       widget.kind === "metric"
         ? [widget.metricId]
-        : widget.kind === "formula"
-          ? [widget.leftMetricId, widget.rightMetricId]
-          : widget.metricIds
+        : [widget.leftMetricId, widget.rightMetricId]
     for (const metricId of widgetMetricIds) {
       if (seen.has(metricId)) continue
       seen.add(metricId)
@@ -303,22 +294,6 @@ function resolveWidget(
   }
 
   const title = cleanTitle(input.title)
-  if (input.kind === "chart" && title && Array.isArray(input.metricIds)) {
-    const metricIds = input.metricIds.filter(
-      (metricId): metricId is DashboardMetricId =>
-        isDashboardMetricId(metricId) && available.has(metricId)
-    )
-    const uniqueMetricIds = [...new Set(metricIds)].slice(0, 8)
-    if (uniqueMetricIds.length >= 2) {
-      return {
-        id,
-        kind: "chart",
-        metricIds: uniqueMetricIds,
-        title,
-      }
-    }
-  }
-
   if (
     input.kind === "formula" &&
     title &&

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { cncDashboardDepartments } from "@/lib/cnc-dashboard"
 import { usePathname, useSearchParams } from "next/navigation"
 
 import {
@@ -29,7 +30,6 @@ import {
   useShellPageActions,
 } from "@/components/ui/page-actions"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
-import { qualityReportNavigation } from "@/lib/quality-reports"
 import {
   administrationNavigation,
   brandingNavigation,
@@ -84,6 +84,9 @@ export function CommercialShell({
   user: { email: string; name: string }
 }) {
   const pathname = usePathname()
+  const cncDepartment = Object.entries(cncDashboardDepartments).find(
+    ([id]) => pathname === `/home/${id}`
+  )
   const searchParams = useSearchParams()
   const { actionsTarget, setActionsTarget, headerHeight, headerRef } =
     useShellPageActions()
@@ -124,7 +127,6 @@ export function CommercialShell({
             : productionPage) ??
     [
       personalDashboardNavigation,
-      ...qualityReportNavigation,
       ...commercialNavigation,
       commercialMasterNavigation,
       ...hrMasterNavigation,
@@ -148,44 +150,99 @@ export function CommercialShell({
       style={
         {
           "--header-height": `${headerHeight}px`,
-          "--sidebar-width": "19rem",
+          "--sidebar-width": cncDepartment ? "14.5rem" : "19rem",
         } as React.CSSProperties
       }
     >
-      <Sidebar variant="sidebar">
-        <SidebarHeader className="border-b border-black/10 bg-[var(--color-logo-surface)] px-3 py-3">
-          <Link className="flex items-center px-2 py-2" href="/home">
+      <Sidebar
+        variant="sidebar"
+        className={
+          cncDepartment
+            ? "[--sidebar-accent-foreground:#f7f7f2] [--sidebar-accent:#ffffff19] [--sidebar-border:#ffffff35] [--sidebar-foreground:#f7f7f2] [--sidebar:#056247] dark:[--sidebar:#103c2b]"
+            : undefined
+        }
+      >
+        <SidebarHeader
+          className={
+            cncDepartment
+              ? "bg-[#056247] px-[22px] pt-7 pb-0 text-[#f7f7f2] dark:bg-[#103c2b]"
+              : "border-b border-black/10 bg-[var(--color-logo-surface)] px-3 py-3"
+          }
+        >
+          <Link
+            className={
+              cncDepartment
+                ? "grid justify-items-start gap-1 border-b border-dotted border-white/40 pb-6"
+                : "flex items-center px-2 py-2"
+            }
+            href="/home"
+          >
             <Image
               src="/mrm-green.svg"
               alt="Mrmpl"
               width={792}
               height={176}
               priority
-              className="h-8 w-auto max-w-full object-contain"
+              className={
+                cncDepartment
+                  ? "h-auto w-[181px] max-w-full object-contain brightness-0 invert"
+                  : "h-8 w-auto max-w-full object-contain"
+              }
             />
+            {cncDepartment ? (
+              <span className="text-base leading-tight">
+                Precision Metal Fittings
+              </span>
+            ) : null}
           </Link>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent
+          className={
+            cncDepartment ? "bg-[#056247] dark:bg-[#103c2b]" : undefined
+          }
+        >
           <UnifiedSidebarNavigation
             activeDashboardTab={activeDashboardTab}
             activeProductionFloor={activeProductionFloor}
+            cncWorkspace={Boolean(cncDepartment)}
             navigationAccess={navigationAccess}
           />
         </SidebarContent>
-        <SidebarFooter className="border-t border-sidebar-border p-3">
+        <SidebarFooter
+          className={
+            cncDepartment
+              ? "border-t border-white/25 bg-[#056247] p-3 dark:bg-[#103c2b] [&_.text-muted-foreground]:text-[#d4e6dc] [&_a]:text-[#f7f7f2] [&_button]:text-[#f7f7f2]"
+              : "border-t border-sidebar-border p-3"
+          }
+        >
           <UserAccountFooter user={user} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset className="min-w-0">
+      <SidebarInset
+        className={
+          cncDepartment ? "min-w-0 bg-[#f7f7f2] dark:bg-background" : "min-w-0"
+        }
+      >
         <header
           ref={headerRef}
-          className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur lg:px-6"
+          className={
+            cncDepartment
+              ? "sticky top-0 z-30 flex min-h-[70px] items-center gap-3 border-b border-dotted bg-[#f7f7f2] px-4 py-3 lg:px-8 dark:bg-background"
+              : "sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur lg:px-6"
+          }
         >
           <SidebarTrigger />
           <Separator className="h-5" orientation="vertical" />
           <div className="min-w-[min(100%,16rem)] flex-1">
-            <h1 className="text-base font-semibold">{current.label}</h1>
+            {cncDepartment ? (
+              <p className="text-xs text-muted-foreground">
+                Workspace / PPAC CNC-01 /{" "}
+                <strong className="text-primary">{cncDepartment[1]}</strong>
+              </p>
+            ) : (
+              <h1 className="text-base font-semibold">{current.label}</h1>
+            )}
           </div>
           <div
             className="flex max-w-full min-w-0 flex-wrap items-center gap-2 empty:hidden max-sm:order-last max-sm:basis-full"
@@ -194,7 +251,13 @@ export function CommercialShell({
           />
         </header>
         <PageActionsTarget value={actionsTarget}>
-          <main className="@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6">
+          <main
+            className={
+              cncDepartment
+                ? "@container/main flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-9 lg:py-[34px]"
+                : "@container/main flex min-w-0 flex-1 flex-col gap-6 p-4 lg:p-6"
+            }
+          >
             {children}
           </main>
         </PageActionsTarget>

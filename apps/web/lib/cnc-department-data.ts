@@ -1,0 +1,707 @@
+import "server-only"
+
+import {
+  createDashboardReadModelRepository,
+  createMaintenanceRepository,
+  repositoryPool,
+} from "@workspace/db"
+import { productionFloorCodeForRecord } from "@workspace/db/production-floors"
+import {
+  productionShiftAt,
+  productionShiftEndInstant,
+} from "@workspace/db/production-session-domain"
+
+import { readAuthEnvironment } from "./auth/auth"
+import {
+  cncDashboardCardSource,
+  type CncDashboardCardId,
+  type CncDashboardData,
+  type CncDashboardFilters,
+} from "./cnc-dashboard"
+import { loadCncSessionDashboard } from "./cnc-dashboard-data"
+import {
+  loadCncQualityWorkload,
+  loadCncSetupWorkload,
+  qualityWorkloadCards,
+  setupWorkloadCards,
+} from "./cnc-quality-data"
+import { formatIstDateTime, istDateValue } from "./date-time"
+import {
+  nextShopFloorStageId,
+  shopFloorRowIsExplicitlyStopped,
+  shopFloorRowIsProducedHistory,
+  shopFloorRowIsProductionCurrent,
+} from "./shop-floor-workflow"
+import { dateSortValue } from "./dashboard-view-model"
+
+type CardData = Pick<CncDashboardData, "charts" | "values" | "tables">
+type Filter = CncDashboardFilters
+const workflowStages = ["raw_material_at_machine", "operator_started"] as const
+type Stage = (typeof workflowStages)[number]
+const stageLabels: Record<Stage, string> = {
+  raw_material_at_machine: "Material placed",
+  operator_started: "Machine started",
+}
+type StageEvent = {
+  stage: Stage
+  at: Date
+  job: string
+  part: string
+  machine: string
+  actor: string | null
+  setup: number
+}
+
+function timeSelection(value: Date | string, filters: Filter) {
+  const at = new Date(value)
+  if (!Number.isFinite(at.getTime())) return null
+  const shift = productionShiftAt("cnc", at)
+  if (
+    !shift ||
+    shift.productionDate < filters.from ||
+    shift.productionDate > filters.to
+  )
+    return null
+  return filters.shift === "all" || filters.shift === shift.shift ? shift : null
+}
+
+function daysBefore(date: string, days: number) {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - days * 86_400_000)
+    .toISOString()
+    .slice(0, 10)
+}
+
+function chart<T>(
+  rows: T[],
+  label: (row: T) => string,
+  amount: (row: T) => number = () => 1
+) {
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    const key = label(row)
+    totals.set(key, (totals.get(key) ?? 0) + amount(row))
+  }
+  return [...totals].map(([label, value]) => ({ label, value }))
+}
+
+function logRows(events: StageEvent[]) {
+  return events.map(({ at, machine, job, part, setup, stage, actor }) => [
+    formatIstDateTime(at),
+    machine,
+    job,
+    part,
+    setup,
+    stageLabels[stage],
+    actor ?? "—",
+  ])
+}
+
+function rowRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value : []
+}
+
+function currentQueues(rows: Record<string, unknown>[]) {
+  const grouped = new Map<string, Record<string, unknown>[]>()
+  for (const row of rows) {
+    const machine = String(row.machine ?? "").trim()
+    if (
+      !machine ||
+      row.shopFloorStage === "item_complete" ||
+      shopFloorRowIsProducedHistory(row)
+    )
+      continue
+    const key = machine.toLowerCase()
+    const queue = grouped.get(key) ?? []
+    queue.push(row)
+    grouped.set(key, queue)
+  }
+  return [...grouped.values()].flatMap((queue) => {
+    const running = (row: Record<string, unknown>) =>
+      !shopFloorRowIsExplicitlyStopped(row) &&
+      shopFloorRowIsProductionCurrent(row)
+    const next = queue
+      .filter((row) => !running(row))
+      .sort(
+        (a, b) =>
+          dateSortValue(
+            a.plannedProductionStartDate || a.setupPlannedDate || a.plannedDate
+          ) -
+            dateSortValue(
+              b.plannedProductionStartDate ||
+                b.setupPlannedDate ||
+                b.plannedDate
+            ) ||
+          String(a.setupNo ?? "").localeCompare(
+            String(b.setupNo ?? ""),
+            undefined,
+            { numeric: true }
+          ) ||
+          String(a.partCode ?? "").localeCompare(
+            String(b.partCode ?? ""),
+            undefined,
+            { numeric: true }
+          )
+      )[0]
+    if (!next || next.shopFloorTaskReady === false) return []
+    const stage = nextShopFloorStageId(next.shopFloorStage, next.machineType)
+    return stage === "raw_material_at_machine" && queue.some(running)
+      ? []
+      : [{ row: next, stage }]
+  })
+}
+
+async function loadWorkflow(
+  filters: Filter,
+  cards: readonly CncDashboardCardId[]
+): Promise<CardData> {
+  const options = { connectionString: readAuthEnvironment().connectionString }
+  const publication = createDashboardReadModelRepository(options)
+  const { pool, close } = repositoryPool(options)
+  try {
+    const organization = await publication.organizationIdForCode("MRMPL")
+    const sources = new Set(cards.map(cncDashboardCardSource))
+    const dispatchPeriod =
+      filters.from === filters.to && cards.includes("cnc-dispatch-trend")
+        ? { ...filters, from: daysBefore(filters.from, 6) }
+        : filters
+    const [snapshot, events, dispatch, decisions] = await Promise.all([
+      publication.state(organization, {}, "cnc"),
+      sources.has("shopFloorTasksTab")
+        ? pool.query<StageEvent>(
+            `
+        SELECT event.to_stage AS stage, event.occurred_at AS at,
+          work.job_card_number AS job, item.uid AS part, machine.machine_number AS machine, setup.setup_number AS setup,
+          COALESCE(NULLIF(event.legacy_actor, ''), actor.name) AS actor
+        FROM manufacturing.shop_floor_stage_events event
+        JOIN manufacturing.shop_floor_setup_state state ON state.id = event.setup_state_id
+        JOIN catalog.machines machine ON machine.id = COALESCE(event.machine_id, state.machine_id)
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        JOIN manufacturing.work_orders work ON work.id = state.work_order_id
+        JOIN catalog.items item ON item.id = work.item_id
+        JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+        LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+        WHERE event.organization_id = $1 AND floor.code = 'cnc' AND event.reversed_at IS NULL
+          AND event.to_stage = ANY($4::text[])
+          AND event.occurred_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+          AND event.occurred_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+        ORDER BY event.occurred_at DESC, event.id
+      `,
+            [organization, filters.from, filters.to, workflowStages]
+          )
+        : null,
+      sources.has("shopFloorTasksTab")
+        ? pool.query<{
+            at: Date
+            job: string
+            quantity: string | null
+            actor: string | null
+            floor: unknown
+            workFloor: unknown
+          }>(
+            `
+        SELECT event.occurred_at AS at, work.job_card_number AS job, event.quantity::text,
+          COALESCE(NULLIF(event.legacy_actor, ''), actor.name) AS actor,
+          event.source_payload AS floor, work.source_payload AS "workFloor"
+        FROM manufacturing.dispatch_approval_events event
+        JOIN manufacturing.work_orders work ON work.id = event.work_order_id
+        LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+        WHERE event.organization_id = $1 AND event.decision = 'approved' AND event.reversed_at IS NULL
+          AND event.occurred_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+          AND event.occurred_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+        ORDER BY event.occurred_at DESC, event.id
+      `,
+            [organization, dispatchPeriod.from, dispatchPeriod.to]
+          )
+        : null,
+      sources.has("productionControlTab")
+        ? pool.query<{
+            at: Date
+            id: string
+            job: string | null
+            part: string | null
+            machine: string | null
+            priority: string | null
+            rank: number | null
+            status: string | null
+            floorCode: string | null
+            eventFloor: unknown
+            workFloor: unknown
+          }>(
+            `
+        SELECT event.id, event.occurred_at AS at, work.job_card_number AS job, item.uid AS part,
+          machine.machine_number AS machine, event.source_payload->>'priority' AS priority,
+          detail.target_position AS rank, work.status,
+          floor.code AS "floorCode", event.source_payload AS "eventFloor", work.source_payload AS "workFloor"
+        FROM manufacturing.planner_priority_events event
+        LEFT JOIN manufacturing.planner_priority_event_details detail
+          ON detail.planner_priority_event_id = event.id AND detail.sequence = 0
+        LEFT JOIN manufacturing.work_orders work ON work.id = detail.work_order_id
+        LEFT JOIN catalog.items item ON item.id = work.item_id
+        LEFT JOIN catalog.machines machine ON machine.id = event.machine_id
+        LEFT JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        WHERE event.organization_id = $1 AND event.reversed_at IS NULL
+          AND event.occurred_at < (($2::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+        ORDER BY event.occurred_at DESC, event.id
+      `,
+            [organization, filters.to]
+          )
+        : null,
+    ])
+    const control = (snapshot.dashboard as Record<string, unknown> | null)
+      ?.productionControl as Record<string, unknown> | undefined
+    const plans = rowRecords(control?.machinePlanDetailRows)
+    const queue = currentQueues(plans)
+    const floorWork = (events?.rows ?? []).filter(
+      ({ stage, at }) =>
+        (stage === "raw_material_at_machine" || stage === "operator_started") &&
+        timeSelection(at, filters)
+    )
+    const placements = floorWork.filter(
+      ({ stage }) => stage === "raw_material_at_machine"
+    )
+    const trendRows = (dispatch?.rows ?? []).flatMap((row) => {
+      const eventFloor =
+        row.floor && typeof row.floor === "object" ? row.floor : {}
+      const workFloor =
+        row.workFloor && typeof row.workFloor === "object" ? row.workFloor : {}
+      if (
+        productionFloorCodeForRecord({
+          sourcePayload: { ...workFloor, ...eventFloor },
+        }) !== "cnc"
+      )
+        return []
+      const shift = timeSelection(row.at, dispatchPeriod)
+      return shift ? [{ ...row, date: shift.productionDate }] : []
+    })
+    const dispatchRows = trendRows.filter(({ date }) => date >= filters.from)
+    const dailyDispatch = new Map<
+      string,
+      { approvals: number; pieces: number; complete: boolean }
+    >()
+    const dispatchSpan = Math.round(
+      (Date.parse(dispatchPeriod.to) - Date.parse(dispatchPeriod.from)) /
+        86_400_000
+    )
+    if (dispatchSpan >= 0 && dispatchSpan < 31) {
+      for (let offset = dispatchSpan; offset >= 0; offset--) {
+        dailyDispatch.set(daysBefore(dispatchPeriod.to, offset), {
+          approvals: 0,
+          pieces: 0,
+          complete: true,
+        })
+      }
+    }
+    for (const { date, quantity } of trendRows) {
+      const total = dailyDispatch.get(date) ?? {
+        approvals: 0,
+        pieces: 0,
+        complete: true,
+      }
+      total.approvals++
+      total.complete &&= quantity !== null
+      total.pieces += Number(quantity ?? 0)
+      dailyDispatch.set(date, total)
+    }
+    const dispatchDays = [...dailyDispatch].sort(([a], [b]) =>
+      a.localeCompare(b)
+    )
+    const priorities = (decisions?.rows ?? []).filter((row) => {
+      const eventFloor =
+        row.eventFloor && typeof row.eventFloor === "object"
+          ? row.eventFloor
+          : {}
+      const workFloor =
+        row.workFloor && typeof row.workFloor === "object" ? row.workFloor : {}
+      const floor =
+        row.floorCode ??
+        productionFloorCodeForRecord({
+          sourcePayload: { ...workFloor, ...eventFloor },
+        })
+      return (
+        floor === "cnc" &&
+        (filters.shift === "all" ||
+          productionShiftAt("cnc", row.at)?.shift === filters.shift)
+      )
+    })
+    const jobs = new Map(
+      rowRecords(control?.workOrderRegisterRows ?? control?.workOrders).map(
+        (row) => [
+          String(row.jcNo ?? row.jobCardNumber ?? "").toLowerCase(),
+          row,
+        ]
+      )
+    )
+    const latestPriorities = new Map<string, (typeof priorities)[number]>()
+    for (const decision of priorities) {
+      const key = decision.job?.toLowerCase() || decision.id
+      if (!latestPriorities.has(key)) latestPriorities.set(key, decision)
+    }
+    const priorityRows = [...latestPriorities.values()].flatMap(
+      ({ at, job, part, machine, priority, rank, status }) => {
+        const jobKey = job?.toLowerCase() ?? ""
+        const progress = jobs.get(jobKey)
+        const plan = plans.find(
+          (row) =>
+            String(row.jcNo ?? row.jobCardNumber ?? "").toLowerCase() === jobKey
+        )
+        const state = String(progress?.dispatchStatus ?? status ?? "Unmatched")
+        if (/^(dispatched|cancelled|rejected)$/i.test(state)) return []
+        const phase = /partially dispatched/i.test(state)
+          ? "Partially dispatched"
+          : Number(progress?.rawRows ?? 0) > 0 ||
+              (plan && shopFloorRowIsProductionCurrent(plan))
+            ? "In production"
+            : plan && plan.shopFloorTaskReady !== false
+              ? "Ready for setup"
+              : !job
+                ? "Unmatched"
+                : state
+        const ordered = Number(progress?.orderPcs ?? 0)
+        const actual = Number(progress?.finalSetupGoodPieces ?? 0)
+        return [
+          [
+            formatIstDateTime(at),
+            part ?? "—",
+            job ?? "—",
+            machine ?? String(plan?.machine ?? "—"),
+            priority ?? rank ?? "—",
+            phase,
+            timeSelection(at, filters) ? "Yes" : "No",
+            ordered > 0
+              ? `${Math.min(100, (actual / ordered) * 100).toFixed(1)}%`
+              : "—",
+            String(plan?.plannedProductionEndDate || "—"),
+            progress?.finalSetupGoodPieces != null
+              ? `${actual.toLocaleString("en-IN")} final setup good pieces`
+              : "—",
+          ],
+        ]
+      }
+    )
+    const columns = [
+      "Recorded at",
+      "Machine",
+      "Job card",
+      "Part",
+      "Setup",
+      "Task",
+      "User",
+    ]
+    const queueColumns = ["Machine", "Job card", "Part", "Setup", "Next task"]
+    const queueTable = (stageList: string[]) => ({
+      columns: queueColumns,
+      rows: queue
+        .filter(({ stage }) => stage && stageList.includes(stage))
+        .map(({ row, stage }) => [
+          String(row.machine ?? "—"),
+          String(row.jcNo ?? row.jobCardNumber ?? "—"),
+          String(row.partCode ?? "—"),
+          String(row.setupNo ?? "—"),
+          stage === "setting"
+            ? "Complete setting"
+            : stage === "operator_started"
+              ? "Start machine"
+              : "Place material",
+        ]),
+    })
+    return {
+      values: {
+        "cnc-floor-pending": control
+          ? queue.filter(({ stage }) => stage === "raw_material_at_machine")
+              .length
+          : null,
+        "cnc-floor-placements": floorWork.filter(
+          ({ stage }) => stage === "raw_material_at_machine"
+        ).length,
+        "cnc-floor-starts": floorWork.filter(
+          ({ stage }) => stage === "operator_started"
+        ).length,
+        "cnc-dispatch-pieces": dispatchRows.some(
+          ({ quantity }) => quantity === null
+        )
+          ? null
+          : dispatchRows.reduce(
+              (total, row) => total + Number(row.quantity),
+              0
+            ),
+        "cnc-dispatch-approvals": dispatchRows.length,
+      },
+      charts: {
+        "cnc-floor-by-user": chart(
+          placements,
+          ({ actor }) => actor ?? "Unrecorded"
+        ),
+        "cnc-dispatch-trend": dispatchDays.flatMap(([label, total]) =>
+          total.complete ? [{ label, value: total.pieces }] : []
+        ),
+      },
+      tables: {
+        "cnc-dispatch-daily": {
+          columns: ["Production date", "Approval events", "Dispatched pieces"],
+          rows: dispatchDays.map(([date, total]) => [
+            date,
+            total.approvals,
+            total.complete ? total.pieces : "—",
+          ]),
+        },
+        "cnc-floor-log": { columns, rows: logRows(placements) },
+        "cnc-dispatch-log": {
+          columns: ["Approved at", "Job card", "Pieces", "User"],
+          rows: dispatchRows.map(({ at, job, quantity, actor }) => [
+            formatIstDateTime(at),
+            job,
+            quantity === null ? "—" : Number(quantity),
+            actor ?? "—",
+          ]),
+        },
+        "cnc-planner-priorities": {
+          columns: [
+            "Changed at",
+            "Part",
+            "Job card",
+            "Machine",
+            "Priority",
+            "Current progress",
+            "Changed in selection",
+            "Final setup progress",
+            "Estimated finish",
+            "Recorded output",
+          ],
+          rows: priorityRows,
+        },
+        ...(control
+          ? {
+              "cnc-floor-queue": queueTable(["raw_material_at_machine"]),
+            }
+          : {}),
+      },
+    }
+  } finally {
+    await Promise.all([publication.close(), close()])
+  }
+}
+
+async function loadMaintenance(
+  filters: Filter,
+  cards: readonly CncDashboardCardId[]
+): Promise<CardData> {
+  const options = { connectionString: readAuthEnvironment().connectionString }
+  const repository = createMaintenanceRepository(options)
+  const { pool, close } = repositoryPool(options)
+  try {
+    const organization = await repository.organizationIdForCode("MRMPL")
+    const [breakdowns, plan, completed, overdue] = await Promise.all([
+      repository.listBreakdowns({
+        organizationId: organization,
+        status: cards.includes("cnc-maintenance-breakdowns-started")
+          ? undefined
+          : "In Progress",
+      }),
+      repository.listMachineMaintenancePlan(
+        organization,
+        filters.from,
+        filters.to,
+        { productionFloorCode: "cnc" }
+      ),
+      pool.query<{
+        machine: string
+        work: string
+        type: string
+        at: Date
+        minutes: number | null
+      }>(
+        `
+        SELECT machine.machine_number AS machine, definition.name AS work, task.task_type AS type,
+          task.completed_at AS at,
+          CASE WHEN task.source_payload->>'actualMinutes' ~ '^[0-9]+([.][0-9]+)?$'
+            THEN (task.source_payload->>'actualMinutes')::float8
+            WHEN task.started_at IS NOT NULL AND task.completed_at > task.started_at
+            THEN extract(epoch FROM task.completed_at - task.started_at)::float8 / 60
+          END AS minutes
+        FROM maintenance.tasks task
+        JOIN maintenance.machine_schedules schedule ON schedule.id = task.machine_schedule_id
+        JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
+        JOIN catalog.machines machine ON machine.id = schedule.machine_id
+        JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+        WHERE task.organization_id = $1 AND floor.code = 'cnc' AND task.status = 'Completed'
+          AND task.completed_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+          AND task.completed_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+        ORDER BY task.completed_at DESC, task.id
+      `,
+        [organization, filters.from, filters.to]
+      ),
+      cards.includes("cnc-maintenance-backlog")
+        ? repository.listMachineMaintenancePlan(
+            organization,
+            "0001-01-01",
+            daysBefore(istDateValue(), 1),
+            { outstandingOnly: true, productionFloorCode: "cnc" }
+          )
+        : [],
+    ])
+    const floorBreakdowns = breakdowns.filter(
+      ({ productionFloorCode }) => productionFloorCode === "cnc"
+    )
+    const cncBreakdowns = floorBreakdowns.filter(
+      ({ status }) => status === "In Progress"
+    )
+    const cutoff = productionShiftEndInstant({
+      productionDate: filters.to,
+      productionFloorCode: "cnc",
+      shift: filters.shift === "all" ? "C" : filters.shift,
+    })
+    const done = completed.rows.filter(({ at }) => timeSelection(at, filters))
+    const timed = done.flatMap(({ minutes }) =>
+      minutes === null ? [] : [minutes]
+    )
+    const repairs = done.filter(
+      ({ type }) => type.toLowerCase() === "breakdown"
+    )
+    const repairTimes = repairs.flatMap(({ minutes }) =>
+      minutes === null ? [] : [minutes]
+    )
+    return {
+      values: {
+        "cnc-open-breakdowns": new Set(
+          cncBreakdowns.map(({ machineNumber }) => machineNumber)
+        ).size,
+        "cnc-maintenance-breakdowns-intersecting": cncBreakdowns.filter(
+          ({ startedAt }) => !!startedAt && new Date(startedAt) < cutoff
+        ).length,
+        "cnc-maintenance-breakdowns-started": floorBreakdowns.filter(
+          ({ startedAt }) => startedAt && timeSelection(startedAt, filters)
+        ).length,
+        "cnc-maintenance-repairs": repairs.length,
+        "cnc-maintenance-repair-avg": repairTimes.length
+          ? Math.round(
+              repairTimes.reduce((sum, minutes) => sum + minutes, 0) /
+                repairTimes.length
+            )
+          : null,
+        "cnc-maintenance-planned": plan.length,
+        "cnc-maintenance-completed": done.filter(
+          ({ type }) => type.toLowerCase() === "planned"
+        ).length,
+        "cnc-maintenance-duration": timed.length
+          ? Math.round(
+              timed.reduce((total, minutes) => total + minutes, 0) /
+                timed.length
+            )
+          : null,
+      },
+      charts: {},
+      tables: {
+        "cnc-breakdown-log": {
+          columns: ["Machine", "Started at", "Reason"],
+          rows: cncBreakdowns.map(
+            ({ machineNumber, startedAt, reasonName }) => [
+              machineNumber,
+              formatIstDateTime(startedAt),
+              reasonName ?? "—",
+            ]
+          ),
+        },
+        "cnc-maintenance-work": {
+          columns: [
+            "Machine",
+            "Work",
+            "Record",
+            "Date",
+            "Actual minutes",
+            "Type",
+          ],
+          rows: [
+            ...plan.map(({ machineNumber, maintenance, dueOn }) => [
+              machineNumber,
+              maintenance,
+              "Plan",
+              dueOn,
+              "—",
+              "Planned",
+            ]),
+            ...done.map(({ machine, work, at, minutes, type }) => [
+              machine,
+              work,
+              "Completed",
+              formatIstDateTime(at),
+              minutes === null ? "—" : Math.round(minutes),
+              type,
+            ]),
+          ],
+        },
+        "cnc-maintenance-backlog": {
+          columns: ["Machine", "Work", "Due date", "Status"],
+          rows: overdue.map(({ machineNumber, maintenance, dueOn, status }) => [
+            machineNumber,
+            maintenance,
+            dueOn,
+            status,
+          ]),
+        },
+      },
+    }
+  } finally {
+    await Promise.all([repository.close(), close()])
+  }
+}
+
+export async function loadCncDashboard(
+  filters: Filter,
+  cards: readonly CncDashboardCardId[],
+  includeWorkloadDetails = false
+): Promise<CncDashboardData> {
+  const sources = new Set(cards.map(cncDashboardCardSource))
+  const [session, workflow, maintenance, qualityWorkload, setupWorkload] =
+    await Promise.all([
+      sources.has("productionSessionsTab")
+        ? loadCncSessionDashboard(filters, cards)
+        : null,
+      sources.has("shopFloorTasksTab") || sources.has("productionControlTab")
+        ? loadWorkflow(filters, cards)
+        : null,
+      sources.has("maintenanceTab") ? loadMaintenance(filters, cards) : null,
+      sources.has("qualityControlTasksTab")
+        ? loadCncQualityWorkload(filters)
+        : undefined,
+      sources.has("machinistTasksTab")
+        ? loadCncSetupWorkload(filters)
+        : undefined,
+    ])
+  const quality = qualityWorkload && qualityWorkloadCards(qualityWorkload)
+  const setup = setupWorkload && setupWorkloadCards(setupWorkload)
+  const selected = new Set<string>(cards)
+  function picked<T>(records: Partial<Record<CncDashboardCardId, T>>) {
+    return Object.fromEntries(
+      Object.entries(records).filter(([id]) => selected.has(id))
+    ) as typeof records
+  }
+  return {
+    qualityWorkload: includeWorkloadDetails ? qualityWorkload : undefined,
+    setupWorkload: includeWorkloadDetails ? setupWorkload : undefined,
+    sessionCount: session?.sessionCount,
+    machines: selected.has("cnc-machine-output")
+      ? (session?.machines ?? [])
+      : [],
+    values: picked({
+      ...session?.values,
+      ...workflow?.values,
+      ...maintenance?.values,
+      ...quality?.values,
+      ...setup?.values,
+    }),
+    charts: picked({
+      ...session?.charts,
+      ...workflow?.charts,
+      ...maintenance?.charts,
+      ...quality?.charts,
+      ...setup?.charts,
+    }),
+    tables: picked({
+      ...session?.tables,
+      ...workflow?.tables,
+      ...maintenance?.tables,
+      ...quality?.tables,
+      ...setup?.tables,
+    }),
+  }
+}
