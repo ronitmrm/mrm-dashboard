@@ -1,5 +1,6 @@
 import { expect, test } from "vitest"
 import { buildShiftCoverage, type RecordedShiftInterval } from "./shift-coverage"
+import { shiftIdleQueue, shiftReasonRanges, type ShiftIdleMachine } from "./shift-idle-reasons"
 
 const at = (time: string) => `2026-11-16T${time}:00.000Z`
 const interval = (start: string, end: string) => ({ start: at(start), end: at(end) })
@@ -7,7 +8,7 @@ const record = (kind: RecordedShiftInterval["kind"], start: string, end: string)
   kind, ...interval(start, end),
 })
 
-test("credits recorded production, shared breakdown and break exactly once and leaves only 30 minutes to explain", () => {
+test("credits recorded production, shared breakdown and break exactly once", () => {
   const window = interval("06:00", "14:00")
   const records = [
     record("running", "05:30", "11:00"),
@@ -25,6 +26,24 @@ test("credits recorded production, shared breakdown and break exactly once and l
   expect(buildShiftCoverage(window, records, [review]).at(-1)).toEqual({
     kind: "reviewed", ...interval("13:30", "14:00"), review,
   })
+})
+
+test("routes up to 30 unexplained minutes to Completed and sums gaps before applying the cutoff", () => {
+  const machine: ShiftIdleMachine = {
+    machineId: "1", machineNumber: "CNC-1", jobCard: null, item: null, setup: null, stage: null, untimedOutput: false,
+    segments: buildShiftCoverage(interval("06:00", "14:00"), [record("running", "06:15", "13:45")]),
+  }
+  expect(shiftIdleQueue(machine)).toBe("unaccounted")
+  expect(shiftReasonRanges(machine.segments)).toHaveLength(0)
+
+  machine.segments = buildShiftCoverage(interval("06:00", "14:00"), [record("running", "06:15", "13:44")])
+  expect(shiftIdleQueue(machine)).toBe("review")
+  expect(shiftReasonRanges(machine.segments)).toHaveLength(2)
+
+  const review = { ...interval("06:00", "06:15"), reason: "no_job_assigned" as const, note: null, version: 1 }
+  machine.segments = buildShiftCoverage(interval("06:00", "14:00"), [record("running", "06:15", "13:44")], [review])
+  expect(shiftIdleQueue(machine)).toBe("unaccounted")
+  expect(shiftReasonRanges(machine.segments)).toEqual([{ ...interval("06:00", "06:15"), kind: "reviewed", review }])
 })
 
 test("subtracts interruptions from an open session and rechecks gaps after late production entries", () => {

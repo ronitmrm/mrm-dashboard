@@ -10,7 +10,7 @@ import { StandardState } from "@workspace/ui/components/standard-state"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { useConditionalRecords } from "@/hooks/use-conditional-records"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
-import { MachineReasonForm } from "./shift-idle-review"
+import { MachineReasonForm, ShiftIdleReviewPanel } from "./shift-idle-review"
 import { PlanningRecordCells, PlanningRecordHeaders } from "./planning-record-columns"
 
 type HistoryRow = Awaited<ReturnType<ReturnType<typeof createPlanningControlHistoryRepository>["read"]>>["rows"][number]
@@ -25,6 +25,18 @@ const labels: Record<HistoryRow["kind"], string> = {
 }
 
 export function PlanningControlCompleted({ floor }: { floor: ProductionFloorCode }) {
+  return (
+    <>
+      <CompletedReviewHistory floor={floor} />
+      {floor === "cnc" ? <section aria-labelledby="completed-unaccounted" className="grid min-w-0 gap-3 border-t pt-4">
+        <h3 id="completed-unaccounted" className="text-sm font-semibold">Unaccounted time</h3>
+        <ShiftIdleReviewPanel view="unaccounted" />
+      </section> : null}
+    </>
+  )
+}
+
+function CompletedReviewHistory({ floor }: { floor: ProductionFloorCode }) {
   const [page, setPage] = useState(0)
   const [notice, setNotice] = useState("")
   const history = useConditionalRecords(`/api/planning-control-history?floor=${floor}&page=${page}`)

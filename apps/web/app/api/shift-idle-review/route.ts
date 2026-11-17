@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createShiftIdleReviewRepository } from "@workspace/db"
 import { productionShiftAt, productionShiftEndInstant } from "@workspace/db/production-session-domain"
-import { isCncShift, isShiftIdleReason } from "@workspace/db/shift-idle-reasons"
+import { cncShifts, isCncShift, isShiftIdleReason, shiftIdleQueue } from "@workspace/db/shift-idle-reasons"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { productionFloorPageCapability } from "@/lib/auth/production-floor-capabilities"
@@ -11,16 +11,48 @@ import { DashboardReadError, withDashboardReadRepository } from "@/lib/postgres-
 const floor = "cnc"
 const reviewCapability = productionFloorPageCapability(floor, "planningControlTab")
 const editCapability = productionFloorTaskCapability(floor, "plan_override")
+// The first production date covered by the Machine Review rollout.
+const firstReviewDate = "2026-11-16"
+const queuePageDays = 2
+
+function parseProductionDate(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    throw new DashboardReadError(400, "Select a valid production date.")
+  const day = new Date(`${value}T00:00:00Z`)
+  if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== value)
+    throw new DashboardReadError(400, "Select a valid production date.")
+  return day
+}
 
 function validateShift(productionDate: unknown, shift: unknown, now: Date) {
-  if (typeof productionDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(productionDate) || !isCncShift(shift))
+  if (typeof productionDate !== "string" || !isCncShift(shift))
     throw new DashboardReadError(400, "Select a valid production date and shift.")
-  const day = new Date(`${productionDate}T00:00:00Z`)
-  if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== productionDate)
-    throw new DashboardReadError(400, "Select a valid production date.")
+  parseProductionDate(productionDate)
   if (productionShiftEndInstant({ productionDate, shift, productionFloorCode: floor }) > now)
     throw new DashboardReadError(400, "This shift has not ended yet.")
   return { productionDate, shift }
+}
+
+function reviewQueuePage(params: URLSearchParams, latestDate: string, now: Date) {
+  const date = params.get("date")
+  const shift = params.get("shift")
+  if (shift !== null && !isCncShift(shift))
+    throw new DashboardReadError(400, "Select a valid shift.")
+
+  const olderDate = params.get("olderDate") ?? latestDate
+  const day = parseProductionDate(date ?? (olderDate < latestDate ? olderDate : latestDate))
+  const dates: string[] = []
+  for (let index = 0; index < (date ? 1 : queuePageDays); index++) {
+    const productionDate = day.toISOString().slice(0, 10)
+    if (!date && productionDate < firstReviewDate) break
+    dates.push(productionDate)
+    day.setUTCDate(day.getUTCDate() - 1)
+  }
+  const shifts = shift ? [shift] : [...cncShifts].reverse()
+  const keys = dates.flatMap((productionDate) => shifts.map((shift) => ({ productionDate, shift })))
+    .filter((key) => productionShiftEndInstant({ ...key, productionFloorCode: floor }) <= now)
+  const nextDate = day.toISOString().slice(0, 10)
+  return { keys, nextDate: !date && nextDate >= firstReviewDate ? nextDate : null }
 }
 
 function errorResponse(error: unknown) {
@@ -37,15 +69,27 @@ export async function GET(request: NextRequest) {
       const now = new Date()
       const lastShift = productionShiftAt(floor, new Date(now.getTime() - 8 * 60 * 60 * 1000))!
       const params = request.nextUrl.searchParams
-      const key = params.has("date") || params.has("shift")
-        ? validateShift(params.get("date"), params.get("shift"), now)
-        : validateShift(lastShift.productionDate, lastShift.shift, now)
       const repository = createShiftIdleReviewRepository({ connectionString: readAuthEnvironment().connectionString })
       try {
-        const review = await repository.read({ ...key, organizationId })
-        return NextResponse.json({ ...key, ...review, canEdit: granted.has(editCapability) }, {
-          headers: { "Cache-Control": "no-store" },
+        const canEdit = granted.has(editCapability)
+        const headers = { "Cache-Control": "no-store" }
+        const read = async (key: ReturnType<typeof validateShift>) => ({
+          ...key, ...await repository.read({ ...key, organizationId }), canEdit,
         })
+        const view = params.get("view")
+        if (view === "queue" || view === "unaccounted") {
+          const queue = view === "queue" ? "review" : "unaccounted"
+          const { keys, nextDate } = reviewQueuePage(params, lastShift.productionDate, now)
+          const reviews = await Promise.all(keys.map(async (key) => {
+            const review = await read(key)
+            return { ...review, machines: review.machines.filter((machine) => shiftIdleQueue(machine) === queue) }
+          }))
+          return NextResponse.json({ reviews, nextDate }, { headers })
+        }
+        const key = params.has("date") || params.has("shift")
+          ? validateShift(params.get("date"), params.get("shift"), now)
+          : validateShift(lastShift.productionDate, lastShift.shift, now)
+        return NextResponse.json(await read(key), { headers })
       } finally {
         await repository.close()
       }
