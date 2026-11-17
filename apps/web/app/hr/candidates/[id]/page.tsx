@@ -108,7 +108,7 @@ export default async function CandidateWorkspacePage({
         </Alert>
       ) : null}
       <Button asChild className="w-fit" size="sm" variant="ghost">
-        <Link href="/hr?panel=candidatesPanel">
+        <Link href="/hr?panel=candidatesPanel&masterView=masterTables">
           <ArrowLeft data-icon="inline-start" />
           Back To Candidates
         </Link>
@@ -162,7 +162,7 @@ export default async function CandidateWorkspacePage({
       ) : null}
 
       {canEditCandidate ? (
-        <SectionCard width="wide">
+        <SectionCard id="edit-candidate" tabIndex={-1} width="wide">
           <CardHeader>
             <CardTitle>Edit Candidate</CardTitle>
           </CardHeader>
@@ -182,9 +182,9 @@ export default async function CandidateWorkspacePage({
             >
               <input name="candidate_id" type="hidden" value={candidate.id} />
               <input
-                name="return_to"
+                name="return_candidate_id"
                 type="hidden"
-                value={`/hr/candidates/${candidate.id}`}
+                value={candidate.id}
               />
               <Field>
                 <FieldLabel htmlFor="edit-candidate-name">Name</FieldLabel>

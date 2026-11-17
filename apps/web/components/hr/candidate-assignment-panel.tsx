@@ -36,7 +36,7 @@ import {
 } from "@workspace/ui/components/table"
 import { useExcelTable } from "@workspace/ui/hooks/use-excel-table"
 import { Textarea } from "@workspace/ui/components/textarea"
-import { FileText, MessageSquareText } from "lucide-react"
+import { FileText, MessageSquareText, Pencil } from "lucide-react"
 
 import { logCandidateEventAction } from "@/app/hr/actions"
 import { CandidateAssignmentForm } from "@/components/hr/candidate-assignment-form"
@@ -62,10 +62,12 @@ function CandidateStatusBadge({ status }: { status: string }) {
 }
 
 export function CandidatesTable({
+  canEditCandidate = false,
   canWrite = false,
   candidates,
   masterView,
 }: {
+  canEditCandidate?: boolean
   canWrite?: boolean
   candidates: RecruitmentCandidateRow[]
   masterView?: "dataEntry" | "masterTables"
@@ -172,11 +174,24 @@ export function CandidatesTable({
               {visibleRows.map((row) => (
                 <TableRow key={row.candidate.id}>
                   <TableCell>
-                    <Button asChild className="h-auto p-0" variant="link">
-                      <Link href={`/hr/candidates/${row.candidate.id}`}>
-                        {row.name}
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button asChild className="h-auto p-0" variant="link">
+                        <Link href={`/hr/candidates/${row.candidate.id}`}>
+                          {row.name}
+                        </Link>
+                      </Button>
+                      {canEditCandidate ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            aria-label={`Edit ${row.name}`}
+                            href={`/hr/candidates/${row.candidate.id}#edit-candidate`}
+                          >
+                            <Pencil data-icon="inline-start" />
+                            Edit
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono">{row.phone}</TableCell>
                   <TableCell>{row.email}</TableCell>
