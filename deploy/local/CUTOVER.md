@@ -23,7 +23,8 @@ One scheduled downtime. Neon `staging` stays untouched as the rollback point.
 
 ## Downtime
 
-1. Freeze writes: pause the Vercel project and disconnect its Git integration, stop the Railway worker.
+1. Freeze writes: pause the Vercel project and disconnect its Git integration; stop the Railway worker
+   and disconnect its GitHub source (it redeploys on every push to `main`).
 2. `sudo systemctl enable --now postgresql redis-server`
 3. `bash deploy/local/refresh-from-neon.sh --replace-local-database` (row counts must match exactly).
 4. Merge `migration` into `main`, then `bash deploy/local/deploy.sh main`
