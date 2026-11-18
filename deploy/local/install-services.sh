@@ -2,7 +2,7 @@
 # Installs and (re)starts the MRMPL user services: web, worker, HTTPS proxy, nightly snapshot.
 # User-level systemd with lingering enabled, so services start at boot without login.
 #
-#   bash deploy/local/install-services.sh            # production (Caddy on :8443)
+#   bash deploy/local/install-services.sh            # production (Caddy on :9443)
 #   bash deploy/local/install-services.sh --tunnel   # rehearsal: Cloudflare quick tunnel instead
 set -euo pipefail
 

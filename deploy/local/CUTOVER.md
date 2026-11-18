@@ -1,6 +1,6 @@
 # Cutover: Vercel/Neon/Railway/GCS → this server
 
-Target URL: `https://erp.mayankrawmint.com:8443` (public 80/443 belong to the factory firewall).
+Target URL: `https://erp.mayankrawmint.com:9443` (public 80/443 belong to the factory firewall).
 One scheduled downtime. Neon `staging` stays untouched as the rollback point.
 
 ## Before the downtime
@@ -15,9 +15,9 @@ One scheduled downtime. Neon `staging` stays untouched as the rollback point.
 2. **Domain admin, once:** CNAME `_acme-challenge.erp.mayankrawmint.com` → `_acme-challenge.erp.mrmerp.fyi`.
    Does not affect the live site. A day before the downtime: lower the `erp` record TTL to 300.
 3. **Windows, once (admin PowerShell):** `deploy/local/windows-setup.ps1`
-   (opens 8443 to WSL, starts WSL at boot, disables sleep).
+   (opens 9443 to WSL, starts WSL at boot, disables sleep).
 4. **Pre-issue the certificate:** `bash deploy/local/install-services.sh`, then from outside the
-   factory: `curl --resolve erp.mayankrawmint.com:8443:203.76.186.224 https://erp.mayankrawmint.com:8443/api/auth/ok`.
+   factory: `curl --resolve erp.mayankrawmint.com:9443:203.76.186.224 https://erp.mayankrawmint.com:9443/api/auth/ok`.
 5. **Rehearse** steps 3–7 below once and time them
    (`DEPLOY_SOURCE=~/Code/mrm bash deploy/local/deploy.sh migration` deploys without touching GitHub).
 
@@ -35,10 +35,10 @@ One scheduled downtime. Neon `staging` stays untouched as the rollback point.
    `pnpm artifact:storage:copy-local --mode=copy` then `--mode=switch`. Both must exit 0.
 6. `touch ~/.config/mrm/local-authoritative` (refresh-from-neon refuses to run after this).
 7. In `~/.config/mrm/production.env` set `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` to
-   `https://erp.mayankrawmint.com:8443`, then `bash deploy/local/install-services.sh`.
+   `https://erp.mayankrawmint.com:9443`, then `bash deploy/local/install-services.sh`.
 8. Domain admin: change `erp` from the Vercel CNAME to `A 203.76.186.224`.
 9. Smoke test from mobile data: login, each module, download and upload a file.
-   Everyone signs in again; old bookmarks without `:8443` land on the firewall's page.
+   Everyone signs in again; old bookmarks without `:9443` land on the firewall's page.
 
 ## Rollback (only before users enter real data locally)
 
