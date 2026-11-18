@@ -9,13 +9,19 @@ $ErrorActionPreference = "Stop"
 $distro = "Ubuntu-24.04"
 $wslVmCreatorId = "{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}"
 
-# Recreate the rules so re-running the script also updates the port.
-Remove-NetFirewallHyperVRule -Name "MRM-ERP-HTTPS" -ErrorAction SilentlyContinue
-New-NetFirewallHyperVRule -Name "MRM-ERP-HTTPS" -DisplayName "MRM ERP HTTPS (WSL)" `
-  -Direction Inbound -VMCreatorId $wslVmCreatorId -Protocol TCP -LocalPorts 9443 -Action Allow | Out-Null
-Remove-NetFirewallRule -Name "MRM-ERP-HTTPS" -ErrorAction SilentlyContinue
-New-NetFirewallRule -Name "MRM-ERP-HTTPS" -DisplayName "MRM ERP HTTPS (WSL)" `
-  -Direction Inbound -Protocol TCP -LocalPort 9443 -Action Allow | Out-Null
+# Update the rules in place so re-running the script also changes the port.
+if (Get-NetFirewallHyperVRule -Name "MRM-ERP-HTTPS" -ErrorAction SilentlyContinue) {
+  Set-NetFirewallHyperVRule -Name "MRM-ERP-HTTPS" -LocalPorts 9443 -Action Allow
+} else {
+  New-NetFirewallHyperVRule -Name "MRM-ERP-HTTPS" -DisplayName "MRM ERP HTTPS (WSL)" `
+    -Direction Inbound -VMCreatorId $wslVmCreatorId -Protocol TCP -LocalPorts 9443 -Action Allow | Out-Null
+}
+if (Get-NetFirewallRule -Name "MRM-ERP-HTTPS" -ErrorAction SilentlyContinue) {
+  Set-NetFirewallRule -Name "MRM-ERP-HTTPS" -LocalPort 9443 -Action Allow
+} else {
+  New-NetFirewallRule -Name "MRM-ERP-HTTPS" -DisplayName "MRM ERP HTTPS (WSL)" `
+    -Direction Inbound -Protocol TCP -LocalPort 9443 -Action Allow | Out-Null
+}
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d $distro --exec /bin/sh -c 'exec sleep infinity'"
