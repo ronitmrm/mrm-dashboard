@@ -86,6 +86,11 @@ function configureAuth({
     },
     plugins: [admin()],
     rateLimit: {
+      // The factory router rewrites every visitor to one source address, so the
+      // whole site shares one bucket; the default 3 per 10 s blocks shift-start sign-ins.
+      customRules: {
+        "/sign-in/email": { max: 30, window: 10 },
+      },
       enabled: true,
       storage: "database",
     },
