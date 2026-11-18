@@ -10,6 +10,7 @@ EnvironmentFile=-%h/.config/mrm/release.env
 Environment=PATH=%h/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
 ExecStartPre=/usr/bin/pg_isready -h 127.0.0.1 -q -t 60
 ExecStart=%h/srv/mrm-erp/apps/web/node_modules/.bin/next start -p 3001 -H 127.0.0.1
+SuccessExitStatus=143
 Restart=always
 RestartSec=3
 LimitNOFILE=65536
