@@ -3,7 +3,7 @@
 #   & "\\wsl.localhost\Ubuntu-24.04\home\mrmdev\Code\mrm\deploy\local\windows-setup.ps1"
 #
 # 1. Lets the router's forwarded port 9443 reach WSL (mirrored networking blocks inbound by default).
-# 2. Starts WSL at boot, before anyone logs in, so the systemd services come up after power cuts.
+# 2. Starts WSL at boot, before anyone logs in, and holds it open so closing a terminal never stops the distro.
 # 3. Stops the PC from sleeping.
 $ErrorActionPreference = "Stop"
 $distro = "Ubuntu-24.04"
@@ -24,13 +24,14 @@ if (Get-NetFirewallRule -Name "MRM-ERP-HTTPS" -ErrorAction SilentlyContinue) {
 }
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
-$action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d $distro --exec /bin/sh -c 'exec sleep infinity'"
+$action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d $distro --exec /bin/sleep infinity"
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 $credential = Get-Credential -UserName $user -Message "Windows password for $user (the task runs without anyone logged in)"
 Register-ScheduledTask -TaskName "MRM ERP - start WSL" -Action $action -Trigger $trigger -Settings $settings `
   -User $user -Password $credential.GetNetworkCredential().Password -RunLevel Highest -Force | Out-Null
+Start-ScheduledTask -TaskName "MRM ERP - start WSL"
 
 powercfg /change standby-timeout-ac 0
 powercfg /change hibernate-timeout-ac 0
