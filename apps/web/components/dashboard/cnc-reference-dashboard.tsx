@@ -135,7 +135,7 @@ function Columns({
   unit?: "pcs" | "%"
   actualLabel?: string
   minimumMaximum?: number
-  /** Give each group its own shade from the shared chart greens. */
+  /** Alternate groups between the primary and capacity greens. */
   palette?: boolean
 }) {
   if (!groups.length)
@@ -164,7 +164,7 @@ function Columns({
       ) : null}
       <div className="flex gap-3 overflow-x-auto pt-5 pb-2">
         {groups.map(({ label, actual, capacity }, index) => {
-          const shade = palette ? `var(--chart-${(index % 5) + 1})` : undefined
+          const shade = palette && index % 2 ? "#b8d446" : undefined
           return (
             <div
               key={label}
@@ -184,7 +184,7 @@ function Columns({
                 >
                   <span
                     className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-primary"
-                    style={{ color: shade }}
+                    style={{ color: shade && "var(--foreground)" }}
                   >
                     {number(actual)}
                     {unit === "%" ? "%" : ""}
