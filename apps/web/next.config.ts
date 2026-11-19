@@ -11,7 +11,10 @@ import { commercialAttachmentRequestLimitBytes } from "./lib/commercial-attachme
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.join(appDir, "../..")
+const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL
 const nextConfig: NextConfig = {
+  // Lets `next dev` serve HMR to the configured public origin (e.g. a tunnel).
+  allowedDevOrigins: publicAppUrl ? [new URL(publicAppUrl).hostname] : [],
   experimental: {
     proxyClientMaxBodySize: Math.max(
       maxDashboardProxyRequestBytes,
