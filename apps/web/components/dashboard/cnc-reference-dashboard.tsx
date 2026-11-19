@@ -828,7 +828,7 @@ export function CncReferenceDashboard({
               {allowed("cnc-production-capacity") ? (
                 <Panel
                   title="Session-based capacity vs actual"
-                  subtitle={`${shift} · job session time less planned breaks`}
+                  subtitle={`${shift} · session time less planned breaks and downtime`}
                   action={pin("cnc-production-capacity")}
                 >
                   <div className="grid gap-4">
@@ -851,8 +851,9 @@ export function CncReferenceDashboard({
                     <ReferenceDetails title="How is capacity calculated?">
                       <p className={subheading}>
                         Capacity uses recorded session time less planned breaks
-                        and the applicable piece cycle standard. Logged stops
-                        remain in available session time. Sessions without an
+                        and recorded downtime, divided by the applicable piece
+                        cycle standard and rounded down per session. Breaks that
+                        overlap downtime are deducted once. Sessions without an
                         applicable time standard contribute to actual output
                         only.
                       </p>

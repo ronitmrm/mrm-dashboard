@@ -42,7 +42,7 @@ export const cncDashboardCards = {
   "cnc-production-capacity": [
     "Session-based capacity vs actual",
     "Production",
-    "Output and capacity from recorded allocation less scheduled breaks.",
+    "Output and capacity from recorded session time less planned breaks and recorded downtime.",
   ],
   "cnc-machine-activity": [
     "Machine activity",

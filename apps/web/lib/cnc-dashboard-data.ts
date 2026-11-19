@@ -303,15 +303,8 @@ export async function loadCncSessionDashboard(
           eligible: 0,
         }
         shiftCapacity.actual += output
-        const allocated = Math.max(
-          0,
-          number(row.elapsedMinutes) - number(row.breakMinutes)
-        )
-        if (
-          cycleSeconds > 0 &&
-          allocated > 0 &&
-          row.cycleBasis !== "weight_batch"
-        ) {
+        const allocated = Math.max(0, number(row.runtimeMinutes))
+        if (cycleSeconds > 0 && row.cycleBasis !== "weight_batch") {
           const capacity = Math.floor((allocated * 60) / cycleSeconds)
           shiftCapacity.capacity += capacity
           shiftCapacity.eligible++
