@@ -190,6 +190,12 @@ export function ReferenceFleetHours({
       }))
     : totals
   const maximum = values[0]?.value || 1
+  const availableHours = Math.max(
+    0,
+    (values[0]?.value ?? 0) - (values[4]?.value ?? 0)
+  )
+  const utilisation =
+    availableHours > 0 ? ((values[1]?.value ?? 0) / availableHours) * 100 : null
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -209,7 +215,7 @@ export function ReferenceFleetHours({
           ))}
         </NativeSelect>
       </div>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
         {values.map(({ label, value }, index) => (
           <div
             className={cn(
@@ -224,6 +230,12 @@ export function ReferenceFleetHours({
             </p>
           </div>
         ))}
+        <MetricCard
+          className="min-h-0 rounded-xl p-3 shadow-none [&_div.uppercase]:font-normal [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_span.tabular-nums]:text-xl [&_span.tabular-nums]:text-primary"
+          label="Machine utilisation %"
+          tone="brand"
+          value={utilisation === null ? "—" : `${utilisation.toFixed(1)}%`}
+        />
       </div>
       {values.length ? (
         <div
@@ -255,6 +267,8 @@ export function ReferenceFleetHours({
         Breaks use the configured CNC schedule and take precedence over
         overlapping recorded stops. Session coverage comes from ERP start and
         close timestamps. Time without session evidence remains unclassified.
+        Machine utilisation is session time excluding stops divided by total
+        fleet hours less planned breaks.
       </p>
     </div>
   )
