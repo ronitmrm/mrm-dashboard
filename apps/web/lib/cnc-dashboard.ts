@@ -54,6 +54,11 @@ export const cncDashboardCards = {
     "Production",
     "Actual output, session-based capacity and downtime per machine.",
   ],
+  "cnc-category-efficiency": [
+    "Machine category-wise efficiency",
+    "Production",
+    "Standard time earned divided by net working time, grouped by Machine Master family.",
+  ],
   "cnc-machine-hours-detail": [
     "Machine-wise time breakdown",
     "Production",

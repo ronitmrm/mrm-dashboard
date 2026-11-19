@@ -862,6 +862,28 @@ export function CncReferenceDashboard({
                   </div>
                 </Panel>
               ) : null}
+              {allowed("cnc-category-efficiency") ? (
+                <Panel
+                  title="Machine category-wise efficiency"
+                  subtitle={`${shift} · grouped by Machine Master family`}
+                  action={pin("cnc-category-efficiency")}
+                >
+                  <ReferenceTable
+                    data={table("cnc-category-efficiency")}
+                    label="Machine category-wise efficiency"
+                    storageKey="cnc-category-efficiency"
+                  />
+                  <p className={subheading}>
+                    Efficiency is total standard time earned divided by total
+                    net working time for completed sessions with output recorded
+                    and a piece cycle standard. Planned breaks and downtime are
+                    excluded, counting overlaps once. Production includes all
+                    matching sessions; measured sessions show which contribute
+                    to efficiency. Categories use the current Machine Master
+                    family.
+                  </p>
+                </Panel>
+              ) : null}
               {allowed("cnc-machine-output") ? (
                 <Panel>
                   <ReferenceDetails
