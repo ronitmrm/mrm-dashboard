@@ -180,4 +180,4 @@ still required before hosted staging is declared delivered. The Railway worker
 deploys from GitHub `main`; its production and development connection URLs both
 target the Neon `staging` branch. Keep credentials in their hosting provider,
 merge reviewed source, and record deployment evidence without URLs or provider
-IDs. See `docs/railway-worker-deployment.md` for the worker procedure.
+IDs.

@@ -9,7 +9,6 @@ cannot express clearly.
 - `adr/` — durable architectural decisions.
 - `neon-upstash-staging-runbook.md` and `neon-upstash-recovery-runbook.md` —
   managed runtime operation and recovery.
-- `railway-worker-deployment.md` — worker deployment.
 - `local-file-storage-backup-restore.md` and
   `codebase/artifact-storage-migration.md` — active legacy-byte migration and
   recovery procedures.
