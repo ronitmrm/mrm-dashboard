@@ -125,9 +125,18 @@ function Bars({
 function Columns({
   groups,
   comparison,
+  unit = "pcs",
+  actualLabel = "Actual",
+  minimumMaximum = 1,
+  palette,
 }: {
   groups: { label: string; actual: number; capacity?: number }[]
   comparison?: boolean
+  unit?: "pcs" | "%"
+  actualLabel?: string
+  minimumMaximum?: number
+  /** Give each group its own shade from the shared chart greens. */
+  palette?: boolean
 }) {
   if (!groups.length)
     return (
@@ -136,7 +145,7 @@ function Columns({
       </p>
     )
   const max = Math.max(
-    1,
+    minimumMaximum,
     ...groups.flatMap(({ actual, capacity }) => [actual, capacity ?? 0])
   )
   return (
@@ -154,39 +163,49 @@ function Columns({
         </div>
       ) : null}
       <div className="flex gap-3 overflow-x-auto pt-5 pb-2">
-        {groups.map(({ label, actual, capacity }) => (
-          <div
-            key={label}
-            className={cn(
-              "grid flex-1 gap-1 text-center",
-              comparison ? "min-w-28" : "min-w-[72px]"
-            )}
-          >
-            <div className="flex h-36 items-end justify-center gap-1.5 border-b border-border px-1">
-              <div
-                className="relative w-full max-w-12 rounded-t-sm bg-primary"
-                style={{ height: `${(100 * actual) / max}%` }}
-                title={`Actual: ${number(actual)} pcs`}
-              >
-                <span className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-primary">
-                  {number(actual)}
-                </span>
-              </div>
-              {capacity !== undefined ? (
+        {groups.map(({ label, actual, capacity }, index) => {
+          const shade = palette ? `var(--chart-${(index % 5) + 1})` : undefined
+          return (
+            <div
+              key={label}
+              className={cn(
+                "grid flex-1 gap-1 text-center",
+                comparison ? "min-w-28" : "min-w-[72px]"
+              )}
+            >
+              <div className="flex h-36 items-end justify-center gap-1.5 border-b border-border px-1">
                 <div
-                  className="relative w-full max-w-12 rounded-t-sm bg-[#b8d446]"
-                  style={{ height: `${(100 * capacity) / max}%` }}
-                  title={`Capacity: ${number(capacity)} pcs`}
+                  className="relative w-full max-w-12 rounded-t-sm bg-primary"
+                  style={{
+                    height: `${(100 * actual) / max}%`,
+                    backgroundColor: shade,
+                  }}
+                  title={`${actualLabel}: ${number(actual)} ${unit}`}
                 >
-                  <span className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-foreground">
-                    {number(capacity)}
+                  <span
+                    className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-primary"
+                    style={{ color: shade }}
+                  >
+                    {number(actual)}
+                    {unit === "%" ? "%" : ""}
                   </span>
                 </div>
-              ) : null}
+                {capacity !== undefined ? (
+                  <div
+                    className="relative w-full max-w-12 rounded-t-sm bg-[#b8d446]"
+                    style={{ height: `${(100 * capacity) / max}%` }}
+                    title={`Capacity: ${number(capacity)} pcs`}
+                  >
+                    <span className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-foreground">
+                      {number(capacity)}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              <span className={subheading}>{label}</span>
             </div>
-            <span className={subheading}>{label}</span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -868,20 +887,40 @@ export function CncReferenceDashboard({
                   subtitle={`${shift} · grouped by Machine Master family`}
                   action={pin("cnc-category-efficiency")}
                 >
-                  <ReferenceTable
-                    data={table("cnc-category-efficiency")}
-                    label="Machine category-wise efficiency"
-                    storageKey="cnc-category-efficiency"
-                  />
-                  <p className={subheading}>
-                    Efficiency is total standard time earned divided by total
-                    net working time for completed sessions with output recorded
-                    and a piece cycle standard. Planned breaks and downtime are
-                    excluded, counting overlaps once. Production includes all
-                    matching sessions; measured sessions show which contribute
-                    to efficiency. Categories use the current Machine Master
-                    family.
-                  </p>
+                  <div className="grid gap-4">
+                    <div
+                      role="group"
+                      aria-label="Efficiency by machine category"
+                    >
+                      <Columns
+                        groups={chart("cnc-category-efficiency").map(
+                          ({ label, value }) => ({ label, actual: value })
+                        )}
+                        unit="%"
+                        actualLabel="Efficiency"
+                        minimumMaximum={100}
+                        palette
+                      />
+                    </div>
+                    <ReferenceDetails title="How is efficiency calculated?">
+                      <p className={subheading}>
+                        Efficiency is total standard time earned divided by
+                        total net working time for completed sessions with
+                        output recorded and a piece cycle standard. Planned
+                        breaks and downtime are excluded, counting overlaps
+                        once. Production includes all matching sessions;
+                        measured sessions show which contribute to efficiency.
+                        Categories use the current Machine Master family.
+                      </p>
+                    </ReferenceDetails>
+                    <ReferenceDetails title="Machine category-wise efficiency table">
+                      <ReferenceTable
+                        data={table("cnc-category-efficiency")}
+                        label="Machine category-wise efficiency"
+                        storageKey="cnc-category-efficiency"
+                      />
+                    </ReferenceDetails>
+                  </div>
                 </Panel>
               ) : null}
               {allowed("cnc-machine-output") ? (
