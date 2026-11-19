@@ -546,6 +546,22 @@ export async function loadCncSessionDashboard(
         "cnc-machinist-downtime": machinistMinutes,
       },
       charts: {
+        "cnc-category-efficiency": [...categories]
+          .sort(([left], [right]) =>
+            left.localeCompare(right, "en-IN", { numeric: true })
+          )
+          .flatMap(([label, totals]) =>
+            totals.measured
+              ? [
+                  {
+                    label,
+                    value: Number(
+                      ((totals.earned / totals.measured) * 100).toFixed(1)
+                    ),
+                  },
+                ]
+              : []
+          ),
         "cnc-production-capacity": [...capacityByShift]
           .sort(([a], [b]) => a.localeCompare(b))
           .flatMap(([key, { capacity, actual, eligible }]) => [
