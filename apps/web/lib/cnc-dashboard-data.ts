@@ -138,6 +138,33 @@ export async function loadCncSessionDashboard(
   const { pool, close } = repositoryPool(options)
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
+    const categoryMachines = cards.includes("cnc-category-efficiency")
+      ? await pool.query<{ machine: string; category: string | null }>(
+          `SELECT machine.machine_number AS machine,
+            NULLIF(btrim(machine.source_payload->>'machineFamily'), '') AS category
+           FROM catalog.machines machine
+           JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+           WHERE machine.organization_id = $1 AND floor.code = 'cnc'`,
+          [organizationId]
+        )
+      : null
+    const categoryByMachine = new Map(
+      (categoryMachines?.rows ?? []).map(({ machine, category }) => [
+        machine,
+        category?.toUpperCase() ?? "Unclassified",
+      ])
+    )
+    const categories = new Map<
+      string,
+      {
+        machines: Set<string>
+        output: number
+        rejected: number
+        earned: number
+        measured: number
+        sessions: number
+      }
+    >()
     const showFleet =
       cards.includes("cnc-machine-availability") ||
       cards.includes("cnc-fleet-hours") ||
@@ -276,6 +303,22 @@ export async function loadCncSessionDashboard(
         totals.shifts.add(rowShift)
         const cycleSeconds = number(row.cycleTimeSeconds)
         const netSeconds = number(row.runtimeMinutes) * 60
+        const machine =
+          typeof row.machineNumber === "string"
+            ? row.machineNumber
+            : "Unclassified"
+        const category = categoryByMachine.get(machine) ?? "Unclassified"
+        const categoryTotals = categories.get(category) ?? {
+          machines: new Set<string>(),
+          output: 0,
+          rejected: 0,
+          earned: 0,
+          measured: 0,
+          sessions: 0,
+        }
+        categoryTotals.machines.add(machine)
+        categoryTotals.output += output
+        categoryTotals.rejected += number(row.rejectedPieces)
         if (
           row.status === "closed" &&
           !row.outputPending &&
@@ -288,13 +331,13 @@ export async function loadCncSessionDashboard(
           measuredSeconds += netSeconds
           totals.earned += earned
           totals.measured += netSeconds
+          categoryTotals.earned += earned
+          categoryTotals.measured += netSeconds
+          categoryTotals.sessions++
         }
+        categories.set(category, categoryTotals)
         operators.set(operator, totals)
         if (row.status === "open") open++
-        const machine =
-          typeof row.machineNumber === "string"
-            ? row.machineNumber
-            : "Unclassified"
         totals.machines.add(machine)
         const shiftKey = String(row.shift)
         const shiftCapacity = capacityByShift.get(shiftKey) ?? {
@@ -562,6 +605,34 @@ export async function loadCncSessionDashboard(
           : [],
       },
       tables: {
+        "cnc-category-efficiency": {
+          columns: [
+            "Machine category",
+            "Machines reporting",
+            "Produced",
+            "Rejected",
+            "Measured sessions",
+            "Net working time (h)",
+            "Standard time earned (h)",
+            "Efficiency",
+          ],
+          rows: [...categories]
+            .sort(([left], [right]) =>
+              left.localeCompare(right, "en-IN", { numeric: true })
+            )
+            .map(([category, totals]) => [
+              category,
+              totals.machines.size,
+              totals.output,
+              totals.rejected,
+              totals.sessions,
+              totals.measured ? roundHours(totals.measured / 3600) : "—",
+              totals.measured ? roundHours(totals.earned / 3600) : "—",
+              totals.measured
+                ? `${((totals.earned / totals.measured) * 100).toFixed(1)}%`
+                : "—",
+            ]),
+        },
         "cnc-shift-detail": {
           columns: [
             "Shift",
