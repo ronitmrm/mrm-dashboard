@@ -872,7 +872,8 @@ export function CncReferenceDashboard({
                         Capacity uses recorded session time less planned breaks
                         and recorded downtime, divided by the applicable piece
                         cycle standard and rounded down per session. Breaks that
-                        overlap downtime are deducted once. Sessions without an
+                        overlap downtime are deducted once. An open session
+                        counts only until its shift ends. Sessions without an
                         applicable time standard contribute to actual output
                         only.
                       </p>

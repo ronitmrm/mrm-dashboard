@@ -346,7 +346,17 @@ export async function loadCncSessionDashboard(
           eligible: 0,
         }
         shiftCapacity.actual += output
-        const allocated = Math.max(0, number(row.runtimeMinutes))
+        // An open session's capacity stops at its shift end, so a session
+        // left open does not keep accruing capacity until it is closed.
+        const allocated = Math.max(
+          0,
+          row.status === "open" && row.targetRuntimeMinutes != null
+            ? Math.min(
+                number(row.runtimeMinutes),
+                number(row.targetRuntimeMinutes)
+              )
+            : number(row.runtimeMinutes)
+        )
         if (cycleSeconds > 0 && row.cycleBasis !== "weight_batch") {
           const capacity = Math.floor((allocated * 60) / cycleSeconds)
           shiftCapacity.capacity += capacity
