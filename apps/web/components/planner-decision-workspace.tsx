@@ -12,6 +12,7 @@ import {
   PlusCircle,
   Route,
   RotateCcw,
+  CalendarClock,
   Wrench,
 } from "lucide-react"
 
@@ -25,6 +26,7 @@ import {
 } from "@workspace/ui/components/card"
 
 export type PlannerDecisionAction =
+  | "urgent-delivery"
   | "priority"
   | "machine-unavailable"
   | "machine-switch"
@@ -38,6 +40,7 @@ export type PlannerDecisionAction =
 export type PlannerDecisionView = "new" | "pending" | "issues" | "history"
 
 type PlannerDecisionPanels = {
+  urgentDelivery: ReactNode
   issues: ReactNode
   history: ReactNode
   machineUnavailable: ReactNode
@@ -64,6 +67,13 @@ type PlannerDecisionWorkspaceProps = {
 }
 
 const actionChoices = [
+  {
+    key: "urgent-delivery",
+    title: "Urgent Delivery Simulation",
+    description: "Check a preferred finish date for an existing Job Card.",
+    detail: "Review queue changes, machine moves and parallel machines before approval.",
+    icon: CalendarClock,
+  },
   {
     key: "setup-release",
     title: "Release machine",
@@ -148,6 +158,7 @@ export function PlannerDecisionWorkspace({
   const activeChoice = actionChoices.find((choice) => choice.key === activeAction)
   const activePanel = activeAction
     ? {
+        "urgent-delivery": panels.urgentDelivery,
         priority: panels.priority,
         "machine-unavailable": panels.machineUnavailable,
         "machine-switch": panels.machineSwitch,
