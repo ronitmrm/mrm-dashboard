@@ -1,3 +1,5 @@
+import { productionBreakIntervals, type ProductionBreak, type TimeInterval } from "./production-breaks"
+
 export type ProductionMeasurementMethod = "counter" | "weight"
 export type ProductionDowntimeEndOutcome =
   | "resolved"
@@ -131,6 +133,39 @@ export function productionShiftEndInstant(input: {
     return new Date(`${input.productionDate}T20:00:00.000+05:30`)
   }
   throw new Error("A valid Production Floor shift is required.")
+}
+
+export function productionSessionShiftTarget(input: {
+  productionDate: string
+  productionFloorCode: string
+  shift: string
+  startedAt: Date
+  cycleTimeSeconds: number
+  breaks: ProductionBreak[]
+  downtime: TimeInterval[]
+}) {
+  const endedAt = productionShiftEndInstant(input)
+  const start = input.startedAt.getTime()
+  const end = Math.max(start, endedAt.getTime())
+  const breaks = productionBreakIntervals(input.breaks, { startedAt: input.startedAt, endedAt })
+  const intervals = [...breaks, ...input.downtime].map((interval) => ({
+    start: Math.max(start, interval.startedAt.getTime()),
+    end: Math.min(end, interval.endedAt.getTime()),
+  })).filter((interval) => interval.end > interval.start)
+    .sort((left, right) => left.start - right.start)
+  let unavailable = 0
+  let coveredUntil = start
+  for (const interval of intervals) {
+    unavailable += Math.max(0, interval.end - Math.max(coveredUntil, interval.start))
+    coveredUntil = Math.max(coveredUntil, interval.end)
+  }
+  const targetRuntimeMinutes = Math.max(0, Math.round((end - start - unavailable) / 60_000))
+  return {
+    targetEndAt: endedAt.toISOString(),
+    targetRuntimeMinutes,
+    targetPieces: input.cycleTimeSeconds > 0
+      ? Math.floor(targetRuntimeMinutes * 60 / input.cycleTimeSeconds) : 0,
+  }
 }
 
 export function productionSessionOperationalStatus(

@@ -428,7 +428,8 @@ material, route, setup, quality and production workflow from its first step.
 Cycle Time Master revisions apply to the selected unit, item, route and setup.
 Open production sessions adopt the revised cycle time, and planning refreshes
 remaining-duration and completion estimates from the current master. The open
-session's target is calculated using the revised cycle time for its runtime.
+session's target is calculated using the revised cycle time for its available
+production time through shift end.
 Closed sessions keep their saved cycle standard and are never rewritten by a
 Cycle Time Master revision. Their output and target change only through an
 explicit audited closed-session correction. New sessions read the current master
@@ -445,11 +446,19 @@ Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Co
 
 Rejected pieces are included in total produced pieces. Good pieces equal total produced minus rejected pieces.
 
-Session target quantity is the whole-piece capacity for productive runtime:
-`floor((elapsed session time - downtime) / cycle time)`. Open-session targets
-use the current runtime and cycle standard. A closed session keeps its saved
-cycle standard; its target changes only when an audited end-time or downtime
-correction changes the recorded productive runtime.
+Open-session target quantity is displayed immediately for the entered session
+start through its scheduled shift end, using the current cycle standard. A late
+start excludes the earlier shift hours. Scheduled breaks and recorded downtime
+reduce that available time; overlapping intervals count once. An open downtime
+reduces the target as it continues, capped at shift end, including overnight CNC
+Shift C. Elapsed productive runtime remains a separate actual measure.
+The start form previews this target when the start time changes; the current
+target is shown in the machine lookup, Session Register and session detail.
+
+On closure, target quantity is the whole-piece capacity for actual productive
+runtime: `floor((session duration - breaks/downtime without overlap) / cycle time)`.
+A closed session keeps its saved cycle standard; its target changes only through
+an audited timing or downtime correction that changes productive runtime.
 
 Session efficiency compares total produced pieces, including rejected pieces,
 with that target: `total produced / target quantity × 100`. It may exceed 100%

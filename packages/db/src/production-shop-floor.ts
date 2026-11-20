@@ -39,6 +39,7 @@ import {
   formatProductionSessionReference,
   productionDowntimeEndOutcome,
   productionSessionEfficiency,
+  productionSessionShiftTarget,
   productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
@@ -4892,11 +4893,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         "elapsedMinutes",
         "runtimeMinutes",
       ] as const
-      const needsCurrentBreaks = result.rows.some((row) =>
-        row.status === "open" && savedBreaks(objectRecord(row.sessionPayload)) === null
-      )
       let currentBreaks: ProductionBreak[] = []
-      if (needsCurrentBreaks) {
+      {
         const client = queryClient ?? await pool.connect()
         try {
           currentBreaks = await readProductionBreaks(
@@ -4911,6 +4909,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         limit,
         offset,
         productionFloorCode: floorCode,
+        breakSchedule: currentBreaks,
         rows: result.rows.map((row) => {
           const { sessionPayload, ...mapped } = row
           for (const key of numericKeys) {
@@ -4940,7 +4939,15 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             mapped.breakMinutes = timing.breakMinutes
             mapped.elapsedMinutes = timing.elapsedMinutes
             mapped.runtimeMinutes = timing.runtimeMinutes
-            mapped.targetPieces = timing.targetPieces
+            Object.assign(mapped, productionSessionShiftTarget({
+              productionDate: String(row.productionDate).slice(0, 10),
+              productionFloorCode: floorCode,
+              shift: String(row.shift),
+              startedAt,
+              cycleTimeSeconds: Number(row.cycleTimeSeconds),
+              breaks: savedBreaks(payload) ?? currentBreaks,
+              downtime: downtimeIntervals(row.downtimeEvents, now),
+            }))
           }
           return mapped
         }),
