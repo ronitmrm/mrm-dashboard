@@ -1,12 +1,12 @@
 [Unit]
-Description=MRMPL ERP durable refresh worker
+Description=MRMPL ERP durable refresh worker (%i)
 After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/srv/mrm-erp
-EnvironmentFile=%h/.config/mrm/production.env
-EnvironmentFile=-%h/.config/mrm/release.env
+WorkingDirectory=%h/srv/slots/worker-%i/app
+EnvironmentFile=%h/srv/slots/worker-%i/stack.env
+EnvironmentFile=%h/srv/slots/worker-%i/slot.env
 Environment=PATH=%h/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
 ExecStartPre=/usr/bin/pg_isready -h 127.0.0.1 -q -t 60
 ExecStart=%h/.nvm/versions/node/v24.22.2/bin/pnpm runtime:worker
