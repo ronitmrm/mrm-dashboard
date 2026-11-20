@@ -1,0 +1,22 @@
+[Unit]
+Description=MRMPL ERP web (Next.js) on port %i
+After=network-online.target
+
+# deploy.sh points ~/srv/slots/<port> at a release and starts this on the idle port.
+[Service]
+Type=simple
+WorkingDirectory=%h/srv/slots/%i/app/apps/web
+EnvironmentFile=%h/srv/slots/%i/stack.env
+EnvironmentFile=%h/srv/slots/%i/slot.env
+Environment=PATH=%h/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/usr/bin/pg_isready -h 127.0.0.1 -q -t 60
+ExecStart=%h/srv/slots/%i/app/apps/web/node_modules/.bin/next start -p %i -H 127.0.0.1
+SuccessExitStatus=143
+Restart=always
+RestartSec=3
+# Next.js finishes in-flight requests on SIGTERM before exiting.
+TimeoutStopSec=60
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

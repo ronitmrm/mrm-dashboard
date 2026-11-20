@@ -1,0 +1,26 @@
+# Routing for the ERP site, shared by the Caddyfile and deploy rehearsals.
+# {$MRM_SRV} is the deploy root (~/srv); deploy.sh writes upstream.caddy and static/ there.
+encode zstd gzip
+
+@retiredWebhook path /api/user-daily-attendance/test-webhook /api/user-daily-attendance/test-webhook/
+handle @retiredWebhook {
+	respond 410
+}
+
+# Static assets of the newest releases combined: names are content hashes, so tabs still
+# open on an older release keep loading their chunks after a deploy.
+handle /_next/static/* {
+	root * {$MRM_SRV}/static
+	header Cache-Control "public, max-age=31536000, immutable"
+	header X-Content-Type-Options nosniff
+	file_server
+}
+
+handle {
+	reverse_proxy {
+		# The live web port: a single "to 127.0.0.1:<port>" line.
+		import {$MRM_SRV}/upstream.caddy
+		# Keep retrying a refused connection instead of answering 502.
+		lb_try_duration 10s
+	}
+}

@@ -6,6 +6,8 @@
 	http_port 8081
 	https_port 9443
 	auto_https disable_redirects
+	# A reload hands new requests to the new config; old requests get this long to finish.
+	grace_period 60s
 }
 
 {$APP_HOST}:9443 {
@@ -17,8 +19,5 @@
 		propagation_delay 30s
 		propagation_timeout -1
 	}
-	encode zstd gzip
-	@retiredWebhook path /api/user-daily-attendance/test-webhook /api/user-daily-attendance/test-webhook/
-	respond @retiredWebhook 410
-	reverse_proxy 127.0.0.1:3001
+	import app.caddy
 }

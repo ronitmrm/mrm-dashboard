@@ -4,6 +4,7 @@ After=network-online.target
 
 [Service]
 Type=notify
+Environment=MRM_SRV=%h/srv
 EnvironmentFile=%h/.config/mrm/caddy.env
 ExecStart=%h/.local/bin/caddy run --config %h/srv/mrm-erp/deploy/local/Caddyfile --adapter caddyfile
 ExecReload=%h/.local/bin/caddy reload --config %h/srv/mrm-erp/deploy/local/Caddyfile --adapter caddyfile

@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
-# Installs and (re)starts the MRMPL user services: web, worker, HTTPS proxy, nightly snapshot.
+# Installs and (re)starts the MRMPL user services: HTTPS proxy and nightly snapshot.
 # User-level systemd with lingering enabled, so services start at boot without login.
+# The web (mrm-web@<port>) and worker (mrm-worker@prod) units are installed and started
+# by deploy.sh, which also decides which web port is live.
 #
-#   bash deploy/local/install-services.sh            # production (Caddy on :9443)
-#   bash deploy/local/install-services.sh --tunnel   # rehearsal: Cloudflare quick tunnel instead
+#   bash deploy/local/install-services.sh
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-proxy=mrm-caddy.service
-[[ "${1:-}" == "--tunnel" ]] && proxy=mrm-tunnel.service
-units=(mrm-web.service mrm-worker.service "$proxy" mrm-snapshot.service mrm-snapshot.timer)
+units=(mrm-caddy.service mrm-snapshot.service mrm-snapshot.timer mrm-web@.service mrm-worker@.service)
 
 mkdir -p ~/.config/systemd/user
 for unit in "${units[@]}"; do
   install -m 644 "$here/systemd/$unit" ~/.config/systemd/user/
 done
 systemctl --user daemon-reload
-other=mrm-tunnel.service; [[ "$proxy" == mrm-tunnel.service ]] && other=mrm-caddy.service
-systemctl --user disable --now "$other" 2>/dev/null || true
-systemctl --user enable mrm-web.service mrm-worker.service "$proxy" mrm-snapshot.timer
-systemctl --user restart mrm-web.service mrm-worker.service "$proxy"
+systemctl --user enable mrm-caddy.service mrm-snapshot.timer
+systemctl --user restart mrm-caddy.service
 systemctl --user start mrm-snapshot.timer
-[[ "$proxy" == mrm-tunnel.service ]] && bash "$here/sync-tunnel-url.sh"
-systemctl --user --no-pager status "${units[@]:0:3}" | grep -E '●|Active:'
+systemctl --user --no-pager status mrm-caddy.service 'mrm-web@*' 'mrm-worker@*' | grep -E '●|Active:'
