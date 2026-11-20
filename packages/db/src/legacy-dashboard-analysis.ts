@@ -394,6 +394,7 @@ export type PublishedPlanningBaseline = {
   machinePlanDetailRows: Array<Record<string, unknown>>;
 };
 type PlanningBuildOptions = {
+  transientPlanning?: boolean;
   forceFullCalculation?: boolean;
   calculationTime?: number;
   builderVersion?: string;
@@ -408,6 +409,17 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput, option
 
 /** Planning identity travels separately from the public dashboard payload. */
 export function buildLegacyDashboardSnapshotWithPlanning(input: LegacyDashboardInput, options: PlanningBuildOptions = {}) {
+  return withPlanningBuild(options, () => calculateLegacyDashboardSnapshot(input));
+}
+
+// Use the exact published-plan preparation and scheduler without rebuilding
+// unrelated HR, rejection and operator analytics for every what-if candidate.
+export function buildProductionPlanningControl(input: LegacyDashboardInput, calculationTime = Date.now()) {
+  return withPlanningBuild({ calculationTime, forceFullCalculation: true, transientPlanning: true },
+    () => buildProductionControl(prepareLegacyProductionInput(input))).snapshot;
+}
+
+function withPlanningBuild<T>(options: PlanningBuildOptions, calculate: () => T) {
   const previous = allowFinalizedPlanReuse;
   const previousClock = planningCalculationTime;
   const previousFrame = planningBuildFrame;
@@ -416,7 +428,7 @@ export function buildLegacyDashboardSnapshotWithPlanning(input: LegacyDashboardI
   planningCalculationTime = options.calculationTime;
   planningBuildFrame = frame;
   try {
-    const snapshot = calculateLegacyDashboardSnapshot(input);
+    const snapshot = calculate();
     return { snapshot, planningFactsFingerprint: frame.factsFingerprint, retainedPlanning: frame.retained };
   } finally {
     allowFinalizedPlanReuse = previous;
@@ -425,7 +437,7 @@ export function buildLegacyDashboardSnapshotWithPlanning(input: LegacyDashboardI
   }
 }
 
-function calculateLegacyDashboardSnapshot(input: LegacyDashboardInput) {
+function prepareLegacyProductionInput(input: LegacyDashboardInput) {
   const dataEntries = input.dataEntries ?? [];
   const byType = bucketDataEntries(dataEntries);
   const employeeRows = entryRows(byType, "employee");
@@ -476,7 +488,7 @@ function calculateLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     ? normalizedRawSoftwareRows(rawSoftwareRows, routeLookup)
     : normalizedProductionEntries(input.productionEntries);
 
-  const snapshot = buildProductionAnalysis({
+  return {
     productionFloorCode: input.productionFloorCode ?? "conventional",
     includeToolFixtureNumbers: input.includeToolFixtureNumbers ?? true,
     currentProductionDate: planningProductionDate(input.productionFloorCode, planningNow()),
@@ -527,8 +539,18 @@ function calculateLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
-  });
+  };
+}
 
+function calculateLegacyDashboardSnapshot(input: LegacyDashboardInput) {
+  const prepared = prepareLegacyProductionInput(input);
+  const snapshot = buildProductionAnalysis(prepared);
+  const { setupNameMasterRows, planningHolidayRows, maintenanceMasterRows,
+    qualityParameterMasterRows, rejectionTypeMasterRows, rejectionReasonMasterRows,
+    rejectionRemarkMasterRows, productionRows, routeRows, cycleRows, toolingRows,
+    workOrderRows, rmInwardRows, setupChecklistRows, setupChecklistMasterRows,
+    setupChecklistSessionRows, productionCardRows, maintenanceChecklistMasterRows,
+    maintenanceScheduleRows, maintenanceTaskRows, employeeRows, machineRows } = prepared;
   if (
     setupNameMasterRows.length ||
     planningHolidayRows.length ||
@@ -551,7 +573,7 @@ function calculateLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     maintenanceScheduleRows.length ||
     maintenanceTaskRows.length ||
     employeeRows.length ||
-    entryRows(byType, "machine_master").length
+    machineRows.length
   ) return snapshot;
 
   const fallback = buildDashboardSnapshot(input);
@@ -4154,6 +4176,11 @@ function initializeMachinePlanDetails(
 
 function machinePlanDetails(...args: Parameters<typeof initializeMachinePlanDetails>) {
   const [workOrders, , , routeGroups, , , toolingAvailability, machineRows, , , , previousAssignments, planningCalendar, simulation] = args;
+  if (!simulation && planningBuildFrame?.options.transientPlanning) {
+    const prepared = initializeMachinePlanDetails(...args);
+    return finalizeMachinePlanDetails(prepared.details, planningCalendar, machineRows,
+      prepared.machineUnavailableWindows, toolingAvailability);
+  }
   if (simulation) {
     // Forecasts have no publication baseline and continually add protected plans.
     // Use the same solve without fingerprinting or caching the complete state.

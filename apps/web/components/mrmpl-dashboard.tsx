@@ -301,6 +301,7 @@ import {
   type PlannerDecisionAction,
   type PlannerDecisionView,
 } from "@/components/planner-decision-workspace"
+import { UrgentDeliveryPlannerForm } from "@/components/urgent-delivery-planner-form"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   externalMasterDataOptions,
@@ -4079,6 +4080,7 @@ function PlannerDecisionConsole({
       onActionChange={setActiveAction}
       onViewChange={setActiveView}
       panels={{
+        urgentDelivery: <UrgentDeliveryPlannerForm key={productionFloorFromLocation()} productionControl={productionControl} floor={productionFloorFromLocation()} />,
         setupRelease: (
           <ReleaseSetupPlannerForm floor={productionFloorFromLocation()} onSave={(setup, reason) =>
             submitAction("setup-release", { setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion),

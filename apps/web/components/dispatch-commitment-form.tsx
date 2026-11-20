@@ -50,7 +50,7 @@ export function DispatchCommitmentForm({ committedDispatchDate, floor, jobCardNu
         <FieldLabel htmlFor="committed-dispatch-date">Committed dispatch date</FieldLabel>
         <Input id="committed-dispatch-date" type="date" value={date} required disabled={saving}
           onChange={event => setDate(event.target.value)} />
-        <FieldDescription>Use Planner Actions → Change Priority to bring urgent production forward.</FieldDescription>
+        <FieldDescription>Use Planner Actions → Urgent Delivery Simulation to review a faster production plan.</FieldDescription>
       </Field></FieldGroup>
       {error ? <StandardState variant="error" title="Commitment not saved" description={error} /> : null}
       {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}

@@ -85,6 +85,7 @@ export {
 export { createCustomerRepository } from "./customers"
 export { createDepartmentStoreRepository } from "./department-stores"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
+export { createUrgentDeliveryRepository } from "./urgent-delivery-repository"
 export {
   normalizeSourceCoverage,
   type CoverageFacts,
