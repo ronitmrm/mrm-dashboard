@@ -118,6 +118,9 @@ be corrected in Machine Master before saving a route setup.
 Route Master does not accept an independently entered Machine Type;
 Cycle Time Master and Tooling Master select an existing Route Master Line and
 cannot redefine its identity.
+Cycle Time Master records Machining, Loading and Unloading time in seconds.
+The total cycle time (machining + loading + unloading) drives sessions,
+capacity and planning; older records hold machining time only until revised.
 
 **Part Readiness**: The production-unit workspace for resolving master-data
 gaps before planning. Both its Production Validation and Whole Work-Order

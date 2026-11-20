@@ -94,6 +94,8 @@ export function planningMasterPayload(
     }
     return {
       cycleTime: text(input.cycleTime),
+      loading: text(input.loading),
+      unloading: text(input.unloading),
       ...routeIdentity,
     }
   }

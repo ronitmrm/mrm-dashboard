@@ -1862,16 +1862,28 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         const routePayload = routeSetup.rows[0]?.source_payload ?? {}
         const payload = sourcePayloadRecord(input.sourcePayload ?? input)
         const blasting = isBlastingMachine(routePayload.machineType)
-        const cycleTimeSeconds = blasting
+        const machiningSeconds = blasting
           ? weightBatchCycleTimeSeconds({
               batchWeightKg: payload.batchWeightKg,
               batchTimeMinutes: payload.batchTimeMinutes,
               pieceWeightGrams: routePayload.stageWeight,
             })
           : Number(input.cycleTimeSeconds)
-        if (!Number.isFinite(cycleTimeSeconds) || cycleTimeSeconds <= 0) {
+        if (!Number.isFinite(machiningSeconds) || machiningSeconds <= 0) {
           throw new Error("Cycle time must be greater than zero.")
         }
+        const handlingSeconds = (value: unknown) => {
+          const seconds = value == null || value === "" ? 0 : Number(value)
+          if (!Number.isFinite(seconds) || seconds < 0) {
+            throw new Error("Loading and unloading time must be zero or more seconds.")
+          }
+          return seconds
+        }
+        // Blasting batch time already includes loading and unloading.
+        const loading = blasting ? 0 : handlingSeconds(payload.loading)
+        const unloading = blasting ? 0 : handlingSeconds(payload.unloading)
+        // Sessions, capacity and planning use the total; cycleTime keeps machining only.
+        const cycleTimeSeconds = machiningSeconds + loading + unloading
         if (!blasting && payload.cycleBasis === "weight_batch") {
           throw new Error("Batch weight and time apply only to Blasting Machines.")
         }
@@ -1890,7 +1902,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         )
         const sourcePayload = {
           ...payload,
-          cycleTime: cycleTimeSeconds,
+          cycleTime: machiningSeconds,
           cycleBasis: blasting ? "weight_batch" : "piece",
           batchWeightKg: blasting ? Number(payload.batchWeightKg) : null,
           batchTimeMinutes: blasting ? Number(payload.batchTimeMinutes) : null,
@@ -1900,7 +1912,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             piecesPerCycle: 1, setupTimeMinutes: 0,
             stageWeight: Number(routePayload.stageWeight),
             machineType: routePayload.machineType,
-          } : {}),
+          } : {
+            loading, unloading, loadingUnloading: loading + unloading,
+            totalTime: cycleTimeSeconds,
+          }),
         }
         const values = [
           cycleTimeSeconds,

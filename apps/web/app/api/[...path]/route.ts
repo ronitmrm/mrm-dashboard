@@ -208,7 +208,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "machineType",
     "stageWeight",
   ],
-  cycle: ["partNo", "optionNumber", "setupNo", "cycleTime", "batchWeightKg", "batchTimeMinutes"],
+  cycle: ["partNo", "optionNumber", "setupNo", "cycleTime", "loading", "unloading", "batchWeightKg", "batchTimeMinutes"],
   tooling: [
     "partNo",
     "optionNumber",

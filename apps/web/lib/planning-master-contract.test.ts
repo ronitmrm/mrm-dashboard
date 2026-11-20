@@ -51,11 +51,15 @@ describe("planning master contract", () => {
     expect(
       planningMasterPayload("cycle", routeRows[0]!, {
         cycleTime: "18.5",
+        loading: "4",
+        unloading: "3",
         partNo: "WRONG",
         setupName: "Mistyped",
       })
     ).toEqual({
       cycleTime: "18.5",
+      loading: "4",
+      unloading: "3",
       machineFamily: "D5",
       machineType: "Drilling",
       optionNumber: "1",
