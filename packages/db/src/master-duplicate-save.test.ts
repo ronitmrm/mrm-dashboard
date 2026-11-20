@@ -325,14 +325,18 @@ test("manual Cycle Time saves update the selected route setup without an edit re
   await expect(createDashboardPlanningRepository({ pool }).upsertCycleStandard({
     cycleTimeSeconds: 80, itemUid: "R131", organizationId: "organization",
     productionFloorCode: "cnc", rejectDuplicates: true, routeCode: "1", setupNumber: 1,
+    sourcePayload: { cycleTime: 80, loading: 12, unloading: "8" },
   })).resolves.toEqual({ id: "cycle" })
+  // Total cycle = machining + loading + unloading; payload keeps machining only.
   expect(query).toHaveBeenCalledWith(
     expect.stringMatching(/UPDATE manufacturing\.operation_cycle_standards[\s\S]*cycleRevisionEffectiveAt/),
-    expect.arrayContaining([80, "cycle"])
+    expect.arrayContaining([100, "cycle", expect.objectContaining({
+      cycleTime: 80, loading: 12, unloading: 8, loadingUnloading: 20, totalTime: 100,
+    })])
   )
   expect(query).toHaveBeenCalledWith(
     expect.stringMatching(/UPDATE manufacturing\.production_sessions[\s\S]*status = 'open'/),
-    ["organization", "setup", 80, {
+    ["organization", "setup", 100, {
       cycleBasis: "piece", batchWeightKg: null, batchTimeMinutes: null,
     }]
   )

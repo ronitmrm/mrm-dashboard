@@ -100,9 +100,12 @@ function productionCycleDescription(row: Row) {
   if (row.cycleBasis === "weight_batch") {
     return `${number(row.batchWeightKg)} kg / ${number(row.batchTimeMinutes)} min`
   }
-  const seconds = first(row, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])
+  const seconds = cycleSeconds(row)
   return seconds ? `${seconds} sec` : ""
 }
+// Plan rows carry machining time plus loading/unloading; session rows hold the total.
+const cycleSeconds = (row: Row) =>
+  number(first(row, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])) + number(row.loadingUnloading)
 const machine = (row: Row) => first(row, ["machineNumber", "machineNo", "machine", "machineCode"])
 const job = (row: Row) => first(row, ["jobCardNumber", "jobCard", "jcNo", "JC NO."])
 const part = (row: Row) => first(row, ["partCode", "partNo", "itemCode", "partUid"])
@@ -767,7 +770,7 @@ function ActionSheet({ action, target, floor, breakSchedule, signedInPerson, sig
   const startAtIso = istDateTimeInputToIso(startAt)
   const endAtIso = istDateTimeInputToIso(endAt)
   const previewShift = startAtIso ? productionShiftAt(floor, new Date(startAtIso)) : null
-  const cycleTimeSeconds = number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"]))
+  const cycleTimeSeconds = cycleSeconds(plan)
   const startTarget = action === "start" && previewShift && startAtIso && breakSchedule && cycleTimeSeconds > 0
     ? productionSessionShiftTarget({
         ...previewShift, productionFloorCode: floor, startedAt: new Date(startAtIso),
@@ -777,7 +780,7 @@ function ActionSheet({ action, target, floor, breakSchedule, signedInPerson, sig
   const hasCrateCount = crates !== ""
   const hasCrateWeight = crateWeightKg !== ""
   const submit = () => {
-    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator?.code, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: startAtIso, cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: pieceWeight })
+    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator?.code, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: startAtIso, cycleTime: cycleTimeSeconds, pieceWeightGrams: pieceWeight })
     if (action === "end") onSave("production_session_close", { sessionId, enteredRole: role, endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined })
     if (action === "correctClose") onSave("production_session_correct", { sessionId, correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), endedAt: endAtIso, endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" && hasGrossWeight ? number(grossKg) : undefined, crateCount: method === "weight" && hasCrateCount ? number(crates) : undefined, crateWeightKg: method === "weight" && hasCrateWeight ? number(crateWeightKg) : undefined, downtimeCorrection })
     if (action === "correctStart") onSave("production_session_correct", { sessionId, correctionType: "start", correctionReason, enteredRole: role, expectedRowVersion: number(target.rowVersion), startedAt: startAtIso })

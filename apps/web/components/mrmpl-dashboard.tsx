@@ -613,18 +613,21 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "cycle",
     title: "Cycle Time",
-    description: "Select A Route Master Line And Enter Only Its Cycle Time.",
+    description: "Select A Route Master Line And Enter Its Machining, Loading And Unloading Time.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       {
         name: "cycleTime",
-        label: "Cycle Time Sec",
+        label: "Machining Time Sec",
         type: "number",
         step: "0.01",
         required: true,
       },
+      { name: "loading", label: "Loading Time Sec", type: "number", step: "0.01" },
+      { name: "unloading", label: "Unloading Time Sec", type: "number", step: "0.01" },
+      { name: "totalTime", label: "Total Cycle Time Sec", type: "number", step: "0.01" },
       { name: "batchWeightKg", label: "Batch Weight Kg", type: "number", step: "0.001" },
       { name: "batchTimeMinutes", label: "Batch Time Minutes", type: "number", step: "0.01" },
       { name: "setupName", label: "Setup Name" },
@@ -11956,7 +11959,7 @@ function masterTableColumns(
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {
-  if (key === "cycleTime" && row.cycleBasis === "weight_batch") return "-"
+  if (["cycleTime", "loading", "unloading"].includes(key) && row.cycleBasis === "weight_batch") return "-"
   if (key === "rmInwardDate") return formatRmInwardDate(row[key]) || "-"
   return displayValue(row[key])
 }
@@ -14767,17 +14770,41 @@ function PlanningMasterRelationForm({
                 </p>
               </div>
             ) : kind === "cycle" ? (
-              <div className="max-w-xs">
-                <Field label="Cycle Time Sec">
-                  <Input
-                    name="cycleTime"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    defaultValue={str(defaults.cycleTime)}
-                  />
-                </Field>
+              <div className="grid gap-3">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Machining Time Sec">
+                    <Input
+                      name="cycleTime"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      defaultValue={str(defaults.cycleTime)}
+                    />
+                  </Field>
+                  <Field label="Loading Time Sec">
+                    <Input
+                      name="loading"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={str(defaults.loading)}
+                    />
+                  </Field>
+                  <Field label="Unloading Time Sec">
+                    <Input
+                      name="unloading"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={str(defaults.unloading)}
+                    />
+                  </Field>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Total cycle time = machining + loading + unloading. Sessions,
+                  capacity and planning use the total.
+                </p>
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
