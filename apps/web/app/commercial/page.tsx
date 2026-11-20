@@ -27,9 +27,6 @@ import {
 } from "@workspace/ui/components/table"
 
 import {
-  ChartCard,
-  DashboardBarChart,
-  DashboardGrid,
   PageHeader,
   DashboardSection,
   DataTableCard,
@@ -129,7 +126,7 @@ export default async function CommercialPage() {
             <Database aria-hidden="true" /> Canonical Postgresql Analytics
           </Badge>
         }
-        description="Source-Equivalent Counts, Six-Month Quoting, Workflow Load, Quote Mix, Material Lead Time, And Customer Pareto—All Bounded To Mrmpl."
+        description="Commercial counts, material lead times, and customer quote volume."
         icon={BarChart3}
         title="Commercial Workflow Dashboard"
       />
@@ -150,96 +147,50 @@ export default async function CommercialPage() {
       />
 
       <DashboardSection
-        description="Volume and queue comparisons using the same source definitions as before."
-        title="Trends & Comparisons"
-      >
-        <DashboardGrid columns="two">
-          <ChartCard
-            description="Sent, Non-Superseded Quote Items By Source Month Bucket."
-            empty={!dashboard.monthlyQuotedItems.length}
-            title="Quoted Items — Six Months"
-          >
-            <DashboardBarChart
-              rows={dashboard.monthlyQuotedItems.map((row) => ({
-                label: row.month,
-                value: row.count,
-              }))}
-            />
-          </ChartCard>
-          <ChartCard
-            description="Open Work Using The Source Queue Definitions."
-            empty={!dashboard.workflowLoad.length}
-            title="Workflow Load"
-          >
-            <DashboardBarChart
-              rows={dashboard.workflowLoad.map((row) => ({
-                label: row.label,
-                value: row.count,
-              }))}
-            />
-          </ChartCard>
-        </DashboardGrid>
-      </DashboardSection>
-
-      <DashboardSection
-        description="Commercial composition and elapsed-time detail."
+        description="Elapsed time from enquiry to quote."
         title="Operational Detail"
       >
-        <DashboardGrid columns="two">
-          <ChartCard
-            description="Purchase, Quoted, And In-Costing Commercial Rows."
-            empty={!dashboard.quoteMix.length}
-            title="Quote Mix"
-          >
-            <DashboardBarChart
-              rows={dashboard.quoteMix.map((row) => ({
-                label: row.label,
-                value: row.count,
-              }))}
-            />
-          </ChartCard>
-          <DataTableCard
-            description="Average Days From Enquiry Receipt To Quote Send."
-            icon={TableProperties}
-            title="Material Lead Time"
-          >
-            <div className="rounded-lg border min-w-0">
-              <OperationalTable>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead className="text-right">Quoted</TableHead>
-                    <TableHead className="text-right">Average Days</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboard.materialLeadTimes.length ? (
-                    dashboard.materialLeadTimes.map((row) => (
-                      <TableRow key={row.material}>
-                        <TableCell>{row.material}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.quotedItems}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.averageDays.toFixed(1)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        className="h-24 text-center text-muted-foreground"
-                        colSpan={3}
-                      >
-                        No Sent Quote Lead-Time Data Yet.
+        <DataTableCard
+          description="Average Days From Enquiry Receipt To Quote Send."
+          icon={TableProperties}
+          title="Material Lead Time"
+        >
+          <div className="rounded-lg border min-w-0">
+            <OperationalTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Material</TableHead>
+                  <TableHead className="text-right">Quoted</TableHead>
+                  <TableHead className="text-right">Average Days</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dashboard.materialLeadTimes.length ? (
+                  dashboard.materialLeadTimes.map((row) => (
+                    <TableRow key={row.material}>
+                      <TableCell>{row.material}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.quotedItems}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.averageDays.toFixed(1)}
                       </TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </OperationalTable>
-            </div>
-          </DataTableCard>
-        </DashboardGrid>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      className="h-24 text-center text-muted-foreground"
+                      colSpan={3}
+                    >
+                      No Sent Quote Lead-Time Data Yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </OperationalTable>
+          </div>
+        </DataTableCard>
       </DashboardSection>
 
       <DashboardSection
