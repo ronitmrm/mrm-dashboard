@@ -47,5 +47,7 @@ Point `erp` back at the Vercel CNAME, unpause Vercel, start Railway. Anything en
 ## After
 
 - Deploys: `bash deploy/local/deploy.sh` after each merge to `main`.
+  Zero downtime (blue-green on ports 3001/3002). Roll back with `bash deploy/local/deploy.sh <earlier-sha>`:
+  the newest 3 releases stay built, so that skips the build and takes about 15 s.
 - Snapshots: nightly at 02:30 in `~/srv/backups` (same disk), plus one before every deploy.
 - After a stable week or two: downgrade Vercel, Railway, Upstash. Keep Neon longer.
