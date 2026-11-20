@@ -7,6 +7,7 @@ import {
   productionDowntimeEndOutcome,
   productionSessionEfficiency,
   productionSessionOperationalStatus,
+  productionSessionShiftTarget,
   productionShiftAt,
   suggestedCounterStart,
 } from "./production-session-domain"
@@ -55,6 +56,31 @@ describe("production session operational status", () => {
       )
     ).toBe("closing_required")
   })
+})
+
+test("shows the shift target upfront and deducts only overlapping breaks and downtime", () => {
+  const at = (time: string) => new Date(`2026-11-19T${time}:00+05:30`)
+  const input = {
+    productionDate: "2026-11-19", productionFloorCode: "cnc", shift: "A",
+    startedAt: at("06:00"), cycleTimeSeconds: 60, breaks: [], downtime: [],
+  }
+  expect(productionSessionShiftTarget(input).targetPieces).toBe(480)
+  const late = { ...input, startedAt: at("10:00"), breaks: [{ startTime: "12:00", endTime: "12:30" }] }
+  expect(productionSessionShiftTarget(late).targetPieces).toBe(210)
+  expect(productionSessionShiftTarget({ ...late, downtime: [
+    { startedAt: at("10:30"), endedAt: at("10:45") },
+  ] }).targetPieces).toBe(195)
+  expect(productionSessionShiftTarget({ ...late, downtime: [
+    { startedAt: at("11:45"), endedAt: at("12:15") },
+    { startedAt: at("12:00"), endedAt: at("12:45") },
+  ] }).targetPieces).toBe(180)
+  expect(productionSessionShiftTarget({ ...late, downtime: [
+    { startedAt: at("13:30"), endedAt: at("16:00") },
+  ] }).targetPieces).toBe(180)
+  expect(productionSessionShiftTarget({ ...input, shift: "C", startedAt: at("22:00"),
+    breaks: [{ startTime: "02:00", endTime: "02:30" }],
+  })).toMatchObject({ targetPieces: 450, targetEndAt: "2026-11-20T00:30:00.000Z" })
+  expect(productionSessionShiftTarget({ ...input, startedAt: at("14:00") }).targetPieces).toBe(0)
 })
 
 describe("production session output", () => {

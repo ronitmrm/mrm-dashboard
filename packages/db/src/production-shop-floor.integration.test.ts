@@ -206,11 +206,12 @@ describe("production and shop-floor workflows", () => {
           `INSERT INTO manufacturing.production_sessions (
              organization_id, work_order_id, route_option_id, operation_setup_id,
              machine_id, operator_employee_id, production_date, shift, measurement_method,
-             started_at, piece_weight_grams, session_reference, daily_sequence,
+             started_at, piece_weight_grams, cycle_time_seconds, source_payload, session_reference, daily_sequence,
              machine_number_snapshot, job_card_number_snapshot, part_code_snapshot,
              option_number_snapshot, setup_number_snapshot, operator_code_snapshot, operator_name_snapshot
            ) SELECT $1, work_order.id, route.id, setup.id, machine.id, employee.id,
-             '2026-09-22', 'General', 'weight', '2026-09-22T08:30:00+05:30', 1,
+             '2026-09-22', 'General', 'weight', '2026-09-22T08:30:00+05:30', 1, 60,
+             '{"breakSchedule":[{"startTime":"12:00","endTime":"12:30"}]}',
              $2 || '-20260922-01', 1, $2, $3, $4, '1', '1', $5, 'Bulk test operator'
            FROM manufacturing.work_orders work_order
            JOIN manufacturing.route_options route ON route.item_id = work_order.item_id AND route.route_code = '1'
@@ -231,12 +232,19 @@ describe("production and shop-floor workflows", () => {
       expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).map((row) => row.productionDate))
         .toEqual(["2026-09-22", "2026-09-22"])
       expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).every((row) => !row.hasOpenDowntime)).toBe(true)
+      expect(before.rows.filter((row) => sessionIds.includes(String(row.id))).map((row) => row.targetPieces))
+        .toEqual([660, 660])
       await expect(repository.startBulkProductionSessionDowntime(input)).resolves.toMatchObject({ rowsUpdated: 2 })
       const after = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
       expect(after.rows.filter((row) => sessionIds.includes(String(row.id)))).toEqual(expect.arrayContaining(
         sessionIds.map((id) => expect.objectContaining({ id, status: "open", hasOpenDowntime: true,
+          targetPieces: 645,
           downtimeEvents: [expect.objectContaining({ reasonCode: "POWER", reasonName: "Power failure", isOpen: true })] }))
       ))
+      vi.setSystemTime(new Date("2026-09-22T12:15:00+05:30"))
+      const duringBreak = await repository.readProductionSessions({ organizationId, productionFloorCode: "conventional", status: "open" })
+      expect(duringBreak.rows.filter((row) => sessionIds.includes(String(row.id))).map((row) => row.targetPieces))
+        .toEqual([525, 525])
       await expect(repository.startBulkProductionSessionDowntime(input)).rejects.toThrow("Refresh the bulk breakdown preview")
     } finally {
       vi.useRealTimers()
