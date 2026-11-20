@@ -88,3 +88,6 @@ next-env.d.ts
 
 # local database tooling
 /.neon
+
+AGENTS.override.md
+CLAUDE.local.md
