@@ -230,7 +230,9 @@ export default async function AccessAdministrationPage({
                       (device) => device.status === "pending"
                     ).length
                   }{" "}
-                  pending. Grant Use Any Device under Access Administration to
+                  pending ·{" "}
+                  {deviceSnapshot.blockedLastDay}{" "}
+                  blocked in the last 24 hours. Grant Use Any Device under Access Administration to
                   exempt a role or person.
                 </p>
                 <form action={setDeviceEnforcementAction}>
@@ -266,6 +268,8 @@ export default async function AccessAdministrationPage({
                   devices={deviceSnapshot.devices.map((device) => ({
                     ...describeDevice(device),
                     awaitingFirstVisit: device.awaitingFirstVisit,
+                    blockedAttempts: device.blockedAttempts,
+                    lastBlockedAt: device.lastBlockedAt?.toISOString() ?? null,
                     code: device.code,
                     firstSeenAt: device.firstSeenAt.toISOString(),
                     id: device.id,

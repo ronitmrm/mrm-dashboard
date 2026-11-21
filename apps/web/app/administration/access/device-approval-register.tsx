@@ -25,6 +25,8 @@ import { approveDeviceAction, revokeDeviceAction } from "./actions"
 
 export type DeviceRow = DeviceDescription & {
   awaitingFirstVisit: boolean
+  blockedAttempts: number
+  lastBlockedAt: string | null
   code: string
   firstSeenAt: string
   id: string
@@ -50,6 +52,7 @@ export function DeviceApprovalRegister({ devices }: { devices: DeviceRow[] }) {
         <TableRow>
           <TableHead>Code</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Blocked Sign-ins</TableHead>
           <TableHead>Name</TableHead>
           <TableHead>Manufacturer</TableHead>
           <TableHead>Model</TableHead>
@@ -84,6 +87,18 @@ export function DeviceApprovalRegister({ devices }: { devices: DeviceRow[] }) {
                   From a recent sign-in
                 </span>
               ) : null}
+            </TableCell>
+            <TableCell className="whitespace-nowrap">
+              {device.lastBlockedAt ? (
+                <>
+                  <StatusBadge tone="danger">{device.blockedAttempts}</StatusBadge>
+                  <span className="block text-xs text-muted-foreground">
+                    Last {formatIstDateTime(device.lastBlockedAt)}
+                  </span>
+                </>
+              ) : (
+                "—"
+              )}
             </TableCell>
             <TableCell>{device.name ?? "—"}</TableCell>
             <TableCell>{device.manufacturer}</TableCell>
