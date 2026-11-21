@@ -14,6 +14,7 @@ import {
 } from "./dashboard-corrections"
 import { normalizeSourceCoverage } from "./dashboard-coverage"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
+import { releaseReversedParallelMachineClaim } from "./production-shop-floor"
 import {
   readCorrectionCandidateSource,
   type CorrectionCandidateSource,
@@ -684,6 +685,14 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             },
           ]
         )
+        if (candidate.targetTable === "planOverrides") {
+          await releaseReversedParallelMachineClaim(client, {
+            actorUserId,
+            organizationId: input.organizationId,
+            overrideSourceId: candidate.targetId,
+            reason,
+          })
+        }
         await queueDashboardRefresh(client, input.organizationId)
         return { reversed: true }
       })

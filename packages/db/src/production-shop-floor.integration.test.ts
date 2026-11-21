@@ -6,6 +6,7 @@ import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
+import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { createMaintenanceRepository } from "./maintenance"
 import { migrateDatabase } from "./migrate"
@@ -1807,6 +1808,44 @@ describe("production and shop-floor workflows", () => {
        ORDER BY machine.machine_number`, [jobCardNumber]
     )
     expect(restored.rows.map((row) => row.machine_number)).toEqual(machines)
+  })
+
+  test("undoing a parallel machine frees an RM-only claim and blocks a started one", async () => {
+    const jobCardNumber = `PARALLEL-UNDO-${suffix}`
+    const [source, target] = [`UNDO-A-${suffix}`, `UNDO-B-${suffix}`]
+    const actor = (await pool.query<{ id: string }>("INSERT INTO identity.users(name,email) VALUES ('Planner',$1) RETURNING id", [`planner-${randomUUID()}@example.test`])).rows[0]!.id
+    const corrections = createDashboardReadModelRepository({ connectionString })
+    await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId, workOrderNumber: jobCardNumber })
+    await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+    for (const machineNumber of [source, target]) await planning.upsertMachine({ machineNumber, organizationId })
+    const stage = (machineNumber: string, stage: "raw_material_at_machine" | "operator_started") =>
+      repository.recordShopFloorStage({ jobCardNumber, machineNumber, operationSetupCode: "1", organizationId, payload: {}, stage })
+    const addParallel = async () => {
+      await planning.recordPlanOverride({ assignmentMode: "add_parallel_machine", jobCardNumber, organizationId,
+        reason: "Second machine", setupNumber: 1, toMachineNumber: target })
+      return (await pool.query<{ source_id: string }>(
+        `SELECT event.source_id FROM manufacturing.plan_override_events event
+         JOIN manufacturing.work_orders work_order ON work_order.id = event.work_order_id
+         WHERE work_order.job_card_number = $1 ORDER BY event.occurred_at DESC LIMIT 1`, [jobCardNumber])).rows[0]!.source_id
+    }
+    const undo = (recordId: string) => corrections.reverseEntry({ actorUserId: actor, correctionKind: "planOverrides",
+      organizationId, reason: "Planner undo", recordId })
+    const targetActive = async () => (await pool.query(
+      `SELECT state.stage FROM manufacturing.shop_floor_setup_state state
+       JOIN catalog.machines machine ON machine.id = state.machine_id
+       WHERE machine.machine_number = $1 AND state.active`, [target])).rows
+
+    await stage(source, "operator_started")
+    const first = await addParallel()
+    await stage(target, "raw_material_at_machine")
+    await expect(undo(first)).resolves.toEqual({ reversed: true })
+    expect(await targetActive()).toEqual([])
+
+    const second = await addParallel()
+    await stage(target, "operator_started")
+    await expect(undo(second)).rejects.toThrow(`${target} has already started Job Card ${jobCardNumber}, Setup 1`)
+    expect(await targetActive()).toEqual([{ stage: "operator_started" }])
+    await corrections.close()
   })
 
   test("dispatches saved final-setup good in parts without overdraw", async () => {
