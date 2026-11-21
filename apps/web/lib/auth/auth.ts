@@ -11,6 +11,7 @@ import { deleteSessionCookie } from "better-auth/cookies"
 import { admin } from "better-auth/plugins"
 import type { Pool } from "pg"
 
+import { createDeviceGate, deviceBlockedMessage } from "./device-approval"
 import {
   getWebPostgresPool,
   readWebPostgresEnvironment,
@@ -41,6 +42,7 @@ function configureAuth({
 }) {
   const origin = new URL(baseURL).origin
   const authorization = createAuthorizationRepository({ pool })
+  const checkDevice = createDeviceGate(pool)
 
   return betterAuth({
     advanced: {
@@ -67,6 +69,15 @@ function configureAuth({
               await ctx?.context.internalAdapter.deleteUserSessions(session.userId)
               throw new APIError("FORBIDDEN", { message: "This employee's company access has ended." })
             }
+            if (session.impersonatedBy) return
+            const device = await checkDevice({
+              headers: ctx?.headers ?? ctx?.request?.headers,
+              sessionId: null,
+              userId: session.userId,
+            })
+            if (!device.allowed) {
+              throw new APIError("FORBIDDEN", { message: deviceBlockedMessage(device.code) })
+            }
           },
         },
       },
@@ -80,6 +91,22 @@ function configureAuth({
           deleteSessionCookie(ctx)
           if (ctx.path === "/get-session") return ctx.json(null)
           throw new APIError("UNAUTHORIZED", { message: "This employee's company access has ended." })
+        }
+        // Sign-in checks its own device in session.create; sign-out stays open.
+        if (
+          !ctx.path.startsWith("/sign-in") &&
+          ctx.path !== "/sign-out" &&
+          !session.session.impersonatedBy
+        ) {
+          const device = await checkDevice({
+            headers: ctx.headers,
+            sessionId: session.session.id,
+            userId: session.user.id,
+          })
+          if (!device.allowed) {
+            if (ctx.path === "/get-session") return ctx.json(null)
+            throw new APIError("UNAUTHORIZED", { message: deviceBlockedMessage(device.code) })
+          }
         }
         if (ctx.path === "/get-session") return ctx.json(session)
       }),

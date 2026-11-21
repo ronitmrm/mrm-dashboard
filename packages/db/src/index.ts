@@ -5,6 +5,11 @@ export {
 } from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
 export {
+  createDeviceApprovalRepository,
+  type DeviceRecord,
+  type DeviceStatus,
+} from "./device-approval"
+export {
   artifactUploadChunkMaxBytes,
   ArtifactStorageError,
   createArtifactService,
