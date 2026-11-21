@@ -380,3 +380,18 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Touch screens only (phones, tablets); mouse and trackpad screens are unchanged.
+   Unlayered so it wins over utility text sizes: under 16px, iPhones zoom into fields. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Inline padding widens the tap area of table links without moving the layout. */
+  td a {
+    padding-block: 0.5rem;
+  }
+}

@@ -2,7 +2,8 @@
 
 import * as React from "react";
 
-const MOBILE_BREAKPOINT = 768;
+// Below laptop width (phones and portrait tablets) the sidebar becomes a drawer.
+const MOBILE_BREAKPOINT = 1024;
 
 export function useIsMobile() {
   return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
