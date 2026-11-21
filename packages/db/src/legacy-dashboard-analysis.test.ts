@@ -872,3 +872,25 @@ test("material waits release upstream machines while running downstream retains 
     ? { ...row, payload: { ...row.payload, rmInwardKg: 50.22 } } : row) }, { calculationTime }).productionControl.machinePlanDetailRows;
   expect(parallelResumed.find(row => row.jcNo === 'WAIT-JC' && row.machine === 'WAIT-1')).toMatchObject({ shopFloorStage: 'planned', pendingGoodQty: 2000 });
 });
+
+test("new work goes to an idle machine before one holding a running setup", () => {
+  const createdAt = "2026-11-01T10:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  // P-NEW needs ~3 days, too long to fit any idle gap after P-RUN.
+  const job = (jcNo: string, partCode: string, rmInwardDate: string, orderPcs: number) => [
+    entry("work_order", { jcNo, partCode, orderPcs, rmInwardDate, rmInwardKg: 1 }),
+    entry("route", { partNo: partCode, optionNumber: "1", setupNo: "1", machineType: "CNC", machineFamily: "T42" }),
+    entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: 60 }),
+    entry("tooling", { partNo: partCode, optionNumber: "1", setupNo: "1" }),
+  ]
+  const control = buildLegacyDashboardSnapshotWithPlanning({
+    workbookName: "PostgreSQL", productionFloorCode: "cnc", productionEntries: [],
+    dataEntries: [...job("P-NEW", "NEW", "2026-10-01", 4000), ...job("P-RUN", "RUN", "2026-10-20", 2000),
+      ...["T42-1", "T42-2"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "T42", status: "Active" }))],
+    currentShopFloorStatusRows: [{ jcNo: "P-RUN", partCode: "RUN", optionNumber: "1", setupNo: "1", machine: "T42-1",
+      stage: "operator_started", active: true, hasRecordedStart: true, createdAt }],
+  }, { calculationTime: Date.parse("2026-11-04T10:00:00Z"), forceFullCalculation: true }).snapshot.productionControl
+  const machineFor = (jcNo: string) => control.machinePlanDetailRows.find(row => row.jcNo === jcNo)?.machine
+  expect(machineFor("P-RUN")).toBe("T42-1")
+  expect(machineFor("P-NEW")).toBe("T42-2")
+})
