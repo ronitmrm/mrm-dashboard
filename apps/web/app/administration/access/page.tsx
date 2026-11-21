@@ -1,4 +1,7 @@
 import Link from "next/link"
+import { cookies } from "next/headers"
+
+import { createDeviceApprovalRepository } from "@workspace/db"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -22,14 +25,23 @@ import {
 
 import { createAccessAdministrationService } from "@/lib/auth/access-administration"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { hashDeviceToken } from "@/lib/auth/device-approval"
+import { deviceCookieName, isDeviceToken } from "@/lib/auth/device-cookie"
 import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { MetricSummary } from "@/components/ui/golden-patterns"
+import { describeDevice } from "@/lib/device-description"
+import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
-import { createRoleAction, updateRolePermissionsAction } from "./actions"
+import {
+  createRoleAction,
+  setDeviceEnforcementAction,
+  updateRolePermissionsAction,
+} from "./actions"
+import { DeviceApprovalRegister } from "./device-approval-register"
 import { PermissionSelector } from "./permission-selector"
 import { configuredPermissionCount, permissionAccessRows } from "./permission-access"
 import { AccessWorkspaceTabs } from "./access-workspace-tabs"
@@ -64,6 +76,8 @@ export default async function AccessAdministrationPage({
       administrationTaskCapabilities.assignStaffRole,
       administrationTaskCapabilities.createRole,
       administrationTaskCapabilities.deleteRole,
+      administrationTaskCapabilities.manageDevices,
+      administrationTaskCapabilities.managePermissionOverrides,
       administrationTaskCapabilities.provisionStaff,
       administrationTaskCapabilities.updateRolePermissions,
     ])
@@ -74,9 +88,14 @@ export default async function AccessAdministrationPage({
   const canDeleteRole = grantedTasks.has(
     administrationTaskCapabilities.deleteRole
   )
+  const canManageDevices = grantedTasks.has(
+    administrationTaskCapabilities.manageDevices
+  )
   const requestedSection = firstQueryValue(query.section)
   const activeSection =
-    requestedSection === "staff" || requestedSection === "roles"
+    requestedSection === "staff" ||
+    requestedSection === "roles" ||
+    (requestedSection === "devices" && canManageDevices)
       ? requestedSection
       : canCreateRole
         ? "create"
@@ -115,6 +134,40 @@ export default async function AccessAdministrationPage({
     (role) => role.key === firstQueryValue(query.role)
   )
   const returnToStaff = firstQueryValue(query.from) === "staff"
+  // Mirrors authorization: an override wins, then any direct or post role.
+  const screenProtectionFor = (user: (typeof snapshot.users)[number]) => {
+    const roleKeys = new Set([
+      ...user.roleKeys,
+      ...(user.employee?.inheritedRoleKeys ?? []),
+    ])
+    const exempt = (permissionKey: string) => {
+      const override = user.overrides.find(
+        (candidate) =>
+          candidate.permissionKey === permissionKey &&
+          (!candidate.expiresAt || new Date(candidate.expiresAt) > new Date())
+      )
+      if (override) return override.effect === "allow"
+      return (
+        roleKeys.has("administrative") ||
+        snapshot.roles.some(
+          (role) =>
+            roleKeys.has(role.key) && role.permissionKeys.includes(permissionKey)
+        )
+      )
+    }
+    return {
+      blockPrint: !exempt(administrationTaskCapabilities.printScreen),
+      hideUnfocused: !exempt(administrationTaskCapabilities.unfocusedScreenView),
+      watermark: !exempt(administrationTaskCapabilities.screenWithoutWatermark),
+    }
+  }
+  const deviceToken = (await cookies()).get(deviceCookieName)?.value
+  const deviceSnapshot =
+    activeSection === "devices"
+      ? await createDeviceApprovalRepository({
+          pool: getWebPostgresPool(),
+        }).snapshot(isDeviceToken(deviceToken) ? hashDeviceToken(deviceToken) : null)
+      : null
 
   return (
     <>
@@ -151,10 +204,90 @@ export default async function AccessAdministrationPage({
       <AccessWorkspaceTabs
         activeSection={activeSection}
         canCreateRole={canCreateRole}
+        canManageDevices={canManageDevices}
       >
+        {deviceSnapshot ? (
+          <>
+            <SectionCard size="sm" width="standard">
+              <CardHeader className="border-b">
+                <CardTitle>Device Approval</CardTitle>
+                <CardDescription>
+                  {deviceSnapshot.enforced
+                    ? "Enforced. Staff without Use Any Device can sign in only on approved devices."
+                    : "Recording only. Devices register as staff use them; nobody is blocked yet."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <p className="text-sm text-muted-foreground">
+                  {
+                    deviceSnapshot.devices.filter(
+                      (device) => device.status === "approved"
+                    ).length
+                  }{" "}
+                  approved ·{" "}
+                  {
+                    deviceSnapshot.devices.filter(
+                      (device) => device.status === "pending"
+                    ).length
+                  }{" "}
+                  pending. Grant Use Any Device under Access Administration to
+                  exempt a role or person.
+                </p>
+                <form action={setDeviceEnforcementAction}>
+                  <input
+                    name="enforced"
+                    type="hidden"
+                    value={deviceSnapshot.enforced ? "off" : "on"}
+                  />
+                  <Button
+                    className="w-fit"
+                    size="sm"
+                    type="submit"
+                    variant={deviceSnapshot.enforced ? "outline" : "default"}
+                  >
+                    {deviceSnapshot.enforced
+                      ? "Stop Enforcing"
+                      : "Enforce Device Approval"}
+                  </Button>
+                </form>
+              </CardContent>
+            </SectionCard>
+            <SectionCard size="sm">
+              <CardHeader className="border-b">
+                <CardTitle>Devices</CardTitle>
+                <CardDescription>
+                  Match a device by its last user, model and times. Once
+                  enforced, an unapproved device shows its code on the sign-in
+                  screen; ask the person there to read it out.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DeviceApprovalRegister
+                  devices={deviceSnapshot.devices.map((device) => ({
+                    ...describeDevice(device),
+                    awaitingFirstVisit: device.awaitingFirstVisit,
+                    code: device.code,
+                    firstSeenAt: device.firstSeenAt.toISOString(),
+                    id: device.id,
+                    isCurrent: device.isCurrent,
+                    lastSeenAt: device.lastSeenAt.toISOString(),
+                    lastUserName: device.lastUserName,
+                    name: device.name,
+                    reviewedAt: device.reviewedAt?.toISOString() ?? null,
+                    reviewedByName: device.reviewedByName,
+                    status: device.status,
+                  }))}
+                />
+              </CardContent>
+            </SectionCard>
+          </>
+        ) : null}
         {activeSection === "staff" ? (
           <StaffAccountWorkflow
             key={firstQueryValue(query.staff) ?? "staff-workflow"}
+            canManageOverrides={grantedTasks.has(
+              administrationTaskCapabilities.managePermissionOverrides
+            )}
             canProvision={canProvisionStaff}
             canAssignRoles={grantedTasks.has(
               administrationTaskCapabilities.assignStaffRole
@@ -171,6 +304,7 @@ export default async function AccessAdministrationPage({
               email: user.email,
               roleKeys: user.roleKeys,
               inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
+              screenProtection: screenProtectionFor(user),
             }))}
             roles={snapshot.roles
               .filter((role) => !role.isSystem)

@@ -5,9 +5,14 @@ export const administrationTaskCapabilities = {
   createRole: "administration.roles.create",
   deleteRole: "administration.roles.delete",
   linkStaffAccount: "administration.staff.link",
+  manageDevices: "administration.devices.manage",
   managePermissionOverrides: "administration.permission_overrides.manage",
+  printScreen: "administration.screen.print",
   provisionStaff: "administration.staff.provision",
+  screenWithoutWatermark: "administration.screen.no_watermark",
+  unfocusedScreenView: "administration.screen.unfocused_view",
   updateRolePermissions: "administration.role_permissions.update",
+  useAnyDevice: "administration.devices.bypass",
 } as const
 
 export const commercialTaskCapabilities = {
@@ -109,11 +114,17 @@ export const taskCapabilityLabels = {
   [administrationTaskCapabilities.createRole]: "Create Role",
   [administrationTaskCapabilities.deleteRole]: "Delete Role",
   [administrationTaskCapabilities.linkStaffAccount]: "Link Login To Employee",
+  [administrationTaskCapabilities.manageDevices]: "Approve Devices",
   [administrationTaskCapabilities.managePermissionOverrides]:
     "Change Individual Permissions",
+  [administrationTaskCapabilities.printScreen]: "Allow Printing And Print Screen",
   [administrationTaskCapabilities.provisionStaff]: "Create Staff Login",
+  [administrationTaskCapabilities.screenWithoutWatermark]: "Hide Screen Watermark",
+  [administrationTaskCapabilities.unfocusedScreenView]:
+    "Keep Content Visible When Unfocused",
   [administrationTaskCapabilities.updateRolePermissions]:
     "Change Role Permissions",
+  [administrationTaskCapabilities.useAnyDevice]: "Use Any Device",
   [commercialTaskCapabilities.addBomLine]: "Add Assembly Part",
   [commercialTaskCapabilities.addEnquiryItem]: "Add Line",
   [commercialTaskCapabilities.addPurchaseOrderLine]: "Match And Add Line",

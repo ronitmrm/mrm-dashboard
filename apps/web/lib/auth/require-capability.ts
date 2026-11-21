@@ -97,3 +97,26 @@ export async function listGrantedCapabilities(
     authorizationTelemetry.finish()
   }
 }
+
+/** Signed-in capabilities without redirecting; null when nobody is signed in. */
+export async function readSignedInCapabilities(
+  capabilities: readonly string[]
+) {
+  const authorizationTelemetry = readAuthorizationRequestTelemetry()
+  const { telemetry } = authorizationTelemetry
+  try {
+    const session = await readAuthenticatedSession()
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      return null
+    }
+    const granted = await readGrantedCapabilitySet(session.user.id)
+    telemetry.setOutcome("allowed")
+    return {
+      granted: new Set(capabilities.filter((key) => granted.has(key))),
+      session,
+    }
+  } finally {
+    authorizationTelemetry.finish()
+  }
+}
