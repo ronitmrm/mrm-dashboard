@@ -16,6 +16,8 @@ export type DeviceObservation = {
 
 export type DeviceRecord = {
   awaitingFirstVisit: boolean
+  blockedAttempts: number
+  lastBlockedAt: Date | null
   isCurrent: boolean
   code: string
   firstSeenAt: Date
@@ -215,6 +217,15 @@ export function createDeviceApprovalRepository(options: RepositoryPoolOptions) {
       return { code, enforced, status }
     },
 
+    async recordBlocked(tokenHash: string) {
+      await pool.query(
+        `UPDATE identity.devices
+         SET blocked_attempts = blocked_attempts + 1, last_blocked_at = now()
+         WHERE token_hash = $1`,
+        [tokenHash]
+      )
+    },
+
     async enforced() {
       const result = await pool.query<{ enforced: boolean }>(
         "SELECT enforced FROM identity.device_approval_settings"
@@ -225,9 +236,11 @@ export function createDeviceApprovalRepository(options: RepositoryPoolOptions) {
     async snapshot(currentTokenHash: string | null) {
       const [devices, settings] = await Promise.all([
         pool.query<{
+          blocked_attempts: number
           code: string
           first_seen_at: Date
           id: string
+          last_blocked_at: Date | null
           last_seen_at: Date
           last_user_name: string | null
           model: string | null
@@ -244,21 +257,30 @@ export function createDeviceApprovalRepository(options: RepositoryPoolOptions) {
              devices.user_agent, devices.model, devices.platform,
              devices.platform_version,
              devices.token_hash, devices.first_seen_at, devices.last_seen_at,
-             devices.reviewed_at, last_user.name AS last_user_name,
+             devices.reviewed_at, devices.blocked_attempts, devices.last_blocked_at,
+             last_user.name AS last_user_name,
              reviewer.name AS reviewed_by_name
            FROM identity.devices
            LEFT JOIN identity.users AS last_user ON last_user.id = devices.last_user_id
            LEFT JOIN identity.users AS reviewer ON reviewer.id = devices.reviewed_by
-           ORDER BY devices.status = 'pending' DESC, devices.last_seen_at DESC`
+           ORDER BY devices.status = 'pending' DESC,
+             devices.last_blocked_at DESC NULLS LAST, devices.last_seen_at DESC`
         ),
-        pool.query<{ enforced: boolean }>(
-          "SELECT enforced FROM identity.device_approval_settings"
+        pool.query<{ blocked_last_day: number; enforced: boolean }>(
+          `SELECT enforced, (
+             SELECT count(*)::int FROM identity.devices
+             WHERE last_blocked_at > now() - interval '24 hours'
+           ) AS blocked_last_day
+           FROM identity.device_approval_settings`
         ),
       ])
       return {
+        blockedLastDay: settings.rows[0]?.blocked_last_day ?? 0,
         devices: devices.rows.map(
           (row): DeviceRecord => ({
             awaitingFirstVisit: row.token_hash === null,
+            blockedAttempts: row.blocked_attempts,
+            lastBlockedAt: row.last_blocked_at,
             isCurrent: row.token_hash !== null && row.token_hash === currentTokenHash,
             code: row.code,
             firstSeenAt: row.first_seen_at,

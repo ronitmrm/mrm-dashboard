@@ -25,6 +25,9 @@ CREATE TABLE identity.devices (
   last_seen_at timestamptz NOT NULL DEFAULT now(),
   reviewed_by uuid REFERENCES identity.users(id) ON DELETE SET NULL,
   reviewed_at timestamptz,
+  -- Refused sign-ins while enforced, so approvers see who is trying.
+  blocked_attempts integer NOT NULL DEFAULT 0,
+  last_blocked_at timestamptz,
   CHECK (token_hash IS NOT NULL OR seed_session_id IS NOT NULL)
 );
 
