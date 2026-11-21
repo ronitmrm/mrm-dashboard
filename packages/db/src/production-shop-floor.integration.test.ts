@@ -1840,6 +1840,7 @@ describe("production and shop-floor workflows", () => {
     await stage(target, "raw_material_at_machine")
     await expect(undo(first)).resolves.toEqual({ reversed: true })
     expect(await targetActive()).toEqual([])
+    expect((await pool.query("SELECT reversed_at FROM manufacturing.plan_override_events WHERE source_id = $1", [first])).rows[0]?.reversed_at).toBeTruthy()
 
     const second = await addParallel()
     await stage(target, "operator_started")

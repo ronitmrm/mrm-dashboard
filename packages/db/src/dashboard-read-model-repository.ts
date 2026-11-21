@@ -692,6 +692,13 @@ export function createDashboardReadModelRepository(options: RepositoryPoolOption
             overrideSourceId: candidate.targetId,
             reason,
           })
+          // Shop-floor and planner checks read reversed_at, not dashboard corrections.
+          await client.query(
+            `UPDATE manufacturing.plan_override_events SET reversed_at = now()
+             WHERE organization_id = $1 AND reversed_at IS NULL
+               AND (source_id = $2 OR source_payload->>'_id' = $2)`,
+            [input.organizationId, candidate.targetId]
+          )
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { reversed: true }
