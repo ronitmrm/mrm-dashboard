@@ -1,6 +1,6 @@
 "use client"
 
-import { BriefcaseBusiness, Plus, UsersRound } from "lucide-react"
+import { BriefcaseBusiness, MonitorSmartphone, Plus, UsersRound } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { ReactNode } from "react"
 
@@ -14,10 +14,12 @@ import {
 export function AccessWorkspaceTabs({
   activeSection,
   canCreateRole,
+  canManageDevices,
   children,
 }: {
-  activeSection: "create" | "roles" | "staff"
+  activeSection: "create" | "devices" | "roles" | "staff"
   canCreateRole: boolean
+  canManageDevices: boolean
   children: ReactNode
 }) {
   const router = useRouter()
@@ -46,6 +48,11 @@ export function AccessWorkspaceTabs({
           <TabsTrigger value="staff">
             <UsersRound data-icon="inline-start" /> Staff Accounts
           </TabsTrigger>
+          {canManageDevices ? (
+            <TabsTrigger value="devices">
+              <MonitorSmartphone data-icon="inline-start" /> Devices
+            </TabsTrigger>
+          ) : null}
         </TabsList>
       </div>
       <TabsContent className="grid min-w-0 gap-4" value={activeSection}>

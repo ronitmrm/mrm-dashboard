@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
 import { Hind, Hind_Vadodara, Outfit } from "next/font/google"
-import type { ReactNode } from "react"
+import { Suspense, type ReactNode } from "react"
 
 import { SoftwareProcessingProvider } from "@/components/software-processing-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { RetiredPageStorageCleanup } from "@/components/retired-page-storage-cleanup"
 import { DeploymentUpdateToast } from "@/components/deployment-update-toast"
+import { ScreenProtection } from "@/components/screen-protection"
 import { themeInitializationScript } from "../lib/theme-initialization"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -61,6 +62,9 @@ export default async function RootLayout({
         <ThemeProvider>
           <SoftwareProcessingProvider>{children}</SoftwareProcessingProvider>
           <DeploymentUpdateToast />
+          <Suspense fallback={null}>
+            <ScreenProtection />
+          </Suspense>
         </ThemeProvider>
       </body>
     </html>
