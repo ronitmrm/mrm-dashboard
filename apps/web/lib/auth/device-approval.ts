@@ -47,6 +47,8 @@ export function createDeviceGate(pool: Pool) {
     )
 
   return async function checkDevice(input: {
+    /** Sign-in attempts are counted on the device; session reads are not. */
+    attempt: "sign-in" | "session"
     headers: Headers | undefined
     sessionId: string | null
     userId: string
@@ -58,19 +60,22 @@ export function createDeviceGate(pool: Pool) {
         ? { allowed: true }
         : { allowed: false, code: "unknown" }
     }
+    const tokenHash = hashDeviceToken(token)
     const { code, enforced, status } = await devices.observe({
       code: newDeviceCode(),
       model: clientHint(input.headers, "sec-ch-ua-model"),
       platform: clientHint(input.headers, "sec-ch-ua-platform"),
       platformVersion: clientHint(input.headers, "sec-ch-ua-platform-version"),
       sessionId: input.sessionId,
-      tokenHash: hashDeviceToken(token),
+      tokenHash,
       userAgent: input.headers.get("user-agent"),
       userId: input.userId,
     })
-    return !enforced || status === "approved" || (await mayUseAnyDevice(input.userId))
-      ? { allowed: true }
-      : { allowed: false, code }
+    if (!enforced || status === "approved" || (await mayUseAnyDevice(input.userId))) {
+      return { allowed: true }
+    }
+    if (input.attempt === "sign-in") await devices.recordBlocked(tokenHash)
+    return { allowed: false, code }
   }
 }
 
