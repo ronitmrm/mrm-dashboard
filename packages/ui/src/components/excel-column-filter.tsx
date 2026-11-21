@@ -175,7 +175,7 @@ export function ExcelColumnFilter({
       <PopoverTrigger asChild>
         <Button
           aria-label={`Filter ${label}`}
-          className="h-8 min-w-20 justify-between gap-2 px-2 text-xs font-normal data-[filter-applied=true]:border-[var(--color-filter-applied)] data-[filter-applied=true]:bg-[var(--color-filter-applied-bg)] data-[sort-direction]:ring-1 data-[sort-direction]:ring-[var(--color-filter-applied)]/30"
+          className="h-8 min-w-20 justify-between pointer-coarse:h-10 gap-2 px-2 text-xs font-normal data-[filter-applied=true]:border-[var(--color-filter-applied)] data-[filter-applied=true]:bg-[var(--color-filter-applied-bg)] data-[sort-direction]:ring-1 data-[sort-direction]:ring-[var(--color-filter-applied)]/30"
           data-filter-applied={selected === null ? undefined : "true"}
           data-sort-direction={sortDirection}
           size="sm"

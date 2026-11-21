@@ -207,7 +207,7 @@ where supplied. Clear the previous success when another upload starts, and never
 show success for a failed import or an unconfirmed preview. Redirecting import
 flows must show confirmation on the destination screen.
 
-Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
+Preserve keyboard operation, visible focus, labelled controls, sufficient contrast, and touch-friendly controls. On touch screens (`pointer: coarse`), compact buttons and table filters grow to 40 px, table links get a taller tap area, and text fields use 16 px text so iPhones do not zoom; mouse and trackpad screens keep the compact sizes. Tables remain horizontally scrollable at narrow widths. Dialogs and drawers require a title and use the standard content wrappers when the workflow is simple.
 
 Pass an explicit `value` to every `NativeSelectOption`; the searchable wrapper
 uses that prop to collect its selectable options.
@@ -237,6 +237,8 @@ expanded-navigation feedback; the current destination keeps a stronger brand
 tint and green leading marker so hover never looks selected. Every submodule
 uses its navigation icon rather than branch lines or bullet marks. Expand and
 collapse motion uses only opacity and transform and honors reduced motion.
+Below laptop width (1024 px: phones and portrait tablets) the sidebar is a
+slide-out drawer; laptops and desktops keep the docked sidebar.
 
 ## Approved exceptions
 
