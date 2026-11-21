@@ -3565,6 +3565,13 @@ function initializeMachinePlanDetails(
     rowText(row, "machineType", "MACHINE TYPE", "type", "TYPE"),
   ]));
   const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
+  // A machine holding started work is not idle, even before that work is planned.
+  const machinesWithStartedWork = new Set([...shopFloorStatusBySetup.values()]
+    .filter((status) => {
+      const rank = setupLifecycleStageRank(rowText(status, "stage"));
+      return rank >= setupLifecycleStageRank("raw_material_at_machine") && rank < setupLifecycleStageRank("item_complete");
+    })
+    .map((status) => canonicalKey(rowText(status, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."))));
   const machineUnavailableWindows = activeMachineUnavailableWindows(machineConstraints, planningCalendar);
   const machineLoad = new Map<string, number>();
   const machineNextSetupDate = new Map<string, string>();
@@ -3782,6 +3789,7 @@ function initializeMachinePlanDetails(
         machineNextSetupDate,
         machinePlannedDays,
         machinePlannedQty,
+        machinesWithStartedWork,
         readyDate: readyDateForAssignment,
         deadlineDate: dispatchDeadlineDate,
         override: interruptedLockedMachines.size ? override : queuePlacementOverride ?? override,
@@ -3812,6 +3820,7 @@ function initializeMachinePlanDetails(
           machineNextSetupDate,
           machinePlannedDays,
           machinePlannedQty,
+          machinesWithStartedWork,
           readyDate: maxDateValue(readyDateForAssignment, setupInterruption.window.fromDate),
           deadlineDate: dispatchDeadlineDate,
           override: queuePlacementOverride ?? override,
@@ -7582,6 +7591,7 @@ function assignedPhysicalMachines({
   machineNextSetupDate,
   machinePlannedDays,
   machinePlannedQty,
+  machinesWithStartedWork,
   readyDate,
   deadlineDate,
   override,
@@ -7602,6 +7612,7 @@ function assignedPhysicalMachines({
   machineNextSetupDate: Map<string, string>;
   machinePlannedDays: Map<string, number>;
   machinePlannedQty: Map<string, number>;
+  machinesWithStartedWork?: ReadonlySet<string>;
   readyDate: string;
   deadlineDate: string;
   override?: ActionRow;
@@ -7613,7 +7624,7 @@ function assignedPhysicalMachines({
   planningCalendar: PlanningCalendar;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
-  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty)
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty, machinesWithStartedWork)
     .filter(candidate => !awaitingMaterialMachines?.has(canonicalKey(candidate.machine)));
   const availableCandidates = candidates.filter((candidate) => candidateMachineAvailableForAssignment(candidate.machine, {
     readyDate,
@@ -8116,9 +8127,15 @@ function candidatePhysicalMachines(
   machineNextSetupDate: Map<string, string>,
   machinePlannedDays: Map<string, number>,
   machinePlannedQty: Map<string, number>,
+  machinesWithStartedWork: ReadonlySet<string> = new Set(),
 ) {
+  // Prefer a truly idle machine over one whose started work is not yet planned.
+  const busy = (machine: string) => Number(
+    (machinePlannedDays.get(canonicalKey(machine)) ?? 0) > 0 || machinesWithStartedWork.has(canonicalKey(machine)),
+  );
   return activePhysicalMachineRows(routeMachine, machineType, machineRows)
     .sort((a, b) =>
+      busy(a.machine) - busy(b.machine) ||
       (machinePlannedDays.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedDays.get(canonicalKey(b.machine)) ?? 0) ||
       (machinePlannedQty.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedQty.get(canonicalKey(b.machine)) ?? 0) ||
       (machineNextSetupDate.get(canonicalKey(a.machine)) ?? "").localeCompare(machineNextSetupDate.get(canonicalKey(b.machine)) ?? "") ||
