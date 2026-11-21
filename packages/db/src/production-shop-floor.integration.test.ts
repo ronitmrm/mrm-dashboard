@@ -2428,6 +2428,34 @@ test("flags released downstream material waits after upstream completion", async
   expect(await review()).not.toMatchObject({ materialFlowReviews: expect.arrayContaining([expectedFlag]) })
 })
 
+test("releasing a setup after its upstream finished does not hold it for WIP", async () => {
+  const jobCardNumber = `FLOW-DONE-${suffix}`
+  const [upstreamMachine, downstreamMachine] = [`DONE-UP-${suffix}`, `DONE-DOWN-${suffix}`]
+  await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 100, organizationId,
+    sourcePayload: { jcNo: jobCardNumber, partCode: itemUid, rmPoNo: rmPoNumber, requiredRmKg: 1 }, workOrderNumber: jobCardNumber })
+  await planning.selectRoute({ jobCardNumber, organizationId, routeCode: "1" })
+  await repository.upsertRawMaterialReceipt({ organizationId, quantityKg: 1, receiptNumber: rmPoNumber,
+    receivedOn: "2026-10-17", sourceId: randomUUID(), payload: { jcNo: jobCardNumber, rmPoNo: rmPoNumber } })
+  for (const machineNumber of [upstreamMachine, downstreamMachine]) await planning.upsertMachine({ machineNumber, organizationId })
+  await repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: upstreamMachine,
+    operationSetupCode: "1", stage: "operator_started", payload: {} })
+  await repository.recordProductionEntry({ organizationId, jobCardNumber, machineNumber: upstreamMachine,
+    operationSetupCode: "1", productionDate: "2026-10-17", quantityGood: 100, quantityRejected: 0, payload: {}, sourceId: randomUUID() })
+  await repository.recordSetupCompletion({ organizationId, jobCardNumber, machineNumber: upstreamMachine,
+    operationSetupCode: "1", completedBy: "Planner" })
+  const downstreamStage = () => repository.recordShopFloorStage({ organizationId, jobCardNumber, machineNumber: downstreamMachine,
+    operationSetupCode: "2", stage: "raw_material_at_machine", payload: {} })
+  await downstreamStage()
+  const setup = (await repository.readReleasableSetups({ organizationId, productionFloorCode: "conventional" }))
+    .rows.find(row => row.jobCardNumber === jobCardNumber && row.setupNumber === 2)!
+  await repository.releaseSetupAwaitingMaterial({ organizationId, productionFloorCode: "conventional",
+    setupStateId: setup.id, expectedRowVersion: Number(setup.rowVersion), reason: "Machine needed elsewhere." })
+  const state = (await pool.query("SELECT stage, active, source_payload FROM manufacturing.shop_floor_setup_state WHERE id = $1", [setup.id])).rows[0]
+  expect(state).toMatchObject({ stage: "planned", active: false })
+  expect(state.source_payload).not.toHaveProperty("awaitingMaterial")
+  await expect(downstreamStage()).resolves.toMatchObject({ ok: true })
+})
+
 test("RM shortage flag and completion blocker clear at 95% usable receipt", async () => {
   const jobCardNumber = `RM-ALLOWANCE-${suffix}`
   await planning.upsertWorkOrder({ itemUid, jobCardNumber, orderedQuantity: 10000, organizationId,
