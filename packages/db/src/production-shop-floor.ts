@@ -1190,9 +1190,11 @@ async function assertMaterialCompletion(client: PoolClient, organizationId: stri
 }
 
 async function upstreamGoodForSetup(client: Pick<PoolClient, "query">, workOrderId: string, setupId: string) {
-  const result = await client.query<{ id: string; good: string }>(`SELECT previous.id,
+  const result = await client.query<{ id: string; good: string; complete: boolean | null }>(`SELECT previous.id,
       COALESCE((SELECT sum(quantity_good) FROM manufacturing.production_entries
-        WHERE work_order_id = $1 AND operation_setup_id = previous.id AND reversed_at IS NULL), 0)::text AS good
+        WHERE work_order_id = $1 AND operation_setup_id = previous.id AND reversed_at IS NULL), 0)::text AS good,
+      (SELECT bool_and(stage = 'item_complete' AND NOT active) FROM manufacturing.shop_floor_setup_state
+        WHERE work_order_id = $1 AND operation_setup_id = previous.id) AS complete
     FROM manufacturing.operation_setups current_setup
     JOIN manufacturing.operation_setups previous ON previous.route_option_id = current_setup.route_option_id
       AND previous.sequence < current_setup.sequence AND previous.active
@@ -1263,7 +1265,9 @@ async function releaseSetupAwaitingMaterialInTransaction(
   const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
   const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
     actionType: "Release machine", releasedAt: new Date().toISOString(), reason: input.reason,
-    awaitingMaterial: { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
+    // A finished upstream setup will never add WIP, so waiting for more would block the setup forever.
+    awaitingMaterial: upstream?.complete ? undefined
+      : { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
   await client.query(`UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false,
     completed_at = NULL, source_payload = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1 WHERE id = $3`,
   [payload, input.actorUserId ?? null, state.id])
