@@ -883,14 +883,20 @@ test("new work goes to an idle machine before one holding a running setup", () =
     entry("cycle", { partNo: partCode, optionNumber: "1", setupNo: "1", cycleTime: 60 }),
     entry("tooling", { partNo: partCode, optionNumber: "1", setupNo: "1" }),
   ]
-  const control = buildLegacyDashboardSnapshotWithPlanning({
-    workbookName: "PostgreSQL", productionFloorCode: "cnc", productionEntries: [],
+  const input = {
+    workbookName: "PostgreSQL", productionFloorCode: "cnc" as const, productionEntries: [],
     dataEntries: [...job("P-NEW", "NEW", "2026-10-01", 4000), ...job("P-RUN", "RUN", "2026-10-20", 2000),
       ...["T42-1", "T42-2"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: "T42", status: "Active" }))],
     currentShopFloorStatusRows: [{ jcNo: "P-RUN", partCode: "RUN", optionNumber: "1", setupNo: "1", machine: "T42-1",
       stage: "operator_started", active: true, hasRecordedStart: true, createdAt }],
-  }, { calculationTime: Date.parse("2026-11-04T10:00:00Z"), forceFullCalculation: true }).snapshot.productionControl
-  const machineFor = (jcNo: string) => control.machinePlanDetailRows.find(row => row.jcNo === jcNo)?.machine
-  expect(machineFor("P-RUN")).toBe("T42-1")
-  expect(machineFor("P-NEW")).toBe("T42-2")
+  }
+  const build = (source: Parameters<typeof buildLegacyDashboardSnapshotWithPlanning>[0]) => buildLegacyDashboardSnapshotWithPlanning(source,
+    { calculationTime: Date.parse("2026-11-04T10:00:00Z"), forceFullCalculation: true }).snapshot.productionControl.machinePlanDetailRows
+  const rows = build(input)
+  const machineFor = (planRows: typeof rows, jcNo: string) => planRows.find(row => row.jcNo === jcNo)?.machine
+  expect(machineFor(rows, "P-RUN")).toBe("T42-1")
+  expect(machineFor(rows, "P-NEW")).toBe("T42-2")
+  // A previously published queue slot behind the running job does not hold the new work there.
+  const previous = rows.map(row => row.jcNo === "P-NEW" ? { ...row, machine: "T42-1" } : row)
+  expect(machineFor(build({ ...input, previousMachinePlanDetailRows: previous }), "P-NEW")).toBe("T42-2")
 })

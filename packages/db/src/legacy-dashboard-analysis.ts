@@ -7660,6 +7660,7 @@ function assignedPhysicalMachines({
   if (delayMachineList.length) return withAdditionalMachines(delayMachineList);
   if (!assignableCandidates.length) return [];
   const assignmentCandidates = stableMachineAssignmentCandidates(assignableCandidates, previousMachineList, {
+    machinesWithStartedWork,
     machineLoad,
     machineNextSetupDate,
     machinePlannedDays,
@@ -8148,6 +8149,7 @@ export function stableMachineAssignmentCandidates(
   candidates: Array<{ machine: string }>,
   previousMachineList: string[],
   context: {
+    machinesWithStartedWork?: ReadonlySet<string>;
     machineLoad: Map<string, number>;
     machineNextSetupDate: Map<string, string>;
     machinePlannedDays: Map<string, number>;
@@ -8180,6 +8182,7 @@ function previousAssignmentMoveIsMaterial(
   bestCandidate: { machine: string },
   previousCandidate: { machine: string },
   context: {
+    machinesWithStartedWork?: ReadonlySet<string>;
     machineLoad: Map<string, number>;
     machineNextSetupDate: Map<string, string>;
     machinePlannedDays: Map<string, number>;
@@ -8196,6 +8199,10 @@ function previousAssignmentMoveIsMaterial(
   const previousKey = canonicalKey(previousCandidate.machine);
   const bestStart = feasibleMachineAssignmentStart(bestCandidate.machine, context);
   const previousStart = feasibleMachineAssignmentStart(previousCandidate.machine, context);
+  // Leave a machine whose started work is not yet planned for a truly idle one.
+  // Checked before comparing starts: a running machine's next setup date can be stale.
+  const startedWork = context.machinesWithStartedWork;
+  if (startedWork?.has(previousKey) && !startedWork.has(bestKey) && !(context.machinePlannedDays.get(bestKey) ?? 0)) return true;
   if (bestStart > previousStart) return false;
   const plannedDaysGain = (context.machinePlannedDays.get(previousKey) ?? 0) - (context.machinePlannedDays.get(bestKey) ?? 0);
   if (plannedDaysGain >= 2) return true;
