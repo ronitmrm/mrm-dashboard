@@ -975,6 +975,59 @@ async function assertEarlyDownstreamWip(
   }
 }
 
+// Undoing a parallel-machine decision must not leave its target machine claimed.
+// RM alone is released; later shop-floor progress blocks the undo.
+export async function releaseReversedParallelMachineClaim(
+  client: PoolClient,
+  input: { organizationId: string; overrideSourceId: string; actorUserId: string; reason: string }
+) {
+  const claims = await client.query<{
+    id: string; stage: string; source_payload: Record<string, unknown> | null
+    machine_id: string; machine_number: string; job_card_number: string; setup_number: number
+  }>(
+    `SELECT state.id, state.stage, state.source_payload, state.machine_id, machine.machine_number,
+       work_order.job_card_number, setup.setup_number
+     FROM manufacturing.plan_override_events override_event
+     JOIN manufacturing.shop_floor_setup_state state
+       ON state.work_order_id = override_event.work_order_id
+      AND state.machine_id = override_event.target_machine_id
+      AND (override_event.operation_setup_id IS NULL OR state.operation_setup_id = override_event.operation_setup_id)
+      AND state.active
+     JOIN catalog.machines machine ON machine.id = state.machine_id
+     JOIN manufacturing.work_orders work_order ON work_order.id = state.work_order_id
+     JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
+     WHERE override_event.organization_id = $1
+       AND (override_event.source_id = $2 OR override_event.source_payload->>'_id' = $2)
+       AND override_event.source_payload->>'assignmentMode' = 'add_parallel_machine'
+     FOR UPDATE OF state`,
+    [input.organizationId, input.overrideSourceId]
+  )
+  const started = claims.rows.find((row) => row.stage !== "planned" && row.stage !== "raw_material_at_machine")
+  if (started) {
+    throw new ShopFloorConflictError(
+      `${started.machine_number} has already started Job Card ${started.job_card_number}, Setup ${started.setup_number}. Complete the item or release the machine before undoing this parallel machine.`
+    )
+  }
+  for (const claim of claims.rows) {
+    const payload = { ...claim.source_payload, stage: "planned", active: false,
+      actionType: "Parallel machine undone", releasedAt: new Date().toISOString(), reason: input.reason }
+    await client.query(
+      `UPDATE manufacturing.shop_floor_setup_state SET stage = 'planned', active = false, completed_at = NULL,
+         source_payload = $1, updated_by_user_id = $2, updated_at = now(), row_version = row_version + 1
+       WHERE id = $3`,
+      [payload, input.actorUserId, claim.id]
+    )
+    await client.query(
+      `INSERT INTO manufacturing.shop_floor_stage_events
+         (organization_id, setup_state_id, from_stage, to_stage, machine_id, actor_user_id, reason,
+          source_system, source_table, source_id, source_payload)
+       VALUES ($1, $2, $3, 'planned', $4, $5, $6, 'mrm-dashboard', 'shop_floor_status', $7, $8)`,
+      [input.organizationId, claim.id, claim.stage, claim.machine_id, input.actorUserId, input.reason, randomUUID(), payload]
+    )
+  }
+  return claims.rows.length
+}
+
 async function restoreParallelShopFloorState(
   client: PoolClient,
   input: {
