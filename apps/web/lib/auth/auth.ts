@@ -71,6 +71,7 @@ function configureAuth({
             }
             if (session.impersonatedBy) return
             const device = await checkDevice({
+              attempt: "sign-in",
               headers: ctx?.headers ?? ctx?.request?.headers,
               sessionId: null,
               userId: session.userId,
@@ -99,6 +100,7 @@ function configureAuth({
           !session.session.impersonatedBy
         ) {
           const device = await checkDevice({
+            attempt: "session",
             headers: ctx.headers,
             sessionId: session.session.id,
             userId: session.user.id,
