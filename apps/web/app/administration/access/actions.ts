@@ -3,11 +3,14 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
+import { createDeviceApprovalRepository } from "@workspace/db"
+
 import { createAccessAdministrationService } from "@/lib/auth/access-administration"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
 const accessPath = "/administration/access"
 
@@ -256,4 +259,91 @@ export async function setPostRoleAction(formData: FormData) {
       })
   )
   revalidatePath(accessPath)
+}
+
+async function withDevices<T>(
+  operation: (
+    devices: ReturnType<typeof createDeviceApprovalRepository>,
+    actorUserId: string
+  ) => Promise<T>
+) {
+  const session = await requireCapability(
+    administrationTaskCapabilities.manageDevices,
+    accessPath
+  )
+  const result = await operation(
+    createDeviceApprovalRepository({ pool: getWebPostgresPool() }),
+    session.user.id
+  )
+  revalidatePath(accessPath)
+  return result
+}
+
+export type DeviceActionState = { error?: string }
+
+export async function approveDeviceAction(
+  _previousState: DeviceActionState,
+  formData: FormData
+): Promise<DeviceActionState> {
+  try {
+    await withDevices((devices, actorUserId) =>
+      devices.approve({
+        actorUserId,
+        deviceId: requiredText(formData, "deviceId"),
+        name: optionalText(formData, "name")?.slice(0, 80) ?? null,
+      })
+    )
+    return {}
+  } catch (error) {
+    if (error instanceof Error && error.message === "The selected device no longer exists") {
+      return { error: error.message }
+    }
+    throw error
+  }
+}
+
+export async function revokeDeviceAction(formData: FormData) {
+  await withDevices((devices, actorUserId) =>
+    devices.revoke({ actorUserId, deviceId: requiredText(formData, "deviceId") })
+  )
+}
+
+export async function setDeviceEnforcementAction(formData: FormData) {
+  await withDevices((devices, actorUserId) =>
+    devices.setEnforced({
+      actorUserId,
+      enforced: requiredText(formData, "enforced") === "on",
+    })
+  )
+}
+
+const screenProtections = {
+  blockPrint: administrationTaskCapabilities.printScreen,
+  hideUnfocused: administrationTaskCapabilities.unfocusedScreenView,
+  watermark: administrationTaskCapabilities.screenWithoutWatermark,
+} as const
+
+/** Each checked protection denies its exemption for this user; unchecked allows it. */
+export async function setScreenProtectionAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.managePermissionOverrides,
+    async (access, actorUserId) => {
+      const userId = requiredText(formData, "userId")
+      for (const [protection, permissionKey] of Object.entries(screenProtections)) {
+        await access.setPermissionOverride({
+          actorUserId,
+          effect: formData.get(protection) === "on" ? "deny" : "allow",
+          permissionKey,
+          reason: "Screen protection set in Staff Accounts",
+          userId,
+        })
+      }
+      return { success: "Screen protection saved. It applies on the person's next page load." }
+    }
+  )
+  revalidatePath(accessPath)
+  return result
 }

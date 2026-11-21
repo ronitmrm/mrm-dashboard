@@ -7,6 +7,34 @@ every authenticated user. They do not require Document Templates role grants. Re
 routes serve only the latest issued revision. Document Templates authoring, drafts, and
 historical PDF routes retain their per-type capability checks.
 
+## Device approval
+
+The factory router rewrites every visitor to its own address, so access is
+tied to approved devices rather than IP ranges. `proxy.ts` gives each browser a
+random `mrm_device` cookie (renewed on every visit; only its SHA-256 is
+stored) and asks Chromium for model client hints. Better Auth hooks check the
+device on sign-in and on every session read: once enforcement is on, staff
+without `administration.devices.bypass` (Use Any Device) can use only
+approved devices. An unapproved device's sign-in names its code; an existing
+session on it reads as signed out. Sign-out stays open.
+
+Migration 0245 starts with enforcement off and seeds pending devices from each
+user's latest sign-in per browser in the past two days; the next request from
+that session claims the row, keeping any approval. The Devices tab
+(`administration.devices.manage`) approves, names, rejects or revokes devices
+and switches enforcement. Manufacturer is inferred (Apple from the OS,
+Android brands from model codes); PCs never report it.
+
+## Screen protection
+
+Staff without each exemption get a watermark (name, employee ID, time),
+hidden content while the window is unfocused, and blocked printing / Print
+Screen copy: `administration.screen.no_watermark`, `.unfocused_view` and
+`.print`. Administrators hold them. Staff Accounts sets each per person as an
+allow or deny override that wins over roles. These are deterrents: browsers
+cannot block OS screenshots or phone cameras; the watermark makes captures
+traceable.
+
 ## Administrative full access
 
 Migration 0125 grants every registered capability to the assignable

@@ -121,6 +121,16 @@ export function createAuthorizationRepository(
       return result.rows[0]?.employee_code ?? null
     },
 
+    async anyLinkedEmployeeCode(userId: string) {
+      const result = await pool.query<{ employee_code: string }>(
+        `SELECT btrim(employee_code) AS employee_code
+         FROM identity.employee_links WHERE user_id = $1
+         ORDER BY employee_code LIMIT 1`,
+        [userId]
+      )
+      return result.rows[0]?.employee_code ?? null
+    },
+
     async hasCapability(userId: string, capability: string) {
       return (await listGrantedCapabilities(userId, [capability])).length === 1
     },

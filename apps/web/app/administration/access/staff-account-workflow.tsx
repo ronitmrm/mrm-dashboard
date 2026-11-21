@@ -32,6 +32,7 @@ import {
 import {
   assignStaffRolesAction,
   provisionStaffAction,
+  setScreenProtectionAction,
   updateStaffLoginIdAction,
   type StaffActionState,
 } from "./actions"
@@ -45,9 +46,35 @@ type StaffAccount = {
   email: string
   roleKeys: string[]
   inheritedRoleKeys: string[]
+  screenProtection: ScreenProtectionState
 }
 
+export type ScreenProtectionState = {
+  blockPrint: boolean
+  hideUnfocused: boolean
+  watermark: boolean
+}
+
+const screenProtectionOptions = [
+  {
+    description: "Name, employee ID and time across every page, so any capture is traceable.",
+    key: "watermark",
+    label: "Watermark",
+  },
+  {
+    description: "Covers pages when the window loses focus, e.g. to a snipping tool.",
+    key: "hideUnfocused",
+    label: "Hide When Unfocused",
+  },
+  {
+    description: "Prints a blank page and clears the Print Screen copy on Windows.",
+    key: "blockPrint",
+    label: "Block Print & Print Screen",
+  },
+] as const satisfies readonly { key: keyof ScreenProtectionState; description: string; label: string }[]
+
 type StaffWorkflowProps = {
+  canManageOverrides: boolean
   canProvision: boolean
   canAssignRoles: boolean
   created: boolean
@@ -345,6 +372,51 @@ function StaffLoginIdForm({ user }: { user: StaffAccount }) {
   )
 }
 
+function StaffScreenProtectionForm({ user }: { user: StaffAccount }) {
+  const [state, action, pending] = useActionState(setScreenProtectionAction, {})
+  return (
+    <form action={action}>
+      <input type="hidden" name="userId" value={user.id} />
+      <FieldGroup className="gap-4">
+        <FieldSet className="min-w-0" disabled={pending}>
+          <FieldLegend variant="label">Screen Protection</FieldLegend>
+          <FieldDescription>
+            Checked protections apply to this person on every device and
+            override their roles. Phone cameras and OS screenshots cannot be
+            fully blocked; the watermark makes them traceable.
+          </FieldDescription>
+          <FieldGroup className="grid gap-3">
+            {screenProtectionOptions.map((option) => (
+              <Field
+                key={`${option.key}:${user.screenProtection[option.key]}`}
+                orientation="horizontal"
+                data-disabled={pending}
+              >
+                <Checkbox
+                  id={`screen-protection-${option.key}`}
+                  name={option.key}
+                  defaultChecked={user.screenProtection[option.key]}
+                  disabled={pending}
+                />
+                <div className="grid gap-1">
+                  <FieldLabel htmlFor={`screen-protection-${option.key}`}>
+                    {option.label}
+                  </FieldLabel>
+                  <FieldDescription>{option.description}</FieldDescription>
+                </div>
+              </Field>
+            ))}
+          </FieldGroup>
+        </FieldSet>
+        <StaffFeedback state={state} />
+        <Button className="w-fit" type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save Screen Protection"}
+        </Button>
+      </FieldGroup>
+    </form>
+  )
+}
+
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
   const [search, setSearch] = useState(() => {
     const selected = props.users.find((user) => user.id === props.selectedUserId)
@@ -357,7 +429,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
       {props.canProvision ? (
         <CreateStaffAccountForm employees={props.employees} />
       ) : null}
-      {props.canAssignRoles || props.canProvision ? (
+      {props.canAssignRoles || props.canProvision || props.canManageOverrides ? (
         <SectionCard
           size="sm"
           id="staff-role-assignment"
@@ -391,6 +463,9 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
             ) : null}
             {user && props.canAssignRoles ? (
               <StaffRoleForm key={user.id} user={user} roles={props.roles} />
+            ) : null}
+            {user && props.canManageOverrides ? (
+              <StaffScreenProtectionForm key={user.id} user={user} />
             ) : null}
             {user && !props.canAssignRoles ? (
               <FieldDescription>
