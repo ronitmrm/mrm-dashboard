@@ -59,6 +59,11 @@ export const cncDashboardCards = {
     "Production",
     "Standard time earned divided by net working time, grouped by Machine Master family.",
   ],
+  "cnc-shift-attendance": [
+    "Shift-wise attendance",
+    "Production",
+    "Operators with a filled session card and machines running, by Machine Master type.",
+  ],
   "cnc-machine-hours-detail": [
     "Machine-wise time breakdown",
     "Production",

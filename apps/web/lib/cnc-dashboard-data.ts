@@ -138,22 +138,40 @@ export async function loadCncSessionDashboard(
   const { pool, close } = repositoryPool(options)
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const categoryMachines = cards.includes("cnc-category-efficiency")
-      ? await pool.query<{ machine: string; category: string | null }>(
-          `SELECT machine.machine_number AS machine,
-            NULLIF(btrim(machine.source_payload->>'machineFamily'), '') AS category
+    const categoryMachines =
+      cards.includes("cnc-category-efficiency") ||
+      cards.includes("cnc-shift-attendance")
+        ? await pool.query<{
+            machine: string
+            category: string | null
+            type: string | null
+          }>(
+            `SELECT machine.machine_number AS machine,
+            NULLIF(btrim(machine.source_payload->>'machineFamily'), '') AS category,
+            NULLIF(btrim(machine.source_payload->>'machineType'), '') AS type
            FROM catalog.machines machine
            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
            WHERE machine.organization_id = $1 AND floor.code = 'cnc'`,
-          [organizationId]
-        )
-      : null
+            [organizationId]
+          )
+        : null
     const categoryByMachine = new Map(
       (categoryMachines?.rows ?? []).map(({ machine, category }) => [
         machine,
         category?.toUpperCase() ?? "Unclassified",
       ])
     )
+    const typeByMachine = new Map(
+      (categoryMachines?.rows ?? []).map(({ machine, type }) => [
+        machine,
+        type ?? "Unclassified",
+      ])
+    )
+    // Per shift: distinct operators and machines, keyed by date so ranges sum.
+    const attendance = new Map<
+      string,
+      { operators: Set<string>; machines: Map<string, Set<string>> }
+    >()
     const categories = new Map<
       string,
       {
@@ -276,6 +294,22 @@ export async function loadCncSessionDashboard(
         totalsByShift.downtime += number(row.downtimeMinutes)
         totalsByShift.sessions++
         shiftTotals.set(rowShift, totalsByShift)
+        const present = attendance.get(rowShift) ?? {
+          operators: new Set<string>(),
+          machines: new Map<string, Set<string>>(),
+        }
+        const day = String(row.productionDate)
+        if (row.operatorCode ?? row.operatorName)
+          present.operators.add(
+            `${day}|${String(row.operatorCode ?? row.operatorName)}`
+          )
+        if (typeof row.machineNumber === "string") {
+          const type = typeByMachine.get(row.machineNumber) ?? "Unclassified"
+          const running = present.machines.get(type) ?? new Set<string>()
+          running.add(`${day}|${row.machineNumber}`)
+          present.machines.set(type, running)
+        }
+        attendance.set(rowShift, present)
         if (shift !== "all" && shift !== row.shift) continue
         sessionCount++
         produced += output
@@ -529,6 +563,18 @@ export async function loadCncSessionDashboard(
       }
     })
     const roundHours = (value: number) => Math.round(value * 100) / 100
+    const attendanceShifts = cncShifts.filter(
+      (key) => shift === "all" || shift === key
+    )
+    const machineTypes = [
+      ...new Set(
+        attendanceShifts.flatMap((key) => [
+          ...(attendance.get(key)?.machines.keys() ?? []),
+        ])
+      ),
+    ].sort((left, right) =>
+      left.localeCompare(right, "en-IN", { numeric: true })
+    )
     return {
       sessionCount,
       values: {
@@ -658,6 +704,26 @@ export async function loadCncSessionDashboard(
                 ? `${((totals.earned / totals.measured) * 100).toFixed(1)}%`
                 : "—",
             ]),
+        },
+        "cnc-shift-attendance": {
+          columns: [
+            "Shift",
+            "Operators present",
+            "Machines running",
+            ...machineTypes,
+          ],
+          rows: attendanceShifts.map((key) => {
+            const present = attendance.get(key)
+            const running = machineTypes.map(
+              (type) => present?.machines.get(type)?.size ?? 0
+            )
+            return [
+              `Shift ${key}`,
+              present?.operators.size ?? 0,
+              running.reduce((sum, count) => sum + count, 0),
+              ...running,
+            ]
+          }),
         },
         "cnc-shift-detail": {
           columns: [

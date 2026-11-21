@@ -678,6 +678,59 @@ export function CncReferenceDashboard({
                   </ReferenceDetails>
                 </Panel>
               ) : null}
+              {allowed("cnc-shift-attendance") ? (
+                <Panel
+                  title="Shift-wise attendance"
+                  subtitle={`${shift} · operators from filled session cards, machines by Machine Master type`}
+                  action={pin("cnc-shift-attendance")}
+                >
+                  <div className="grid gap-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {table("cnc-shift-attendance")?.rows.map(
+                        ([label, operators, machines, ...types]) => (
+                          <div
+                            key={label}
+                            className={cn(tint, "grid gap-2 p-4")}
+                          >
+                            <p className="text-xs text-muted-foreground">
+                              {label}
+                            </p>
+                            <p className="text-2xl font-semibold text-primary">
+                              {operators} operators
+                            </p>
+                            <p className={subheading}>
+                              {machines} machines running
+                            </p>
+                            <ul className="grid gap-1 text-sm">
+                              {table("cnc-shift-attendance")
+                                ?.columns.slice(3)
+                                .map((type, index) =>
+                                  Number(types[index]) ? (
+                                    <li
+                                      key={type}
+                                      className="flex justify-between gap-3"
+                                    >
+                                      <span>{type}</span>
+                                      <b>{types[index]}</b>
+                                    </li>
+                                  ) : null
+                                )}
+                            </ul>
+                          </div>
+                        )
+                      )}
+                    </div>
+                    <ReferenceDetails title="How is attendance counted?">
+                      <p className={subheading}>
+                        An operator is present in a shift when they filled at
+                        least one production session card in it. A machine is
+                        running when it has at least one session in the shift.
+                        Each person or machine counts once per shift per day.
+                      </p>
+                    </ReferenceDetails>
+                  </div>
+                </Panel>
+              ) : null}
               {allowed("cnc-machine-activity") ? (
                 <Panel
                   title={`Machine activity · ${shift}`}
