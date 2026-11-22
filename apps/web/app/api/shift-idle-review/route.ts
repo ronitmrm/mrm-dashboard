@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { isAppOrigin } from "@/lib/app-origin"
 import { createShiftIdleReviewRepository } from "@workspace/db"
 import { productionShiftAt, productionShiftEndInstant } from "@workspace/db/production-session-domain"
 import { cncShifts, isCncShift, isShiftIdleReason, shiftIdleQueue } from "@workspace/db/shift-idle-reasons"
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const origin = request.headers.get("origin")
-    if (origin && origin !== request.nextUrl.origin)
+    if (origin && !isAppOrigin(origin, request))
       throw new DashboardReadError(403, "Use this action from the application.")
     return await withDashboardReadRepository(request, async ({ organizationId, actorUserId, granted }) => {
       if (!granted.has(editCapability))

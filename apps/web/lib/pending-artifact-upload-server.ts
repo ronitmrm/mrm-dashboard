@@ -18,6 +18,7 @@ import {
   type PendingUploadIntent,
   type PendingUploadSafeProgress,
 } from "./artifact-upload-contract"
+import { isAppOrigin } from "./app-origin"
 import { getAuth } from "./auth/auth"
 import { createArtifactStorage } from "./artifact-storage-providers"
 import {
@@ -279,7 +280,7 @@ async function reconcileUpload(
 
 export function assertSameOriginMutation(request: Request) {
   const origin = request.headers.get("origin")
-  if (!origin || origin !== new URL(request.url).origin) {
+  if (!origin || !isAppOrigin(origin, request)) {
     throw new PendingUploadError(
       "forbidden",
       "Cross-origin upload mutation is not permitted."
