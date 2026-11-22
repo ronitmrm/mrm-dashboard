@@ -616,11 +616,18 @@ function idealPiecesNow(session: Row, floor: ProductionFloorCode, breaks: Produc
   }).targetPieces
 }
 
-// Supervisors compare this with the machine's counter on hourly rounds.
+// Supervisors compare these with the machine counter or crate weight on hourly rounds.
 function idealNowFields(session: Row, floor: ProductionFloorCode, breaks: ProductionBreak[] | null, now: Date): Array<[string, string]> {
-  if (text(session.measurementMethod).toLowerCase() !== "counter" || session.startCount == null) return []
   const pieces = idealPiecesNow(session, floor, breaks, now)
-  return pieces === null ? [] : [[`Machine counter should read at ${formatIstTime(now.toISOString())}`, String(number(session.startCount) + pieces)]]
+  if (pieces === null) return []
+  const at = formatIstTime(now.toISOString())
+  if (text(session.measurementMethod).toLowerCase() !== "counter") {
+    return [[`Ideal weight at ${at}`, `${Number((pieces * number(session.pieceWeightGrams) / 1000).toFixed(3))} kg`]]
+  }
+  return [
+    [`Ideal count at ${at}`, `${pieces} pcs`],
+    ...(session.startCount == null ? [] : [["Machine counter should read", String(number(session.startCount) + pieces)]] as Array<[string, string]>),
+  ]
 }
 
 function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
