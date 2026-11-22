@@ -400,13 +400,13 @@ export function ProductionSessionsWorkspace({
           <CardContent>
             {error || sessionDelivery.error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error || sessionDelivery.error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading full session history…" description="Older sessions are included automatically." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading full session history…" description="Older sessions are included automatically." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} breakSchedule={breakSchedule} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
  </SectionCard>
       {!initialLoading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
       {bulkOpen ? <BulkBreakdownDialog floor={floor} control={control} signedInPerson={signedInPerson} signedInRoles={signedInRoles} onClose={() => setBulkOpen(false)} onSaved={(savedText) => { setBulkOpen(false); setMessage(savedText); void load() }} /> : null}
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} breakSchedule={breakSchedule} signedInPerson={signedInPerson} signedInStarter={signedInStarter} signedInRoles={signedInRoles} workerOptions={workerOptions} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
-      <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />
+      <DetailSheet session={detail} events={detailEvents} floor={floor} breakSchedule={breakSchedule} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} onAction={(next, row) => { setDetail(null); openAction(next, row) }} />
     </div>
   )
 }
@@ -553,7 +553,7 @@ function CarriedDowntimeTable({ rows: carriedRows, sessions, options, onSelect, 
   })}</ScrollableTable></CardContent></SectionCard>
 }
 
-function StartSessionLookup({ options, selected, shift, floor, now, onSelect, onAction, onDetail }: { options: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; floor: ProductionFloorCode; now: Date; onSelect: (machineNumber: string) => void; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
+function StartSessionLookup({ options, selected, shift, floor, breakSchedule, now, onSelect, onAction, onDetail }: { options: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; floor: ProductionFloorCode; breakSchedule: ProductionBreak[] | null; now: Date; onSelect: (machineNumber: string) => void; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
   const plan = selected?.plan
   const session = selected?.session
   const pieceWeight = plan ? productionPieceWeightGrams(plan) : 0
@@ -575,6 +575,7 @@ function StartSessionLookup({ options, selected, shift, floor, now, onSelect, on
         <PlanField label="Piece weight" value={pieceWeight ? `${pieceWeight} g` : "Not configured"} />
         {session || plan.cycleBasis !== "weight_batch" ? <PlanField label="Hourly target" value={hourlyTargetLabel(session ?? plan)} /> : null}
         {session ? <PlanField label="Session target" value={sessionTargetLabel(session)} /> : null}
+        {session ? idealNowFields(session, floor, breakSchedule, now).map(([label, value]) => <PlanField key={label} label={label} value={value} />) : null}
         {session ? <><PlanField label="Operator" value={`${text(session.operatorCode)} · ${text(session.operatorName)}`} /><PlanField label="Started" value={formatDateTime(session.startedAt)} /><PlanField label="Session" value={text(session.sessionReference)} /></> : null}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" disabled={session.hasOpenDowntime === true && session.hasOpenBreakdownDowntime !== true} title={session.hasOpenDowntime && !session.hasOpenBreakdownDowntime ? "Close the open downtime before ending this session." : session.hasOpenBreakdownDowntime ? "Shift Ends will carry the open breakdown into Maintenance." : undefined} onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? session.hasOpenBreakdownDowntime ? null : <Button className="h-11" variant="destructive" onClick={() => onAction("downtimeEnd", session)}><Clock3 />Close downtime</Button> : <><Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Start downtime</Button><Button className="h-11" variant="outline" onClick={() => onAction("accident", session)}><TriangleAlert />Record accident</Button></>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter start details</Button>}</div>
@@ -599,6 +600,30 @@ function sessionTargetLabel(session: Row) {
 function hourlyTargetLabel(row: Row) {
   const seconds = cycleSeconds(row)
   return seconds > 0 ? sessionTargetLabel({ ...row, targetPieces: Math.floor(3600 / seconds) }) : "-"
+}
+
+// Pieces an open session should have made by `now`: runtime so far minus breaks and recorded downtime.
+function idealPiecesNow(session: Row, floor: ProductionFloorCode, breaks: ProductionBreak[] | null, now: Date) {
+  const cycleTimeSeconds = cycleSeconds(session)
+  if (text(session.status) !== "open" || !breaks || cycleTimeSeconds <= 0) return null
+  return productionSessionShiftTarget({
+    productionDate: text(session.productionDate), productionFloorCode: floor, shift: text(session.shift),
+    startedAt: new Date(text(session.startedAt)), cycleTimeSeconds, breaks, until: now,
+    downtime: rows(session.downtimeEvents).map((event) => ({
+      startedAt: new Date(text(event.startedAt)),
+      endedAt: text(event.endedAt) ? new Date(text(event.endedAt)) : now,
+    })),
+  }).targetPieces
+}
+
+function idealNowFields(session: Row, floor: ProductionFloorCode, breaks: ProductionBreak[] | null, now: Date): Array<[string, string]> {
+  const pieces = idealPiecesNow(session, floor, breaks, now)
+  if (pieces === null) return []
+  const counter = text(session.measurementMethod).toLowerCase() === "counter" && session.startCount != null
+  return [
+    [`Ideal count at ${formatIstTime(now.toISOString())}`, sessionTargetLabel({ ...session, targetPieces: pieces })],
+    ...(counter ? [["Machine counter should read", String(number(session.startCount) + pieces)]] as Array<[string, string]> : []),
+  ]
 }
 
 function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
@@ -983,7 +1008,7 @@ function IstDateTimeField({ label, value, onChange }: { label: string; value: st
 }
 function MasterSelect({ value, options, onChange, placeholder }: { value: string; options: Array<{ code: string; label: string }>; onChange: (value: string) => void; placeholder: string }) { return <NativeSelect className="w-full" wrapLabels value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">{options.length ? placeholder : "No active master values configured"}</NativeSelectOption>{options.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}</NativeSelect> }
 
-function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { session: Row | null; events: { rows: Row[]; loading: boolean; error: string }; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void; onAction: (action: Action, row: Row) => void }) {
+function DetailSheet({ session, events, floor, breakSchedule, now, onOpenChange, onAction }: { session: Row | null; events: { rows: Row[]; loading: boolean; error: string }; floor: ProductionFloorCode; breakSchedule: ProductionBreak[] | null; now: Date; onOpenChange: (open: boolean) => void; onAction: (action: Action, row: Row) => void }) {
   if (!session) return null
   const status = sessionOperationalStatus(session, floor, now)
   const pending = outputPending(session)
@@ -1018,6 +1043,7 @@ function DetailSheet({ session, events, floor, now, onOpenChange, onAction }: { 
     ["Scheduled break", `${number(session.breakMinutes)} min`],
     [session.cycleBasis === "weight_batch" ? "Batch standard" : "Cycle time", productionCycleDescription(session)],
     ["Hourly target", hourlyTargetLabel(session)],
+    ...idealNowFields(session, floor, breakSchedule, now),
     ["Downtime", `${number(session.downtimeMinutes)} min`],
     ["Total produced", pending ? "Pending" : number(session.totalPieces)],
     ["Efficiency", pending ? "Pending" : efficiency === null ? "-" : `${percent.format(efficiency * 100)}%`],
