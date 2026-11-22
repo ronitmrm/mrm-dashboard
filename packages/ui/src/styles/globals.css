@@ -434,6 +434,11 @@
   }
 }
 
+/* The card "All details" toggle exists only in phone card mode. */
+[data-slot="table-card-toggle"] {
+  display: none;
+}
+
 /* Phones: wide tables (OperationalTable marks them data-phone-cards and labels
    every cell with its column) show one card per row. The doubled attribute
    outranks the tablet rules above. */
@@ -488,6 +493,33 @@
     padding: 0.75rem;
     border: 1px solid var(--color-panel-border);
     border-radius: var(--radius-lg);
+    position: relative;
+  }
+
+  /* Cards load a batch at a time and fold details past the first few. */
+  [data-phone-cards][data-phone-cards] > tbody > tr[data-card-later],
+  [data-phone-cards][data-phone-cards] > tbody > tr:not([data-expanded]) > [data-card-extra] {
+    display: none;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-card-toggle"] {
+    display: block;
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    min-height: 2.5rem;
+    padding: 0 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--primary);
+  }
+
+  [data-phone-cards][data-phone-cards] > tbody > tr:has([data-slot="table-card-toggle"]) > [data-slot="table-cell"]:is(
+      :first-child:not(:has(input[type="checkbox"], [role="checkbox"])),
+      :first-child:has(input[type="checkbox"], [role="checkbox"]) + td
+    ) {
+    padding-right: 6.5rem;
   }
 
   [data-phone-cards][data-phone-cards] [data-slot="table-cell"] {
@@ -535,7 +567,7 @@
   [data-phone-cards][data-phone-cards] [data-slot="table-cell"]:is(
       [data-label=""],
       [colspan],
-      :has(select, textarea, a, button:not([role="checkbox"]))
+      :has(select, textarea, a, button:not([role="checkbox"], [data-slot="table-card-toggle"]))
     ) {
     grid-column: 1 / -1;
   }

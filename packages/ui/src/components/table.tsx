@@ -157,7 +157,9 @@ function tableSnapshot(table: HTMLTableElement) {
     const isActionColumn =
       rows.length > 0 &&
       cells.every((rowCell) =>
-        rowCell?.querySelector("a, button, form, input, select, textarea")
+        rowCell?.querySelector(
+          `a, button:not([data-slot="${phoneCardToggle}"]), form, input, select, textarea`
+        )
       )
     if (
       !shouldShowTableFilter({
@@ -184,10 +186,32 @@ function tableSnapshot(table: HTMLTableElement) {
 }
 
 // Phones show wide tables as one card per row (styled in globals.css).
-// Each cell gets its column name so the card can label it.
+// Each cell gets its column name so the card can label it; a card shows its
+// title and first few details, and loads a batch of cards at a time.
 const phoneCardMinColumns = 5
+const phoneCardDetails = 5
+const phoneCardBatch = 25
+const phoneCardToggle = "table-card-toggle"
+const phoneCardActions = `a, button:not([data-slot="${phoneCardToggle}"]), input, select, textarea`
 
-function labelCellsForPhoneCards(table: HTMLTableElement) {
+function cardToggle(row: HTMLTableRowElement) {
+  const toggle = document.createElement("button")
+  toggle.type = "button"
+  toggle.dataset.slot = phoneCardToggle
+  toggle.dataset.filterIgnore = "true"
+  toggle.ariaExpanded = "false"
+  toggle.textContent = "All details"
+  toggle.addEventListener("click", (event) => {
+    // Keep the row's own tap (open details) from firing.
+    event.stopPropagation()
+    const expanded = row.toggleAttribute("data-expanded")
+    toggle.ariaExpanded = String(expanded)
+    toggle.textContent = expanded ? "Fewer details" : "All details"
+  })
+  return toggle
+}
+
+function prepareTableForPhoneCards(table: HTMLTableElement) {
   const headerRows = table.tHead?.rows
   const headerCells = Array.from(headerRows?.item(0)?.cells ?? [])
   const eligible =
@@ -211,11 +235,36 @@ function labelCellsForPhoneCards(table: HTMLTableElement) {
   ]
   for (const row of rows) {
     const matches = row.cells.length === labels.length
-    Array.from(row.cells).forEach((cell, index) => {
+    const cells = Array.from(row.cells)
+    const title = cells[0]?.querySelector('input[type="checkbox"], [role="checkbox"]') ? 1 : 0
+    let extras = 0
+    cells.forEach((cell, index) => {
       const label = matches ? (labels[index] ?? "") : ""
       if (cell.dataset.label !== label) cell.dataset.label = label
+      // Actions stay on the card; other details past the first few fold away.
+      const extra = matches && index > title + phoneCardDetails && !cell.querySelector(phoneCardActions)
+      cell.toggleAttribute("data-card-extra", extra)
+      if (extra) extras += 1
     })
+    const toggle = row.querySelector(`:scope > td > [data-slot="${phoneCardToggle}"]`)
+    if (extras && !toggle) cells[0]?.append(cardToggle(row))
+    if (!extras && toggle) toggle.remove()
   }
+}
+
+// Marks matching rows past the limit; returns how many are waiting.
+function limitPhoneCards(table: HTMLTableElement, limit: number) {
+  if (!table.hasAttribute("data-phone-cards")) return 0
+  let shown = 0
+  let later = 0
+  for (const row of Array.from(table.tBodies).flatMap((body) => Array.from(body.rows))) {
+    const waiting = !row.hidden && shown >= limit
+    row.toggleAttribute("data-card-later", waiting)
+    if (row.hidden) continue
+    if (waiting) later += 1
+    else shown += 1
+  }
+  return later
 }
 
 function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
@@ -278,6 +327,8 @@ function OperationalTable({
   >({})
   const [filters, setFilters] = React.useState<TableColumnFilters>({})
   const [sort, setSort] = React.useState<TableSort | null>(null)
+  const [phoneLimit, setPhoneLimit] = React.useState(phoneCardBatch)
+  const [phoneCardsLater, setPhoneCardsLater] = React.useState(0)
   const [selectionState, setSelectionState] = React.useState({
     selectableCount: 0,
     selectedCount: 0,
@@ -311,6 +362,13 @@ function OperationalTable({
     )
   }, [exclusiveSelectionGroup])
 
+  const refreshPhoneCards = React.useCallback(() => {
+    const table = tableRef.current
+    if (!table) return
+    prepareTableForPhoneCards(table)
+    setPhoneCardsLater(limitPhoneCards(table, phoneLimit))
+  }, [phoneLimit])
+
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
     if (!table) return
@@ -322,8 +380,10 @@ function OperationalTable({
         }
       }
     }
-    labelCellsForPhoneCards(table)
-    if (!excelFilters || filterMode === "external") return
+    if (!excelFilters || filterMode === "external") {
+      refreshPhoneCards()
+      return
+    }
 
     const snapshot = tableSnapshot(table)
     const headerCells = Array.from(table.tHead?.rows.item(0)?.cells ?? [])
@@ -469,6 +529,7 @@ function OperationalTable({
         body.append(...nextRows)
       }
     }
+    refreshPhoneCards()
     onFilteredRowCountChange?.(matchingRows.size, snapshot.rows.length)
     onFilteredRowIdsChange?.(
       [...matchingRows].flatMap((row) =>
@@ -484,6 +545,7 @@ function OperationalTable({
     filteredSelectionCheckboxName,
     onFilteredRowCountChange,
     onFilteredRowIdsChange,
+    refreshPhoneCards,
     sort,
     syncFilteredSelectionState,
   ])
@@ -499,7 +561,7 @@ function OperationalTable({
     const observer = new MutationObserver(
       excelFilters && filterMode !== "external"
         ? refreshTable
-        : () => labelCellsForPhoneCards(table)
+        : refreshPhoneCards
     )
     observer.observe(table, {
       characterData: true,
@@ -507,7 +569,7 @@ function OperationalTable({
       subtree: true,
     })
     return () => observer.disconnect()
-  }, [excelFilters, filterMode, refreshTable])
+  }, [excelFilters, filterMode, refreshPhoneCards, refreshTable])
 
   React.useEffect(() => {
     if (excelFilters && filterMode !== "external") return
@@ -713,6 +775,16 @@ function OperationalTable({
           {...props}
         />
       </div>
+      {phoneCardsLater ? (
+        <Button
+          className="mt-2 w-full sm:hidden"
+          onClick={() => setPhoneLimit((limit) => limit + phoneCardBatch)}
+          type="button"
+          variant="outline"
+        >
+          Show more ({phoneCardsLater} left)
+        </Button>
+      ) : null}
     </div>
   )
 }
