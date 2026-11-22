@@ -922,7 +922,6 @@ export function CncReferenceDashboard({
                   )}
                 </Panel>
               ) : null}
-              {idleReasons}
               {allowed("cnc-fleet-hours") ? (
                 <Panel
                   title="Machine availability"
@@ -936,6 +935,7 @@ export function CncReferenceDashboard({
                   />
                 </Panel>
               ) : null}
+              {idleReasons}
               {allowed("cnc-production-capacity") ? (
                 <Panel
                   title="Session-based capacity vs actual"
