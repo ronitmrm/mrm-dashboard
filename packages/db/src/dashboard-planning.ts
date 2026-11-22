@@ -1,4 +1,4 @@
-import { rejectDuplicateMaster } from "./master-duplicate"
+import { DuplicateMasterError, rejectDuplicateMaster } from "./master-duplicate"
 import { randomUUID } from "node:crypto"
 import { isBlastingMachine, weightBatchCycleTimeSeconds } from "./production-cycle"
 
@@ -1033,11 +1033,15 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           source_id: string
           legacy_id: string | null
           production_floor_id: string
+          machine_number: string
+          unit: string
         }>(
           `
             SELECT machine.id, machine.source_id,
               machine.source_payload->>'_id' AS legacy_id,
-              machine.production_floor_id FROM catalog.machines machine
+              machine.production_floor_id, machine.machine_number, floor.name AS unit
+            FROM catalog.machines machine
+            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
             WHERE machine.organization_id = $1
               AND lower(machine.machine_number) = lower($2)
             FOR UPDATE
@@ -1045,7 +1049,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           [input.organizationId, machineNumber]
         )
         if (existing.rows[0] && existing.rows[0].production_floor_id !== productionFloorId) {
-          throw new Error("This machine belongs to another Production Unit. Edit it in its existing unit.")
+          // Machine numbers are unique across all units (machines_number_unique).
+          throw new DuplicateMasterError(
+            `Machine ${existing.rows[0].machine_number} already exists in ${existing.rows[0].unit}. Each machine number can be used only once across all units.`
+          )
         }
         if (input.recordId && (!existing.rows[0] || ![
           existing.rows[0].id,

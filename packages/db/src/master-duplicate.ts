@@ -1,8 +1,10 @@
 import type { PoolClient } from "pg"
 
 export class DuplicateMasterError extends Error {
-  constructor() {
-    super("This entry already exists. Please edit the existing record.")
+  constructor(
+    message = "This entry already exists. Please edit the existing record."
+  ) {
+    super(message)
     this.name = "DuplicateMasterError"
   }
 }
