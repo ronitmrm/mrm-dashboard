@@ -37,7 +37,7 @@ import {
 const formatNumber = new Intl.NumberFormat("en-IN").format
 
 export const cncReferenceMetricClass =
-  "min-h-[149px] rounded-2xl px-4 py-5 shadow-none xl:px-[22px] xl:py-[23px] [&>span[aria-hidden]]:hidden [&_div.truncate]:whitespace-normal [&_div.uppercase]:pr-4 [&_div.uppercase]:font-normal [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_.line-clamp-2]:line-clamp-none [&_.line-clamp-2]:text-xs [&_.line-clamp-2]:leading-relaxed [&_[data-slot=metric-card-action]]:absolute [&_[data-slot=metric-card-action]]:top-4 [&_[data-slot=metric-card-action]]:right-3 [&_span.tabular-nums]:mt-2 [&_span.tabular-nums]:text-[clamp(1.625rem,2.9vw,2.375rem)] [&_span.tabular-nums]:leading-tight [&_span.tabular-nums]:text-primary"
+  "min-h-[149px] rounded-2xl px-4 py-5 shadow-none xl:px-[22px] xl:py-[23px] [&>span[aria-hidden]]:hidden [&_div.truncate]:whitespace-normal [&_div.uppercase]:pr-4 [&_div.uppercase]:font-normal [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_.line-clamp-2]:line-clamp-none [&_.line-clamp-2]:text-xs [&_.line-clamp-2]:leading-relaxed [&_[data-slot=metric-card-action]]:absolute [&_[data-slot=metric-card-action]]:top-4 [&_[data-slot=metric-card-action]]:right-3 [&_span.tabular-nums]:mt-2 [&_span.tabular-nums]:text-[clamp(1.625rem,2.9vw,2.375rem)] [&_span.tabular-nums]:leading-tight [&_span.tabular-nums]:text-primary max-sm:min-h-0 max-sm:py-4 max-sm:[&_.line-clamp-2]:line-clamp-2"
 
 export const cncReferenceFeaturedMetricClass =
   "border-primary bg-primary [&_.text-muted-foreground]:text-primary-foreground/90 [&_button]:text-primary-foreground [&_span.tabular-nums]:text-primary-foreground"
