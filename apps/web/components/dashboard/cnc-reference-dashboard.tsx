@@ -36,6 +36,7 @@ import {
   ReferenceTable,
   type ReferenceTableData,
 } from "./cnc-reference-controls"
+import { CncRejectionBreakdown } from "./cnc-rejection-breakdown"
 import { PinDashboardMetricButton } from "./pin-dashboard-metric-button"
 
 const number = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
@@ -834,23 +835,15 @@ export function CncReferenceDashboard({
                     "Approved machines and approval wait"
                   )}
                   {allowed("cnc-rejection-log") ? (
-                    <div className="my-4 grid gap-5 md:grid-cols-2">
-                      <div>
-                        <strong className="mb-3 block">
-                          Rejection reasons
-                        </strong>
-                        <Bars
-                          rows={chart("cnc-rejection-reasons")}
-                          unit=" pcs"
-                        />
-                      </div>
-                      <div>
-                        <strong className="mb-3 block">Recorded causes</strong>
-                        <Bars
-                          rows={chart("cnc-rejection-causes")}
-                          unit=" pcs"
-                        />
-                      </div>
+                    <div className="my-4">
+                      <CncRejectionBreakdown
+                        reasons={chart("cnc-rejection-reasons")}
+                        causes={chart("cnc-rejection-causes")}
+                        rejected={values?.["cnc-pieces-rejected"] ?? 0}
+                        shift={shift}
+                        reasonsPin={pin("cnc-rejection-reasons")}
+                        causesPin={pin("cnc-rejection-causes")}
+                      />
                     </div>
                   ) : null}
                   {tableDetails(
