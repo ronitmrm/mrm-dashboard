@@ -363,6 +363,11 @@ export const cncDashboardCards = {
     "Planning",
     "Recorded priority decisions in the selected period and the latest known job progress.",
   ],
+  "cnc-idle-reasons": [
+    "Why machines sat idle",
+    "Planning",
+    "Planner-recorded reasons for idle CNC machine time, by total hours.",
+  ],
 } as const
 
 export type CncDashboardCardId = keyof typeof cncDashboardCards
@@ -390,6 +395,7 @@ export const productionOverviewCards: readonly CncDashboardCardId[] = [
   "cnc-pieces-rejected",
   "cnc-logged-downtime",
   "cnc-downtime-reasons",
+  "cnc-idle-reasons",
   "cnc-downtime-log",
   "cnc-qc-completed",
   "cnc-qc-average-wait",
@@ -444,7 +450,8 @@ export function cncDashboardCardSource(id: CncDashboardCardId) {
     id === "cnc-breakdown-log"
   )
     return "maintenanceTab"
-  if (id === "cnc-planner-priorities") return "productionControlTab"
+  if (id === "cnc-planner-priorities" || id === "cnc-idle-reasons")
+    return "productionControlTab"
   return "productionSessionsTab"
 }
 
