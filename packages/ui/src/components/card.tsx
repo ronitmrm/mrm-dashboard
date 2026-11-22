@@ -374,7 +374,7 @@ function MetricCard({
     "group/metric relative flex min-h-28 items-stretch overflow-hidden rounded-lg border border-[var(--color-panel-border)] p-4 text-left shadow-[var(--shadow-sm)]",
     metricToneSurfaceClassNames[tone],
     onClick &&
-      "pr-8 transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:border-primary/35 hover:bg-[var(--color-brand-tint)] hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
+      "pr-8 transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:bg-[var(--color-brand-tint)] hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
     className
   )
 

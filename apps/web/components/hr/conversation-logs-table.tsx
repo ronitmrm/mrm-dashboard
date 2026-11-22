@@ -7,6 +7,7 @@ import Link from "next/link"
 
 import type { RecruitmentCandidateEventRow } from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
+import { ConfirmSubmitButton } from "../ui/confirm-submit-button"
 import {
   SectionCard,
   CardContent,
@@ -230,18 +231,7 @@ export function ConversationLogsTable({
                           <Pencil data-icon="inline-start" />
                           Edit
                         </Button>
-                        <form
-                          action={deleteCandidateEventAction}
-                          onSubmit={(event) => {
-                            if (
-                              !window.confirm(
-                                "Delete this conversation log? It will be removed from the candidate history."
-                              )
-                            ) {
-                              event.preventDefault()
-                            }
-                          }}
-                        >
+                        <form action={deleteCandidateEventAction}>
                           <input
                             name="panel"
                             type="hidden"
@@ -259,15 +249,17 @@ export function ConversationLogsTable({
                             type="hidden"
                             value={row.event.id}
                           />
-                          <Button
+                          <ConfirmSubmitButton
                             aria-label={`Delete log for ${row.candidate}`}
+                            confirmTitle="Delete this conversation log?"
+                            confirmDescription="It will be removed from the candidate history."
+                            confirmLabel="Delete"
                             size="sm"
-                            type="submit"
                             variant="destructive"
                           >
                             <Trash2 data-icon="inline-start" />
                             Delete
-                          </Button>
+                          </ConfirmSubmitButton>
                         </form>
                       </div>
                     </TableCell>

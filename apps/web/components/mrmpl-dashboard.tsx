@@ -17763,7 +17763,7 @@ function TileField({
   const text = displayValue(value, numeric)
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-medium text-muted-foreground">
+      <div className="text-xs font-medium text-muted-foreground">
         {label}
       </div>
       <div
@@ -17788,7 +17788,7 @@ function MachineStateBadge({
 }) {
   return (
     <StatusBadge tone={tone} className="gap-1">
-      <span className="text-[10px] font-semibold opacity-75">{label}</span>
+      <span className="text-xs font-semibold opacity-75">{label}</span>
       <span>{value}</span>
     </StatusBadge>
   )

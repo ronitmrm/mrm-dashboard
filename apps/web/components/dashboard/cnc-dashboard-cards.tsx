@@ -36,7 +36,7 @@ import {
 const formatNumber = new Intl.NumberFormat("en-IN").format
 
 export const cncReferenceMetricClass =
-  "min-h-[149px] rounded-2xl border-[#dfe3d8] px-4 py-5 shadow-none xl:px-[22px] xl:py-[23px] dark:border-border [&>span[aria-hidden]]:hidden [&_div.truncate]:whitespace-normal [&_div.uppercase]:pr-4 [&_div.uppercase]:font-normal [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_.line-clamp-2]:line-clamp-none [&_.line-clamp-2]:text-[11px] [&_.line-clamp-2]:leading-relaxed [&_[data-slot=metric-card-action]]:absolute [&_[data-slot=metric-card-action]]:top-4 [&_[data-slot=metric-card-action]]:right-3 [&_span.tabular-nums]:mt-2 [&_span.tabular-nums]:text-[clamp(1.625rem,2.9vw,2.375rem)] [&_span.tabular-nums]:leading-tight [&_span.tabular-nums]:text-primary"
+  "min-h-[149px] rounded-2xl px-4 py-5 shadow-none xl:px-[22px] xl:py-[23px] [&>span[aria-hidden]]:hidden [&_div.truncate]:whitespace-normal [&_div.uppercase]:pr-4 [&_div.uppercase]:font-normal [&_div.uppercase]:tracking-normal [&_div.uppercase]:normal-case [&_.line-clamp-2]:line-clamp-none [&_.line-clamp-2]:text-xs [&_.line-clamp-2]:leading-relaxed [&_[data-slot=metric-card-action]]:absolute [&_[data-slot=metric-card-action]]:top-4 [&_[data-slot=metric-card-action]]:right-3 [&_span.tabular-nums]:mt-2 [&_span.tabular-nums]:text-[clamp(1.625rem,2.9vw,2.375rem)] [&_span.tabular-nums]:leading-tight [&_span.tabular-nums]:text-primary"
 
 export const cncReferenceFeaturedMetricClass =
   "border-primary bg-primary [&_.text-muted-foreground]:text-primary-foreground/90 [&_button]:text-primary-foreground [&_span.tabular-nums]:text-primary-foreground"
@@ -53,7 +53,7 @@ export function CncDashboardHeading({
   return (
     <div className="mb-1 flex flex-wrap items-center justify-between gap-5">
       <div className="min-w-0">
-        <p className="mb-3 text-[10px] font-semibold tracking-[.17em] text-primary uppercase before:mb-3 before:block before:h-1 before:w-8 before:rounded-full before:bg-[#b8d446]">
+        <p className="mb-3 text-xs font-semibold tracking-[.17em] text-primary uppercase before:mb-3 before:block before:h-1 before:w-8 before:rounded-full before:bg-[#b8d446]">
           CNC Operations · Command Centre
         </p>
         <h1 className="text-[clamp(25px,2.5vw,36px)] leading-[1.15] font-bold tracking-tight text-foreground">

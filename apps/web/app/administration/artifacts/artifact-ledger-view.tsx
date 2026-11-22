@@ -248,7 +248,7 @@ export function ArtifactLedgerView({
                         {byteSize(artifact.byteSize)}
                       </span>
                       <code
-                        className="truncate text-[10px] text-muted-foreground"
+                        className="truncate text-xs text-muted-foreground"
                         title={artifact.sha256}
                       >
                         SHA-256 {artifact.sha256}

@@ -7,6 +7,7 @@ import type {
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { ConfirmSubmitButton } from "../ui/confirm-submit-button"
 import {
   SectionCard,
   CardContent,
@@ -276,17 +277,7 @@ export function CombinedRolesTable({
                             </Button>
                           ) : null}
                           {canDelete ? (
-                            <form
-                              action={deleteCombinedRoleAction}
-                              onSubmit={(event) => {
-                                if (
-                                  !window.confirm(
-                                    `Delete combined role ${role.vacancyCode ?? role.name}? Individual approved posts and employee assignments will be retained. This cannot be undone.`
-                                  )
-                                )
-                                  event.preventDefault()
-                              }}
-                            >
+                            <form action={deleteCombinedRoleAction}>
                               <input
                                 name="panel"
                                 type="hidden"
@@ -304,15 +295,17 @@ export function CombinedRolesTable({
                                   value={masterView}
                                 />
                               ) : null}
-                              <Button
+                              <ConfirmSubmitButton
                                 aria-label={`Delete ${role.vacancyCode ?? role.name}`}
+                                confirmTitle={`Delete combined role ${role.vacancyCode ?? role.name}?`}
+                                confirmDescription="Individual approved posts and employee assignments will be retained. This cannot be undone."
+                                confirmLabel="Delete"
                                 size="sm"
-                                type="submit"
                                 variant="destructive"
                               >
                                 <Trash2 data-icon="inline-start" />
                                 Delete
-                              </Button>
+                              </ConfirmSubmitButton>
                             </form>
                           ) : null}
                         </div>

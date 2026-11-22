@@ -84,7 +84,7 @@
   --color-text-inverse: var(--mrm-white);
   --color-border: rgb(5 5 5 / 12%);
   --color-border-strong: rgb(5 5 5 / 22%);
-  --color-panel-border: rgb(16 60 30 / 34%);
+  --color-panel-border: var(--mrm-green);
   --color-table-border: rgb(16 60 30 / 24%);
   --color-table-border-strong: rgb(0 106 73 / 52%);
   --color-primary: var(--mrm-green);
@@ -187,7 +187,7 @@
   --color-text-inverse: #050505;
   --color-border: rgb(247 247 242 / 14%);
   --color-border-strong: rgb(247 247 242 / 24%);
-  --color-panel-border: rgb(247 247 242 / 32%);
+  --color-panel-border: rgb(46 155 110 / 70%);
   --color-table-border: rgb(247 247 242 / 22%);
   --color-table-border-strong: rgb(139 195 65 / 52%);
   --color-primary: #2e9b6e;

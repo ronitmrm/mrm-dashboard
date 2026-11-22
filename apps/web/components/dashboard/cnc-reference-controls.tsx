@@ -299,7 +299,7 @@ export function ReferencePriorityWatchlist({
   )
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-xl bg-[#eef3e5] px-4 py-3 dark:bg-primary/10">
+      <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-xl border bg-[#eef3e5] px-4 py-3 dark:bg-primary/10">
         {[
           [open.length, "open orders"],
           [
