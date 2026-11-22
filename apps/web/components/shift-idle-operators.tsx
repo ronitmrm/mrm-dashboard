@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { X } from "lucide-react"
 import type { ShiftIdleOperator, ShiftIdleOperatorCheck } from "@workspace/db"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
 import { CardContent, CardDescription, CardHeader, CardTitle, SectionCard } from "@workspace/ui/components/card"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
@@ -87,26 +88,44 @@ function ShiftRow({ shift, canEdit, workerOptions, onSaved }: {
   onSaved: (shift: ShiftIdleOperatorCheck) => void
 }) {
   const [editing, setEditing] = useState(!shift.checkedAt)
-  const [chosen, setChosen] = useState(shift.idle)
+  // One slot per operator; picking a code fills the name and vice versa.
+  const [slots, setSlots] = useState<(ShiftIdleOperator | null)[]>(shift.idle)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const key = (code: string) => code.toLowerCase()
-  const taken = new Set([...shift.sessionOperators, ...chosen.map(({ code }) => code)].map(key))
-  const available = workerOptions.filter(({ code }) => !taken.has(key(code)))
+  const inSession = new Set(shift.sessionOperators.map(key))
+  const filled = slots.filter((slot) => slot !== null)
+  const complete = filled.length === slots.length
+
+  function resize(count: number) {
+    setSlots(Array.from({ length: count }, (_, index) => slots[index] ?? null))
+  }
+
+  function choose(index: number, code: string) {
+    const operator = workerOptions.find((option) => option.code === code) ?? null
+    setSlots(slots.map((slot, current) => current === index ? operator : slot))
+  }
+
+  // Everyone not already in a session or picked in another slot.
+  function optionsFor(index: number) {
+    const taken = new Set(slots.flatMap((slot, current) => slot && current !== index ? [key(slot.code)] : []))
+    return workerOptions.filter(({ code }) => !inSession.has(key(code)) && !taken.has(key(code)))
+  }
 
   async function save() {
+    if (!complete) return
     setSaving(true)
     setError("")
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productionDate: shift.productionDate, shift: shift.shift, employeeCodes: chosen.map(({ code }) => code) }),
+        body: JSON.stringify({ productionDate: shift.productionDate, shift: shift.shift, employeeCodes: filled.map(({ code }) => code) }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error)
       onSaved(result.shift)
-      setChosen(result.shift.idle)
+      setSlots(result.shift.idle)
       setEditing(false)
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not save. Try again.")
@@ -124,38 +143,43 @@ function ShiftRow({ shift, canEdit, workerOptions, onSaved }: {
       </TableCell>
       <TableCell className="whitespace-normal">
         {canEdit && editing ? (
-          <div className="grid gap-2">
-            {chosen.length ? (
-              <ul className="flex flex-wrap gap-2">
-                {chosen.map((operator) => (
-                  <li key={operator.code}>
-                    <Button type="button" size="sm" variant="outline" disabled={saving}
-                      aria-label={`Remove ${operator.name}`}
-                      onClick={() => setChosen(chosen.filter(({ code }) => code !== operator.code))}>
-                      {operator.name} · {operator.code}
-                      <X className="size-3" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+          <div className="grid gap-3">
+            <Field className="w-56">
+              <FieldLabel htmlFor={`idle-count-${shift.productionDate}-${shift.shift}`}>How many operators had no machine?</FieldLabel>
+              <Input id={`idle-count-${shift.productionDate}-${shift.shift}`} type="number" inputMode="numeric" min={0} max={50}
+                value={slots.length} disabled={saving}
+                onChange={(event) => resize(Math.min(50, Math.max(0, Math.trunc(Number(event.target.value) || 0))))} />
+            </Field>
+            {slots.map((slot, index) => {
+              const options = optionsFor(index)
+              return (
+                <div key={index} className="flex flex-wrap items-center gap-2">
+                  <span className="w-6 text-sm text-muted-foreground">{index + 1}.</span>
+                  <SearchableSelect aria-label={`Operator ${index + 1} code`} className="w-40" size="sm"
+                    value={slot?.code ?? ""} disabled={saving} searchPlaceholder="Type a code"
+                    onValueChange={(code) => choose(index, code)}>
+                    <option value="">Select code</option>
+                    {[...options].sort((left, right) => left.code.localeCompare(right.code, "en-IN", { numeric: true }))
+                      .map((option) => <option key={option.code} value={option.code}>{option.code}</option>)}
+                  </SearchableSelect>
+                  <SearchableSelect aria-label={`Operator ${index + 1} name`} className="w-64" size="sm"
+                    value={slot?.code ?? ""} disabled={saving} searchPlaceholder="Type a name"
+                    onValueChange={(code) => choose(index, code)}>
+                    <option value="">Select name</option>
+                    {options.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+                  </SearchableSelect>
+                </div>
+              )
+            })}
             <div className="flex flex-wrap items-center gap-2">
-              <SearchableSelect aria-label={`Add operator for shift ${shift.shift}`} className="w-64" size="sm" value=""
-                disabled={saving || !available.length} searchPlaceholder="Type a name or code"
-                onValueChange={(code) => {
-                  const operator = available.find((option) => option.code === code)
-                  if (operator) setChosen([...chosen, operator])
-                }}>
-                <option value="">Add operator</option>
-                {available.map((option) => <option key={option.code} value={option.code}>{option.name} · {option.code}</option>)}
-              </SearchableSelect>
-              <Button type="button" size="sm" disabled={saving} onClick={save}>
-                {saving ? "Saving…" : chosen.length ? `Save ${chosen.length} ${chosen.length === 1 ? "operator" : "operators"}` : "Nobody was without a machine"}
+              <Button type="button" size="sm" disabled={saving || !complete} onClick={save}>
+                {saving ? "Saving…" : slots.length ? `Save ${slots.length} ${slots.length === 1 ? "operator" : "operators"}` : "Save: nobody was without a machine"}
               </Button>
               {shift.checkedAt ? (
                 <Button type="button" size="sm" variant="ghost" disabled={saving}
-                  onClick={() => { setChosen(shift.idle); setEditing(false) }}>Cancel</Button>
+                  onClick={() => { setSlots(shift.idle); setEditing(false) }}>Cancel</Button>
               ) : null}
+              {!complete ? <span className="text-xs text-muted-foreground">Select every operator to save.</span> : null}
             </div>
             {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
           </div>
