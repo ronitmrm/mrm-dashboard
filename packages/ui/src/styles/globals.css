@@ -395,3 +395,41 @@
     padding-block: 0.5rem;
   }
 }
+
+/* Phones and tablets (below the docked-sidebar width); laptops are unchanged.
+   Unlayered so it wins over the table primitives' nowrap utilities.
+   Long headings and stacked cell details wrap instead of stretching the table,
+   and the first column stays in view while the table scrolls sideways. */
+@media (width < 64rem) {
+  [data-slot="table-head"] {
+    white-space: normal;
+  }
+
+  [data-slot="table-cell"]:has(> div:not(.flex)):not(:has(input, select, textarea)) {
+    white-space: normal;
+  }
+
+  /* Short details keep their width; long ones wrap at 18rem. */
+  [data-slot="table-cell"]:not(:has(input, select, textarea)) > div:not(.flex) {
+    width: max-content;
+    max-width: 18rem;
+  }
+
+  /* The frozen first column must leave room to scroll on a phone. */
+  [data-slot="table-cell"]:first-child:not(:has(input, select, textarea)) > div:not(.flex) {
+    max-width: min(18rem, 40vw);
+  }
+
+  :is([data-slot="table-head"], [data-slot="table-cell"]):first-child:not(:has([role="checkbox"])) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--card);
+    box-shadow: inset -1px 0 0 var(--color-table-border-strong);
+  }
+
+  [data-slot="table-head"]:first-child:not(:has([role="checkbox"])) {
+    z-index: 2;
+    background: var(--muted);
+  }
+}
