@@ -3,6 +3,7 @@ import { createUrgentDeliveryRepository } from "@workspace/db"
 import { deliveryRecord } from "@workspace/db/urgent-delivery"
 import { parseProductionFloorCode } from "@workspace/db/production-floors"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { isAppOrigin } from "@/lib/app-origin"
 import { productionFloorPageCapability } from "@/lib/auth/production-floor-capabilities"
 import { productionFloorTaskCapability } from "@/lib/auth/production-floor-task-capabilities"
 import {
@@ -15,7 +16,7 @@ export const maxDuration = 300
 export async function POST(request: NextRequest) {
   try {
     const origin = request.headers.get("origin")
-    if (origin && origin !== request.nextUrl.origin)
+    if (origin && !isAppOrigin(origin, request))
       return NextResponse.json(
         { error: "Use this action from the application." },
         { status: 403 }
