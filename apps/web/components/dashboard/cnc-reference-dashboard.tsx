@@ -142,7 +142,7 @@ function Columns({
 }: {
   groups: { label: string; actual: number; capacity?: number }[]
   comparison?: boolean
-  unit?: "pcs" | "%"
+  unit?: "pcs" | "%" | "hr"
   actualLabel?: string
   minimumMaximum?: number
   /** Alternate groups between the primary and capacity greens. */
@@ -197,7 +197,7 @@ function Columns({
                     style={{ color: shade && "var(--foreground)" }}
                   >
                     {number(actual)}
-                    {unit === "%" ? "%" : ""}
+                    {{ pcs: "", "%": "%", hr: " hr" }[unit]}
                   </span>
                 </div>
                 {capacity !== undefined ? (
@@ -473,7 +473,15 @@ export function CncReferenceDashboard({
       subtitle={`${shift} · planner-recorded reasons for idle machine time`}
       action={pin("cnc-idle-reasons")}
     >
-      <Bars rows={chart("cnc-idle-reasons")} unit=" hr" />
+      <Columns
+        groups={chart("cnc-idle-reasons").map(({ label, value }) => ({
+          label,
+          actual: value,
+        }))}
+        unit="hr"
+        actualLabel="Idle time"
+        palette
+      />
     </Panel>
   ) : null
   const maintenance = table("cnc-maintenance-work")
