@@ -36,6 +36,7 @@ import {
   cncReferenceMetricClass,
 } from "./cnc-dashboard-cards"
 import { PanelBody } from "./cnc-reference-controls"
+import { CncRejectionBreakdown } from "./cnc-rejection-breakdown"
 import { PinDashboardMetricButton } from "./pin-dashboard-metric-button"
 
 const number = new Intl.NumberFormat("en-IN").format
@@ -59,44 +60,6 @@ function elapsed(from: string, to: string) {
     Math.round((Date.parse(to) - Date.parse(from)) / 60_000)
   )
   return `${Math.floor(elapsedMinutes / 60)}h ${String(elapsedMinutes % 60).padStart(2, "0")}m`
-}
-
-function Breakdown({
-  rows,
-  cause,
-}: {
-  rows: { label: string; value: number }[]
-  cause?: boolean
-}) {
-  const maximum = Math.max(1, ...rows.map(({ value }) => value))
-  return rows.length ? (
-    <ul className="grid gap-4">
-      {rows.map(({ label, value }) => (
-        <li className="grid gap-1.5" key={label}>
-          <div className="flex justify-between gap-3 text-sm">
-            <span>{label}</span>
-            <b className="shrink-0 font-semibold">{number(value)} pcs</b>
-          </div>
-          <div
-            aria-hidden="true"
-            className="h-[7px] overflow-hidden rounded-full bg-[#edf1e4] dark:bg-primary/15"
-          >
-            <div
-              className={cn(
-                "h-full rounded-full",
-                cause ? "bg-[#b8d446]" : "bg-primary"
-              )}
-              style={{ width: `${(100 * value) / maximum}%` }}
-            />
-          </div>
-        </li>
-      ))}
-    </ul>
-  ) : (
-    <p className="text-sm text-muted-foreground">
-      No rejection recorded in this selection.
-    </p>
-  )
 }
 
 export function CncQualityDashboard({
@@ -329,52 +292,14 @@ export function CncQualityDashboard({
             </SectionCard>
           ) : null}
           {rejectionTable ? (
-            <div className="grid gap-[22px] lg:grid-cols-2">
-              <SectionCard className={section}>
-                <PanelBody
-                  action={
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="rounded-full bg-[var(--color-warning-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-warning-text)]">
-                        {number(rejected ?? 0)} pcs
-                      </span>
-                      {pin("cnc-rejection-reasons")}
-                    </div>
-                  }
-                  heading={
-                    <div>
-                      <CardTitle className="text-xl">Defects recorded</CardTitle>
-                      <CardDescription>
-                        Rejected quantity by defect · {shift}
-                      </CardDescription>
-                    </div>
-                  }
-                >
-                  <Breakdown
-                    rows={data.charts["cnc-rejection-reasons"] ?? []}
-                  />
-                </PanelBody>
-              </SectionCard>
-              <SectionCard className={section}>
-                <PanelBody
-                  action={pin("cnc-rejection-causes")}
-                  heading={
-                    <div>
-                      <CardTitle className="text-xl">
-                        Recorded defect causes
-                      </CardTitle>
-                      <CardDescription>
-                        Causes entered against the rejection events
-                      </CardDescription>
-                    </div>
-                  }
-                >
-                  <Breakdown
-                    rows={data.charts["cnc-rejection-causes"] ?? []}
-                    cause
-                  />
-                </PanelBody>
-              </SectionCard>
-            </div>
+            <CncRejectionBreakdown
+              reasons={data.charts["cnc-rejection-reasons"] ?? []}
+              causes={data.charts["cnc-rejection-causes"] ?? []}
+              rejected={rejected ?? 0}
+              shift={shift}
+              reasonsPin={pin("cnc-rejection-reasons")}
+              causesPin={pin("cnc-rejection-causes")}
+            />
           ) : null}
           {workload ? (
             <SectionCard className={section}>
