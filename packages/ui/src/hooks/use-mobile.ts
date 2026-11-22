@@ -2,26 +2,35 @@
 
 import * as React from "react";
 
-// Below laptop width (phones and portrait tablets) the sidebar becomes a drawer.
-const MOBILE_BREAKPOINT = 1024;
+function widthBelow(breakpoint: number) {
+  return {
+    subscribe(onStoreChange: () => void) {
+      if (typeof window === "undefined") return () => {};
 
-export function useIsMobile() {
-  return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-}
+      const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+      mediaQuery.addEventListener("change", onStoreChange);
 
-function subscribe(onStoreChange: () => void) {
-  if (typeof window === "undefined") return () => {};
-
-  const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-  mediaQuery.addEventListener("change", onStoreChange);
-
-  return () => mediaQuery.removeEventListener("change", onStoreChange);
-}
-
-function getSnapshot() {
-  return typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+      return () => mediaQuery.removeEventListener("change", onStoreChange);
+    },
+    getSnapshot() {
+      return typeof window !== "undefined" && window.innerWidth < breakpoint;
+    },
+  };
 }
 
 function getServerSnapshot() {
   return false;
+}
+
+// Below laptop width (phones and portrait tablets) the sidebar becomes a drawer.
+const mobile = widthBelow(1024);
+// Below tablet width, wide registers switch to record cards.
+const phone = widthBelow(640);
+
+export function useIsMobile() {
+  return React.useSyncExternalStore(mobile.subscribe, mobile.getSnapshot, getServerSnapshot);
+}
+
+export function useIsPhone() {
+  return React.useSyncExternalStore(phone.subscribe, phone.getSnapshot, getServerSnapshot);
 }

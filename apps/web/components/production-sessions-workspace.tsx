@@ -26,6 +26,8 @@ import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/nativ
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { RecordCard, RecordCardList } from "@workspace/ui/components/record-card"
+import { useIsPhone } from "@workspace/ui/hooks/use-mobile"
 import { Clock3, History, Pencil, Play, Search, Square, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -90,6 +92,8 @@ const entryRoleLabels: Record<EntryRole, string> = {
   quality: "QC",
 }
 
+// Phones show the register as cards, a batch at a time.
+const phoneBatch = 50
 const text = (value: unknown) => String(value ?? "").trim()
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
 const percent = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 })
@@ -598,12 +602,35 @@ function hourlyTargetLabel(row: Row) {
 }
 
 function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
-  return <ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Start time", "Start count", "Target", "Hourly target", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{sessionRows.map((row) => {
+  const phone = useIsPhone()
+  const [shown, setShown] = useState(phoneBatch)
+  const sessionView = (row: Row) => {
     const status = sessionOperationalStatus(row, floor, now)
     const closingRequired = status === "closing_required"
-    const action = row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "downtimeEnd" : "end"
+    const closeDowntime = Boolean(row.hasOpenDowntime && !row.hasOpenBreakdownDowntime)
     const pending = outputPending(row)
- return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-[var(--color-warning-bg)] hover:bg-[var(--color-warning-bg)] dark:hover:bg-[var(--color-warning-bg)]" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><div className="mt-1 flex flex-wrap gap-1"><Badge variant={closingRequired ? "destructive" : status === "open" ? "default" : "secondary"}>{pending ? "Weight Pending" : titleCase(status)}</Badge>{rows(row.downtimeEvents).some((event) => event.accident) ? <StatusBadge tone="warning" value="Accident" /> : null}</div></TableCell><TableCell className="whitespace-nowrap">{formatIstDate(text(row.productionDate))}</TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}<div className="text-xs text-muted-foreground">Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{formatIstTime(text(row.startedAt))}</TableCell><TableCell className="text-right tabular-nums">{text(row.measurementMethod).toLowerCase() === "counter" && row.startCount != null ? number(row.startCount) : "-"}</TableCell><TableCell className="text-right tabular-nums">{sessionTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{hourlyTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{pending ? "Pending" : number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{pending ? "Pending" : number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{closingRequired ? <Button className="h-9 whitespace-nowrap" variant={row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "destructive" : "default"} onClick={(event) => { event.stopPropagation(); onAction(action, row) }}>{row.hasOpenDowntime && !row.hasOpenBreakdownDowntime ? "Close downtime" : "Close session"}</Button> : status === "closed" ? <Button className="h-9 whitespace-nowrap" variant={pending ? "default" : "outline"} onClick={(event) => { event.stopPropagation(); onAction("correctClose", row) }}><Pencil />{pending ? "Complete weight" : "Correct"}</Button> : "-"}</TableCell></TableRow>
+    const badges = <><Badge variant={closingRequired ? "destructive" : status === "open" ? "default" : "secondary"}>{pending ? "Weight Pending" : titleCase(status)}</Badge>{rows(row.downtimeEvents).some((event) => event.accident) ? <StatusBadge tone="warning" value="Accident" /> : null}</>
+    const action = closingRequired ? <Button className="h-9 whitespace-nowrap" variant={closeDowntime ? "destructive" : "default"} onClick={(event) => { event.stopPropagation(); onAction(closeDowntime ? "downtimeEnd" : "end", row) }}>{closeDowntime ? "Close downtime" : "Close session"}</Button> : status === "closed" ? <Button className="h-9 whitespace-nowrap" variant={pending ? "default" : "outline"} onClick={(event) => { event.stopPropagation(); onAction("correctClose", row) }}><Pencil />{pending ? "Complete weight" : "Correct"}</Button> : null
+    return { closingRequired, pending, badges, action }
+  }
+  if (phone) return <div className="grid gap-3">
+    <RecordCardList>{sessionRows.slice(0, shown).map((row) => {
+      const { closingRequired, pending, badges, action } = sessionView(row)
+      return <RecordCard key={text(row.id)} tone={closingRequired ? "warning" : "default"} onSelect={() => onDetail(row)} title={machine(row)} badges={badges} description={`${job(row)} · ${part(row)} · Setup ${setup(row)}`} action={action} fields={[
+        { label: "Operator", value: text(row.operatorName) || text(row.operatorCode) || "-" },
+        { label: "Date · Shift", value: `${formatIstDate(text(row.productionDate))} · ${text(row.shift)}` },
+        { label: "Started", value: formatIstTime(text(row.startedAt)) },
+        { label: "Good", value: pending ? "Pending" : number(row.goodPieces) },
+        { label: "Rejected", value: number(row.rejectedPieces) },
+        { label: "Downtime", value: `${number(row.downtimeMinutes)} min` },
+      ]} />
+    })}</RecordCardList>
+    {sessionRows.length > shown ? <Button className="h-11" variant="outline" onClick={() => setShown(shown + phoneBatch)}>Show more ({sessionRows.length - shown} left)</Button> : null}
+    {sessionRows.length ? null : <StandardState title="No sessions found" description="Change the search or status filter." />}
+  </div>
+  return <ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Start time", "Start count", "Target", "Hourly target", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{sessionRows.map((row) => {
+    const { closingRequired, pending, badges, action } = sessionView(row)
+ return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-[var(--color-warning-bg)] hover:bg-[var(--color-warning-bg)] dark:hover:bg-[var(--color-warning-bg)]" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><div className="mt-1 flex flex-wrap gap-1">{badges}</div></TableCell><TableCell className="whitespace-nowrap">{formatIstDate(text(row.productionDate))}</TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}<div className="text-xs text-muted-foreground">Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{formatIstTime(text(row.startedAt))}</TableCell><TableCell className="text-right tabular-nums">{text(row.measurementMethod).toLowerCase() === "counter" && row.startCount != null ? number(row.startCount) : "-"}</TableCell><TableCell className="text-right tabular-nums">{sessionTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{hourlyTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{pending ? "Pending" : number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{pending ? "Pending" : number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{action ?? "-"}</TableCell></TableRow>
   })}</ScrollableTable>
 }
 
