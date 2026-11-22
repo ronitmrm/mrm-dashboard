@@ -12,6 +12,7 @@ import type {
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { ConfirmSubmitButton } from "../ui/confirm-submit-button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Dialog, DialogClose, DialogFooter } from "@workspace/ui/components/dialog"
 import {
@@ -413,18 +414,7 @@ export function ApprovedPostsTable({
                                     <Pencil data-icon="inline-start" />
                                     Edit
                                   </Button> : null}
-                                  {canDelete ? <form
-                                    action={deletePostAction}
-                                    onSubmit={(event) => {
-                                      if (
-                                        !window.confirm(
-                                          `Delete approved post ${row.postCode}? This cannot be undone.`
-                                        )
-                                      ) {
-                                        event.preventDefault()
-                                      }
-                                    }}
-                                  >
+                                  {canDelete ? <form action={deletePostAction}>
                                     <input
                                       name="panel"
                                       type="hidden"
@@ -442,14 +432,16 @@ export function ApprovedPostsTable({
                                       type="hidden"
                                       value={row.id}
                                     />
-                                    <Button
+                                    <ConfirmSubmitButton
+                                      confirmTitle={`Delete approved post ${row.postCode}?`}
+                                      confirmDescription="This cannot be undone."
+                                      confirmLabel="Delete"
                                       size="sm"
-                                      type="submit"
                                       variant="destructive"
                                     >
                                       <Trash2 data-icon="inline-start" />
                                       Delete
-                                    </Button>
+                                    </ConfirmSubmitButton>
                                   </form> : null}
                                 </>
                               ) : null}

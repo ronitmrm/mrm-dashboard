@@ -43,7 +43,7 @@ const dayAndMonth = new Intl.DateTimeFormat("en-GB", {
   month: "long",
   timeZone: "UTC",
 })
-const tint = "rounded-xl bg-[#eef3e5] dark:bg-primary/10"
+const tint = "rounded-xl border bg-[#eef3e5] dark:bg-primary/10"
 const subheading = "text-xs text-muted-foreground"
 const caption = {
   production:
@@ -69,7 +69,7 @@ function Panel({
   children: ReactNode
 }) {
   return (
-    <SectionCard className="min-w-0 rounded-[20px] border-[#dce4d5] shadow-none dark:border-border">
+    <SectionCard className="min-w-0 rounded-[20px] shadow-none">
       {title ? (
         <CardHeader className="flex flex-row items-start justify-between gap-2">
           <div>
@@ -183,7 +183,7 @@ function Columns({
                   title={`${actualLabel}: ${number(actual)} ${unit}`}
                 >
                   <span
-                    className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-primary"
+                    className="absolute inset-x-0 bottom-full mb-1 text-xs font-medium text-primary"
                     style={{ color: shade && "var(--foreground)" }}
                   >
                     {number(actual)}
@@ -196,7 +196,7 @@ function Columns({
                     style={{ height: `${(100 * capacity) / max}%` }}
                     title={`Capacity: ${number(capacity)} pcs`}
                   >
-                    <span className="absolute inset-x-0 bottom-full mb-1 text-[10px] font-medium text-foreground">
+                    <span className="absolute inset-x-0 bottom-full mb-1 text-xs font-medium text-foreground">
                       {number(capacity)}
                     </span>
                   </div>
@@ -253,13 +253,13 @@ function People({
             : null
           return (
             <div
-              className="grid gap-3 rounded-2xl border border-[#dce4d5] bg-[#f7f7f2] p-4 dark:border-border dark:bg-muted/60"
+              className="grid gap-3 rounded-2xl border bg-[#f7f7f2] p-4 dark:bg-muted/60"
               key={name}
             >
               <div className="flex items-center gap-2.5">
                 <span
                   aria-hidden="true"
-                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[#e4edd8] text-xs font-semibold text-[#006a49]"
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[#e4edd8] text-xs font-semibold text-primary dark:bg-primary/15"
                 >
                   {name
                     .split(/\s+/)
