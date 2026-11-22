@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type { ShiftIdleOperator, ShiftIdleOperatorCheck } from "@workspace/db"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
@@ -10,6 +11,7 @@ import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
+import { shiftLabel } from "@/lib/dashboard-units"
 
 const endpoint = "/api/shift-idle-operators"
 type Page = { shifts: ShiftIdleOperatorCheck[]; canEdit: boolean }
@@ -20,14 +22,14 @@ const sameShift = (left: ShiftIdleOperatorCheck, right: ShiftIdleOperatorCheck) 
 
 // End-of-shift task: operators who came in but never got a machine, so
 // attendance counts them even without a production session.
-export function useShiftIdleOperators(enabled: boolean) {
+export function useShiftIdleOperators(enabled: boolean, floor: ProductionFloorCode) {
   const [page, setPage] = useState<Page | null>(null)
   const [error, setError] = useState("")
 
   useEffect(() => {
     if (!enabled) return
     const controller = new AbortController()
-    fetch(endpoint, { signal: controller.signal, cache: "no-store" })
+    fetch(`${endpoint}?floor=${encodeURIComponent(floor)}`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const data = await response.json()
         if (!response.ok) throw new Error(data.error)
@@ -37,7 +39,7 @@ export function useShiftIdleOperators(enabled: boolean) {
         if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Try again.")
       })
     return () => controller.abort()
-  }, [enabled])
+  }, [enabled, floor])
 
   return {
     page,
@@ -127,7 +129,12 @@ function ShiftRow({ shift, canEdit, workerOptions, onSaved }: {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productionDate: shift.productionDate, shift: shift.shift, employeeCodes: filled.map(({ code }) => code) }),
+        body: JSON.stringify({
+          productionFloorCode: shift.productionFloorCode,
+          productionDate: shift.productionDate,
+          shift: shift.shift,
+          employeeCodes: filled.map(({ code }) => code),
+        }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error)
@@ -144,7 +151,7 @@ function ShiftRow({ shift, canEdit, workerOptions, onSaved }: {
   return (
     <TableRow>
       <TableCell>{formatIstDate(shift.productionDate)}</TableCell>
-      <TableCell>{shift.shift}</TableCell>
+      <TableCell>{shiftLabel(shift.shift)}</TableCell>
       <TableCell>
         {shift.checkedAt ? formatIstDateTime(shift.checkedAt) : <StatusBadge tone="warning" value="Pending" />}
       </TableCell>
