@@ -577,10 +577,10 @@ export async function loadCncSessionDashboard(
     )
     const roundHours = (value: number) => Math.round(value * 100) / 100
     // Operators the shop floor marked present without a machine.
-    const idleOperators =
-      cards.includes("cnc-shift-attendance") && floors.includes("cnc")
+    const idleOperators = cards.includes("cnc-shift-attendance")
       ? await createShiftIdleOperatorRepository({ pool }).readBetween(
           organizationId,
+          floors,
           from,
           to
         )

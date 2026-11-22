@@ -8354,9 +8354,9 @@ function RoleTaskPanel({
     [productionSessionsPage.data?.rows]
   )
   const pendingTaskCount = roleRows.length + downtimeRestartTasks.length
-  // CNC shop floor also owns the end-of-shift idle-operator task.
-  const shiftQueues = role === "shopFloor" && productionFloorCode === "cnc"
-  const idleOperators = useShiftIdleOperators(shiftQueues)
+  // Shop floor also owns the end-of-shift idle-operator task.
+  const shiftQueues = role === "shopFloor"
+  const idleOperators = useShiftIdleOperators(shiftQueues, productionFloorCode)
   const [shopFloorQueue, setShopFloorQueue] = useState<
     "material" | "idle" | "completed"
   >("material")
