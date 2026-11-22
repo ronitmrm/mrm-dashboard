@@ -225,6 +225,7 @@ export {
 export { createQualityRepository } from "./quality"
 export { createProductionShopFloorRepository, ShopFloorConflictError } from "./production-shop-floor"
 export { createShiftIdleReviewRepository } from "./shift-idle-review"
+export { createShiftIdleOperatorRepository, type ShiftIdleOperator, type ShiftIdleOperatorCheck } from "./shift-idle-operators"
 export { createPlanningControlHistoryRepository } from "./planning-control-history"
 export {
   defaultProductionFloorCode,

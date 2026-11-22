@@ -295,6 +295,7 @@ import {
 } from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
+import { ShiftIdleOperatorsPanel } from "@/components/shift-idle-operators"
 import { RouteChangeTargetPicker } from "@/components/route-change-target-picker"
 import {
   PlannerDecisionWorkspace,
@@ -8645,6 +8646,9 @@ function RoleTaskPanel({
           )}
         </CardContent>
       </SectionCard>
+      {role === "shopFloor" && productionFloorCode === "cnc" ? (
+        <ShiftIdleOperatorsPanel workerOptions={workerOptions} />
+      ) : null}
       {enableFirstPieceInspection ? (
         <>
           <DataRowsCard

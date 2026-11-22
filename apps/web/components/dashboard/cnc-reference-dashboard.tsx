@@ -687,7 +687,7 @@ export function CncReferenceDashboard({
                   <div className="grid gap-4">
                     <div className="grid gap-3 sm:grid-cols-3">
                       {table("cnc-shift-attendance")?.rows.map(
-                        ([label, operators, machines, ...types]) => (
+                        ([label, operators, idle, machines, ...types]) => (
                           <div
                             key={label}
                             className={cn(tint, "grid gap-2 p-4")}
@@ -698,12 +698,17 @@ export function CncReferenceDashboard({
                             <p className="text-2xl font-semibold text-primary">
                               {operators} operators
                             </p>
+                            {Number(idle) ? (
+                              <p className={subheading}>
+                                incl. {idle} without a machine
+                              </p>
+                            ) : null}
                             <p className={subheading}>
                               {machines} machines running
                             </p>
                             <ul className="grid gap-1 text-sm">
                               {table("cnc-shift-attendance")
-                                ?.columns.slice(3)
+                                ?.columns.slice(4)
                                 .map((type, index) =>
                                   Number(types[index]) ? (
                                     <li
@@ -723,7 +728,9 @@ export function CncReferenceDashboard({
                     <ReferenceDetails title="How is attendance counted?">
                       <p className={subheading}>
                         An operator is present in a shift when they filled at
-                        least one production session card in it. A machine is
+                        least one production session card in it, or when the
+                        shop floor listed them in the end-of-shift task for
+                        operators without a machine. A machine is
                         running when it has at least one session in the shift.
                         Each person or machine counts once per shift per day.
                       </p>
