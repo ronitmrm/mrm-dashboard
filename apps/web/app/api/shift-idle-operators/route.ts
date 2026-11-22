@@ -14,7 +14,7 @@ const pageCapability = productionFloorPageCapability(floor, "shopFloorTasksTab")
 const editCapability = productionFloorTaskCapability(floor, "shop_floor_material")
 // The first production date the end-of-shift task covers.
 const firstDate = "2026-11-22"
-const recentDays = 3
+const recentDays = 7
 
 function shiftEnded(productionDate: string, shift: CncShift, now: Date) {
   return productionShiftEndInstant({ productionDate, shift, productionFloorCode: floor }) <= now

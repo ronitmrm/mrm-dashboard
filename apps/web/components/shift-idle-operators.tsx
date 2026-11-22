@@ -6,25 +6,26 @@ import { StatusBadge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { CardContent, CardDescription, CardHeader, CardTitle, SectionCard } from "@workspace/ui/components/card"
 import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { StandardState } from "@workspace/ui/components/standard-state"
 import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { formatIstDate } from "@/lib/date-time"
+import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 
 const endpoint = "/api/shift-idle-operators"
 type Page = { shifts: ShiftIdleOperatorCheck[]; canEdit: boolean }
+export type ShiftIdleOperators = ReturnType<typeof useShiftIdleOperators>
 
 const sameShift = (left: ShiftIdleOperatorCheck, right: ShiftIdleOperatorCheck) =>
   left.productionDate === right.productionDate && left.shift === right.shift
 
-// End-of-shift task: record operators who came in but never got a machine,
-// so attendance counts them even without a production session.
-export function ShiftIdleOperatorsPanel({ workerOptions }: { workerOptions: readonly ShiftIdleOperator[] }) {
+// End-of-shift task: operators who came in but never got a machine, so
+// attendance counts them even without a production session.
+export function useShiftIdleOperators(enabled: boolean) {
   const [page, setPage] = useState<Page | null>(null)
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     fetch(endpoint, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
@@ -36,48 +37,54 @@ export function ShiftIdleOperatorsPanel({ workerOptions }: { workerOptions: read
         if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Try again.")
       })
     return () => controller.abort()
-  }, [])
+  }, [enabled])
 
-  const pending = page?.shifts.filter((shift) => !shift.checkedAt).length ?? 0
+  return {
+    page,
+    error,
+    pendingCount: page?.shifts.filter((shift) => !shift.checkedAt).length ?? null,
+    replace: (saved: ShiftIdleOperatorCheck) =>
+      setPage((current) => current && { ...current, shifts: current.shifts.map((row) => sameShift(row, saved) ? saved : row) }),
+  }
+}
+
+export function ShiftIdleOperatorsQueue({ data, view, workerOptions }: {
+  data: ShiftIdleOperators
+  view: "pending" | "completed"
+  workerOptions: readonly ShiftIdleOperator[]
+}) {
+  const { page, error, replace } = data
+  const completed = view === "completed"
+  const rows = page?.shifts.filter((shift) => Boolean(shift.checkedAt) === completed) ?? []
+  if (error) return <StandardState variant="error" title="Could not load the end-of-shift task" description={error} />
+  if (!page) return <StandardState variant="loading" title="Loading recent shifts" description="Checking the last few shifts." />
+  if (!rows.length) return completed
+    ? <StandardState title="Nothing completed yet" description="Shifts appear here once their operators are saved." />
+    : <StandardState title="No shifts are waiting" description="After each shift ends, list the operators who had no machine here." />
   return (
-    <SectionCard>
-      <CardHeader>
-        <CardTitle>End of Shift: Operators Without a Machine</CardTitle>
-        <CardDescription>
-          After each shift, list operators who came to work but were not given a machine. Operators with a
-          production session are already counted as present.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {error ? <StandardState variant="error" title="Could not load the end-of-shift task" description={error} /> : null}
-        {!page && !error ? <StandardState variant="loading" title="Loading recent shifts" description="Checking the last few shifts." /> : null}
-        {page && !page.shifts.length ? <StandardState title="No shifts have ended yet" description="This task appears after each shift ends." /> : null}
-        {page?.shifts.length ? (
-          <>
-            <p className="text-sm" role="status">
-              {pending ? `${pending} ${pending === 1 ? "shift needs" : "shifts need"} this task` : "All recent shifts are done"}
-            </p>
-            <OperationalTable aria-label="Operators without a machine" containerClassName="rounded-lg border">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Production date</TableHead>
-                  <TableHead>Shift</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="min-w-96">Operators without a machine</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.shifts.map((shift) => (
-                  <ShiftRow key={`${shift.productionDate}-${shift.shift}`} shift={shift} canEdit={page.canEdit}
-                    workerOptions={workerOptions}
-                    onSaved={(saved) => setPage({ ...page, shifts: page.shifts.map((row) => sameShift(row, saved) ? saved : row) })} />
-                ))}
-              </TableBody>
-            </OperationalTable>
-          </>
-        ) : null}
-      </CardContent>
-    </SectionCard>
+    <div className="grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        {completed
+          ? "Saved shifts from the last 7 days. Use Edit to correct a mistake."
+          : "List operators who came to work but were not given a machine. Operators with a production session are already counted as present."}
+      </p>
+      <OperationalTable aria-label={completed ? "Completed end-of-shift entries" : "Operators without a machine"} containerClassName="rounded-lg border">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Production date</TableHead>
+            <TableHead>Shift</TableHead>
+            <TableHead>{completed ? "Completed" : "Status"}</TableHead>
+            <TableHead className="min-w-96">Operators without a machine</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((shift) => (
+            <ShiftRow key={`${shift.productionDate}-${shift.shift}`} shift={shift} canEdit={page.canEdit}
+              workerOptions={workerOptions} onSaved={replace} />
+          ))}
+        </TableBody>
+      </OperationalTable>
+    </div>
   )
 }
 
@@ -139,7 +146,7 @@ function ShiftRow({ shift, canEdit, workerOptions, onSaved }: {
       <TableCell>{formatIstDate(shift.productionDate)}</TableCell>
       <TableCell>{shift.shift}</TableCell>
       <TableCell>
-        <StatusBadge tone={shift.checkedAt ? "positive" : "warning"} value={shift.checkedAt ? "Done" : "Pending"} />
+        {shift.checkedAt ? formatIstDateTime(shift.checkedAt) : <StatusBadge tone="warning" value="Pending" />}
       </TableCell>
       <TableCell className="whitespace-normal">
         {canEdit && editing ? (

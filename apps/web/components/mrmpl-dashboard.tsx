@@ -295,7 +295,10 @@ import {
 } from "@/components/maintenance/maintenance-work-photos"
 import { UserAccountFooter } from "@/components/user-account-footer"
 import { JobCardRegister } from "@/components/job-card-register"
-import { ShiftIdleOperatorsPanel } from "@/components/shift-idle-operators"
+import {
+  ShiftIdleOperatorsQueue,
+  useShiftIdleOperators,
+} from "@/components/shift-idle-operators"
 import { RouteChangeTargetPicker } from "@/components/route-change-target-picker"
 import {
   PlannerDecisionWorkspace,
@@ -8351,6 +8354,13 @@ function RoleTaskPanel({
     [productionSessionsPage.data?.rows]
   )
   const pendingTaskCount = roleRows.length + downtimeRestartTasks.length
+  // CNC shop floor also owns the end-of-shift idle-operator task.
+  const shiftQueues = role === "shopFloor" && productionFloorCode === "cnc"
+  const idleOperators = useShiftIdleOperators(shiftQueues)
+  const [shopFloorQueue, setShopFloorQueue] = useState<
+    "material" | "idle" | "completed"
+  >("material")
+  const taskQueue = shiftQueues ? shopFloorQueue : "material"
   const taskMachines = uniqueValues([
     ...roleRows.map((row) => row.machine),
     ...downtimeRestartTasks.map((task) => task.machineNumber),
@@ -8430,7 +8440,49 @@ function RoleTaskPanel({
           <CardTitle>{copy.title}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-          {role === "quality" ? (
+          {shiftQueues ? (
+            <nav
+              className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1"
+              aria-label="Shop floor task queues"
+            >
+              {(
+                [
+                  ["material", "Raw material at machine", pendingTaskCount],
+                  [
+                    "idle",
+                    "Operators without a machine",
+                    idleOperators.pendingCount,
+                  ],
+                  ["completed", "Completed", null],
+                ] as const
+              ).map(([key, label, count]) => (
+                <Button
+                  className="shrink-0"
+                  key={key}
+                  type="button"
+                  size="sm"
+                  variant={taskQueue === key ? "default" : "ghost"}
+                  aria-pressed={taskQueue === key}
+                  onClick={() => setShopFloorQueue(key)}
+                >
+                  {label}
+                  {count === null ? null : (
+                    <span className="text-xs tabular-nums opacity-80">
+                      {count}
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </nav>
+          ) : null}
+          {taskQueue !== "material" ? (
+            <ShiftIdleOperatorsQueue
+              data={idleOperators}
+              view={taskQueue === "idle" ? "pending" : "completed"}
+              workerOptions={workerOptions}
+            />
+          ) : null}
+          {taskQueue === "material" && role === "quality" ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -8477,7 +8529,7 @@ function RoleTaskPanel({
               </Button>
             </div>
           ) : null}
-          {role !== "quality" ? (
+          {taskQueue === "material" && role !== "quality" ? (
             <Button
               type="button"
               className="h-11 w-fit"
@@ -8494,6 +8546,8 @@ function RoleTaskPanel({
               Open Production Sessions
             </Button>
           ) : null}
+          {taskQueue === "material" ? (
+            <>
           <TrackingSummary
             tones={["warning", "brand", "information"]}
             items={[
@@ -8644,11 +8698,10 @@ function RoleTaskPanel({
           ) : (
             <EmptyRowsMessage>{copy.empty}</EmptyRowsMessage>
           )}
+            </>
+          ) : null}
         </CardContent>
       </SectionCard>
-      {role === "shopFloor" && productionFloorCode === "cnc" ? (
-        <ShiftIdleOperatorsPanel workerOptions={workerOptions} />
-      ) : null}
       {enableFirstPieceInspection ? (
         <>
           <DataRowsCard
