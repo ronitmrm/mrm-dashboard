@@ -181,6 +181,15 @@ export function planningCalendarExceptions(rows: Record<string, unknown>[], floo
   return { holidayDates, workingDates, capacityFractions };
 }
 
+// Whether the Planning Calendar stops a unit's shift on a production date:
+// a holiday for the factory or unit, or a Friday not marked Working Friday.
+export function isPlanningShiftClosed(rows: Record<string, unknown>[], floor: string, date: string, shift: string) {
+  const own = rows.filter((row) =>
+    text(row.date) === date && ["factory", floor].includes(text(row.calendarScope) || "factory"));
+  if (own.some((row) => !isWorkingFriday(row) && ["All", shift].includes(text(row.shift) || "All"))) return true;
+  return new Date(`${date}T12:00:00Z`).getUTCDay() === 5 && !own.some(isWorkingFriday);
+}
+
 export function isPlanningWorkday(value: Date, workingFriday = false) {
   return workingFriday || !planningHolidayWeekdays.has(value.getDay());
 }

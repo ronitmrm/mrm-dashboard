@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createShiftIdleOperatorRepository, type IdleOperatorShift } from "@workspace/db"
+import { isPlanningShiftClosed } from "@workspace/db/planning-rules"
 import { productionFloors, type ProductionFloorCode } from "@workspace/db/production-floors"
 import { productionShiftEndInstant } from "@workspace/db/production-session-domain"
 
@@ -55,8 +56,16 @@ export async function GET(request: NextRequest) {
     return await withDashboardReadRepository(request, async ({ organizationId, granted }) => {
       const repository = createShiftIdleOperatorRepository({ connectionString: readAuthEnvironment().connectionString })
       try {
-        const shifts = await repository.read(organizationId, recentShifts(floor, new Date()))
-        return NextResponse.json({ shifts, canEdit: granted.has(edit) }, { headers: { "Cache-Control": "no-store" } })
+        const keys = recentShifts(floor, new Date())
+        const [newest, oldest] = [keys[0], keys.at(-1)]
+        const [shifts, calendar] = await Promise.all([
+          repository.read(organizationId, keys),
+          newest && oldest ? repository.readCalendar(organizationId, oldest.productionDate, newest.productionDate) : [],
+        ])
+        // Skip Fridays and holidays, unless someone worked or the check was already done.
+        const open = shifts.filter((shift) => shift.checkedAt || shift.sessionOperators.length
+          || !isPlanningShiftClosed(calendar, floor, shift.productionDate, shift.shift))
+        return NextResponse.json({ shifts: open, canEdit: granted.has(edit) }, { headers: { "Cache-Control": "no-store" } })
       } finally {
         await repository.close()
       }

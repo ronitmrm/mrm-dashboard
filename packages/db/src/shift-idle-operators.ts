@@ -84,6 +84,15 @@ export function createShiftIdleOperatorRepository(options: RepositoryPoolOptions
         return saved
       })
     },
+    // Planning Calendar entries (holidays, working Fridays) for a date range.
+    async readCalendar(organizationId: string, from: string, to: string) {
+      const { rows } = await pool.query<{ entry: Record<string, unknown> }>(
+        `SELECT COALESCE(source_payload, '{}'::jsonb) || jsonb_build_object('date', exception_date::text) AS entry
+         FROM manufacturing.planning_calendar_exceptions
+         WHERE organization_id = $1 AND exception_date BETWEEN $2::date AND $3::date`,
+        [organizationId, from, to])
+      return rows.map(({ entry }) => entry)
+    },
     // Idle operator codes per unit, date and shift, for the attendance card.
     async readBetween(organizationId: string, floors: readonly ProductionFloorCode[], from: string, to: string) {
       const { rows } = await pool.query<{ productionDate: string; shift: IdleOperatorShift; code: string }>(
