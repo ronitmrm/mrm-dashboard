@@ -49,6 +49,7 @@ import {
   istDateTimeInputParts,
   istDateTimeInputToIso,
   istDateTimeInputValue,
+  istDateValue,
 } from "@/lib/date-time"
 import {
   productionCrateWeightOptions,
@@ -93,7 +94,14 @@ const entryRoleLabels: Record<EntryRole, string> = {
 }
 
 // Phones show the register as cards, a batch at a time.
-const phoneBatch = 50
+const rowBatch = 50
+// Register opens on the last week; unfinished older sessions always come along.
+const defaultRegisterDays = 7
+function daysAgo(days: number) {
+  const date = new Date(`${istDateValue()}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() - days)
+  return date.toISOString().slice(0, 10)
+}
 const text = (value: unknown) => String(value ?? "").trim()
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
 const percent = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 })
@@ -179,6 +187,7 @@ export function ProductionSessionsWorkspace({
   const [signedInRoles, setSignedInRoles] = useState<EntryRole[]>([])
   const [workerOptions, setWorkerOptions] = useState<Array<{ code: string; name: string }>>([])
   const [query, setQuery] = useState("")
+  const [fromDate, setFromDate] = useState(() => daysAgo(defaultRegisterDays - 1))
   const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>("all")
   const [now, setNow] = useState(() => new Date())
   const [selectedMachine, setSelectedMachine] = useState("")
@@ -255,9 +264,7 @@ export function ProductionSessionsWorkspace({
       startTime: text(row.startTime), endTime: text(row.endTime),
     })))
     const loadedSessions = rows(body.rows)
-    const loadedEvents = rows(body.events)
     setSessions(loadedSessions)
-    setEventRows(loadedEvents)
     setLoading(false)
     setError("")
     setDetail(current => current ? loadedSessions.find(row => text(row.id) === text(current.id)) ?? null : null)
@@ -268,6 +275,15 @@ export function ProductionSessionsWorkspace({
       setView("register")
       setDetail(requested)
       detailRef.current = requested
+    } else if (!requestedSessionOpened.current && initialSessionId) {
+      // Linked session is older than the window: widen the window to its date.
+      requestedSessionOpened.current = true
+      void api(`/api/production-sessions?floor=${encodeURIComponent(floor)}&sessionId=${encodeURIComponent(initialSessionId)}&limit=1`)
+        .then((linked) => {
+          const date = text(rows(linked.rows)[0]?.productionDate)
+          if (date) { requestedSessionOpened.current = false; setFromDate((current) => date < current ? date : current) }
+        })
+        .catch(() => undefined)
     }
     const currentDetail = requested ?? detailRef.current
     if (currentDetail) {
@@ -278,7 +294,7 @@ export function ProductionSessionsWorkspace({
       employeeRevisionRef.current = revision
       void loadEmployees()
     }
-  }, [initialSessionId, loadDetailEvents, loadEmployees])
+  }, [floor, initialSessionId, loadDetailEvents, loadEmployees])
   const clearSessions = useCallback(() => {
     setSessions([])
     setBreakSchedule(null)
@@ -288,12 +304,22 @@ export function ProductionSessionsWorkspace({
     setDetailEvents({ rows: [], loading: false, error: "" })
   }, [])
   const sessionDelivery = useConditionalRecords(
-    `/api/production-sessions?floor=${encodeURIComponent(floor)}&limit=500&conditional=1&includeEvents=1`,
+    `/api/production-sessions?floor=${encodeURIComponent(floor)}&startDate=${fromDate}&unfinished=1&limit=500&conditional=1`,
     reconcileSessions,
     clearSessions,
     true
   )
   const load = sessionDelivery.refresh
+
+  // Event log is fetched only while its tab is open, and again after session changes.
+  useEffect(() => {
+    if (view !== "events") return
+    let current = true
+    api(`/api/production-sessions?view=events&floor=${encodeURIComponent(floor)}&startDate=${fromDate}&limit=500`)
+      .then((body) => { if (current) setEventRows(rows(body.rows)) })
+      .catch((reason) => { if (current) setError(reason instanceof Error ? reason.message : "Event log could not be loaded.") })
+    return () => { current = false }
+  }, [floor, fromDate, sessions, view])
   const initialLoading = loading || sessionDelivery.loading
 
   useEffect(() => {
@@ -394,13 +420,14 @@ export function ProductionSessionsWorkspace({
             </div>
             {view !== "start" ? <div className="flex flex-wrap gap-2">
               <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input className="h-11 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search machine, job, part or operator" /></div>
+              <Input className="h-11 w-44" type="date" aria-label="Show sessions from" title="Show sessions from" value={fromDate} max={istDateValue()} onChange={(event) => { if (event.target.value) setFromDate(event.target.value) }} />
               {view === "register" ? <NativeSelect className="h-11 w-52" aria-label="Session status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SessionStatusFilter)}><NativeSelectOption value="all">All statuses</NativeSelectOption><NativeSelectOption value="closing_required">Closing Required ({closingRequiredSessions.length})</NativeSelectOption><NativeSelectOption value="open">Open</NativeSelectOption><NativeSelectOption value="closed">Closed</NativeSelectOption></NativeSelect> : null}
             </div> : null}
           </CardHeader>
           <CardContent>
             {error || sessionDelivery.error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error || sessionDelivery.error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading full session history…" description="Older sessions are included automatically." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} breakSchedule={breakSchedule} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading sessions…" description="Pick an earlier date to see older sessions." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} breakSchedule={breakSchedule} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
  </SectionCard>
       {!initialLoading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
@@ -632,7 +659,8 @@ function idealNowFields(session: Row, floor: ProductionFloorCode, breaks: Produc
 
 function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
   const phone = useIsPhone()
-  const [shown, setShown] = useState(phoneBatch)
+  const [shown, setShown] = useState(rowBatch)
+  const more = sessionRows.length > shown ? <Button className="h-11" variant="outline" onClick={() => setShown(shown + rowBatch)}>Show more ({sessionRows.length - shown} left)</Button> : null
   const sessionView = (row: Row) => {
     const status = sessionOperationalStatus(row, floor, now)
     const closingRequired = status === "closing_required"
@@ -654,13 +682,13 @@ function Register({ rows: sessionRows, floor, now, onAction, onDetail }: { rows:
         { label: "Downtime", value: `${number(row.downtimeMinutes)} min` },
       ]} />
     })}</RecordCardList>
-    {sessionRows.length > shown ? <Button className="h-11" variant="outline" onClick={() => setShown(shown + phoneBatch)}>Show more ({sessionRows.length - shown} left)</Button> : null}
+    {more}
     {sessionRows.length ? null : <StandardState title="No sessions found" description="Change the search or status filter." />}
   </div>
-  return <ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Start time", "Start count", "Target", "Hourly target", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{sessionRows.map((row) => {
+  return <div className="grid gap-3"><ScrollableTable headers={["Session", "Date", "Machine", "Job Card", "Part Number", "Operator", "Shift", "Start time", "Start count", "Target", "Hourly target", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{sessionRows.slice(0, shown).map((row) => {
     const { closingRequired, pending, badges, action } = sessionView(row)
  return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-[var(--color-warning-bg)] hover:bg-[var(--color-warning-bg)] dark:hover:bg-[var(--color-warning-bg)]" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><div className="mt-1 flex flex-wrap gap-1">{badges}</div></TableCell><TableCell className="whitespace-nowrap">{formatIstDate(text(row.productionDate))}</TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}</TableCell><TableCell>{part(row)}<div className="text-xs text-muted-foreground">Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{formatIstTime(text(row.startedAt))}</TableCell><TableCell className="text-right tabular-nums">{text(row.measurementMethod).toLowerCase() === "counter" && row.startCount != null ? number(row.startCount) : "-"}</TableCell><TableCell className="text-right tabular-nums">{sessionTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{hourlyTargetLabel(row)}</TableCell><TableCell className="text-right tabular-nums">{pending ? "Pending" : number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{pending ? "Pending" : number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{action ?? "-"}</TableCell></TableRow>
-  })}</ScrollableTable>
+  })}</ScrollableTable>{more}</div>
 }
 
 function EventLog({ rows }: { rows: Row[] }) {

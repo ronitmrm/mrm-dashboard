@@ -4682,6 +4682,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       limit?: number
       offset?: number
       includeEvents?: boolean
+      unfinished?: boolean
       knownSourceRevision?: string | null
       identity?: readonly string[]
     }) {
@@ -4701,7 +4702,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ["sessions", "productionEntries", "employee", "machine_master", "route", "work_order", "production_break_schedule"], {
             sessionId: input.sessionId, startDate: input.startDate, endDate: input.endDate,
             status: input.status, efficiencyFlagsOnly: input.efficiencyFlagsOnly,
-            limit: input.limit, offset: input.offset,
+            limit: input.limit, offset: input.offset, unfinished: input.unfinished,
             includeEvents: input.includeEvents, grants: input.identity, minute: clock.rows[0]!.bucket,
           })
         if (input.knownSourceRevision === sourceRevision)
@@ -4760,6 +4761,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       sessionId?: string
       startDate?: string
       status?: "closed" | "open"
+      // With startDate: also keep older sessions the floor still acts on.
+      unfinished?: boolean
     }, queryClient?: PoolClient) {
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
       const limit = Math.min(Math.max(Math.trunc(input.limit ?? 500), 1), 500)
@@ -4909,7 +4912,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           WHERE session.organization_id = $1 AND floor.code = $2
             AND session.reversed_at IS NULL
             AND ($3::uuid IS NULL OR session.id = $3::uuid)
-            AND ($4::date IS NULL OR session.production_date >= $4::date)
+            AND ($4::date IS NULL OR session.production_date >= $4::date OR ($10::boolean AND (
+              session.status = 'open'
+              OR (session.measurement_method = 'weight' AND session.gross_weight_kg IS NULL)
+              -- Latest closed session per machine seeds the next start count.
+              OR (session.status = 'closed' AND NOT EXISTS (
+                SELECT 1 FROM manufacturing.production_sessions later
+                WHERE later.machine_id = session.machine_id AND later.status = 'closed'
+                  AND later.reversed_at IS NULL AND later.ended_at > session.ended_at))
+              -- Unresolved carried downtime plus the machine's later sessions.
+              OR EXISTS (
+                SELECT 1 FROM manufacturing.production_session_downtime_events carried
+                JOIN manufacturing.production_sessions carried_session
+                  ON carried_session.id = carried.production_session_id
+                WHERE carried_session.machine_id = session.machine_id
+                  AND carried_session.reversed_at IS NULL AND carried.reversed_at IS NULL
+                  AND carried.end_outcome = 'shift_end_unresolved'
+                  AND carried.carry_forward_resolved_at IS NULL
+                  AND carried_session.started_at <= session.started_at)
+            )))
             AND ($5::date IS NULL OR session.production_date <= $5::date)
             AND ($6::text IS NULL OR session.status = $6)
             AND (NOT $9::boolean OR (
@@ -4931,6 +4952,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           limit,
           offset,
           input.efficiencyFlagsOnly ?? false,
+          input.unfinished ?? false,
         ]
       )
       const numericKeys = [

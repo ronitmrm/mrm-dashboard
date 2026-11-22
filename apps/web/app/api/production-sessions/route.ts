@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
             ? Number(params.get("offset"))
             : undefined,
           efficiencyFlagsOnly: params.get("efficiencyFlagsOnly") === "1",
+          unfinished: params.get("unfinished") === "1",
         }
         try {
           if (params.get("conditional") === "1")
