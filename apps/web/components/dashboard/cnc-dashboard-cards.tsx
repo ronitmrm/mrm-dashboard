@@ -338,7 +338,9 @@ export function CncDashboardCard({
       "cnc-qc-wait",
     ].includes(id)
       ? " min"
-      : ["cnc-machine-hours", "cnc-fleet-hours"].includes(id)
+      : ["cnc-machine-hours", "cnc-fleet-hours", "cnc-idle-reasons"].includes(
+            id
+          )
         ? " hr"
         : ""
     return (

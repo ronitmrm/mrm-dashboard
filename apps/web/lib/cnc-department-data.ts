@@ -9,6 +9,7 @@ import {
   productionFloorCodeForRecord,
   type ProductionFloorCode,
 } from "@workspace/db/production-floors"
+import { shiftIdleReasons } from "@workspace/db/shift-idle-reasons"
 
 import { readAuthEnvironment } from "./auth/auth"
 import {
@@ -174,7 +175,7 @@ async function loadWorkflow(
       filters.from === filters.to && cards.includes("cnc-dispatch-trend")
         ? { ...filters, from: daysBefore(filters.from, 6) }
         : filters
-    const [snapshots, events, dispatch, decisions] = await Promise.all([
+    const [snapshots, events, dispatch, decisions, idle] = await Promise.all([
       Promise.all(
         snapshotFloors.map(async (floor) => ({
           floor,
@@ -261,7 +262,37 @@ async function loadWorkflow(
             [organization, filters.to]
           )
         : null,
+      // Planner-explained idle time; gaps a later session now covers are stale.
+      cards.includes("cnc-idle-reasons") && planFloors.includes("cnc")
+        ? pool.query<{ reason: string; hours: number }>(
+            `
+        SELECT review.reason,
+          round(sum(extract(epoch FROM review.gap_end - review.gap_start)) / 3600, 1)::float8 AS hours
+        FROM manufacturing.cnc_shift_idle_reviews review
+        WHERE review.organization_id = $1
+          AND review.production_date BETWEEN $2::date AND $3::date
+          AND ($4::text IS NULL OR review.shift = $4)
+          AND NOT EXISTS (
+            SELECT 1 FROM manufacturing.production_sessions session
+            WHERE session.organization_id = review.organization_id
+              AND session.machine_id = review.machine_id AND session.reversed_at IS NULL
+              AND session.started_at < review.gap_end
+              AND (session.ended_at > review.gap_start OR (session.ended_at IS NULL
+                AND session.production_date = review.production_date AND session.shift = review.shift))
+          )
+        GROUP BY review.reason
+        ORDER BY hours DESC, review.reason
+      `,
+            [
+              organization,
+              filters.from,
+              filters.to,
+              filters.shift === "all" ? null : filters.shift,
+            ]
+          )
+        : null,
     ])
+    const idleReasonLabels = new Map<string, string>(shiftIdleReasons)
     const controls = snapshots.flatMap(({ floor, state }) => {
       const control = (state.dashboard as Record<string, unknown> | null)
         ?.productionControl as Record<string, unknown> | undefined
@@ -453,6 +484,10 @@ async function loadWorkflow(
         "cnc-dispatch-approvals": dispatchRows.length,
       },
       charts: {
+        "cnc-idle-reasons": (idle?.rows ?? []).map(({ reason, hours }) => ({
+          label: idleReasonLabels.get(reason) ?? reason,
+          value: hours,
+        })),
         "cnc-floor-by-user": chart(
           placements,
           ({ actor }) => actor ?? "Unrecorded"

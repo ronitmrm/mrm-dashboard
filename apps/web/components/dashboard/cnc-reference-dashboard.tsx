@@ -467,6 +467,15 @@ export function CncReferenceDashboard({
       />
     </Panel>
   )
+  const idleReasons = allowed("cnc-idle-reasons") ? (
+    <Panel
+      title="Why machines sat idle"
+      subtitle={`${shift} · planner-recorded reasons for idle machine time`}
+      action={pin("cnc-idle-reasons")}
+    >
+      <Bars rows={chart("cnc-idle-reasons")} unit=" hr" />
+    </Panel>
+  ) : null
   const maintenance = table("cnc-maintenance-work")
   const maintenanceRows = (
     test: (row: (number | string)[]) => boolean
@@ -905,6 +914,7 @@ export function CncReferenceDashboard({
                   )}
                 </Panel>
               ) : null}
+              {idleReasons}
               {allowed("cnc-fleet-hours") ? (
                 <Panel
                   title="Machine availability"
@@ -1265,6 +1275,7 @@ export function CncReferenceDashboard({
               )}
             </Panel>
           ) : null}
+          {department === "planning" ? idleReasons : null}
           {department === "planning" && allowed("cnc-planner-priorities")
             ? watchlist
             : null}
