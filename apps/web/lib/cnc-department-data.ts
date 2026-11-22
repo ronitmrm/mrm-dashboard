@@ -5,11 +5,10 @@ import {
   createMaintenanceRepository,
   repositoryPool,
 } from "@workspace/db"
-import { productionFloorCodeForRecord } from "@workspace/db/production-floors"
 import {
-  productionShiftAt,
-  productionShiftEndInstant,
-} from "@workspace/db/production-session-domain"
+  productionFloorCodeForRecord,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors"
 
 import { readAuthEnvironment } from "./auth/auth"
 import {
@@ -17,6 +16,7 @@ import {
   type CncDashboardCardId,
   type CncDashboardData,
   type CncDashboardFilters,
+  type DashboardFloorScope,
 } from "./cnc-dashboard"
 import { loadCncSessionDashboard } from "./cnc-dashboard-data"
 import {
@@ -33,6 +33,7 @@ import {
   shopFloorRowIsProductionCurrent,
 } from "./shop-floor-workflow"
 import { dateSortValue } from "./dashboard-view-model"
+import { shiftWindows, unitShiftAt } from "./dashboard-units"
 
 type CardData = Pick<CncDashboardData, "charts" | "values" | "tables">
 type Filter = CncDashboardFilters
@@ -50,12 +51,17 @@ type StageEvent = {
   machine: string
   actor: string | null
   setup: number
+  floor: ProductionFloorCode
 }
 
-function timeSelection(value: Date | string, filters: Filter) {
+function timeSelection(
+  value: Date | string,
+  filters: Filter,
+  floor: ProductionFloorCode
+) {
   const at = new Date(value)
   if (!Number.isFinite(at.getTime())) return null
-  const shift = productionShiftAt("cnc", at)
+  const shift = unitShiftAt(floor, at)
   if (
     !shift ||
     shift.productionDate < filters.from ||
@@ -152,7 +158,8 @@ function currentQueues(rows: Record<string, unknown>[]) {
 
 async function loadWorkflow(
   filters: Filter,
-  cards: readonly CncDashboardCardId[]
+  cards: readonly CncDashboardCardId[],
+  scope: DashboardFloorScope
 ): Promise<CardData> {
   const options = { connectionString: readAuthEnvironment().connectionString }
   const publication = createDashboardReadModelRepository(options)
@@ -160,18 +167,26 @@ async function loadWorkflow(
   try {
     const organization = await publication.organizationIdForCode("MRMPL")
     const sources = new Set(cards.map(cncDashboardCardSource))
+    const shopFloors = scope.shopFloorTasksTab ?? []
+    const planFloors = scope.productionControlTab ?? []
+    const snapshotFloors = [...new Set([...shopFloors, ...planFloors])]
     const dispatchPeriod =
       filters.from === filters.to && cards.includes("cnc-dispatch-trend")
         ? { ...filters, from: daysBefore(filters.from, 6) }
         : filters
-    const [snapshot, events, dispatch, decisions] = await Promise.all([
-      publication.state(organization, {}, "cnc"),
+    const [snapshots, events, dispatch, decisions] = await Promise.all([
+      Promise.all(
+        snapshotFloors.map(async (floor) => ({
+          floor,
+          state: await publication.state(organization, {}, floor),
+        }))
+      ),
       sources.has("shopFloorTasksTab")
         ? pool.query<StageEvent>(
             `
         SELECT event.to_stage AS stage, event.occurred_at AS at,
           work.job_card_number AS job, item.uid AS part, machine.machine_number AS machine, setup.setup_number AS setup,
-          COALESCE(NULLIF(event.legacy_actor, ''), actor.name) AS actor
+          COALESCE(NULLIF(event.legacy_actor, ''), actor.name) AS actor, floor.code AS floor
         FROM manufacturing.shop_floor_stage_events event
         JOIN manufacturing.shop_floor_setup_state state ON state.id = event.setup_state_id
         JOIN catalog.machines machine ON machine.id = COALESCE(event.machine_id, state.machine_id)
@@ -180,13 +195,13 @@ async function loadWorkflow(
         JOIN catalog.items item ON item.id = work.item_id
         JOIN manufacturing.operation_setups setup ON setup.id = state.operation_setup_id
         LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
-        WHERE event.organization_id = $1 AND floor.code = 'cnc' AND event.reversed_at IS NULL
+        WHERE event.organization_id = $1 AND floor.code = ANY($5::text[]) AND event.reversed_at IS NULL
           AND event.to_stage = ANY($4::text[])
-          AND event.occurred_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+          AND event.occurred_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata')
           AND event.occurred_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
         ORDER BY event.occurred_at DESC, event.id
       `,
-            [organization, filters.from, filters.to, workflowStages]
+            [organization, filters.from, filters.to, workflowStages, shopFloors]
           )
         : null,
       sources.has("shopFloorTasksTab")
@@ -206,7 +221,7 @@ async function loadWorkflow(
         JOIN manufacturing.work_orders work ON work.id = event.work_order_id
         LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
         WHERE event.organization_id = $1 AND event.decision = 'approved' AND event.reversed_at IS NULL
-          AND event.occurred_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+          AND event.occurred_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata')
           AND event.occurred_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
         ORDER BY event.occurred_at DESC, event.id
       `,
@@ -247,14 +262,22 @@ async function loadWorkflow(
           )
         : null,
     ])
-    const control = (snapshot.dashboard as Record<string, unknown> | null)
-      ?.productionControl as Record<string, unknown> | undefined
-    const plans = rowRecords(control?.machinePlanDetailRows)
-    const queue = currentQueues(plans)
+    const controls = snapshots.flatMap(({ floor, state }) => {
+      const control = (state.dashboard as Record<string, unknown> | null)
+        ?.productionControl as Record<string, unknown> | undefined
+      return control ? [{ floor, control }] : []
+    })
+    const control = controls.length ? controls : null
+    const plansOf = (floors: readonly ProductionFloorCode[]) =>
+      controls.flatMap(({ floor, control }) =>
+        floors.includes(floor) ? rowRecords(control.machinePlanDetailRows) : []
+      )
+    const plans = plansOf(planFloors)
+    const queue = currentQueues(plansOf(shopFloors))
     const floorWork = (events?.rows ?? []).filter(
-      ({ stage, at }) =>
+      ({ stage, at, floor }) =>
         (stage === "raw_material_at_machine" || stage === "operator_started") &&
-        timeSelection(at, filters)
+        timeSelection(at, filters, floor)
     )
     const placements = floorWork.filter(
       ({ stage }) => stage === "raw_material_at_machine"
@@ -264,13 +287,11 @@ async function loadWorkflow(
         row.floor && typeof row.floor === "object" ? row.floor : {}
       const workFloor =
         row.workFloor && typeof row.workFloor === "object" ? row.workFloor : {}
-      if (
-        productionFloorCodeForRecord({
-          sourcePayload: { ...workFloor, ...eventFloor },
-        }) !== "cnc"
-      )
-        return []
-      const shift = timeSelection(row.at, dispatchPeriod)
+      const floor = productionFloorCodeForRecord({
+        sourcePayload: { ...workFloor, ...eventFloor },
+      })
+      if (!floor || !shopFloors.includes(floor)) return []
+      const shift = timeSelection(row.at, dispatchPeriod, floor)
       return shift ? [{ ...row, date: shift.productionDate }] : []
     })
     const dispatchRows = trendRows.filter(({ date }) => date >= filters.from)
@@ -305,26 +326,31 @@ async function loadWorkflow(
     const dispatchDays = [...dailyDispatch].sort(([a], [b]) =>
       a.localeCompare(b)
     )
-    const priorities = (decisions?.rows ?? []).filter((row) => {
+    const priorities = (decisions?.rows ?? []).flatMap((row) => {
       const eventFloor =
         row.eventFloor && typeof row.eventFloor === "object"
           ? row.eventFloor
           : {}
       const workFloor =
         row.workFloor && typeof row.workFloor === "object" ? row.workFloor : {}
-      const floor =
-        row.floorCode ??
+      const floor = (row.floorCode ??
         productionFloorCodeForRecord({
           sourcePayload: { ...workFloor, ...eventFloor },
-        })
-      return (
-        floor === "cnc" &&
+        })) as ProductionFloorCode | null
+      return floor &&
+        planFloors.includes(floor) &&
         (filters.shift === "all" ||
-          productionShiftAt("cnc", row.at)?.shift === filters.shift)
-      )
+          unitShiftAt(floor, row.at)?.shift === filters.shift)
+        ? [{ ...row, floor }]
+        : []
     })
     const jobs = new Map(
-      rowRecords(control?.workOrderRegisterRows ?? control?.workOrders).map(
+      controls
+        .filter(({ floor }) => planFloors.includes(floor))
+        .flatMap(({ control }) =>
+          rowRecords(control.workOrderRegisterRows ?? control.workOrders)
+        )
+        .map(
         (row) => [
           String(row.jcNo ?? row.jobCardNumber ?? "").toLowerCase(),
           row,
@@ -337,7 +363,7 @@ async function loadWorkflow(
       if (!latestPriorities.has(key)) latestPriorities.set(key, decision)
     }
     const priorityRows = [...latestPriorities.values()].flatMap(
-      ({ at, job, part, machine, priority, rank, status }) => {
+      ({ at, job, part, machine, priority, rank, status, floor }) => {
         const jobKey = job?.toLowerCase() ?? ""
         const progress = jobs.get(jobKey)
         const plan = plans.find(
@@ -366,7 +392,7 @@ async function loadWorkflow(
             machine ?? String(plan?.machine ?? "—"),
             priority ?? rank ?? "—",
             phase,
-            timeSelection(at, filters) ? "Yes" : "No",
+            timeSelection(at, filters, floor) ? "Yes" : "No",
             ordered > 0
               ? `${Math.min(100, (actual / ordered) * 100).toFixed(1)}%`
               : "—",
@@ -483,7 +509,8 @@ async function loadWorkflow(
 
 async function loadMaintenance(
   filters: Filter,
-  cards: readonly CncDashboardCardId[]
+  cards: readonly CncDashboardCardId[],
+  floors: readonly ProductionFloorCode[]
 ): Promise<CardData> {
   const options = { connectionString: readAuthEnvironment().connectionString }
   const repository = createMaintenanceRepository(options)
@@ -497,13 +524,18 @@ async function loadMaintenance(
           ? undefined
           : "In Progress",
       }),
-      repository.listMachineMaintenancePlan(
-        organization,
-        filters.from,
-        filters.to,
-        { productionFloorCode: "cnc" }
-      ),
+      Promise.all(
+        floors.map((productionFloorCode) =>
+          repository.listMachineMaintenancePlan(
+            organization,
+            filters.from,
+            filters.to,
+            { productionFloorCode }
+          )
+        )
+      ).then((plans) => plans.flat()),
       pool.query<{
+        floor: ProductionFloorCode
         machine: string
         work: string
         type: string
@@ -511,7 +543,7 @@ async function loadMaintenance(
         minutes: number | null
       }>(
         `
-        SELECT machine.machine_number AS machine, definition.name AS work, task.task_type AS type,
+        SELECT floor.code AS floor, machine.machine_number AS machine, definition.name AS work, task.task_type AS type,
           task.completed_at AS at,
           CASE WHEN task.source_payload->>'actualMinutes' ~ '^[0-9]+([.][0-9]+)?$'
             THEN (task.source_payload->>'actualMinutes')::float8
@@ -523,34 +555,41 @@ async function loadMaintenance(
         JOIN maintenance.definitions definition ON definition.id = schedule.definition_id
         JOIN catalog.machines machine ON machine.id = schedule.machine_id
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-        WHERE task.organization_id = $1 AND floor.code = 'cnc' AND task.status = 'Completed'
-          AND task.completed_at >= (($2::date + time '06:00') AT TIME ZONE 'Asia/Kolkata')
+        WHERE task.organization_id = $1 AND floor.code = ANY($4::text[]) AND task.status = 'Completed'
+          AND task.completed_at >= ($2::date::timestamp AT TIME ZONE 'Asia/Kolkata')
           AND task.completed_at < (($3::date + 1 + time '06:00') AT TIME ZONE 'Asia/Kolkata')
         ORDER BY task.completed_at DESC, task.id
       `,
-        [organization, filters.from, filters.to]
+        [organization, filters.from, filters.to, floors]
       ),
       cards.includes("cnc-maintenance-backlog")
-        ? repository.listMachineMaintenancePlan(
-            organization,
-            "0001-01-01",
-            daysBefore(istDateValue(), 1),
-            { outstandingOnly: true, productionFloorCode: "cnc" }
-          )
+        ? Promise.all(
+            floors.map((productionFloorCode) =>
+              repository.listMachineMaintenancePlan(
+                organization,
+                "0001-01-01",
+                daysBefore(istDateValue(), 1),
+                { outstandingOnly: true, productionFloorCode }
+              )
+            )
+          ).then((plans) => plans.flat())
         : [],
     ])
-    const floorBreakdowns = breakdowns.filter(
-      ({ productionFloorCode }) => productionFloorCode === "cnc"
-    )
-    const cncBreakdowns = floorBreakdowns.filter(
+    const floorBreakdowns = breakdowns.flatMap((breakdown) => {
+      const floor = floors.find(
+        (code) => code === breakdown.productionFloorCode
+      )
+      return floor ? [{ ...breakdown, floor }] : []
+    })
+    const openBreakdowns = floorBreakdowns.filter(
       ({ status }) => status === "In Progress"
     )
-    const cutoff = productionShiftEndInstant({
-      productionDate: filters.to,
-      productionFloorCode: "cnc",
-      shift: filters.shift === "all" ? "C" : filters.shift,
-    })
-    const done = completed.rows.filter(({ at }) => timeSelection(at, filters))
+    // End of the last selected shift on the final date, per unit.
+    const cutoff = (floor: ProductionFloorCode) =>
+      shiftWindows(floor, { ...filters, from: filters.to }).at(-1)?.[1] ?? 0
+    const done = completed.rows.filter(({ at, floor }) =>
+      timeSelection(at, filters, floor)
+    )
     const timed = done.flatMap(({ minutes }) =>
       minutes === null ? [] : [minutes]
     )
@@ -563,13 +602,15 @@ async function loadMaintenance(
     return {
       values: {
         "cnc-open-breakdowns": new Set(
-          cncBreakdowns.map(({ machineNumber }) => machineNumber)
+          openBreakdowns.map(({ machineNumber }) => machineNumber)
         ).size,
-        "cnc-maintenance-breakdowns-intersecting": cncBreakdowns.filter(
-          ({ startedAt }) => !!startedAt && new Date(startedAt) < cutoff
+        "cnc-maintenance-breakdowns-intersecting": openBreakdowns.filter(
+          ({ startedAt, floor }) =>
+            !!startedAt && new Date(startedAt).getTime() < cutoff(floor)
         ).length,
         "cnc-maintenance-breakdowns-started": floorBreakdowns.filter(
-          ({ startedAt }) => startedAt && timeSelection(startedAt, filters)
+          ({ startedAt, floor }) =>
+            startedAt && timeSelection(startedAt, filters, floor)
         ).length,
         "cnc-maintenance-repairs": repairs.length,
         "cnc-maintenance-repair-avg": repairTimes.length
@@ -593,7 +634,7 @@ async function loadMaintenance(
       tables: {
         "cnc-breakdown-log": {
           columns: ["Machine", "Started at", "Reason"],
-          rows: cncBreakdowns.map(
+          rows: openBreakdowns.map(
             ({ machineNumber, startedAt, reasonName }) => [
               machineNumber,
               formatIstDateTime(startedAt),
@@ -648,23 +689,30 @@ async function loadMaintenance(
 export async function loadCncDashboard(
   filters: Filter,
   cards: readonly CncDashboardCardId[],
+  scope: DashboardFloorScope,
   includeWorkloadDetails = false
 ): Promise<CncDashboardData> {
   const sources = new Set(cards.map(cncDashboardCardSource))
   const [session, workflow, maintenance, qualityWorkload, setupWorkload] =
     await Promise.all([
       sources.has("productionSessionsTab")
-        ? loadCncSessionDashboard(filters, cards)
+        ? loadCncSessionDashboard(
+            filters,
+            cards,
+            scope.productionSessionsTab ?? []
+          )
         : null,
       sources.has("shopFloorTasksTab") || sources.has("productionControlTab")
-        ? loadWorkflow(filters, cards)
+        ? loadWorkflow(filters, cards, scope)
         : null,
-      sources.has("maintenanceTab") ? loadMaintenance(filters, cards) : null,
+      sources.has("maintenanceTab")
+        ? loadMaintenance(filters, cards, scope.maintenanceTab ?? [])
+        : null,
       sources.has("qualityControlTasksTab")
-        ? loadCncQualityWorkload(filters)
+        ? loadCncQualityWorkload(filters, scope.qualityControlTasksTab ?? [])
         : undefined,
       sources.has("machinistTasksTab")
-        ? loadCncSetupWorkload(filters)
+        ? loadCncSetupWorkload(filters, scope.machinistTasksTab ?? [])
         : undefined,
     ])
   const quality = qualityWorkload && qualityWorkloadCards(qualityWorkload)

@@ -1,32 +1,41 @@
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
-import { isCncDashboardCard } from "@/lib/cnc-dashboard"
+import { cncCardInScope, isCncDashboardCard } from "@/lib/cnc-dashboard"
 import { cncDashboardCsv } from "@/lib/cnc-dashboard-export"
 import { cncDashboardFilters } from "@/lib/cnc-dashboard-data"
 import { loadCncDashboard } from "@/lib/cnc-department-data"
 import { formatIstDateTime } from "@/lib/date-time"
-import { availablePersonalDashboardWidgets } from "@/lib/personal-dashboard"
+import { shiftLabel, unitLabel } from "@/lib/dashboard-units"
+import {
+  availablePersonalDashboardWidgets,
+  dashboardFloorScope,
+  dashboardUnits,
+} from "@/lib/personal-dashboard"
 
 export async function GET(request: Request) {
   const session = await requireAuthenticatedSession("/home/quality")
   const access = await getUnifiedNavigationAccess(session.user.id)
+  const filters = cncDashboardFilters(
+    Object.fromEntries(new URL(request.url).searchParams),
+    dashboardUnits(access)
+  )
+  const scope = dashboardFloorScope(access, filters.unit)
   const cards = availablePersonalDashboardWidgets(access)
     .filter(({ dashboardCategory }) => dashboardCategory === "Quality")
     .map(({ id }) => id)
     .filter(isCncDashboardCard)
+    .filter((id) => cncCardInScope(scope, id))
   if (!cards.length) return new Response(null, { status: 404 })
-  const filters = cncDashboardFilters(
-    Object.fromEntries(new URL(request.url).searchParams)
-  )
   if (filters.from > filters.to)
     return new Response("Choose a valid date range.", { status: 400 })
-  const data = await loadCncDashboard(filters, cards, true)
+  const data = await loadCncDashboard(filters, cards, scope, true)
   const rows: (string | number | null | undefined)[][] = [
     [
       "Quality summary",
       filters.from,
       filters.to,
-      filters.shift === "all" ? "All shifts" : `Shift ${filters.shift}`,
+      unitLabel(filters.unit),
+      filters.shift === "all" ? "All shifts" : shiftLabel(filters.shift),
     ],
     [
       "Requests received",
@@ -78,6 +87,6 @@ export async function GET(request: Request) {
   }
   return cncDashboardCsv(
     rows,
-    `cnc-quality-${filters.from}-${filters.to}-${filters.shift}.csv`
+    `${filters.unit}-quality-${filters.from}-${filters.to}-${filters.shift}.csv`
   )
 }

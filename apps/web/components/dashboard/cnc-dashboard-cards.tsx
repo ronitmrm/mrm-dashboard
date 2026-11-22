@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { Button } from "@workspace/ui/components/button"
 import { MetricCard } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
@@ -20,11 +21,11 @@ import { cn } from "@workspace/ui/lib/utils"
 
 import {
   cncDashboardCards,
-  cncShifts,
   type CncDashboardCardId,
   type CncDashboardData,
   type CncDashboardFilters,
 } from "@/lib/cnc-dashboard"
+import { shiftLabel, shiftsOf, unitLabel } from "@/lib/dashboard-units"
 import {
   ChartCard,
   DashboardBarChart,
@@ -54,7 +55,7 @@ export function CncDashboardHeading({
     <div className="mb-1 flex flex-wrap items-center justify-between gap-5">
       <div className="min-w-0">
         <p className="mb-3 text-xs font-semibold tracking-[.17em] text-primary uppercase before:mb-3 before:block before:h-1 before:w-8 before:rounded-full before:bg-[#b8d446]">
-          CNC Operations · Command Centre
+          PPAC Operations · Command Centre
         </p>
         <h1 className="text-[clamp(25px,2.5vw,36px)] leading-[1.15] font-bold tracking-tight text-foreground">
           {title}
@@ -68,14 +69,23 @@ export function CncDashboardHeading({
   )
 }
 
+const shiftHours: Record<string, string> = {
+  A: " · 06:00–14:00",
+  B: " · 14:00–22:00",
+  C: " · 22:00–06:00",
+  General: " · 08:30–20:00",
+}
+
 export function CncDashboardFilterBar({
   filters,
+  units,
   sessionCount,
   action = "/home",
   qualitySummary,
   summary,
 }: {
   filters: CncDashboardFilters
+  units: readonly ProductionFloorCode[]
   sessionCount?: number
   action?: string
   qualitySummary?: ReactNode
@@ -97,14 +107,31 @@ export function CncDashboardFilterBar({
             : "rounded-xl"
         }
         label={
-          qualitySummary ? "CNC quality filters" : "CNC production filters"
+          qualitySummary ? "Quality filters" : "Production filters"
         }
       >
-        {monthSummary ? null : (
-          <span className="self-center text-sm font-semibold text-primary">
-            CNC-01
-          </span>
-        )}
+        <div className={filterField}>
+          <Label htmlFor="cnc-dashboard-unit">Unit</Label>
+          <NativeSelect
+            className={
+              monthSummary ? "h-[42px] min-w-40 bg-background" : undefined
+            }
+            defaultValue={filters.unit}
+            id="cnc-dashboard-unit"
+            name="unit"
+          >
+            {units.length > 1 ? (
+              <NativeSelectOption value="all">
+                {unitLabel("all")}
+              </NativeSelectOption>
+            ) : null}
+            {units.map((unit) => (
+              <NativeSelectOption key={unit} value={unit}>
+                {unitLabel(unit)}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
         <div className={filterField}>
           <Label htmlFor="cnc-dashboard-from">From</Label>
           <Input
@@ -142,16 +169,12 @@ export function CncDashboardFilterBar({
             name="shift"
           >
             <NativeSelectOption value="all">All shifts</NativeSelectOption>
-            {cncShifts.map((shift) => (
+            {shiftsOf(
+              filters.unit === "all" ? units : [filters.unit]
+            ).map((shift) => (
               <NativeSelectOption key={shift} value={shift}>
-                Shift {shift}
-                {monthSummary
-                  ? {
-                      A: " · 06:00–14:00",
-                      B: " · 14:00–22:00",
-                      C: " · 22:00–06:00",
-                    }[shift]
-                  : ""}
+                {shiftLabel(shift)}
+                {monthSummary ? shiftHours[shift] : ""}
               </NativeSelectOption>
             ))}
           </NativeSelect>

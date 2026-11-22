@@ -26,6 +26,8 @@ import {
   type CncDashboardFilters,
   type CncQualityApproval,
 } from "@/lib/cnc-dashboard"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { shiftLabel, unitLabel } from "@/lib/dashboard-units"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 import {
   CncDashboardFilterBar,
@@ -102,15 +104,18 @@ export function CncQualityDashboard({
   filters,
   availableIds,
   pinnedIds,
+  units,
 }: {
   actions: ReactNode
   data: CncDashboardData | null
   filters: CncDashboardFilters
   availableIds: ReadonlySet<CncDashboardCardId>
   pinnedIds: ReadonlySet<string>
+  units: readonly ProductionFloorCode[]
 }) {
-  const shift =
-    filters.shift === "all" ? "All shifts" : `Shift ${filters.shift}`
+  const shift = `${unitLabel(filters.unit)} · ${
+    filters.shift === "all" ? "All shifts" : shiftLabel(filters.shift)
+  }`
   const date =
     filters.from === filters.to
       ? dayAndMonth.format(new Date(`${filters.from}T00:00:00Z`))
@@ -196,6 +201,7 @@ export function CncQualityDashboard({
       <CncDashboardFilterBar
         action="/home/quality"
         filters={filters}
+        units={units}
         qualitySummary={`${shift} · ${rollup}`}
       />
       {data ? (

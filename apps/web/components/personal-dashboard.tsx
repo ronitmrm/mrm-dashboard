@@ -1,5 +1,6 @@
 "use client"
 
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { useMemo, useState } from "react"
 import { useFormStatus } from "react-dom"
 import Link from "next/link"
@@ -110,6 +111,7 @@ export function PersonalDashboard({
   availableMetricIds,
   cncData,
   cncFilters,
+  units,
   metricValues,
   metrics,
   onSave,
@@ -122,6 +124,7 @@ export function PersonalDashboard({
   availableMetricIds: DashboardMetricId[]
   cncData: CncDashboardData | null
   cncFilters: CncDashboardFilters
+  units: readonly ProductionFloorCode[]
   metrics: PersonalDashboardMetrics
   metricValues: DashboardMetricValues
   onSave: (formData: FormData) => Promise<void>
@@ -196,6 +199,7 @@ export function PersonalDashboard({
                 <input name="from" type="hidden" value={cncFilters.from} />
                 <input name="to" type="hidden" value={cncFilters.to} />
                 <input name="shift" type="hidden" value={cncFilters.shift} />
+                <input name="unit" type="hidden" value={cncFilters.unit} />
                 <input
                   name="analytics"
                   type="hidden"
@@ -296,6 +300,7 @@ export function PersonalDashboard({
         {hasCncCards ? (
           <CncDashboardFilterBar
             filters={cncFilters}
+            units={units}
             sessionCount={cncData?.sessionCount}
           />
         ) : null}

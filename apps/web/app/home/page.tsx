@@ -19,6 +19,8 @@ import {
 } from "@/lib/personal-dashboard-data"
 import {
   availablePersonalDashboardWidgets,
+  dashboardFloorScope,
+  dashboardUnits,
   resolvePersonalDashboardSelection,
 } from "@/lib/personal-dashboard"
 
@@ -70,14 +72,19 @@ export default async function HomePage({
       analyticsSourceWidgetIds.has(widget.id)
   )
   const query = await searchParams
-  const cncFilters = cncDashboardFilters(query)
+  const units = dashboardUnits(access)
+  const cncFilters = cncDashboardFilters(query, units)
   const cncCardIds = selectedWidgets
     .map(({ id }) => id)
     .filter(isCncDashboardCard)
   const [metrics, cncData] = await Promise.all([
     loadPersonalDashboardMetrics(dataWidgets),
     cncCardIds.length && cncFilters.from <= cncFilters.to
-      ? loadCncDashboard(cncFilters, cncCardIds)
+      ? loadCncDashboard(
+          cncFilters,
+          cncCardIds,
+          dashboardFloorScope(access, cncFilters.unit)
+        )
       : null,
   ])
   const metricValues = dashboardMetricValues(metrics)
@@ -90,6 +97,7 @@ export default async function HomePage({
         availableMetricIds={availableMetricIds}
         cncData={cncData}
         cncFilters={cncFilters}
+        units={units}
         metrics={metrics}
         metricValues={metricValues}
         onSave={savePersonalDashboard}

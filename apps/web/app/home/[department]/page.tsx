@@ -10,6 +10,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
+  cncCardInScope,
   cncDashboardDepartments,
   cncDashboardIncludes,
   type CncDashboardDepartment,
@@ -19,6 +20,8 @@ import { cncDashboardFilters } from "@/lib/cnc-dashboard-data"
 import { loadCncDashboard } from "@/lib/cnc-department-data"
 import {
   availablePersonalDashboardWidgets,
+  dashboardFloorScope,
+  dashboardUnits,
   resolvePersonalDashboardSelection,
 } from "@/lib/personal-dashboard"
 
@@ -36,17 +39,16 @@ export default async function DepartmentDashboard({
   const session = await requireAuthenticatedSession(href)
   const access = await getUnifiedNavigationAccess(session.user.id)
   const available = availablePersonalDashboardWidgets(access)
-  const widgets = available
-    .filter(
-      ({ id }) =>
-        isCncDashboardCard(id) && cncDashboardIncludes(departmentId, id)
-    )
-    .flatMap((widget) =>
-      isCncDashboardCard(widget.id) ? [{ ...widget, id: widget.id }] : []
-    )
-  if (!widgets.length) notFound()
+  const units = dashboardUnits(access)
+  const filters = cncDashboardFilters(query, units)
+  const scope = dashboardFloorScope(access, filters.unit)
+  const departmentCards = available.flatMap(({ id }) =>
+    isCncDashboardCard(id) && cncDashboardIncludes(departmentId, id) ? [id] : []
+  )
+  if (!departmentCards.length) notFound()
+  // A unit may grant fewer pages than another; its other cards stay hidden.
+  const cards = departmentCards.filter((id) => cncCardInScope(scope, id))
 
-  const filters = cncDashboardFilters(query)
   const repository = createUserDashboardRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -56,7 +58,8 @@ export default async function DepartmentDashboard({
       filters.from <= filters.to
         ? loadCncDashboard(
             filters,
-            widgets.map(({ id }) => id),
+            cards,
+            scope,
             department === "quality" || department === "machinist"
           )
         : null,
@@ -90,9 +93,10 @@ export default async function DepartmentDashboard({
     )
     const props = {
       actions,
-      availableIds: new Set(widgets.map(({ id }) => id)),
+      availableIds: new Set(cards),
       data,
       filters,
+      units,
       pinnedIds: pinned,
     }
     return (

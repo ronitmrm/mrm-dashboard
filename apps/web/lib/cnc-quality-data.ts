@@ -4,10 +4,7 @@ import {
   createProductionShopFloorRepository,
   repositoryPool,
 } from "@workspace/db"
-import {
-  productionShiftAt,
-  productionShiftEndInstant,
-} from "@workspace/db/production-session-domain"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 import { readAuthEnvironment } from "./auth/auth"
 import type {
@@ -19,6 +16,7 @@ import type {
   CncSetupWorkload,
 } from "./cnc-dashboard"
 import { formatIstDateTime } from "./date-time"
+import { shiftWindows, unitShiftAt } from "./dashboard-units"
 
 type QueueEvent = Omit<CncQualityRequest, "at"> & {
   at: Date
@@ -28,46 +26,55 @@ type QueueEvent = Omit<CncQualityRequest, "at"> & {
 }
 
 export function loadCncQualityWorkload(
-  filters: CncDashboardFilters
+  filters: CncDashboardFilters,
+  floors: readonly ProductionFloorCode[]
 ): Promise<CncQualityWorkload> {
-  return readWorkload(filters, "quality")
+  return readUnitsWorkload(filters, "quality", floors)
 }
 
 export function loadCncSetupWorkload(
-  filters: CncDashboardFilters
+  filters: CncDashboardFilters,
+  floors: readonly ProductionFloorCode[]
 ): Promise<CncSetupWorkload> {
-  return readWorkload(filters, "setup")
+  return readUnitsWorkload(filters, "setup", floors)
+}
+
+/** Each unit keeps its own shift windows, so read units apart and add them up. */
+async function readUnitsWorkload(
+  filters: CncDashboardFilters,
+  kind: "setup" | "quality",
+  floors: readonly ProductionFloorCode[]
+): Promise<CncSetupWorkload> {
+  const units = await Promise.all(
+    floors.map((floor) => readWorkload(filters, kind, floor))
+  )
+  return {
+    carryIn: units.reduce((sum, unit) => sum + unit.carryIn, 0),
+    received: units.reduce((sum, unit) => sum + unit.received, 0),
+    moved: units.reduce((sum, unit) => sum + unit.moved, 0),
+    pending: units.flatMap((unit) => unit.pending),
+    approvals: units.flatMap((unit) => unit.approvals),
+    receipts: units.flatMap((unit) => unit.receipts),
+    endAt: units.reduce(
+      (latest, unit) => (unit.endAt > latest ? unit.endAt : latest),
+      units[0]?.endAt ?? new Date().toISOString()
+    ),
+  }
 }
 
 async function readWorkload(
   filters: CncDashboardFilters,
-  kind: "setup" | "quality"
+  kind: "setup" | "quality",
+  floor: ProductionFloorCode
 ): Promise<CncSetupWorkload> {
   const setupWork = kind === "setup"
   const requestStages = setupWork
     ? ["raw_material_at_machine", "presetting"]
     : ["setting"]
   const completionStage = setupWork ? "setting" : "quality_approval"
-  const firstShift = filters.shift === "all" ? "A" : filters.shift
-  const lastShift = filters.shift === "all" ? "C" : filters.shift
-  const start = new Date(
-    productionShiftEndInstant({
-      productionDate: filters.from,
-      productionFloorCode: "cnc",
-      shift: firstShift,
-    }).getTime() -
-      8 * 60 * 60 * 1000
-  )
-  const end = new Date(
-    Math.min(
-      Date.now(),
-      productionShiftEndInstant({
-        productionDate: filters.to,
-        productionFloorCode: "cnc",
-        shift: lastShift,
-      }).getTime()
-    )
-  )
+  const windows = shiftWindows(floor, filters)
+  const start = new Date(windows[0]?.[0] ?? Date.now())
+  const end = new Date(Math.min(Date.now(), windows.at(-1)?.[1] ?? 0))
   if (end <= start)
     return {
       carryIn: 0,
@@ -93,7 +100,7 @@ async function readWorkload(
         JOIN manufacturing.shop_floor_setup_state setup_state ON setup_state.id = event.setup_state_id
         JOIN catalog.machines machine ON machine.id = COALESCE(event.machine_id, setup_state.machine_id)
         JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-        WHERE event.organization_id = $1 AND floor.code = 'cnc'
+        WHERE event.organization_id = $1 AND floor.code = $6
           AND event.reversed_at IS NULL AND event.from_stage IS DISTINCT FROM event.to_stage
       ),
       prior AS (
@@ -141,7 +148,7 @@ async function readWorkload(
       ) checklist ON true
       ORDER BY timeline.occurred_at, timeline.event_id
     `,
-      [organizationId, start, end, requestStages, setupWork]
+      [organizationId, start, end, requestStages, setupWork, floor]
     )
 
     const pending = new Map<string, CncQualityRequest>()
@@ -156,7 +163,7 @@ async function readWorkload(
       const selected =
         at >= start &&
         (filters.shift === "all" ||
-          productionShiftAt("cnc", at)?.shift === filters.shift)
+          unitShiftAt(floor, at)?.shift === filters.shift)
       if (requestStages.includes(stage)) {
         if (!request) {
           pending.set(details.id, event)
