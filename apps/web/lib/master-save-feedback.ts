@@ -13,7 +13,12 @@ export async function withMasterSaveFeedback(save: () => Promise<unknown>) {
         "code" in error &&
         error.code === "23505")
     ) {
-      return { error: new DuplicateMasterError().message }
+      return {
+        error:
+          error instanceof DuplicateMasterError
+            ? error.message
+            : new DuplicateMasterError().message,
+      }
     }
     throw error
   }
