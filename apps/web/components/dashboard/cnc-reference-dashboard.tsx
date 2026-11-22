@@ -19,6 +19,8 @@ import {
   type CncDashboardDepartment,
   type CncDashboardFilters,
 } from "@/lib/cnc-dashboard"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { shiftLabel, unitLabel } from "@/lib/dashboard-units"
 import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 import {
   CncDashboardFilterBar,
@@ -47,7 +49,7 @@ const tint = "rounded-xl border bg-[#eef3e5] dark:bg-primary/10"
 const subheading = "text-xs text-muted-foreground"
 const caption = {
   production:
-    "CNC overview · recorded production, machine activity and session-based capacity",
+    "Production overview · recorded production, machine activity and session-based capacity",
   machinist:
     "Machinist · setup workload, machine settings and recorded downtime",
   "shop-floor":
@@ -393,6 +395,7 @@ export function CncReferenceDashboard({
   filters,
   availableIds,
   pinnedIds,
+  units,
 }: {
   actions: ReactNode
   department: Exclude<CncDashboardDepartment, "quality">
@@ -400,9 +403,11 @@ export function CncReferenceDashboard({
   filters: CncDashboardFilters
   availableIds: ReadonlySet<CncDashboardCardId>
   pinnedIds: ReadonlySet<string>
+  units: readonly ProductionFloorCode[]
 }) {
-  const shift =
-    filters.shift === "all" ? "All shifts" : `Shift ${filters.shift}`
+  const shift = `${unitLabel(filters.unit)} · ${
+    filters.shift === "all" ? "All shifts" : shiftLabel(filters.shift)
+  }`
   const date =
     filters.from === filters.to
       ? dayAndMonth.format(new Date(`${filters.from}T00:00:00Z`))
@@ -531,6 +536,7 @@ export function CncReferenceDashboard({
       <CncDashboardFilterBar
         action={href}
         filters={filters}
+        units={units}
         summary={
           department === "production" ? shiftSummary : `${shift} · ${banner}`
         }
@@ -654,7 +660,7 @@ export function CncReferenceDashboard({
               {allowed("cnc-shift-comparison") ? (
                 <Panel>
                   <ReferenceDetails
-                    title="Compare all three shifts"
+                    title="Compare shifts"
                     pin={pin("cnc-shift-detail")}
                   >
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -1023,7 +1029,7 @@ export function CncReferenceDashboard({
                 </p>
                 <ReferenceDetails title="Data sources & definitions">
                   <p className={subheading}>
-                    Figures use CNC production sessions and recorded workflow,
+                    Figures use production sessions and recorded workflow,
                     maintenance, and planning records. Current operational
                     snapshots are labeled separately from selected-shift
                     results.

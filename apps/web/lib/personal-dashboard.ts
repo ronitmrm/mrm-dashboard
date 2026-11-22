@@ -1,3 +1,8 @@
+import {
+  productionFloors,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors"
+
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
 import {
   dashboardNavigationDestination,
@@ -11,7 +16,10 @@ import {
   cncDashboardDepartments,
   isCncDashboardCard,
   type CncDashboardCardId,
+  type CncDashboardSource,
+  type DashboardFloorScope,
 } from "./cnc-dashboard"
+import type { DashboardUnit } from "./dashboard-units"
 
 export type PersonalDashboardWidgetId =
   | CncDashboardCardId
@@ -441,17 +449,66 @@ const productionWidgetTabs: Partial<
   "mechanical-maintenance": "maintenanceTab",
 }
 
+const dashboardSources = [
+  ...new Set(cncDashboardCardIds.map(cncDashboardCardSource)),
+]
+
+function grantsSource(
+  access: UnifiedNavigationAccess,
+  floor: ProductionFloorCode,
+  source: CncDashboardSource
+) {
+  return (
+    access.operations &&
+    Boolean(access.productionFloorTabIds?.[floor]?.includes(source))
+  )
+}
+
+/**
+ * Units a person may pick on the department dashboards: every unit where
+ * Access grants one of the dashboard pages. Maintenance is not split by
+ * unit in Access, so a maintenance-only role sees every unit.
+ */
+export function dashboardUnits(access: UnifiedNavigationAccess) {
+  const floors = productionFloors.map(({ code }) => code)
+  const granted = floors.filter((floor) =>
+    dashboardSources.some((source) => grantsSource(access, floor, source))
+  )
+  return granted.length || !hasMaintenanceDashboard(access) ? granted : floors
+}
+
+function hasMaintenanceDashboard(access: UnifiedNavigationAccess) {
+  return Boolean(access.maintenanceHrefs?.includes("/?tab=maintenanceTab"))
+}
+
+/** Units each card source reads for the selected unit filter. */
+export function dashboardFloorScope(
+  access: UnifiedNavigationAccess,
+  unit: DashboardUnit
+): DashboardFloorScope {
+  const selected = dashboardUnits(access).filter(
+    (floor) => unit === "all" || floor === unit
+  )
+  return Object.fromEntries(
+    dashboardSources.map((source) => [
+      source,
+      source === "maintenanceTab"
+        ? hasMaintenanceDashboard(access)
+          ? selected
+          : []
+        : selected.filter((floor) => grantsSource(access, floor, source)),
+    ])
+  )
+}
+
 export function availablePersonalDashboardWidgets(
   access: UnifiedNavigationAccess
 ) {
+  const scope = dashboardFloorScope(access, "all")
   return widgetCatalog
     .filter((widget) => {
       if (isCncDashboardCard(widget.id)) {
-        const source = cncDashboardCardSource(widget.id)
-        return source === "maintenanceTab"
-          ? Boolean(access.maintenanceHrefs?.includes("/?tab=maintenanceTab"))
-          : access.operations &&
-              Boolean(access.productionFloorTabIds?.cnc?.includes(source))
+        return Boolean(scope[cncDashboardCardSource(widget.id)]?.length)
       }
       if (widget.scope === "administration") return access.administration
       if (widget.scope === "operations") {

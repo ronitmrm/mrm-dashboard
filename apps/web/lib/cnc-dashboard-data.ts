@@ -5,28 +5,49 @@ import {
   createShiftIdleOperatorRepository,
   repositoryPool,
 } from "@workspace/db"
-import {
-  productionShiftAt,
-  productionShiftEndInstant,
-} from "@workspace/db/production-session-domain"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { productionShiftAt } from "@workspace/db/production-session-domain"
 import { productionBreakIntervals } from "@workspace/db/production-breaks"
 import { isIsoCalendarDate } from "@workspace/ui/lib/calendar-date"
 
 import { readAuthEnvironment } from "./auth/auth"
 import {
-  cncShifts,
   type CncDashboardCardId,
   type CncDashboardData,
   type CncDashboardFilters,
 } from "./cnc-dashboard"
 import { formatIstDateTime, istDateValue } from "./date-time"
+import {
+  shiftLabel,
+  shiftsOf,
+  shiftWindow,
+  shiftWindows,
+  unitShifts,
+} from "./dashboard-units"
+
+/** Units the selected unit filter covers. */
+export function selectedUnits(
+  filters: Pick<CncDashboardFilters, "unit">,
+  units: readonly ProductionFloorCode[]
+) {
+  return filters.unit === "all" ? units : units.filter((unit) => unit === filters.unit)
+}
 
 export function cncDashboardFilters(
-  query: Record<string, string | string[] | undefined>
+  query: Record<string, string | string[] | undefined>,
+  units: readonly ProductionFloorCode[]
 ): CncDashboardFilters {
   const now = new Date()
   const today = istDateValue(now)
-  const productionDay = productionShiftAt("cnc", now)?.productionDate ?? today
+  const unit =
+    query.unit === "all" && units.length > 1
+      ? "all"
+      : (units.find((value) => value === query.unit) ??
+        (units.includes("cnc") ? "cnc" : (units[0] ?? "cnc")))
+  const productionDay =
+    unit === "cnc" || unit === "all"
+      ? (productionShiftAt("cnc", now)?.productionDate ?? today)
+      : today
   const from =
     typeof query.from === "string" && isIsoCalendarDate(query.from)
       ? query.from
@@ -35,7 +56,10 @@ export function cncDashboardFilters(
     typeof query.to === "string" && isIsoCalendarDate(query.to)
       ? query.to
       : from
-  const shift = cncShifts.find((value) => value === query.shift) ?? "all"
+  const shift =
+    shiftsOf(selectedUnits({ unit }, units)).find(
+      (value) => value === query.shift
+    ) ?? "all"
   if (
     query.applyMonth === "1" &&
     typeof query.month === "string" &&
@@ -43,9 +67,14 @@ export function cncDashboardFilters(
   ) {
     const [year, month] = query.month.split("-").map(Number)
     const lastDay = new Date(Date.UTC(year!, month!, 0)).getUTCDate()
-    return { from: `${query.month}-01`, to: `${query.month}-${lastDay}`, shift }
+    return {
+      from: `${query.month}-01`,
+      to: `${query.month}-${lastDay}`,
+      shift,
+      unit,
+    }
   }
-  return { from, to, shift }
+  return { from, to, shift, unit }
 }
 
 function recordedEvents(value: unknown): Record<string, unknown>[] {
@@ -80,42 +109,17 @@ function topRows(groups: Map<string, number>, limit = 8) {
 
 const hourMs = 3_600_000
 
-function shiftEnd(date: string, shift: string) {
-  return productionShiftEndInstant({
-    productionDate: date,
-    productionFloorCode: "cnc",
-    shift,
-  }).getTime()
-}
-
-function elapsedShiftHours(filters: CncDashboardFilters, now: number) {
-  if (filters.shift === "all") {
-    return (
-      Math.max(
-        0,
-        Math.min(now, shiftEnd(filters.to, "C")) -
-          (shiftEnd(filters.from, "A") - 8 * hourMs)
-      ) / hourMs
-    )
-  }
-  const firstEnd = shiftEnd(filters.from, filters.shift)
-  const dayMs = 24 * hourMs
-  const count = 1 + (shiftEnd(filters.to, filters.shift) - firstEnd) / dayMs
-  const fullShifts = Math.min(
-    count,
-    Math.max(0, Math.floor((now - firstEnd) / dayMs) + 1)
-  )
+/** Elapsed hours of the selected shifts of one unit, up to now. */
+function elapsedShiftHours(
+  floor: ProductionFloorCode,
+  filters: CncDashboardFilters,
+  now: number
+) {
   return (
-    fullShifts * 8 +
-    (fullShifts === count
-      ? 0
-      : Math.max(
-          0,
-          Math.min(
-            8,
-            (now - (firstEnd + fullShifts * dayMs - 8 * hourMs)) / hourMs
-          )
-        ))
+    shiftWindows(floor, filters).reduce(
+      (total, [start, end]) => total + Math.max(0, Math.min(end, now) - start),
+      0
+    ) / hourMs
   )
 }
 
@@ -131,7 +135,8 @@ function coveredHours(intervals: [number, number][]) {
 
 export async function loadCncSessionDashboard(
   filters: CncDashboardFilters,
-  cards: readonly CncDashboardCardId[]
+  cards: readonly CncDashboardCardId[],
+  floors: readonly ProductionFloorCode[]
 ): Promise<CncDashboardData> {
   const { from, shift, to } = filters
   const options = { connectionString: readAuthEnvironment().connectionString }
@@ -152,8 +157,8 @@ export async function loadCncSessionDashboard(
             NULLIF(btrim(machine.source_payload->>'machineType'), '') AS type
            FROM catalog.machines machine
            JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-           WHERE machine.organization_id = $1 AND floor.code = 'cnc'`,
-            [organizationId]
+           WHERE machine.organization_id = $1 AND floor.code = ANY($2::text[])`,
+            [organizationId, floors]
           )
         : null
     const categoryByMachine = new Map(
@@ -192,28 +197,34 @@ export async function loadCncSessionDashboard(
     const showTimeBreakdown =
       cards.includes("cnc-fleet-hours") ||
       cards.includes("cnc-machine-hours-detail")
-    const breakSchedule = showTimeBreakdown
-      ? await repository.readProductionBreakSchedule({
-          organizationId,
-          productionFloorCode: "cnc",
-        })
-      : null
+    const breakSchedules = showTimeBreakdown
+      ? await Promise.all(
+          floors.map(async (floor) => ({
+            floor,
+            schedule: await repository.readProductionBreakSchedule({
+              organizationId,
+              productionFloorCode: floor,
+            }),
+          }))
+        )
+      : []
     const active = showFleet
-      ? await pool.query<{ machine: string }>(
+      ? await pool.query<{ machine: string; floor: ProductionFloorCode }>(
           `
-      SELECT machine.machine_number AS machine
+      SELECT machine.machine_number AS machine, floor.code AS floor
       FROM catalog.machines machine
       JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
-      WHERE machine.organization_id = $1 AND machine.active AND floor.code = 'cnc'
+      WHERE machine.organization_id = $1 AND machine.active AND floor.code = ANY($2::text[])
       ORDER BY machine.machine_number
     `,
-          [organizationId]
+          [organizationId, floors]
         )
       : null
     const coverage = new Map(
-      (active?.rows ?? []).map(({ machine }) => [
+      (active?.rows ?? []).map(({ machine, floor }) => [
         machine,
         {
+          floor,
           sessions: 0,
           open: false,
           stopped: false,
@@ -270,13 +281,14 @@ export async function loadCncSessionDashboard(
     const rejectionCauses = new Map<string, number>()
     const limit = 500
 
+    for (const floor of floors)
     for (let offset = 0; ; offset += limit) {
       const { rows } = await repository.readProductionSessions({
         endDate: to,
         limit,
         offset,
         organizationId,
-        productionFloorCode: "cnc",
+        productionFloorCode: floor,
         startDate: from,
       })
       allSessionCount += rows.length
@@ -409,11 +421,15 @@ export async function loadCncSessionDashboard(
           evidence.stopped ||= row.hasOpenDowntime === true
           if (
             typeof row.productionDate === "string" &&
-            cncShifts.some((key) => key === row.shift)
+            unitShifts(floor).some((key) => key === row.shift)
           ) {
-            const end = shiftEnd(row.productionDate, String(row.shift))
+            const [shiftStart, end] = shiftWindow(
+              floor,
+              row.productionDate,
+              String(row.shift)
+            )
             const start = Math.max(
-              end - 8 * hourMs,
+              shiftStart,
               new Date(String(row.startedAt)).getTime()
             )
             const stop = Math.min(
@@ -448,11 +464,15 @@ export async function loadCncSessionDashboard(
             showTimeBreakdown &&
             evidence &&
             typeof row.productionDate === "string" &&
-            cncShifts.some((key) => key === row.shift)
+            unitShifts(floor).some((key) => key === row.shift)
           ) {
-            const end = shiftEnd(row.productionDate, String(row.shift))
+            const [shiftStart, end] = shiftWindow(
+              floor,
+              row.productionDate,
+              String(row.shift)
+            )
             const start = Math.max(
-              end - 8 * hourMs,
+              shiftStart,
               Date.parse(String(event.startedAt))
             )
             const stop = Math.min(
@@ -510,62 +530,55 @@ export async function loadCncSessionDashboard(
       if (rows.length < limit) break
     }
 
-    const hoursPerMachine = elapsedShiftHours(filters, now)
-    const scheduledBreaks: [number, number][] = []
-    if (breakSchedule && hoursPerMachine > 0) {
-      const firstShift = shift === "all" ? "A" : shift
-      const start = shiftEnd(from, firstShift) - 8 * hourMs
-      const lastShift = shift === "all" ? "C" : shift
-      const end = Math.min(now, shiftEnd(to, lastShift))
-      const breaks = productionBreakIntervals(breakSchedule.breaks, {
-        startedAt: new Date(start),
-        endedAt: new Date(end),
-      })
-      for (const item of breaks) {
-        if (shift === "all") {
-          scheduledBreaks.push([
-            item.startedAt.getTime(),
-            item.endedAt.getTime(),
-          ])
-          continue
-        }
-        const context = productionShiftAt("cnc", item.startedAt)
-        const firstEnd = context ? shiftEnd(context.productionDate, shift) : end
-        for (const shiftBoundary of [firstEnd, firstEnd + 24 * hourMs]) {
-          const a = Math.max(
-            start,
-            shiftBoundary - 8 * hourMs,
-            item.startedAt.getTime()
-          )
-          const b = Math.min(end, shiftBoundary, item.endedAt.getTime())
-          if (a < b) scheduledBreaks.push([a, b])
-        }
-      }
-    }
-    const breakHours = coveredHours(scheduledBreaks)
+    // Elapsed hours and configured breaks differ per unit's shift pattern.
+    const hoursByFloor = new Map(
+      floors.map((floor) => [floor, elapsedShiftHours(floor, filters, now)])
+    )
+    const breaksByFloor = new Map(
+      breakSchedules.map(({ floor, schedule }) => [
+        floor,
+        shiftWindows(floor, filters).flatMap(([start, end]) =>
+          start < now
+            ? productionBreakIntervals(schedule.breaks, {
+                startedAt: new Date(start),
+                endedAt: new Date(Math.min(end, now)),
+              }).map(
+                ({ startedAt, endedAt }): [number, number] => [
+                  startedAt.getTime(),
+                  endedAt.getTime(),
+                ]
+              )
+            : []
+        ),
+      ])
+    )
     const fleetRows = [...coverage].map(([machine, evidence]) => ({
       machine,
       ...evidence,
       hours: coveredHours(evidence.intervals),
+      elapsed: hoursByFloor.get(evidence.floor) ?? 0,
+      breaks: breaksByFloor.get(evidence.floor) ?? [],
     }))
-    const fleetHours = hoursPerMachine * fleetRows.length
-    const timeRows = fleetRows.map(({ machine, intervals, stops }) => {
-      const eventsAndBreaks = coveredHours([...scheduledBreaks, ...stops])
-      const accounted = coveredHours([
-        ...scheduledBreaks,
-        ...stops,
-        ...intervals,
-      ])
-      return {
-        machine,
-        runtime: accounted - eventsAndBreaks,
-        downtime: eventsAndBreaks - breakHours,
-        missing: Math.max(0, hoursPerMachine - accounted),
+    const fleetHours = fleetRows.reduce((sum, row) => sum + row.elapsed, 0)
+    const timeRows = fleetRows.map(
+      ({ machine, intervals, stops, elapsed, breaks }) => {
+        const breakHours = coveredHours([...breaks])
+        const eventsAndBreaks = coveredHours([...breaks, ...stops])
+        const accounted = coveredHours([...breaks, ...stops, ...intervals])
+        return {
+          machine,
+          elapsed,
+          breakHours,
+          runtime: accounted - eventsAndBreaks,
+          downtime: eventsAndBreaks - breakHours,
+          missing: Math.max(0, elapsed - accounted),
+        }
       }
-    })
+    )
     const roundHours = (value: number) => Math.round(value * 100) / 100
     // Operators the shop floor marked present without a machine.
-    const idleOperators = cards.includes("cnc-shift-attendance")
+    const idleOperators =
+      cards.includes("cnc-shift-attendance") && floors.includes("cnc")
       ? await createShiftIdleOperatorRepository({ pool }).readBetween(
           organizationId,
           from,
@@ -584,7 +597,8 @@ export async function loadCncSessionDashboard(
       attendance.set(idle.shift, present)
       idleByShift.set(idle.shift, (idleByShift.get(idle.shift) ?? 0) + 1)
     }
-    const attendanceShifts = cncShifts.filter(
+    const unitShiftList = shiftsOf(floors)
+    const attendanceShifts = unitShiftList.filter(
       (key) => shift === "all" || shift === key
     )
     const machineTypes = [
@@ -642,14 +656,19 @@ export async function loadCncSessionDashboard(
         "cnc-production-capacity": [...capacityByShift]
           .sort(([a], [b]) => a.localeCompare(b))
           .flatMap(([key, { capacity, actual, eligible }]) => [
-            { label: `Shift ${key} · Actual`, value: actual },
+            { label: `${shiftLabel(key)} · Actual`, value: actual },
             ...(eligible
-              ? [{ label: `Shift ${key} · Session capacity`, value: capacity }]
+              ? [
+                  {
+                    label: `${shiftLabel(key)} · Session capacity`,
+                    value: capacity,
+                  },
+                ]
               : []),
           ]),
         "cnc-shift-comparison": allSessionCount
-          ? cncShifts.map((key) => ({
-              label: "Shift " + key,
+          ? unitShiftList.map((key) => ({
+              label: shiftLabel(key),
               value: shifts.get(key) ?? 0,
             }))
           : [],
@@ -692,7 +711,9 @@ export async function loadCncSessionDashboard(
               },
               {
                 label: "Planned breaks",
-                value: roundHours(breakHours * fleetRows.length),
+                value: roundHours(
+                  timeRows.reduce((sum, row) => sum + row.breakHours, 0)
+                ),
               },
             ]
           : [],
@@ -740,7 +761,7 @@ export async function loadCncSessionDashboard(
               (type) => present?.machines.get(type)?.size ?? 0
             )
             return [
-              `Shift ${key}`,
+              shiftLabel(key),
               present?.operators.size ?? 0,
               idleByShift.get(key) ?? 0,
               running.reduce((sum, count) => sum + count, 0),
@@ -756,10 +777,10 @@ export async function loadCncSessionDashboard(
             "Downtime (min)",
             "Sessions",
           ],
-          rows: cncShifts.map((key) => {
+          rows: unitShiftList.map((key) => {
             const row = shiftTotals.get(key)
             return [
-              `Shift ${key}`,
+              shiftLabel(key),
               row?.pieces ?? 0,
               row?.rejected ?? 0,
               row?.downtime ?? 0,
@@ -776,14 +797,16 @@ export async function loadCncSessionDashboard(
             "No session hrs",
             "Break hrs",
           ],
-          rows: timeRows.map(({ machine, runtime, downtime, missing }) => [
-            machine,
-            roundHours(hoursPerMachine),
-            roundHours(runtime),
-            roundHours(downtime),
-            roundHours(missing),
-            roundHours(breakHours),
-          ]),
+          rows: timeRows.map(
+            ({ machine, elapsed, runtime, downtime, missing, breakHours }) => [
+              machine,
+              roundHours(elapsed),
+              roundHours(runtime),
+              roundHours(downtime),
+              roundHours(missing),
+              roundHours(breakHours),
+            ]
+          ),
         },
         "cnc-machine-activity": {
           columns: [
@@ -841,7 +864,7 @@ export async function loadCncSessionDashboard(
               totals.name && totals.name !== id ? `${totals.name} · ${id}` : id,
               `${[...totals.shifts]
                 .sort()
-                .map((shift) => `Shift ${shift}`)
+                .map(shiftLabel)
                 .join(", ")} · ${[...totals.machines].join(", ")}`,
               `${totals.output} / ${totals.rejected}`,
               `${totals.measured ? `${roundHours(totals.measured / 3600)} h` : "—"} / ${roundHours(totals.downtime)} min`,

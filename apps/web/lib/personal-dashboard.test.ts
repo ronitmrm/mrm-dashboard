@@ -5,6 +5,8 @@ import { cncDashboardCardIds, cncDashboardCardSource } from "./cnc-dashboard"
 import {
   availablePersonalDashboardWidgets,
   availableCncDashboardDepartments,
+  dashboardFloorScope,
+  dashboardUnits,
   resolvePersonalDashboardSelection,
 } from "./personal-dashboard"
 
@@ -43,7 +45,7 @@ describe("personal dashboard", () => {
     ).toContain("cnc-shift-comparison")
   })
 
-  it("shows department views and cards only for the corresponding CNC and maintenance permissions", () => {
+  it("shows department views and cards for the pages each unit grants", () => {
     const access = {
       ...noAccess,
       operations: true,
@@ -55,12 +57,18 @@ describe("personal dashboard", () => {
     } satisfies UnifiedNavigationAccess
     expect(
       availableCncDashboardDepartments(access).map(({ id }) => id)
-    ).toEqual(["quality", "maintenance"])
+    ).toEqual(["quality", "machinist", "maintenance"])
     const ids = availablePersonalDashboardWidgets(access).map(({ id }) => id)
     expect(ids).toContain("cnc-qc-pending")
     expect(ids).toContain("cnc-open-breakdowns")
+    expect(ids).toContain("cnc-setup-pending")
     expect(ids).not.toContain("cnc-pieces-rejected")
-    expect(ids).not.toContain("cnc-setup-pending")
+    expect(dashboardUnits(access)).toEqual(["conventional", "cnc"])
+    expect(dashboardFloorScope(access, "cnc")).toMatchObject({
+      qualityControlTasksTab: ["cnc"],
+      machinistTasksTab: [],
+      maintenanceTab: ["cnc"],
+    })
   })
   it("offers only information the signed-in user may open", () => {
     const widgets = availablePersonalDashboardWidgets({

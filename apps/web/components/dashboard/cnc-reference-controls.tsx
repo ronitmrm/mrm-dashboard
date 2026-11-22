@@ -264,7 +264,7 @@ export function ReferenceFleetHours({
         />
       </ReferenceDetails>
       <p className="text-xs text-muted-foreground">
-        Breaks use the configured CNC schedule and take precedence over
+        Breaks use the configured schedule of each unit and take precedence over
         overlapping recorded stops. Session coverage comes from ERP start and
         close timestamps. Time without session evidence remains unclassified.
         Machine utilisation is session time excluding stops divided by total

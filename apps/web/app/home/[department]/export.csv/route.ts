@@ -3,6 +3,7 @@ import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access
 import {
   cncDashboardCards,
   cncDashboardDepartments,
+  cncCardInScope,
   cncDashboardIncludes,
   isCncDashboardCard,
   type CncDashboardDepartment,
@@ -10,7 +11,12 @@ import {
 import { cncDashboardFilters } from "@/lib/cnc-dashboard-data"
 import { cncDashboardCsv } from "@/lib/cnc-dashboard-export"
 import { loadCncDashboard } from "@/lib/cnc-department-data"
-import { availablePersonalDashboardWidgets } from "@/lib/personal-dashboard"
+import { shiftLabel, unitLabel } from "@/lib/dashboard-units"
+import {
+  availablePersonalDashboardWidgets,
+  dashboardFloorScope,
+  dashboardUnits,
+} from "@/lib/personal-dashboard"
 
 export async function GET(
   request: Request,
@@ -24,25 +30,31 @@ export async function GET(
   const access = await getUnifiedNavigationAccess(session.user.id)
   const query = new URL(request.url).searchParams
   const requested = query.get("card")
+  const filters = cncDashboardFilters(
+    Object.fromEntries(query),
+    dashboardUnits(access)
+  )
+  const scope = dashboardFloorScope(access, filters.unit)
   const cards = availablePersonalDashboardWidgets(access)
     .map(({ id }) => id)
     .filter(isCncDashboardCard)
     .filter(
       (id) =>
         cncDashboardIncludes(departmentId, id) &&
+        cncCardInScope(scope, id) &&
         (!requested || id === requested)
     )
   if (!cards.length) return new Response(null, { status: 404 })
-  const filters = cncDashboardFilters(Object.fromEntries(query))
   if (filters.from > filters.to)
     return new Response("Choose a valid date range.", { status: 400 })
-  const data = await loadCncDashboard(filters, cards)
+  const data = await loadCncDashboard(filters, cards, scope)
   const rows: (string | number | null)[][] = [
     [
       `${cncDashboardDepartments[departmentId]} summary`,
       filters.from,
       filters.to,
-      filters.shift === "all" ? "All shifts" : `Shift ${filters.shift}`,
+      unitLabel(filters.unit),
+      filters.shift === "all" ? "All shifts" : shiftLabel(filters.shift),
     ],
   ]
   if (!requested && Object.keys(data.values).length) {
@@ -81,6 +93,6 @@ export async function GET(
   }
   return cncDashboardCsv(
     rows,
-    `cnc-${requested ?? department}-${filters.from}-${filters.to}-${filters.shift}.csv`
+    `${filters.unit}-${requested ?? department}-${filters.from}-${filters.to}-${filters.shift}.csv`
   )
 }

@@ -1,3 +1,7 @@
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+
+import type { DashboardShift, DashboardUnit } from "./dashboard-units"
+
 export const cncDashboardCards = {
   "cnc-sessions-started": [
     "Production session starts",
@@ -67,12 +71,12 @@ export const cncDashboardCards = {
   "cnc-machine-hours-detail": [
     "Machine-wise time breakdown",
     "Production",
-    "Elapsed CNC shift hours split by recorded sessions, stops and configured breaks.",
+    "Elapsed shift hours split by recorded sessions, stops and configured breaks.",
   ],
   "cnc-shift-detail": [
     "Shift production comparison",
     "Production",
-    "Output, rejects, downtime and sessions across all three CNC shifts.",
+    "Output, rejects, downtime and sessions across every shift.",
   ],
   "cnc-dispatch-daily": [
     "Daily dispatch quantities",
@@ -135,7 +139,7 @@ export const cncDashboardCards = {
     "Sessions in the selection that are still open.",
   ],
   "cnc-shift-comparison": [
-    "Compare all three shifts",
+    "Compare shifts",
     "Production",
     "Recorded pieces per shift across the selected dates.",
   ],
@@ -177,12 +181,12 @@ export const cncDashboardCards = {
   "cnc-fleet-hours": [
     "Fleet hours coverage",
     "Production",
-    "Elapsed shift hours for active CNC machines and the share covered by recorded sessions.",
+    "Elapsed shift hours for active machines and the share covered by recorded sessions.",
   ],
   "cnc-machine-availability": [
     "Machine availability",
     "Production",
-    "Session evidence for each active CNC machine in the selection.",
+    "Session evidence for each active machine in the selection.",
   ],
   "cnc-operator-output": [
     "Operator output and efficiency",
@@ -307,7 +311,7 @@ export const cncDashboardCards = {
   "cnc-dispatch-trend": [
     "Dispatch trend",
     "Shop Floor",
-    "Approved dispatch quantities by CNC production date.",
+    "Approved dispatch quantities by production date.",
   ],
   "cnc-dispatch-log": [
     "Dispatch approval log",
@@ -352,7 +356,7 @@ export const cncDashboardCards = {
   "cnc-maintenance-backlog": [
     "Preventive maintenance backlog",
     "Maintenance",
-    "Current planned CNC work past its due date.",
+    "Current planned work past its due date.",
   ],
   "cnc-planner-priorities": [
     "Priority changes and progress",
@@ -444,12 +448,25 @@ export function cncDashboardCardSource(id: CncDashboardCardId) {
   return "productionSessionsTab"
 }
 
-export const cncShifts = ["A", "B", "C"] as const
+export type CncDashboardSource = ReturnType<typeof cncDashboardCardSource>
+
+/** Units each card source may read for the selected unit filter. */
+export type DashboardFloorScope = Partial<
+  Record<CncDashboardSource, readonly ProductionFloorCode[]>
+>
+
+export function cncCardInScope(
+  scope: DashboardFloorScope,
+  id: CncDashboardCardId
+) {
+  return Boolean(scope[cncDashboardCardSource(id)]?.length)
+}
 
 export type CncDashboardFilters = {
   from: string
-  shift: "all" | (typeof cncShifts)[number]
+  shift: "all" | DashboardShift
   to: string
+  unit: DashboardUnit
 }
 
 export type CncQualityRequest = {
