@@ -143,10 +143,12 @@ export function productionSessionShiftTarget(input: {
   cycleTimeSeconds: number
   breaks: ProductionBreak[]
   downtime: TimeInterval[]
+  /** Stop counting here instead of at shift end (e.g. "ideal so far"). */
+  until?: Date
 }) {
   const endedAt = productionShiftEndInstant(input)
   const start = input.startedAt.getTime()
-  const end = Math.max(start, endedAt.getTime())
+  const end = Math.max(start, Math.min(endedAt.getTime(), input.until?.getTime() ?? Infinity))
   const breaks = productionBreakIntervals(input.breaks, { startedAt: input.startedAt, endedAt })
   const intervals = [...breaks, ...input.downtime].map((interval) => ({
     start: Math.max(start, interval.startedAt.getTime()),
