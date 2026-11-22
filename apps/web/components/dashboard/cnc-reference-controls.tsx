@@ -4,7 +4,11 @@ import { useState, type ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
-import { MetricCard } from "@workspace/ui/components/card"
+import {
+  CardContent,
+  CardHeader,
+  MetricCard,
+} from "@workspace/ui/components/card"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { useIsPhone } from "@workspace/ui/hooks/use-mobile"
 import { cn } from "@workspace/ui/lib/utils"
 
 import type { CncDashboardData } from "@/lib/cnc-dashboard"
@@ -72,6 +77,51 @@ export function ReferenceTable({
         ))}
       </TableBody>
     </OperationalTable>
+  )
+}
+
+// On phones a dashboard section starts folded to its title; tap to open.
+// Tablets and laptops always show the section.
+export function PanelBody({
+  heading,
+  action,
+  openOnPhone = false,
+  children,
+}: {
+  heading: ReactNode
+  action?: ReactNode
+  openOnPhone?: boolean
+  children: ReactNode
+}) {
+  const phone = useIsPhone()
+  const [open, setOpen] = useState(openOnPhone)
+  const shown = !phone || open
+  return (
+    <>
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
+        {phone ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            className="flex min-w-0 flex-1 items-start justify-between gap-2 text-left"
+            onClick={() => setOpen(!open)}
+          >
+            {heading}
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "mt-1 size-5 shrink-0 text-primary transition-transform",
+                open && "rotate-180"
+              )}
+            />
+          </button>
+        ) : (
+          heading
+        )}
+        {action}
+      </CardHeader>
+      {shown ? <CardContent>{children}</CardContent> : null}
+    </>
   )
 }
 

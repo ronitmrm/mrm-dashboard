@@ -5,7 +5,6 @@ import { Button } from "@workspace/ui/components/button"
 import {
   CardContent,
   CardDescription,
-  CardHeader,
   CardTitle,
   MetricCard,
   SectionCard,
@@ -29,6 +28,7 @@ import {
   cncReferenceMetricClass,
 } from "./cnc-dashboard-cards"
 import {
+  PanelBody,
   ReferenceDetails,
   ReferenceFleetHours,
   ReferenceMetricDetail,
@@ -63,25 +63,33 @@ function Panel({
   title,
   subtitle,
   action,
+  openOnPhone,
   children,
 }: {
   title?: string
   subtitle?: string
   action?: ReactNode
+  openOnPhone?: boolean
   children: ReactNode
 }) {
   return (
     <SectionCard className="min-w-0 rounded-[20px] shadow-none">
       {title ? (
-        <CardHeader className="flex flex-row items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-xl">{title}</CardTitle>
-            {subtitle ? <CardDescription>{subtitle}</CardDescription> : null}
-          </div>
-          {action}
-        </CardHeader>
-      ) : null}
-      <CardContent>{children}</CardContent>
+        <PanelBody
+          action={action}
+          heading={
+            <div>
+              <CardTitle className="text-xl">{title}</CardTitle>
+              {subtitle ? <CardDescription>{subtitle}</CardDescription> : null}
+            </div>
+          }
+          openOnPhone={openOnPhone}
+        >
+          {children}
+        </PanelBody>
+      ) : (
+        <CardContent>{children}</CardContent>
+      )}
     </SectionCard>
   )
 }
@@ -1019,7 +1027,7 @@ export function CncReferenceDashboard({
                   </ReferenceDetails>
                 </Panel>
               ) : null}
-              <Panel title="Needs attention" subtitle="Day notes">
+              <Panel title="Needs attention" subtitle="Day notes" openOnPhone>
                 <p className="text-sm">
                   {value("cnc-open-sessions")} open sessions in the selection.
                 </p>
