@@ -433,3 +433,114 @@
     background: var(--muted);
   }
 }
+
+/* Phones: wide tables (OperationalTable marks them data-phone-cards and labels
+   every cell with its column) show one card per row. The doubled attribute
+   outranks the tablet rules above. */
+@media (width < 40rem) {
+  [data-phone-cards][data-phone-cards],
+  [data-phone-cards][data-phone-cards] > :is(thead, tbody, tfoot) {
+    display: block;
+  }
+
+  [data-phone-cards][data-phone-cards] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* The heading row becomes a swipeable strip of filter and sort buttons
+     that stays above the cards while they scroll. */
+  [data-phone-cards][data-phone-cards] > thead {
+    background: var(--card);
+  }
+
+  [data-phone-cards][data-phone-cards] > thead:not(:has(button, input)),
+  [data-phone-cards][data-phone-cards] > thead > tr > th:not(:has(button, input)) {
+    display: none;
+  }
+
+  [data-phone-cards][data-phone-cards] > thead > tr {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    border: 0;
+  }
+
+  [data-phone-cards][data-phone-cards] > thead > tr > th {
+    position: static;
+    flex: none;
+    min-width: 8rem;
+    height: auto;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--radius-md);
+    background: var(--muted);
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  [data-phone-cards][data-phone-cards] > :is(tbody, tfoot) > tr:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.625rem 0.75rem;
+    height: auto;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-panel-border);
+    border-radius: var(--radius-lg);
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"] {
+    display: block;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    position: static;
+    background: transparent;
+    box-shadow: none;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"] > div:not(.flex) {
+    width: auto;
+    max-width: none;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"] :is([data-slot="badge"], [data-slot="status-badge"]) {
+    height: auto;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"]:not([data-label=""])::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--muted-foreground);
+  }
+
+  /* First detail (after any tick box) is the card's title; actions, notes and
+     editable lists take the full width. */
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"]:is(
+      :first-child:not(:has(input[type="checkbox"], [role="checkbox"])),
+      :first-child:has(input[type="checkbox"], [role="checkbox"]) + td
+    ) {
+    grid-column: 1 / -1;
+    font-weight: 600;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"]:is(
+      [data-label=""],
+      [colspan],
+      :has(select, textarea, a, button:not([role="checkbox"]))
+    ) {
+    grid-column: 1 / -1;
+  }
+
+  [data-phone-cards][data-phone-cards] [data-slot="table-cell"] > .flex {
+    flex-wrap: wrap;
+  }
+}

@@ -183,6 +183,41 @@ function tableSnapshot(table: HTMLTableElement) {
   return { columns, rows, valuesForColumn }
 }
 
+// Phones show wide tables as one card per row (styled in globals.css).
+// Each cell gets its column name so the card can label it.
+const phoneCardMinColumns = 5
+
+function labelCellsForPhoneCards(table: HTMLTableElement) {
+  const headerRows = table.tHead?.rows
+  const headerCells = Array.from(headerRows?.item(0)?.cells ?? [])
+  const eligible =
+    headerCells.length >= phoneCardMinColumns &&
+    headerCells.every((cell) => cell.colSpan === 1) &&
+    Array.from(headerRows ?? [])
+      .slice(1)
+      .every((row) => row.hidden || row.querySelector('[aria-label^="Filter "]'))
+  table.toggleAttribute("data-phone-cards", eligible)
+  if (!eligible) return
+  // Drop filter buttons from the column name unless the button is the name.
+  const labels = headerCells.map((cell) => {
+    if (cell.dataset.filterLabel) return cell.dataset.filterLabel
+    const clone = cell.cloneNode(true) as HTMLTableCellElement
+    clone.querySelectorAll("button, select").forEach((control) => control.remove())
+    return clone.textContent?.trim() || headerLabel(cell)
+  })
+  const rows = [
+    ...Array.from(table.tBodies).flatMap((body) => Array.from(body.rows)),
+    ...Array.from(table.tFoot?.rows ?? []),
+  ]
+  for (const row of rows) {
+    const matches = row.cells.length === labels.length
+    Array.from(row.cells).forEach((cell, index) => {
+      const label = matches ? (labels[index] ?? "") : ""
+      if (cell.dataset.label !== label) cell.dataset.label = label
+    })
+  }
+}
+
 function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
@@ -287,6 +322,7 @@ function OperationalTable({
         }
       }
     }
+    labelCellsForPhoneCards(table)
     if (!excelFilters || filterMode === "external") return
 
     const snapshot = tableSnapshot(table)
@@ -458,9 +494,13 @@ function OperationalTable({
 
   React.useEffect(() => {
     const table = tableRef.current
-    if (!table || !excelFilters || filterMode === "external") return
+    if (!table) return
 
-    const observer = new MutationObserver(refreshTable)
+    const observer = new MutationObserver(
+      excelFilters && filterMode !== "external"
+        ? refreshTable
+        : () => labelCellsForPhoneCards(table)
+    )
     observer.observe(table, {
       characterData: true,
       childList: true,
