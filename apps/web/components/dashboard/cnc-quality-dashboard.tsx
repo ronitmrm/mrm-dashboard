@@ -35,6 +35,7 @@ import {
   cncReferenceFeaturedMetricClass,
   cncReferenceMetricClass,
 } from "./cnc-dashboard-cards"
+import { PanelBody } from "./cnc-reference-controls"
 import { PinDashboardMetricButton } from "./pin-dashboard-metric-button"
 
 const number = new Intl.NumberFormat("en-IN").format
@@ -330,67 +331,74 @@ export function CncQualityDashboard({
           {rejectionTable ? (
             <div className="grid gap-[22px] lg:grid-cols-2">
               <SectionCard className={section}>
-                <CardHeader className="flex flex-row items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-xl">Defects recorded</CardTitle>
-                    <CardDescription>
-                      Rejected quantity by defect · {shift}
-                    </CardDescription>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="rounded-full bg-[var(--color-warning-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-warning-text)]">
-                      {number(rejected ?? 0)} pcs
-                    </span>
-                    {pin("cnc-rejection-reasons")}
-                  </div>
-                </CardHeader>
-                <CardContent>
+                <PanelBody
+                  action={
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-full bg-[var(--color-warning-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-warning-text)]">
+                        {number(rejected ?? 0)} pcs
+                      </span>
+                      {pin("cnc-rejection-reasons")}
+                    </div>
+                  }
+                  heading={
+                    <div>
+                      <CardTitle className="text-xl">Defects recorded</CardTitle>
+                      <CardDescription>
+                        Rejected quantity by defect · {shift}
+                      </CardDescription>
+                    </div>
+                  }
+                >
                   <Breakdown
                     rows={data.charts["cnc-rejection-reasons"] ?? []}
                   />
-                </CardContent>
+                </PanelBody>
               </SectionCard>
               <SectionCard className={section}>
-                <CardHeader className="flex flex-row items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-xl">
-                      Recorded defect causes
-                    </CardTitle>
-                    <CardDescription>
-                      Causes entered against the rejection events
-                    </CardDescription>
-                  </div>
-                  {pin("cnc-rejection-causes")}
-                </CardHeader>
-                <CardContent>
+                <PanelBody
+                  action={pin("cnc-rejection-causes")}
+                  heading={
+                    <div>
+                      <CardTitle className="text-xl">
+                        Recorded defect causes
+                      </CardTitle>
+                      <CardDescription>
+                        Causes entered against the rejection events
+                      </CardDescription>
+                    </div>
+                  }
+                >
                   <Breakdown
                     rows={data.charts["cnc-rejection-causes"] ?? []}
                     cause
                   />
-                </CardContent>
+                </PanelBody>
               </SectionCard>
             </div>
           ) : null}
           {workload ? (
             <SectionCard className={section}>
-              <CardHeader className="flex flex-row items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-xl">Approvals by user</CardTitle>
-                  <CardDescription>
-                    {shift} · approval counts and elapsed first-piece approval
-                    wait
-                  </CardDescription>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span
-                    className={cn(tint, "px-2.5 py-1 text-xs text-primary")}
-                  >
-                    {byUser.size} users
-                  </span>
-                  {pin("cnc-qc-by-user")}
-                </div>
-              </CardHeader>
-              <CardContent>
+              <PanelBody
+                action={
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span
+                      className={cn(tint, "px-2.5 py-1 text-xs text-primary")}
+                    >
+                      {byUser.size} users
+                    </span>
+                    {pin("cnc-qc-by-user")}
+                  </div>
+                }
+                heading={
+                  <div>
+                    <CardTitle className="text-xl">Approvals by user</CardTitle>
+                    <CardDescription>
+                      {shift} · approval counts and elapsed first-piece approval
+                      wait
+                    </CardDescription>
+                  </div>
+                }
+              >
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {[...byUser]
                     .sort((a, b) => b[1].length - a[1].length)
@@ -491,7 +499,7 @@ export function CncQualityDashboard({
                   are assigned to their approval shift. Averages include matched
                   records only.
                 </p>
-              </CardContent>
+              </PanelBody>
             </SectionCard>
           ) : null}
           {rejectionTable ? (
