@@ -2,6 +2,7 @@ import "server-only"
 
 import {
   createProductionShopFloorRepository,
+  createShiftIdleOperatorRepository,
   repositoryPool,
 } from "@workspace/db"
 import {
@@ -563,6 +564,26 @@ export async function loadCncSessionDashboard(
       }
     })
     const roundHours = (value: number) => Math.round(value * 100) / 100
+    // Operators the shop floor marked present without a machine.
+    const idleOperators = cards.includes("cnc-shift-attendance")
+      ? await createShiftIdleOperatorRepository({ pool }).readBetween(
+          organizationId,
+          from,
+          to
+        )
+      : []
+    const idleByShift = new Map<string, number>()
+    for (const idle of idleOperators) {
+      const present = attendance.get(idle.shift) ?? {
+        operators: new Set<string>(),
+        machines: new Map<string, Set<string>>(),
+      }
+      const key = `${idle.productionDate}|${idle.code}`
+      if (present.operators.has(key)) continue
+      present.operators.add(key)
+      attendance.set(idle.shift, present)
+      idleByShift.set(idle.shift, (idleByShift.get(idle.shift) ?? 0) + 1)
+    }
     const attendanceShifts = cncShifts.filter(
       (key) => shift === "all" || shift === key
     )
@@ -709,6 +730,7 @@ export async function loadCncSessionDashboard(
           columns: [
             "Shift",
             "Operators present",
+            "Without machine",
             "Machines running",
             ...machineTypes,
           ],
@@ -720,6 +742,7 @@ export async function loadCncSessionDashboard(
             return [
               `Shift ${key}`,
               present?.operators.size ?? 0,
+              idleByShift.get(key) ?? 0,
               running.reduce((sum, count) => sum + count, 0),
               ...running,
             ]
