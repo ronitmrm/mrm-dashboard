@@ -184,7 +184,10 @@ without a Planner action. The setup returns to Planned, inactive, and waits for 
 RM (first setup) or upstream good output (later setups). Order targets, recorded
 production and the RM shortage remain. Counter output or complete weight details
 are required; Weight Pending cannot use this close reason. The first rework setup
-cannot wait for fresh RM. A closed-session correction may change Shift Ends or
+cannot wait for fresh RM. The close reason is offered only when there is something
+to wait for: on the first setup the Job Card's RM must be received less (usable RM
+below 95% of Required RM); on later setups the earlier setup must still be
+unfinished. The Planner's Release machine action is not limited this way. A closed-session correction may change Shift Ends or
 another non-completion close reason to Awaiting material and release the matching
 active setup in the same transaction. Actual output, a correction reason and the
 current saved session version are required. A later session on that machine or a

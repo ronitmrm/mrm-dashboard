@@ -1202,6 +1202,40 @@ async function upstreamGoodForSetup(client: Pick<PoolClient, "query">, workOrder
   return result.rows[0]
 }
 
+// Release awaiting material only when there is something to wait for:
+// first setup needs RM received less, later setups need an unfinished earlier setup.
+async function readMaterialReleaseBlocks(
+  client: Pick<PoolClient, "query">,
+  organizationId: string,
+  setups: ReadonlyArray<{ workOrderId: string; setupId: string }>
+) {
+  const blocks = new Map<string, string | null>()
+  if (!setups.length) return blocks
+  const [upstream, materials] = await Promise.all([
+    client.query<{ workOrderId: string; setupId: string; hasUpstream: boolean; upstreamComplete: boolean | null }>(
+      `SELECT pair.work_order_id AS "workOrderId", pair.setup_id AS "setupId",
+        previous.id IS NOT NULL AS "hasUpstream",
+        (SELECT bool_and(stage = 'item_complete' AND NOT active) FROM manufacturing.shop_floor_setup_state
+          WHERE work_order_id = pair.work_order_id AND operation_setup_id = previous.id) AS "upstreamComplete"
+      FROM unnest($1::uuid[], $2::uuid[]) AS pair(work_order_id, setup_id)
+      JOIN manufacturing.operation_setups current_setup ON current_setup.id = pair.setup_id
+      LEFT JOIN LATERAL (SELECT previous.id FROM manufacturing.operation_setups previous
+        WHERE previous.route_option_id = current_setup.route_option_id
+          AND previous.sequence < current_setup.sequence AND previous.active
+        ORDER BY previous.sequence DESC LIMIT 1) previous ON true`,
+      [setups.map(setup => setup.workOrderId), setups.map(setup => setup.setupId)]
+    ),
+    readJobCardMaterialBalances(client, organizationId, undefined, [...new Set(setups.map(setup => setup.workOrderId))]),
+  ])
+  const rmShort = new Set(materials.filter(row => row.requiredKg !== null && !row.receiptSufficient).map(row => row.id))
+  for (const row of upstream.rows) {
+    blocks.set(`${row.workOrderId}|${row.setupId}`, row.hasUpstream
+      ? row.upstreamComplete ? "The earlier setup is complete, so there is no WIP to wait for." : null
+      : rmShort.has(row.workOrderId) ? null : "RM is not received less for this Job Card, so there is no material to wait for.")
+  }
+  return blocks
+}
+
 async function assertSetupMaterialWait(client: PoolClient, organizationId: string, workOrderId: string, setupId: string, machineId: string) {
   const waits = await client.query<{ machine_id: string; source_payload: Record<string, unknown> }>(`SELECT machine_id, source_payload
     FROM manufacturing.shop_floor_setup_state WHERE work_order_id = $1 AND operation_setup_id = $2
@@ -1228,6 +1262,8 @@ async function releaseSetupAwaitingMaterialInTransaction(
     setupStateId: string
     expectedRowVersion?: number
     reason: string
+    // Session close may release only when RM is received less or an earlier setup is unfinished.
+    sessionClose?: boolean
   }
 ) {
   const result = await client.query<{
@@ -1261,6 +1297,11 @@ async function releaseSetupAwaitingMaterialInTransaction(
   const upstream = await upstreamGoodForSetup(client, state.work_order_id, state.operation_setup_id)
   if (objectRecord(order.source_payload).isRework === true && !upstream) {
     throw new ShopFloorConflictError(firstReworkReleaseBlockedReason)
+  }
+  if (input.sessionClose) {
+    const blocked = (await readMaterialReleaseBlocks(client, input.organizationId,
+      [{ workOrderId: state.work_order_id, setupId: state.operation_setup_id }])).values().next().value
+    if (blocked) throw new ShopFloorConflictError(blocked)
   }
   const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
   const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
@@ -3085,6 +3126,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             productionFloorCode: current.production_floor_code,
             setupStateId: setup.rows[0].id,
             reason: "Production session ended awaiting material",
+            sessionClose: true,
           })
         }
         await queueDashboardRefresh(client, input.organizationId)
@@ -3701,6 +3743,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             productionFloorCode: current.production_floor_code,
             setupStateId: state.id,
             reason: correctionReason,
+            sessionClose: true,
           })
         }
         await queueDashboardRefresh(client, input.organizationId)
@@ -4795,6 +4838,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.quantity_good AS "goodPieces",
             session.quantity_rejected AS "rejectedPieces",
             session.source_payload AS "sessionPayload",
+            session.work_order_id AS "workOrderId",
+            session.operation_setup_id AS "operationSetupId",
             target.pieces AS "targetPieces",
             session.source_payload->'efficiencyFlagReview' AS "efficiencyFlagReview",
             session.job_card_number_snapshot AS "jobCardNumber",
@@ -4983,6 +5028,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           if (!queryClient) client.release()
         }
       }
+      const releaseBlocks = await readMaterialReleaseBlocks(queryClient ?? pool, input.organizationId,
+        [...new Map(result.rows.map(row => [`${row.workOrderId}|${row.operationSetupId}`,
+          { workOrderId: String(row.workOrderId), setupId: String(row.operationSetupId) }])).values()])
       const now = new Date()
       return {
         limit,
@@ -4990,7 +5038,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         productionFloorCode: floorCode,
         breakSchedule: currentBreaks,
         rows: result.rows.map((row) => {
-          const { sessionPayload, ...mapped } = row
+          const { sessionPayload, workOrderId, operationSetupId, ...mapped } = row
+          mapped.materialReleaseBlockedReason = releaseBlocks.get(`${workOrderId}|${operationSetupId}`) ?? null
           for (const key of numericKeys) {
             mapped[key] = row[key] === null ? null : Number(row[key] ?? 0)
           }
