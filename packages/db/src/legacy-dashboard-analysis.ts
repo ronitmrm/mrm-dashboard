@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { materialWaitPending } from "./production-material";
+import { materialWaitPending, rmReceiptSufficient } from "./production-material";
 import { readRequiredRawMaterialKg } from "./job-card-workspace";
 import { serialize, deserialize } from "node:v8";
 import { brotliCompressSync, brotliDecompressSync, constants as compression } from "node:zlib";
@@ -1539,6 +1539,7 @@ function buildProductionControl({
       rmLocation: rmInward?.rmLocations.join(" · ") ?? "",
       rmRejectedKg: round(rmRejectedKg),
       rmUsableKg: round(rmUsableKg),
+      rmSettled: rmReceiptSufficient(rmUsableKg, requiredRmKg) || Boolean(rowValue(row, "rmShortAcceptance")),
       rmPlanningAction,
       rmReplanFromSetupOne,
       materialPlanningReady,
@@ -3676,7 +3677,7 @@ function initializeMachinePlanDetails(
         && rowText(status, "stage") === "planned" && status.awaitingMaterial);
       const releasedSetup = releasedStatuses.length > 0;
       const waitingReleasedStatuses = releasedStatuses.filter(status => materialWaitPending(status,
-        safeNumber(rowValue(row, "rmUsableKg")), upstreamActual?.actualQty ?? 0));
+        safeNumber(rowValue(row, "rmUsableKg")), upstreamActual?.actualQty ?? 0, rowValue(row, "rmSettled") === true));
       const awaitingMaterialMachines = new Set(waitingReleasedStatuses.map(status => canonicalKey(rowText(status, "machine", "machineNo"))));
       if (releasedSetup && !lockedShopFloorMachines.size && waitingReleasedStatuses.length === releasedStatuses.length) {
         routePlanningBlocked = true;
