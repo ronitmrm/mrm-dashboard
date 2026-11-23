@@ -59,8 +59,10 @@ export function sidebarModuleForPermission(
     permissionKey.startsWith(`operations.floors.${floor.code}.store.`)
   )
   if (floorStore) return floorStore.label
-  if (permissionKey.startsWith("quality.control.")) return sidebarModuleLabels.qualityControl
-  if (permissionKey.startsWith("quality.rejection_register.")) return sidebarModuleLabels.isoDocument
+  if (permissionKey.startsWith("quality.control."))
+    return sidebarModuleLabels.qualityControl
+  if (permissionKey.startsWith("quality.rejection_register."))
+    return sidebarModuleLabels.isoDocument
   if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
     return sidebarModuleLabels.masterData
   }
@@ -107,7 +109,7 @@ export function sidebarSubmoduleForPermission(
     ["iso.calibration_plan.", "Calibration Plan"],
     ["quality.control.calibration.", "Calibration"],
     ["quality.store.", "Quality Store"],
-    ["iso.documents.", "Document Control"],
+    ["iso.documents.", "All Document Types"],
     ["quality.control.", "Rejection Entry"],
     ["quality.rejection_register.", "Rejection Register"],
     ["branding.sop.", "SOPs"],
@@ -117,11 +119,13 @@ export function sidebarSubmoduleForPermission(
     ["branding.work-instruction.", "Work Instructions"],
     ["administration.", "Access Administration"],
     ["artifacts.", "Artifacts"],
-    ["pricing.dashboard.", "Pricing"],
+    ["pricing.dashboard.", "Commercial Overview"],
     ["pricing.pricing.", "Pricing"],
-    ["pricing.products.", "Product Parameter Costing"],
-    ["pricing.assemblies.", "Product Parameter Costing"],
+    ["pricing.products.", "Product Portfolio"],
+    ["pricing.assemblies.", "Product Portfolio"],
     ["pricing.costing.", "Product Parameter Costing"],
+    ["pricing.quotes.prepare", "Customer Parameter Costing"],
+    ["pricing.quotes.return_to_costing", "Customer Parameter Costing"],
     ["pricing.quotes.", "Sales"],
     ["pricing.sales.", "Sales"],
     ["pricing.technical_review.", "Technical Review"],
@@ -136,10 +140,12 @@ export function sidebarSubmoduleForPermission(
     ["pricing.engineering_changes.", "Engineering Changes"],
     ["pricing.drawing_history.", "Drawing History"],
     ["store.overview.", "Store Overview"],
+    ["store.requests.submit", "Request Item"],
     ["store.requests.", "Requests & Issues"],
     ["store.new_item_requests.", "New Item Requests"],
     ["store.purchase_register.", "Purchase Register"],
-    ["store.purchase_orders.", "Stock"],
+    ["store.purchase_orders.", "Purchase Register"],
+    ["store.asset_movement.", "Movement"],
     ["store.receipts.", "Purchase Register"],
     ["store.asset_", "Stock"],
     ["store.stock.", "Stock"],
@@ -163,9 +169,12 @@ export function sidebarSubmoduleForPermission(
     ["planning.", "Production Dashboard"],
     ["quality.", "Production Dashboard"],
   ] as const
-  if (productionFloors.some((floor) =>
-    permissionKey.startsWith(`operations.floors.${floor.code}.store.`)
-  )) return "Store"
+  if (
+    productionFloors.some((floor) =>
+      permissionKey.startsWith(`operations.floors.${floor.code}.store.`)
+    )
+  )
+    return "Store"
   return (
     mappings.find(([prefix]) => permissionKey.startsWith(prefix))?.[1] ??
     fallbackLabel

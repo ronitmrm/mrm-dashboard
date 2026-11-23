@@ -91,10 +91,12 @@ export function PermissionSelector({
         key.toLowerCase().includes(normalizedQuery)
       )
   )
+  const registeredKeys = new Set(permissions.map(({ key }) => key))
+  // Normalizing adds legacy companion keys; submit only ones that exist.
   const selectedPermissionKeys = normalizePermissionKeys([
     ...permissionKeys,
     ...retainedPermissionKeys,
-  ])
+  ]).filter((key) => registeredKeys.has(key))
   const configuredCount = configuredPermissionCount(rows, permissionKeys)
 
   function setAccess(id: string, level: PermissionAccessLevel) {
@@ -119,11 +121,9 @@ export function PermissionSelector({
           <div>
             <FieldLegend>Capabilities</FieldLegend>
             <FieldDescription>
-              Page access controls opening a screen. Task access controls
-              actions such as Save or Delete. Custom selects individual actions
-              when more than one is available. Modifying actions keep View
-              selected when available. Existing permissions without a current
-              screen stay on the role when you save.
+              Module and Sub Module match the side menu. Click Preview to see
+              the screen, then pick No Access, View Only, Full Access or Custom
+              (choose single buttons) under Access.
             </FieldDescription>
           </div>
           <Badge variant="secondary">{configuredCount} configured</Badge>
@@ -166,8 +166,8 @@ export function PermissionSelector({
                 <TableHead className="w-[15%]">Module</TableHead>
                 <TableHead className="w-[17%]">Sub Module</TableHead>
                 <TableHead className="w-[20%]">Screen</TableHead>
-                <TableHead className="w-20">Type</TableHead>
                 <TableHead>Permission</TableHead>
+                <TableHead className="w-28">Preview</TableHead>
                 <TableHead className="sticky right-0 w-48 bg-muted">
                   Access
                 </TableHead>
@@ -189,20 +189,13 @@ export function PermissionSelector({
                     >
                       {row.pages.join(" / ")}
                     </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={row.kind === "page" ? "default" : "outline"}
-                      >
-                        {row.kind === "page" ? "Screen" : "Action"}
-                      </Badge>
+                    <TableCell className="font-medium wrap-anywhere whitespace-normal">
+                      {row.kind === "page" ? `Open ${row.label}` : row.label}
                     </TableCell>
-                    <TableCell className="wrap-anywhere whitespace-normal">
-                      <PermissionPreviewLabel
+                    <TableCell>
+                      <ScreenPreview
                         label={row.label}
                         location={`${row.module} / ${row.submodule}`}
-                        noScreen={row.fullPermissionKeys.every((key) =>
-                          apiOnlyPermissionKeys.has(key)
-                        )}
                         preview={permissionRowPreview(row)}
                       />
                     </TableCell>
@@ -231,6 +224,72 @@ export function PermissionSelector({
         </div>
       </FieldSet>
     </TooltipProvider>
+  )
+}
+
+function ScreenPreview({
+  label,
+  location,
+  preview,
+}: {
+  label: string
+  location: string
+  preview: ReturnType<typeof permissionPreview>
+}) {
+  if (!preview) {
+    return (
+      <Button disabled size="sm" type="button" variant="ghost">
+        No screen
+      </Button>
+    )
+  }
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          aria-label={`Preview ${label}`}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <ImageIcon /> Preview
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-[min(52rem,calc(100vw-2rem))] gap-2 p-2"
+        side="left"
+      >
+        <PreviewImage label={label} location={location} src={preview.src} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PreviewImage({
+  label,
+  location,
+  src,
+}: {
+  label: string
+  location: string
+  src: string
+}) {
+  return (
+    <>
+      <Image
+        alt={`${label} in ${location}`}
+        className="mx-auto h-auto max-h-[min(70vh,40rem)] w-auto max-w-full rounded-md border object-contain object-top"
+        height={900}
+        src={src}
+        unoptimized
+        width={1136}
+      />
+      <p className="px-1 text-xs leading-relaxed">
+        <span className="font-semibold">{label}</span>
+        <span className="text-muted-foreground"> · {location}</span>
+      </p>
+    </>
   )
 }
 
@@ -298,18 +357,7 @@ function PermissionPreviewLabel({
         side="left"
         sideOffset={8}
       >
-        <Image
-          alt={`${label} in ${location}`}
-          className="mx-auto h-auto max-h-[min(70vh,40rem)] w-auto max-w-full rounded-md border object-contain object-top"
-          height={900}
-          src={preview.src}
-          unoptimized
-          width={1136}
-        />
-        <p className="px-1 text-xs leading-relaxed">
-          <span className="font-semibold">{label}</span>
-          <span className="text-muted-foreground"> · {location}</span>
-        </p>
+        <PreviewImage label={label} location={location} src={preview.src} />
       </TooltipContent>
     </Tooltip>
   )

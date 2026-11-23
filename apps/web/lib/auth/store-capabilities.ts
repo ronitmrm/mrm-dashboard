@@ -41,12 +41,9 @@ export const storePageAccess = [
     "/store",
     storeCapabilities.overview
   ),
-  page(
-    "store.request_item",
-    "Request Item",
-    "/store/requests/new",
-    { read: "store.requests.submit" }
-  ),
+  page("store.request_item", "Request Item", "/store/requests/new", {
+    read: "store.requests.submit",
+  }),
   page(
     "store.requests",
     "Requests & Issues",
@@ -100,6 +97,8 @@ function page(
     module,
     navigation,
     readPermissionKey: capabilities.read,
+    // Pages outside the menu sit under the Stock menu item.
+    ...(navigation ? {} : { submodule: "Stock" }),
     ...(capabilities.write ? { writePermissionKey: capabilities.write } : {}),
   }
 }

@@ -63,13 +63,15 @@ export type PermissionAccessRow = {
   label: string
   module: string
   readPermissionKeys: string[]
+  /** Screens sharing this row's permission, as named on screen. */
+  screens?: string[]
   submodule: string
   supportedLevels: PermissionAccessLevel[]
 }
 
 /** Page context for display and filtering; never changes the granted keys. */
 export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
-  if (row.kind === "page") return [row.label]
+  if (row.kind === "page") return row.screens ?? [row.label]
   if (row.fullPermissionKeys.every((key) => apiOnlyPermissionKeys.has(key))) {
     return ["API only"]
   }
@@ -80,6 +82,7 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["pricing.proforma_invoices.", ["Purchase Orders"]],
     ["pricing.assemblies.", ["Assembly / BOM"]],
     ["pricing.quotes.prepare", ["Customer Parameter Costing"]],
+    ["pricing.quotes.return_to_costing", ["Customer Parameter Costing"]],
     ["pricing.quotes.send", ["Quote Register"]],
     ["pricing.customer_default_terms.", ["Customers"]],
     ["pricing.customers.", ["Customers"]],
@@ -97,8 +100,10 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["hr.job_templates.", ["Job Description Templates"]],
     ["hr.masters.", ["Masters"]],
     ["store.masters.", ["Store Masters"]],
+    ["store.asset_movement.", ["Movement"]],
     ["store.asset_", ["Asset Movement & Maintenance History"]],
     ["quality.parameters.", ["Quality Inspection Parameter"]],
+    ["iso.documents.", ["Document Control"]],
     ["operations.attendance.", ["Attendance"]],
     ["operations.training.", ["Training"]],
   ]
@@ -111,11 +116,13 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
   const pages = pageAccessCatalog.filter(
     (page) =>
       page.module === row.module &&
-      (page.submodule ??
-        sidebarSubmoduleForPermission(page.readPermissionKey, page.label)) ===
-        row.submodule
+      (page.submodule ?? page.label) === row.submodule
   )
   return pages.length === 1 ? [pages[0]!.label] : [row.submodule]
+}
+
+function pageScreens(page: (typeof pageAccessCatalog)[number]) {
+  return [...(page.screens ?? [page.label])]
 }
 
 function permissionKind(key: string) {
@@ -242,6 +249,7 @@ export function permissionAccessRows(
       },
     ]
   })
+  const pageRowsByKeys = new Map<string, PermissionAccessRow>()
   const pageRows = pageAccessCatalog.flatMap((page) => {
     const hasRead = permissionKeys.has(page.readPermissionKey)
     const hasWrite = page.writePermissionKey
@@ -259,44 +267,63 @@ export function permissionAccessRows(
       ...readPermissionKeys,
       ...(hasWrite && page.writePermissionKey ? [page.writePermissionKey] : []),
     ]
+    // Screens sharing one permission are one switch, so show them as one row.
+    const keysId = fullPermissionKeys.join(" ")
+    const sharedRow = pageRowsByKeys.get(keysId)
+    if (sharedRow) {
+      sharedRow.screens = [...(sharedRow.screens ?? []), ...pageScreens(page)]
+      const submodule = page.submodule ?? page.label
+      if (!sharedRow.submodule.split(" / ").includes(submodule)) {
+        sharedRow.submodule = `${sharedRow.submodule} / ${submodule}`
+      }
+      return []
+    }
     const supportedLevels: PermissionAccessLevel[] = ["none"]
     if (hasRead) supportedLevels.push("view")
     if (hasWrite) supportedLevels.push("full")
     supportedLevels.push("custom")
-    return [
-      {
-        actions: [
-          ...(hasRead
-            ? [
-                {
-                  label: `Open ${page.label}`,
-                  permissionKeys: [page.readPermissionKey],
-                },
-              ]
-            : []),
-          ...(hasWrite && page.writePermissionKey
-            ? [
-                {
-                  label: `Change ${page.label}`,
-                  permissionKeys: [page.writePermissionKey],
-                },
-              ]
-            : []),
-        ],
-        fullPermissionKeys,
-        href: page.href,
-        id: `page:${page.id}`,
-        kind: "page" as const,
-        label: page.label,
-        module: page.module,
-        readPermissionKeys,
-        submodule:
-          page.submodule ??
-          sidebarSubmoduleForPermission(page.readPermissionKey, page.label),
-        supportedLevels,
-      },
-    ]
+    const row: PermissionAccessRow = {
+      actions: [
+        ...(hasRead
+          ? [
+              {
+                label: `Open ${page.label}`,
+                permissionKeys: [page.readPermissionKey],
+              },
+            ]
+          : []),
+        ...(hasWrite && page.writePermissionKey
+          ? [
+              {
+                label: `Change ${page.label}`,
+                permissionKeys: [page.writePermissionKey],
+              },
+            ]
+          : []),
+      ],
+      fullPermissionKeys,
+      href: page.href,
+      id: `page:${page.id}`,
+      kind: "page" as const,
+      label: page.label,
+      module: page.module,
+      readPermissionKeys,
+      screens: pageScreens(page),
+      submodule: page.submodule ?? page.label,
+      supportedLevels,
+    }
+    pageRowsByKeys.set(keysId, row)
+    return [row]
   })
+  for (const row of pageRows) {
+    if ((row.screens?.length ?? 0) < 2) continue
+    const screens = row.screens!.join(" / ")
+    row.actions = row.actions.map((action) => ({
+      ...action,
+      label: action.label.replace(row.label, screens),
+    }))
+    row.label = screens
+  }
   const groups = new Map<
     string,
     {
@@ -315,12 +342,7 @@ export function permissionAccessRows(
       const definition = productionFloorTaskDefinitions[taskId]
       const scopedPermissionKey =
         productionFloorTaskCapabilities[floor.code][taskId]
-      if (
-        !permissionKeys.has(scopedPermissionKey) ||
-        !permissionKeys.has(definition.legacyCapability)
-      ) {
-        return []
-      }
+      if (!permissionKeys.has(scopedPermissionKey)) return []
       return [
         {
           actions: [

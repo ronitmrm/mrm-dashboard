@@ -40,5 +40,6 @@ export const departmentStorePageAccess = productionFloors.map((floor) => ({
   navigation: true,
   readPermissionKey: departmentStoreCapability(floor.code, "read"),
   writePermissionKey: departmentStoreCapability(floor.code, "write"),
+  screens: ["Store Stock", "Store Movement", "Store Repairs"],
   submodule: "Store",
 })) satisfies PageAccessDefinition[]

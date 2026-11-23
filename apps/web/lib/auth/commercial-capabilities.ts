@@ -98,7 +98,7 @@ export const commercialPageAccess = [
   ),
   page(
     "commercial.design",
-    "Design",
+    "Design Tasks",
     "/commercial/design",
     commercialCapabilities.design
   ),
@@ -119,7 +119,9 @@ export const commercialPageAccess = [
     "commercial.assemblies",
     "Assembly / BOM",
     "/commercial/assemblies",
-    commercialCapabilities.assemblies
+    commercialCapabilities.assemblies,
+    sidebarModuleLabels.costing,
+    "Product Portfolio"
   ),
   page(
     "commercial.drawing_history",
@@ -154,7 +156,9 @@ export const commercialPageAccess = [
     "commercial.quotes",
     "Quote Register",
     "/commercial/quotes",
-    commercialCapabilities.quotes
+    commercialCapabilities.quotes,
+    sidebarModuleLabels.costing,
+    "Sales"
   ),
   page(
     "commercial.pricing",

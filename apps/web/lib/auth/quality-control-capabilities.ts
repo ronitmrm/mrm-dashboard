@@ -26,6 +26,7 @@ export const qualityControlPageAccess = [
     id: "quality.store",
     label: "Quality Store",
     module: "Quality Control",
+    screens: ["Quality Store", "Store Movement", "Store Repairs"],
     submodule: "Quality Store",
     navigation: true,
     readPermissionKey: "quality.store.read",
