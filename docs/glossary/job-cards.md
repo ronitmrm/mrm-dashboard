@@ -417,7 +417,9 @@ reduced usable balance requires review again. Releasing a machine is not accepta
 Shop Floor can close an open Production Session with **Awaiting material — release
 machine** to save actual output and release its own setup/machine assignment in one
 action, without waiting for a Planner. Counter output or complete weight details
-are required. This does not mark Item Complete or accept the RM shortage.
+are required. This does not mark Item Complete or accept the RM shortage. It is
+offered only when the Job Card's RM is received less (first setup) or the earlier
+setup is still unfinished (later setups).
 
 After closing its Production Session with actual output, the Planner may select
 **Release machine — awaiting material** for one setup/machine assignment. The

@@ -6,7 +6,7 @@ export async function readJobCardMaterialBalances(
   client: Pick<PoolClient, "query">,
   organizationId: string,
   floor?: string,
-  workOrderId?: string
+  workOrderId?: string | string[]
 ) {
   const result = await client.query<{
     id: string; jobCardNumber: string; partCode: string
@@ -27,8 +27,8 @@ export async function readJobCardMaterialBalances(
     FROM manufacturing.work_orders work_order
     JOIN catalog.items item ON item.id = work_order.item_id
     WHERE work_order.organization_id = $1 AND work_order.status <> 'Cancelled'
-      AND ($2::uuid IS NULL OR work_order.id = $2)
-    ORDER BY work_order.job_card_number`, [organizationId, workOrderId ?? null])
+      AND ($2::uuid[] IS NULL OR work_order.id = ANY($2::uuid[]))
+    ORDER BY work_order.job_card_number`, [organizationId, workOrderId === undefined ? null : [workOrderId].flat()])
   return result.rows.filter(row => !floor || productionFloorCodeForRecord(row) === floor).map(row => {
     const requiredKg = readRequiredRawMaterialKg(row.sourcePayload?.requiredRmKg)
     const receivedKg = Number(row.receivedKg)
