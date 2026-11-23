@@ -1,7 +1,13 @@
+import { createEmailSignatureRepository } from "@workspace/db"
+
 import { SignatureGenerator } from "@/components/brand-kit/signature-generator"
 import { PageHeader } from "@/components/ui/golden-patterns"
+import { readAuthEnvironment } from "@/lib/auth/auth"
 import { signaturePageAccess } from "@/lib/auth/brand-kit-capabilities"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 import { brand } from "@/lib/brand-kit/signature"
 
 export default async function SignaturePage() {
@@ -9,6 +15,15 @@ export default async function SignaturePage() {
     signaturePageAccess.readPermissionKey,
     signaturePageAccess.href
   )
+  const repository = createEmailSignatureRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const [saved, granted] = await Promise.all([
+    repository.list().finally(() => repository.close()),
+    listGrantedCapabilities(session.user.id, [
+      signaturePageAccess.writePermissionKey,
+    ]),
+  ])
 
   return (
     <div className="grid gap-6">
@@ -17,6 +32,7 @@ export default async function SignaturePage() {
         title="Signature"
       />
       <SignatureGenerator
+        canSave={granted.length > 0}
         defaults={{
           name: session.user.name,
           designation: "",
@@ -27,6 +43,7 @@ export default async function SignaturePage() {
           company: brand.company,
           imageHost: process.env.NEXT_PUBLIC_APP_URL ?? "",
         }}
+        saved={saved}
       />
     </div>
   )

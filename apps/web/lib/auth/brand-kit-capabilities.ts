@@ -8,6 +8,8 @@ export const signaturePageAccess = {
   module: sidebarModuleLabels.brandKit,
   navigation: true,
   readPermissionKey: "brand-kit.signature.read",
+  writePermissionKey: "brand-kit.signature.write",
+  writeActionLabel: "Save Signature / Delete",
 } satisfies PageAccessDefinition
 
 export const brandGuidePageAccess = {
