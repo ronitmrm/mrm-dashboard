@@ -1,10 +1,13 @@
 import { productionFloors } from "@workspace/db/production-floors"
+import { commercialMasterKinds } from "../../../lib/commercial-master-workspace"
 import {
+  type MasterAction,
   masterPermissionKey,
   scopedMasters,
   supportedMasterActions,
 } from "../../../lib/auth/master-capabilities"
 import {
+  type OperationalEntryAction,
   operationalEntryActions,
   operationalEntryPermissionKey,
   scopedOperationalEntries,
@@ -161,6 +164,126 @@ function taskLabel(permission: PermissionOption) {
     : readable
 }
 
+// Action names use the words on the button the permission controls.
+const masterButtonLabels: Readonly<
+  Record<string, Partial<Record<MasterAction, string>>>
+> = {
+  setup_name_master: { save: "Save Setup Name Master" },
+  route: { save: "Save Route Master" },
+  machine_master: { save: "Save Machine Master" },
+  cycle: { save: "Save Cycle Time Master" },
+  tooling: { save: "Save Tooling Master" },
+  setup_checklist_master: { save: "Save Checklist / Save assignment" },
+  quality_parameter_master: {
+    save: "Save Parameter Set / Save Program Availability",
+  },
+  production_break_schedule: { save: "Add break / Save schedule" },
+  maintenance_master: { save: "Create Schedule / Update Schedule" },
+  maintenance_checklist_master: { save: "Save Checklist" },
+  planning_holiday: { save: "Save Planning Calendar" },
+  parameter_master: { save: "Save Parameter Master" },
+  measuring_instrument_master: { save: "Save Measuring Instrument Master" },
+  rejection_type_master: { save: "Save Rejection Type Master" },
+  rejection_remark_master: { save: "Save Rejection Remark Master" },
+  rejection_reason_master: { save: "Save Defect / Downtime Reason Master" },
+  products: {
+    create: "Add Product to Portfolio",
+    import: "Import Products",
+    rename: "Rename Part Code / Rename Codes CSV",
+  },
+  commercial_customers: {
+    create: "Add Customer",
+    update: "Edit Customer Details",
+  },
+  materialRate: { save: "Add Material rate / Edit Rates" },
+  priceMaster: { save: "Save Price Master" },
+  commercial_website_products: { save: "Save Website Product / Upload CSV" },
+  ITEM_TYPE: { save: "Create & Generate Asset Code" },
+  CATEGORY: { save: "Save Category" },
+  SUBCATEGORY: { save: "Save Subcategory" },
+  ASSET_NAME: { save: "Save Asset Name" },
+  MAKE_MODEL: { save: "Save Make/Model" },
+  LOCATION: { save: "Save Location" },
+  SUPPLIER: { save: "Save Supplier" },
+  SUPPLIER_PRICE: { save: "Save Supplier Price" },
+  VENDOR: { save: "Save Vendor" },
+  department: { save: "Save Master / Upload CSV", rename: "Edit / Save Changes" },
+  designation: { save: "Save Master / Upload CSV", rename: "Edit / Save Changes" },
+  job_templates: { save: "Save Template / Upload CSV" },
+  approved_posts: {
+    create: "Save Approved Post / Upload CSV",
+    update: "Edit / Save Changes",
+  },
+  combined_approved_posts: {
+    create: "Create Combined Role / Upload CSV",
+    update: "Edit / Save Combined Role",
+  },
+  employee_assignments: {
+    save: "Update Selected Employee / Save Employee",
+    import: "Upload CSV / Upload Assignments",
+  },
+  candidates: { save: "Save Candidate / Upload CSV" },
+}
+
+function masterActionLabel(
+  master: (typeof scopedMasters)[number],
+  action: MasterAction
+) {
+  const configured = masterButtonLabels[master.master]?.[action]
+  if (configured) return configured
+  const commercial = commercialMasterKinds.find(
+    (kind) =>
+      kind.entryKind === master.master ||
+      ("workspaceKind" in kind && kind.workspaceKind === master.master)
+  )
+  if (commercial && action === "save") {
+    const edit = ["incoterms", "packaging_terms"].includes(master.master)
+      ? " / Edit"
+      : ""
+    return `Add ${commercial.label}${edit}`
+  }
+  if (commercial && action === "rename") return "Edit / Save Changes"
+  return {
+    read: `View ${master.label}`,
+    save: `Save ${master.label}`,
+    create: `Add ${master.label}`,
+    update: `Edit ${master.label}`,
+    import: "Upload CSV",
+    rename: `Rename ${master.label}`,
+    delete: `Delete ${master.label}`,
+  }[action]
+}
+
+const entryButtonLabels: Readonly<
+  Record<string, Partial<Record<OperationalEntryAction, string>>>
+> = {
+  rm_inward: {
+    save: "Save RM Inward / Add Entry / Edit Location",
+    import: "Receive RM CSV / Update locations CSV",
+    delete: "Delete / Delete Entry",
+  },
+  work_order: {
+    save: "Save Work Order / Add Entry / Cancel Line",
+    import: "Upload CSV / Update Required RM CSV",
+  },
+}
+
+function entryActionLabel(
+  entry: (typeof scopedOperationalEntries)[number],
+  action: OperationalEntryAction
+) {
+  return (
+    entryButtonLabels[entry.entry]?.[action] ??
+    {
+      read: `View ${entry.label}`,
+      save: `Save ${entry.label} / Add Entry`,
+      import: "Upload CSV",
+      export: "Download CSV",
+      delete: `Delete ${entry.label}`,
+    }[action]
+  )
+}
+
 export function permissionAccessRows(
   permissions: readonly PermissionOption[]
 ): PermissionAccessRow[] {
@@ -175,13 +298,7 @@ export function permissionAccessRows(
           )
         )
         .map((action) => ({
-          label: {
-            read: `View ${entry.label}`,
-            save: `Save ${entry.label}`,
-            import: `Import ${entry.label}`,
-            export: `Export ${entry.label}`,
-            delete: `Delete ${entry.label}`,
-          }[action],
+          label: entryActionLabel(entry, action),
           permissionKeys: [
             operationalEntryPermissionKey(entry.unit, entry.entry, action),
           ],
@@ -215,18 +332,7 @@ export function permissionAccessRows(
         )
       )
       .map((action) => ({
-        label:
-          master.master === "quality_parameter_master" && action === "save"
-            ? "Save Parameter Set"
-            : {
-                read: `View ${master.label}`,
-                save: `Add or edit ${master.label}`,
-                create: `Add ${master.label}`,
-                update: `Edit ${master.label}`,
-                import: "Upload CSV",
-                rename: `Rename ${master.label}`,
-                delete: `Delete ${master.label}`,
-              }[action],
+        label: masterActionLabel(master, action),
         permissionKeys: [
           masterPermissionKey(master.unit, master.master, action),
           ...(master.main === "store_masters" && action === "import"
@@ -321,7 +427,7 @@ export function permissionAccessRows(
         ...(hasWrite && page.writePermissionKey
           ? [
               {
-                label: `Change ${page.label}`,
+                label: page.writeActionLabel ?? `Change ${page.label}`,
                 permissionKeys: [page.writePermissionKey],
               },
             ]

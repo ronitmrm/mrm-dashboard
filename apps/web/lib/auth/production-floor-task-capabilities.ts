@@ -11,7 +11,7 @@ import {
 
 export const productionFloorTaskDefinitions = {
   order_acceptance: {
-    label: "Manage Proposed Orders",
+    label: "Save Draft / Calculate Machining Dates / Approve Reviewed Proposal",
     legacyCapability: "planning.order_acceptance.write",
     tab: "productionControlTab",
   },
@@ -21,12 +21,12 @@ export const productionFloorTaskDefinitions = {
     tab: "jobCardStatusTab",
   },
   first_piece_inspection: {
-    label: "Record first-piece inspections",
+    label: "Quality approved / Save correction",
     legacyCapability: "quality.first_piece.write",
     tab: "firstPieceInspectionTab",
   },
   hourly_quality_check: {
-    label: "Record hourly quality checks",
+    label: "Save Hourly Check / Save correction",
     legacyCapability: "quality.hourly.write",
     tab: "qualityControlTasksTab",
   },
@@ -36,72 +36,72 @@ export const productionFloorTaskDefinitions = {
     tab: "jobCardStatusTab",
   },
   job_card_delivery_target: {
-    label: "Change job-card delivery target",
+    label: "Save Target / Save Commitment",
     legacyCapability: "planning.override.write",
     tab: "jobCardStatusTab",
   },
   machine_constraint: {
-    label: "Manage machine constraints",
+    label: "Save And Replan Remaining Qty / Mark Available / Extend",
     legacyCapability: "planning.constraint.write",
     tab: "productionControlTab",
   },
   machinist_progress: {
-    label: "Progress machinist tasks",
+    label: "Setting done / Start machine",
     legacyCapability: "operations.shop_floor.write",
     tab: "machinistTasksTab",
   },
   plan_override: {
-    label: "Override machine plans",
+    label: "Add Machine And Recalculate / Save Machine Switch / Release machine / Reopen to Planned / Accept short RM / Approve and Apply",
     legacyCapability: "planning.override.write",
     tab: "productionControlTab",
   },
   planner_priority: {
-    label: "Change planner priorities",
+    label: "Apply priority / Approve and Apply",
     legacyCapability: "planning.priority.write",
     tab: "productionControlTab",
   },
   planner_recalculation: {
-    label: "Request planning recalculation",
+    label: "Recalculate Planning",
     legacyCapability: "planning.refresh.execute",
     tab: "productionControlTab",
   },
   raw_material_rejection: {
-    label: "Reject raw material",
+    label: "Save RM Rejection And Recalculate",
     legacyCapability: "planning.raw_material_rejection.write",
     tab: "productionControlTab",
   },
   planner_workflow_resolution: {
-    label: "Resolve production workflow exceptions",
+    label: "Close flag / Resolve workflow",
     legacyCapability: "operations.shop_floor.write",
     tab: "planningControlTab",
   },
   production_recording: {
-    label: "Record production sessions",
+    label: "Enter start details / End / Start downtime / Close downtime / Record accident / Rejection",
     legacyCapability: "operations.production.write",
     tab: "productionSessionsTab",
   },
   quality_approval: {
-    label: "Approve quality stage",
+    label: "Quality approved",
     legacyCapability: "operations.shop_floor.write",
     tab: "qualityControlTasksTab",
   },
   route_change: {
-    label: "Change planned routes",
+    label: "Save Route Change Plan",
     legacyCapability: "planning.route_change.write",
     tab: "productionControlTab",
   },
   route_selection: {
-    label: "Select production routes",
+    label: "Save Option / Save & Use Rework Route",
     legacyCapability: "operations.route_selection.write",
     tab: "planningControlTab",
   },
   setup_checklist: {
-    label: "Complete setup checklists",
+    label: "Save Draft / Save Completed Checklist",
     legacyCapability: "quality.setup_checklist.write",
     tab: "machinistTasksTab",
   },
   shop_floor_material: {
-    label: "Confirm raw material at machine",
+    label: "RM at machine / Save operators",
     legacyCapability: "operations.shop_floor.write",
     tab: "shopFloorTasksTab",
   },

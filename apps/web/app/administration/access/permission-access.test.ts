@@ -69,7 +69,7 @@ it("names each inspection parameter control and omits its legacy task", () => {
 
   expect(master.actions.map(({ label }) => label)).toEqual([
     "View Quality Inspection Parameter",
-    "Save Parameter Set",
+    "Save Parameter Set / Save Program Availability",
     "Upload CSV",
     "Download CSV",
     "Add Parameter",

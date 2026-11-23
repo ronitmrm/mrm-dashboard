@@ -21,4 +21,5 @@ export const brandingPageAccess = brandingTypes.map((type) => ({
   navigation: true,
   readPermissionKey: brandingCapability(type, "read"),
   writePermissionKey: brandingCapability(type, "write"),
+  writeActionLabel: "Save Draft / Create Revision",
 })) satisfies PageAccessDefinition[]

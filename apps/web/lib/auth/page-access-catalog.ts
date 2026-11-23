@@ -67,7 +67,6 @@ export const apiOnlyPermissionKeys = new Set([
   // Active server actions with no reachable in-app control to screenshot.
   "administration.post_access.assign",
   "operations.attendance.write",
-  "operations.corrections.write",
   "operations.training.write",
 ])
 
