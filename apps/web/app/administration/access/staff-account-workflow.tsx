@@ -479,13 +479,13 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
               />
             ) : null}
             {user?.employeeCode && props.canProvision ? (
-              <StaffLoginIdForm key={user.id} user={user} />
+              <StaffLoginIdForm key={`login:${user.id}`} user={user} />
             ) : null}
             {user && props.canAssignRoles ? (
-              <StaffRoleForm key={user.id} user={user} roles={props.roles} />
+              <StaffRoleForm key={`roles:${user.id}`} user={user} roles={props.roles} />
             ) : null}
             {user && props.canManageOverrides ? (
-              <StaffScreenProtectionForm key={user.id} user={user} />
+              <StaffScreenProtectionForm key={`screen:${user.id}`} user={user} />
             ) : null}
             {user && props.canManageOverrides ? (
               <StaffPermissionOverridesForm
