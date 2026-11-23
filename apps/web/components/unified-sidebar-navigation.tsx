@@ -62,6 +62,7 @@ import {
 } from "@/lib/sidebar-accordion"
 import {
   administrationNavigation,
+  brandKitNavigation,
   brandingNavigation,
   qualityControlNavigation,
   commercialCostingNavigation,
@@ -126,6 +127,7 @@ function defaultExpandedSections(
   return {
     dashboard: pathname.startsWith("/home"),
     branding: pathname.startsWith("/branding"),
+    brandKit: pathname.startsWith("/brand-kit"),
     qualityControl: pathname.startsWith("/quality-control"),
     costing:
       pathname.startsWith("/commercial") &&
@@ -265,6 +267,11 @@ export function UnifiedSidebarNavigation({
     ),
     normalizedMenuSearch,
     "branding sop notice policy documents"
+  )
+  const filteredBrandKitNavigation = filterNavigationItems(
+    brandKitNavigation,
+    normalizedMenuSearch,
+    "branding brand signature email guide logo colours"
   )
   const filteredIsoDocumentNavigation = filterNavigationItems(
     isoDocumentNavigation.filter((item) =>
@@ -755,6 +762,37 @@ export function UnifiedSidebarNavigation({
           </SidebarMenuSubItem>)}
         </NavigationSection>
       ) : null}
+      {filteredBrandKitNavigation.length ? (
+        <NavigationSection
+          icon={Palette}
+          isActive={pathname.startsWith("/brand-kit")}
+          label={sidebarModuleLabels.brandKit}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("brandKit", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.brandKit}
+        >
+          {filteredBrandKitNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton
+                asChild
+                className={submoduleButtonClassName}
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
+              >
+                <a href={item.href}>
+                  <item.icon aria-hidden="true" />
+                  <span>{item.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
       {filteredBrandingNavigation.length ? (
         <NavigationSection
           icon={Palette}

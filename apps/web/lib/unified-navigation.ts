@@ -12,6 +12,8 @@ import {
   FileClock,
   Gauge,
   Globe2,
+  Palette,
+  PenLine,
   IdCard,
   KeyRound,
   LayoutDashboard,
@@ -72,6 +74,11 @@ export const personalDashboardNavigation = {
   icon: LayoutDashboard,
   label: "Dashboard",
 } as const
+
+export const brandKitNavigation = [
+  { href: "/brand-kit/signature", icon: PenLine, label: "Signature" },
+  { href: "/brand-kit/guide", icon: Palette, label: "Brand Guide" },
+] as const
 
 export const brandingNavigation = [
   { href: "/branding/controlled-document", icon: FileSpreadsheet, label: "Controlled Documents" },

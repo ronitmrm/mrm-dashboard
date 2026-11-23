@@ -1,0 +1,1366 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mayank Raw Mint · Brand Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Hind+Vadodara:wght@400;500;600;700&family=Hind:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#006A49; --white:#F7F7F2; --black:#050505;
+  --tennis:#8BC341; --lime:#B8D446; --jungle:#103C1E;
+  --danger:#D32F2F; --caution:#FFDE59; --safe:#3C9244; --mandatory:#4970AD;
+  --c-brown:#81492A; --c-orange:#FB7800; --c-grey:#8F8E8F; --c-yellow:#F3C839;
+  --grey:#6E6E68; --line:rgba(5,5,5,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Outfit',sans-serif;background:var(--green);color:var(--black);padding:24px 18px 70px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto}
+a{color:inherit}
+
+/* cover */
+.cover{color:var(--white);padding:48px 8px 40px;border-bottom:1px solid rgba(247,247,242,.15);margin-bottom:26px}
+.cover .lg{width:230px;color:var(--white);margin-bottom:40px}
+.cover .lg svg{width:100%;height:auto;display:block}
+.cover .eyebrow{font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--tennis);margin-bottom:14px}
+.cover h1{font-size:clamp(34px,6vw,60px);font-weight:800;line-height:1.03;letter-spacing:-.02em}
+.cover .sub{font-size:16px;font-weight:400;color:rgba(247,247,242,.8);margin-top:16px;max-width:56ch;line-height:1.5}
+.cover .rev{font-size:12px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:rgba(247,247,242,.55);margin-top:28px}
+
+/* contents */
+.toc{background:var(--white);border-radius:28px;padding:38px 42px;margin-bottom:20px}
+.toc h2{font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:22px}
+.toc ol{list-style:none;counter-reset:s;display:grid;grid-template-columns:1fr 1fr;gap:2px 40px}
+@media(max-width:700px){.toc ol{grid-template-columns:1fr}}
+.toc li{counter-increment:s;display:flex;gap:14px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+.toc li::before{content:counter(s,decimal-leading-zero);font-family:'Outfit';font-weight:700;font-size:12px;color:var(--tennis);flex:0 0 auto}
+.toc li b{font-weight:600;font-size:15px}
+.toc li span{font-size:12.5px;color:var(--grey);margin-left:auto;text-align:right}
+
+.card{background:var(--white);border-radius:28px;padding:46px 48px 58px;margin-bottom:20px}
+@media(max-width:700px){.card{padding:30px 24px 34px}}
+.sec-no{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--tennis);margin-bottom:8px}
+h2.sec{font-size:27px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+h2.sec em{font-style:normal;color:var(--green)}
+.hrule{height:2px;background:var(--green);margin:16px 0 30px}
+h3{font-size:16px;font-weight:600;color:var(--green);margin:34px 0 14px}
+h3:first-of-type{margin-top:0}
+h4.sub{font-size:14px;font-weight:700;color:var(--black);margin:22px 0 10px;letter-spacing:.01em}
+p{font-size:15px;line-height:1.68;color:#2A2A26;margin-bottom:14px;max-width:74ch}
+p.lede{font-size:17px;line-height:1.6;color:#1B1B18}
+.small{font-size:13px;color:var(--grey);line-height:1.6}
+strong{font-weight:600}
+code{font-family:'Outfit';font-weight:600;color:var(--black);background:rgba(0,106,73,.07);padding:1px 6px;border-radius:4px;font-size:.92em}
+
+.principle{border-left:4px solid var(--tennis);background:rgba(139,195,65,.10);padding:22px 26px;border-radius:0 14px 14px 0;margin:22px 0 26px}
+.principle .k{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--green);margin-bottom:9px}
+.principle p{font-size:17px;line-height:1.5;font-weight:500;color:var(--black);margin:0;max-width:none}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:20px 0 26px}
+@media(max-width:760px){.two{grid-template-columns:1fr}}
+.box{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px}
+.box .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#9A9A94;font-weight:600;margin-bottom:14px}
+.box h4{font-size:17px;font-weight:700;color:var(--green);margin-bottom:8px}
+.box p{font-size:13.5px;line-height:1.6;color:#444;margin:0}
+
+.arch{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:22px 0}
+@media(max-width:760px){.arch{grid-template-columns:1fr}}
+.arch .a{border-radius:18px;padding:26px;color:var(--white)}
+.arch .ruler{background:var(--jungle)}
+.arch .creator{background:var(--green)}
+.arch .a .lbl{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--tennis);margin-bottom:10px}
+.arch .a h4{font-size:22px;font-weight:800;margin-bottom:12px}
+.arch .a p{font-size:13.5px;line-height:1.6;color:rgba(247,247,242,.9);margin-bottom:10px;max-width:none}
+.arch .a ul{list-style:none;margin-top:8px}
+.arch .a li{font-size:13px;line-height:1.5;padding-left:16px;position:relative;margin-bottom:6px;color:rgba(247,247,242,.85)}
+.arch .a li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--tennis)}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0 26px}
+@media(max-width:700px){.cmp{grid-template-columns:1fr}}
+.cmp>div{border-radius:14px;padding:20px 22px}
+.yes{background:rgba(0,106,73,.07);border:1.5px solid rgba(0,106,73,.32)}
+.no{background:rgba(211,47,47,.05);border:1.5px solid rgba(211,47,47,.26)}
+.cmp h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;margin-bottom:13px}
+.yes h4{color:var(--green)} .no h4{color:var(--danger)}
+.cmp ul{list-style:none}
+.cmp li{font-size:14px;line-height:1.55;margin-bottom:10px;padding-left:20px;position:relative;color:#2A2A26}
+.cmp li:last-child{margin-bottom:0}
+.yes li::before{content:"\2192";position:absolute;left:0;color:var(--green);font-weight:600}
+.no li::before{content:"\2715";position:absolute;left:0;color:var(--danger);font-weight:700}
+.cmp li b{font-weight:600;color:var(--black)}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0 26px}
+th{background:var(--green);color:var(--white);text-align:left;padding:12px 16px;font-weight:600;font-size:12.5px;letter-spacing:.04em}
+th:first-child{border-radius:10px 0 0 0} th:last-child{border-radius:0 10px 0 0}
+td{padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.55;color:#2A2A26}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;color:var(--green)}
+
+.bank{display:grid;gap:10px;margin:16px 0 8px}
+.ph{display:flex;gap:14px;align-items:flex-start;padding:14px 18px;border-radius:12px;background:#fff;border:1px solid var(--line)}
+.ph .tag{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:4px 8px;border-radius:5px;flex:0 0 auto;margin-top:2px}
+.t-any{background:var(--green);color:var(--white)}
+.t-cond{background:var(--tennis);color:var(--jungle)}
+.t-cut{background:var(--danger);color:#fff}
+.ph .txt{font-size:14.5px;line-height:1.5}
+.ph .txt i{display:block;font-style:normal;font-size:12.5px;color:var(--grey);margin-top:4px}
+
+.rw{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:12px;background:#fff}
+.rw .r{padding:13px 18px;font-size:14.5px;line-height:1.55}
+.rw .r.b{border-bottom:1px solid var(--line);color:var(--danger)}
+.rw .r.g{color:var(--green);font-weight:500}
+.rw .r label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;display:inline-block;margin-right:10px;opacity:.65}
+
+.stage-note{background:rgba(139,195,65,.12);border:1px dashed var(--tennis);border-radius:14px;padding:20px 24px;margin:20px 0;color:#2A2A26}
+.stage-note .k{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:8px}
+.stage-note p{margin:0;font-size:14px;max-width:none}
+
+.guj{font-family:'Hind Vadodara','Outfit',sans-serif}
+.hin{font-family:'Hind','Outfit',sans-serif}
+
+
+/* art direction budget bars */
+.budget{margin:16px 0 8px;display:flex;flex-direction:column;gap:9px}
+.brow{display:flex;align-items:center;gap:14px}
+.brow .bl{flex:0 0 150px;font-size:13px;font-weight:600;color:#2A2A26}
+.brow .bbar{flex:1;height:20px;background:rgba(0,0,0,.04);border-radius:5px;overflow:hidden}
+.brow .bbar i{display:block;height:100%;border-radius:5px}
+.brow .bp{flex:0 0 52px;text-align:right;font-family:"Outfit";font-size:12.5px;font-weight:700;color:var(--grey)}
+
+/* navigation: toc links + back-to-contents button */
+.toc li a{display:flex;gap:14px;align-items:baseline;text-decoration:none;color:inherit;width:100%;transition:color .15s}
+.toc li a:hover{color:var(--green)}
+.toc li a:hover b{color:var(--green)}
+.toc li{padding:0}
+.toc li a{padding:11px 0}
+html{scroll-behavior:smooth}
+.card{position:relative}
+.backtop{position:absolute;right:26px;bottom:22px;width:30px;height:30px;color:var(--tennis);opacity:.5;transition:opacity .15s,color .15s;display:block}
+.backtop:hover{opacity:1;color:var(--green)}
+.backtop svg{width:100%;height:100%;display:block}
+@media(max-width:700px){.backtop{right:18px;bottom:16px;width:26px;height:26px}}
+
+/* running header (sticky) */
+#runhead{
+  position:sticky;top:0;z-index:120;
+  background:rgba(247,247,242,.94);
+  backdrop-filter:saturate(140%) blur(8px);
+  border-bottom:1px solid rgba(5,5,5,.10);
+  border-radius:14px;
+  margin:0 auto 18px;max-width:1000px;
+  display:flex;align-items:center;gap:14px;
+  padding:11px 20px;
+  font-family:'Outfit',sans-serif;
+  opacity:0;transform:translateY(-6px);pointer-events:none;
+  transition:opacity .2s ease,transform .2s ease;
+}
+#runhead.show{opacity:1;transform:translateY(0);pointer-events:auto}
+#runhead .rh-num{font-size:12.5px;font-weight:700;color:var(--green);letter-spacing:.06em;flex:0 0 auto}
+#runhead .rh-pill{
+  background:var(--tennis);color:var(--jungle);
+  font-size:11.5px;font-weight:700;letter-spacing:.04em;
+  padding:4px 11px;border-radius:6px;flex:0 0 auto;
+}
+#runhead .rh-part{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--grey);flex:0 0 auto}
+#runhead .rh-spacer{flex:1}
+#runhead .rh-prog{font-size:11.5px;font-weight:600;color:var(--grey);letter-spacing:.04em;flex:0 0 auto}
+#runhead .rh-home{width:22px;height:22px;color:var(--green);opacity:.55;flex:0 0 auto;transition:opacity .15s}
+#runhead .rh-home:hover{opacity:1}
+#runhead .rh-home svg{width:100%;height:100%;display:block}
+@media(max-width:700px){
+  #runhead{padding:9px 14px;gap:9px}
+  #runhead .rh-part{display:none}
+  #runhead .rh-pill{font-size:10.5px;padding:3px 8px}
+}
+
+/* decimal subsection numbering */
+h3 .h3num{
+  display:inline-block;min-width:2.9em;
+  font-size:12.5px;font-weight:700;color:var(--tennis);
+  letter-spacing:.04em;vertical-align:baseline;
+}
+
+/* label + prose lead pattern */
+.leadgrid{display:grid;grid-template-columns:132px 1fr;gap:26px;align-items:start;margin-bottom:20px}
+.leadgrid .llabel{
+  font-size:12.5px;font-weight:700;color:var(--black);
+  line-height:1.35;padding-top:3px;letter-spacing:.01em;
+}
+.leadgrid .llabel span{display:block;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tennis);margin-bottom:5px}
+.leadgrid p.lede{margin-bottom:0;max-width:66ch}
+@media(max-width:760px){
+  .leadgrid{grid-template-columns:1fr;gap:10px}
+  .leadgrid .llabel{padding-top:0}
+}
+
+/* wide spec tables scroll on narrow screens */
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px 0 26px}
+.tscroll table{margin:0;min-width:560px}
+
+.ftr{text-align:center;color:rgba(247,247,242,.62);font-size:12px;padding:22px}
+
+/* colour + component styles */
+.sw-grid{display:grid;gap:14px;margin-bottom:8px}
+.c3{grid-template-columns:repeat(3,1fr)} .c4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:820px){.c3,.c4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.c3,.c4{grid-template-columns:1fr}}
+.sw{border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#fff}
+.sw .chip{height:96px;display:flex;align-items:flex-end;padding:10px}
+.sw .chip span{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.85}
+.sw .i{padding:13px 15px 15px}
+.sw .n{font-size:13.5px;font-weight:600} .sw .h{font-size:11px;letter-spacing:.08em;color:var(--grey);margin-top:2px;font-weight:500}
+.sw .u{font-size:11.5px;color:#55554F;margin-top:8px;line-height:1.5}
+.crate{display:flex;flex-direction:column;gap:8px;margin:18px 0 6px}
+.cr{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.sw-bar{flex:1;min-width:300px;display:flex;align-items:center;gap:14px;border-radius:10px;padding:14px 18px}
+.sw-bar .st{font-weight:800;font-size:15px;opacity:.9;width:24px;flex:0 0 24px}
+.sw-bar .lb{font-weight:600;font-size:14.5px}
+.cr .hx{font-size:11.5px;font-weight:600;color:var(--grey);letter-spacing:.04em;white-space:nowrap}
+.lock{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:18px 0 8px}
+@media(max-width:760px){.lock{grid-template-columns:1fr}}
+.lk{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+.lk .stage{padding:26px 24px;display:flex;align-items:center;justify-content:center}
+.lk .stage svg{width:100%;height:auto;display:block}
+.lk .m{padding:14px 16px 16px}
+.lk .m b{font-size:13.5px;font-weight:600;display:block}
+.lk .m span.d{font-size:11.5px;color:var(--grey);display:block;margin-top:3px;line-height:1.5}
+.lk .m .tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 7px;border-radius:4px;margin-top:8px}
+.t-int{background:rgba(0,106,73,.12);color:var(--green)}
+.t-ext{background:rgba(139,195,65,.25);color:var(--jungle)}
+.spec{border-left:3px solid var(--tennis);padding:4px 0 4px 18px;margin-bottom:22px}
+.spec .l{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--green);font-weight:600;margin-bottom:7px}
+.spec .nn{font-size:11.5px;color:var(--grey);margin-top:6px}
+.sig{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0 10px}
+@media(max-width:820px){.sig{grid-template-columns:repeat(2,1fr)}}
+.sigbox{border-radius:12px;padding:16px;text-align:center}
+.sigbox .lb{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+.sigbox .ex{font-size:13.5px;font-weight:600}
+.s-danger{background:var(--danger);color:#fff} .s-caution{background:var(--caution);color:var(--black);border:2px solid var(--black)}
+.s-safe{background:var(--safe);color:#fff} .s-mand{background:var(--mandatory);color:#fff}
+.icons{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}
+@media(max-width:700px){.icons{grid-template-columns:repeat(2,1fr)}}
+.ic{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;text-align:center}
+.ic svg{width:44px;height:44px;color:var(--green);margin-bottom:12px}
+.ic .t{font-size:12.5px;font-weight:600;color:var(--black)}
+.motif{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:18px 0;align-items:center}
+@media(max-width:700px){.motif{grid-template-columns:1fr}}
+.motif .art{background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px;display:flex;align-items:center;justify-content:center}
+.motif .art svg{width:100%;max-width:220px;height:auto;color:var(--green)}
+</style></head><body><div class="wrap">
+<div id="runhead" aria-live="polite">
+  <span class="rh-num" id="rh-num">01</span>
+  <span class="rh-pill" id="rh-pill">Purpose</span>
+  <span class="rh-part" id="rh-part">Foundation</span>
+  <span class="rh-spacer"></span>
+  <span class="rh-prog" id="rh-prog">01 / 21</span>
+  <a class="rh-home" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+
+<div class="cover">
+  <div class="lg">
+<svg data-logo="mrm-full-tagline" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lft-Layer_2" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 483.4 56.7">
+  
+  <defs>
+    <style>
+      .lft-st0 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lft-Layer_1-2">
+    <g>
+      <g>
+        <path class="lft-st0" d="M49.1,0H5.5C2.4,0,0,2.7,0,6v27.3h54.6V6C54.6,2.7,52.1,0,49.1,0Z"/>
+        <path class="lft-st0" d="M0,49c0,3.1,2.4,5.6,5.5,5.6h43.7c3,0,5.5-2.5,5.5-5.6v-5.3H0v5.3Z"/>
+      </g>
+      <g>
+        <g>
+          <path class="lft-st0" d="M99.8,0v26.7h-7.2v-9.4c0-2.1.2-4.9.3-6.6h-.2c-.7,1.3-1.8,3.2-3.2,5.1l-4.2,5.6h-1.3l-4.2-5.6c-1.4-1.9-2.6-3.8-3.3-5.2h-.2c.2,1.8.4,4.6.4,6.7v9.4h-7.1V0h6.6l8.5,11.7L93.2,0h6.6,0Z"/>
+          <path class="lft-st0" d="M125.2,22.2h-10.9l-1.8,4.5h-7.6L116.2,0h7.5l11.1,26.7h-7.8s-1.8-4.5-1.8-4.5ZM118.2,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.2c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M150.7,15.9v10.8h-7.2v-10.7l-10-16h8.4l3.1,5.6c.8,1.5,1.7,3.2,2.1,4.4h.1c.3-.9,1.3-2.7,2.2-4.3l3.3-5.7h8.4l-10.4,15.9h0Z"/>
+          <path class="lft-st0" d="M180,22.2h-10.9l-1.8,4.5h-7.6L170.9,0h7.5l11.1,26.7h-7.8l-1.8-4.5ZM173,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.1c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M194.6,0h6.6l7.7,10.8c1.4,1.9,2.5,3.6,3.6,5.1h.2c-.5-2.2-.6-5.3-.6-9.3V0h7v26.7h-6.6l-7.7-10.8c-1.6-2.2-2.7-3.8-3.5-5h-.2c.4,1.8.6,5.2.6,9.2v6.7h-7V0Z"/>
+          <path class="lft-st0" d="M251.8,26.7h-9.4l-4.7-5.6c-1.6-1.9-2.9-3.7-3.7-5.1h-.2c.2,1.8.4,4.6.4,7.1v3.7h-7.1V0h7.1v3.5c0,2.5-.2,5.3-.4,7h.2c.9-1.3,2.3-3.2,3.9-5.1L242.1,0h8.7l-10.9,13.1,11.9,13.6h0Z"/>
+          <path class="lft-st0" d="M277.2,18.1h-1.8v8.6h-7.2V0h12.2C286.2,0,290.3,3.7,290.3,9s-2.1,6.8-5.7,8.2l7.4,9.4h-8.5l-6.2-8.6h0ZM279.5,5.8h-4.1v6.9h4.1c2.4,0,3.7-1.2,3.7-3.4s-1.3-3.6-3.7-3.6h0Z"/>
+          <path class="lft-st0" d="M315.3,22.2h-11l-1.8,4.5h-7.6L306.2,0h7.5l11.1,26.7h-7.8l-1.8-4.5h0ZM308.2,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.1c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M324,0h7.8l3,10c.5,1.8,1,3.7,1.5,6.6h.2c.6-2.8,1-3.9,2.1-6.9L342.1,0h4.7l3.5,9.5c1.1,3.1,1.6,5,2.1,7.1h.2c.4-1.9,1.1-4.5,1.8-7L357.2,0h7.7l-9,26.7h-5.9l-3.1-8.9c-.9-2.5-1.8-5.6-2.2-7h-.1c-.3,1.4-1.2,4.3-2.2,7.1l-3,8.7h-5.8L324,0h0Z"/>
+          <path class="lft-st0" d="M410.5,0v26.7h-7.2v-9.4c0-2.1.1-4.9.3-6.6h-.2c-.7,1.3-1.8,3.2-3.2,5.1l-4.2,5.6h-1.3l-4.2-5.6c-1.5-1.9-2.6-3.8-3.3-5.2h-.2c.2,1.8.4,4.6.4,6.7v9.4h-7.1V0h6.6l8.5,11.7L403.9,0h6.6Z"/>
+          <path class="lft-st0" d="M417.6,0h7.2v26.7h-7.2V0Z"/>
+          <path class="lft-st0" d="M431.9,0h6.6l7.7,10.8c1.4,1.9,2.5,3.6,3.5,5.1h.2c-.5-2.2-.6-5.3-.6-9.3V0h7v26.7h-6.6l-7.7-10.8c-1.6-2.2-2.7-3.8-3.5-5h-.2c.4,1.8.6,5.2.6,9.2v6.7h-7V0Z"/>
+          <path class="lft-st0" d="M483.4,6h-7.8v20.7h-7.2V6h-7.8V0h22.8v6Z"/>
+        </g>
+        <g>
+          <path class="lft-st0" d="M69.8,52.3v-14.6h2v14.6h-2ZM71.1,46.6v-1.7h4c.6,0,1-.1,1.5-.3s.8-.5,1-.9c.2-.4.4-.9.4-1.5s-.1-1-.4-1.5c-.2-.4-.6-.7-1-.9s-.9-.3-1.5-.3h-4v-1.7h4.1c.9,0,1.7.2,2.4.5s1.3.9,1.7,1.5.6,1.5.6,2.4-.2,1.7-.6,2.3-1,1.2-1.7,1.5-1.5.5-2.4.5c0,0-4.1,0-4.1,0Z"/>
+          <path class="lft-st0" d="M82.1,52.3v-10h1.9v10h-1.9ZM84,46.6l-.7-.3c0-1.3.3-2.3.9-3s1.4-1.1,2.5-1.1,1,0,1.4.3.8.5,1.1.9l-1.2,1.3c-.2-.2-.4-.4-.7-.5s-.6-.2-.9-.2c-.7,0-1.3.2-1.7.7s-.7,1.1-.7,2.1h0Z"/>
+          <path class="lft-st0" d="M94.8,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.8-1.9.8-.5,1.7-.7,2.6-.7s1.7.2,2.4.6,1.3,1,1.7,1.7.6,1.6.6,2.5,0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8c.3.5.7.9,1.2,1.2s1.1.4,1.8.4,1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M106,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.4-.8-.7-1.7-.7-2.6s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9s1.7-.7,2.7-.7,1.5.1,2.1.4,1.2.7,1.7,1.2l-1.3,1.3c-.3-.4-.7-.6-1.1-.8-.4-.2-.9-.3-1.4-.3s-1.2.1-1.7.4-.9.7-1.2,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.7.7.9,1.2,1.2c.5.3,1.1.4,1.7.4s1,0,1.5-.3.8-.5,1.1-.8l1.2,1.3c-.5.5-1,.9-1.7,1.2s-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M112.7,40.3c-.3,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM111.7,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M119.6,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4c-.4-.1-.9-.3-1.3-.5-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4c.6.3,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M126.4,40.3c-.3,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM125.4,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M134.6,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9c-.5-.8-.7-1.7-.7-2.7s.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM134.6,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7-.7-.9-1.1-1.2c-.5-.3-1.1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4Z"/>
+          <path class="lft-st0" d="M141.9,52.3v-10h1.9v10h-1.9ZM149,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-.9.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M158.1,52.3v-14.6h2v14.6h-2ZM159.4,52.3v-1.7h4.4c.8,0,1.5-.2,2-.7.5-.5.7-1.1.7-1.8s-.1-.9-.3-1.3-.5-.7-.9-.9c-.4-.2-.9-.3-1.4-.3h-4.4v-1.7h4.1c.7,0,1.3-.2,1.7-.6.4-.4.6-.9.6-1.6s-.2-1.2-.6-1.6c-.4-.4-1-.5-1.7-.5h-4.1v-1.7h4.1c.9,0,1.8.2,2.4.5.6.3,1.1.8,1.4,1.3.3.6.5,1.2.5,1.8s-.2,1.5-.6,2.1-1.1,1-1.9,1.4l.2-.6c.9.3,1.7.8,2.2,1.5s.8,1.5.8,2.4-.2,1.5-.6,2.1-.9,1.1-1.6,1.5-1.6.6-2.6.6h-4.3,0Z"/>
+          <path class="lft-st0" d="M170.9,52.3v-10h1.9v10h-1.9ZM172.8,46.6l-.7-.3c0-1.3.3-2.3.9-3s1.4-1.1,2.5-1.1,1,0,1.4.3.8.5,1.1.9l-1.2,1.3c-.2-.2-.4-.4-.7-.5s-.6-.2-.9-.2c-.7,0-1.3.2-1.7.7s-.7,1.1-.7,2.1h0Z"/>
+          <path class="lft-st0" d="M183.2,52.5c-.9,0-1.8-.2-2.5-.7-.7-.5-1.3-1.1-1.7-1.9-.4-.8-.6-1.7-.6-2.6s.2-1.9.6-2.7c.4-.8,1-1.4,1.7-1.9.7-.5,1.6-.7,2.5-.7s1.4.2,2,.5c.6.3,1.1.8,1.4,1.3.4.5.6,1.2.6,1.9v3c0,.7-.2,1.3-.6,1.9s-.8,1-1.4,1.3c-.6.3-1.3.5-2,.5h0ZM183.5,50.7c.9,0,1.7-.3,2.3-1,.6-.6.9-1.5.9-2.4s-.1-1.3-.4-1.8c-.3-.5-.6-.9-1.1-1.2s-1-.4-1.6-.4-1.2.2-1.7.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8.6.9,1.1,1.2c.5.3,1.1.4,1.7.4h0ZM186.5,52.3v-2.7l.4-2.4-.4-2.4v-2.4h1.9v10s-1.9,0-1.9,0Z"/>
+          <path class="lft-st0" d="M194.3,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6c-.4-.3-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M203.3,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6c-.4-.3-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M213.8,52.3v-14.6h2v14.6h-2ZM215.1,39.6v-1.8h7.9v1.8h-7.9ZM215.1,45.9v-1.8h7.6v1.8h-7.6Z"/>
+          <path class="lft-st0" d="M226.3,40.3c-.4,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM225.3,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M229.1,44.1v-1.7h12.7v1.7h-12.7ZM231.5,52.3v-14.1h1.9v14.1h-1.9ZM237.5,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M244.6,40.3c-.4,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM243.7,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M248.4,52.3v-10h1.9v10h-1.9ZM255.4,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-.9.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5c.3.6.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M264,52.1c-.9,0-1.7-.2-2.5-.7s-1.3-1-1.7-1.8c-.4-.8-.6-1.6-.6-2.6s.2-1.8.6-2.5,1-1.3,1.7-1.8,1.5-.7,2.4-.7,1.5.2,2.1.5,1.1.7,1.4,1.3.5,1.2.6,1.9v2.6c0,.7-.2,1.4-.6,1.9-.4.5-.8,1-1.4,1.3s-1.3.5-2.1.5h0ZM264,56.7c-1,0-1.9-.2-2.7-.6-.8-.4-1.4-.9-1.9-1.6l1.2-1.2c.4.5.9.9,1.5,1.2s1.2.4,2,.4,1.8-.3,2.4-.8.9-1.3.9-2.2v-2.5l.3-2.2-.3-2.2v-2.6h1.9v9.6c0,1-.2,1.8-.7,2.5s-1.1,1.3-1.9,1.7-1.7.6-2.7.6h0ZM264.4,50.4c.6,0,1.2-.1,1.6-.4.5-.3.8-.6,1.1-1.1.3-.5.4-1,.4-1.7s-.1-1.2-.4-1.7-.6-.9-1.1-1.1-1-.4-1.6-.4-1.2.1-1.7.4-.9.7-1.1,1.1-.4,1-.4,1.7.1,1.2.4,1.7.6.9,1.1,1.1,1,.4,1.6.4Z"/>
+          <path class="lft-st0" d="M275.2,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3c.3-.2.5-.5.5-.8s-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1-.8-.4-.2-.9-.3-1.4-.3s-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8h0Z"/>
+          <path class="lft-st0" d="M290,52.5c-1,0-1.8-.2-2.5-.6s-1.3-.9-1.7-1.6-.6-1.4-.6-2.3.2-1.7.7-2.4,1.2-1.3,2.1-1.7l.9,1.2c-.6.3-1,.7-1.3,1.1s-.5,1.1-.5,1.7.1,1,.4,1.4c.2.4.6.7,1.1.9s1,.3,1.6.3,1.4-.2,1.9-.5c.5-.3.9-.7,1.2-1.2l1.2,1.5c-.3.4-.6.7-1.1,1-.5.3-1,.5-1.5.7-.5.2-1.1.2-1.8.2h0ZM295.2,52.3l-7-7.5c-.5-.6-.9-1.2-1.2-1.7-.3-.5-.4-1.1-.4-1.8s.2-1.4.5-2,.8-1,1.5-1.4c.6-.3,1.3-.5,2.1-.5s1.1,0,1.6.3c.5.2.9.4,1.3.7.4.3.7.7.9,1l-1.4,1.2c-.3-.5-.7-.8-1.1-1.1s-.9-.4-1.4-.4-1.1.2-1.6.6-.6.9-.6,1.5.1.9.3,1.3.5.8.9,1.2l7.7,8.4h-2.3,0Z"/>
+          <path class="lft-st0" d="M303,52.3v-14.6h1.4l6.2,10.1h-.9l6.2-10.1h1.4v14.6h-2v-11.1h.4c0,.1-4.9,8.1-4.9,8.1h-1.4l-4.9-8h.4c0-.1,0,11,0,11h-2,0Z"/>
+          <path class="lft-st0" d="M324.9,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.6-.7,2.6-.7s1.7.2,2.4.6c.7.4,1.3,1,1.7,1.7.4.7.6,1.6.6,2.5s0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4c-.5.3-.9.7-1.1,1.2s-.4,1.1-.4,1.8.1,1.3.4,1.8c.3.5.7.9,1.2,1.2.5.3,1.1.4,1.8.4s1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M330.3,44.1v-1.7h6.8v1.7h-6.8ZM332.8,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M342.9,52.5c-.9,0-1.8-.2-2.5-.7-.7-.5-1.3-1.1-1.7-1.9s-.6-1.7-.6-2.6.2-1.9.6-2.7c.4-.8,1-1.4,1.7-1.9.7-.5,1.6-.7,2.5-.7s1.4.2,2,.5c.6.3,1.1.8,1.4,1.3.4.5.6,1.2.6,1.9v3c0,.7-.2,1.3-.6,1.9-.4.6-.8,1-1.4,1.3-.6.3-1.3.5-2,.5h0ZM343.2,50.7c.9,0,1.7-.3,2.3-1,.6-.6.9-1.5.9-2.4s-.1-1.3-.4-1.8c-.3-.5-.6-.9-1.1-1.2s-1-.4-1.6-.4-1.2.2-1.7.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8.6.9,1.1,1.2c.5.3,1,.4,1.7.4h0ZM346.2,52.3v-2.7l.4-2.4-.4-2.4v-2.4h1.9v10s-1.9,0-1.9,0Z"/>
+          <path class="lft-st0" d="M350.9,52.3v-15h1.9v15h-1.9Z"/>
+          <path class="lft-st0" d="M366.8,52.5c-1,0-2-.2-2.9-.6s-1.7-.9-2.3-1.6-1.2-1.5-1.5-2.4c-.4-.9-.5-1.9-.5-2.9s.2-2,.5-2.9c.4-.9.9-1.7,1.5-2.4s1.4-1.2,2.3-1.6c.9-.4,1.9-.6,2.9-.6s2.2.2,3,.6,1.6.9,2.3,1.6l-1.4,1.4c-.5-.5-1-.9-1.7-1.2s-1.4-.4-2.3-.4-1.5.1-2.1.4-1.2.7-1.7,1.2c-.5.5-.8,1.1-1.1,1.8-.3.7-.4,1.4-.4,2.2s.1,1.6.4,2.2c.3.7.6,1.3,1.1,1.8.5.5,1,.9,1.7,1.2.6.3,1.4.4,2.1.4s1.7-.2,2.4-.5c.7-.3,1.2-.7,1.7-1.2l1.4,1.4c-.7.7-1.5,1.2-2.4,1.6-.9.4-1.9.6-3,.6h0Z"/>
+          <path class="lft-st0" d="M378.5,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9-.7-1.7-.7-2.7.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM378.5,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7c-.3-.5-.7-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4h0Z"/>
+          <path class="lft-st0" d="M385.8,52.3v-10h1.9v10h-1.9ZM392.5,52.3v-6c0-.7-.2-1.3-.7-1.8-.5-.4-1-.6-1.7-.6s-.9,0-1.2.3c-.4.2-.7.5-.9.8-.2.3-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2s.8-1,1.4-1.3c.6-.3,1.2-.5,1.9-.5s1.3.2,1.9.5,1,.7,1.3,1.3c.3.6.5,1.2.5,2v6.4h-1.9,0ZM399.3,52.3v-6c0-.7-.2-1.3-.7-1.8-.5-.4-1-.6-1.7-.6s-.9,0-1.2.3c-.4.2-.7.5-.9.8s-.3.8-.3,1.3l-1.1-.4c0-.8.2-1.4.6-2s.9-1,1.4-1.3c.6-.3,1.2-.5,1.9-.5s1.4.2,2,.5,1,.7,1.4,1.3c.3.6.5,1.2.5,2v6.4h-1.9,0Z"/>
+          <path class="lft-st0" d="M403.7,56.5v-14.1h1.9v2.6l-.4,2.4.4,2.4v6.7s-1.9,0-1.9,0ZM409,52.5c-.8,0-1.4-.2-2-.5s-1.1-.8-1.5-1.3c-.4-.6-.6-1.2-.6-1.9v-3c0-.7.2-1.4.6-1.9s.9-1,1.5-1.3c.6-.3,1.3-.5,2-.5s1.7.2,2.5.7c.7.5,1.3,1.1,1.7,1.9.4.8.6,1.7.6,2.7s-.2,1.9-.6,2.6-1,1.4-1.7,1.9c-.7.5-1.6.7-2.5.7h0ZM408.7,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.8c-.3-.5-.6-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.2-1.6.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.2.4,1.8.6.9,1.1,1.2,1,.4,1.6.4Z"/>
+          <path class="lft-st0" d="M420.5,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9-.7-1.7-.7-2.7.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM420.5,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7c-.3-.5-.7-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4h0Z"/>
+          <path class="lft-st0" d="M427.8,52.3v-10h1.9v10h-1.9ZM434.8,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-1,.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M443.9,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.6-.7,2.6-.7s1.7.2,2.4.6c.7.4,1.3,1,1.7,1.7.4.7.6,1.6.6,2.5s0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4c-.5.3-.9.7-1.1,1.2s-.4,1.1-.4,1.8.1,1.3.4,1.8c.3.5.7.9,1.2,1.2.5.3,1.1.4,1.8.4s1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M450.5,52.3v-10h1.9v10h-1.9ZM457.6,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-1,.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M461,44.1v-1.7h6.8v1.7h-6.8ZM463.5,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M472.6,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3c.3-.2.5-.5.5-.8s-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1-.8-.4-.2-.9-.3-1.4-.3s-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8h0Z"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg></div>
+  <div class="eyebrow">Brand Guide</div>
+  <h1>The MRM<br>Brand Guide</h1>
+  <div class="sub">One reference for how Mayank Raw Mint looks, sounds, and behaves. Foundation, voice, and visual system in a single document.</div>
+  <div class="rev">Version 1.0 · 2026 · Internal</div>
+</div>
+
+<div class="toc" id="contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#sec-01"><b>Purpose</b><span>Mission, vision, what we do</span></a></li>
+    <li><a href="#sec-02"><b>Brand story</b><span>Who MRM is today</span></a></li>
+    <li><a href="#sec-03"><b>Audience</b><span>Who MRM is for</span></a></li>
+    <li><a href="#sec-04"><b>Archetype &amp; promise</b><span>Who MRM is</span></a></li>
+    <li><a href="#sec-05"><b>Voice</b><span>How MRM sounds</span></a></li>
+    <li><a href="#sec-06"><b>The proof rule</b><span>Claims &amp; evidence</span></a></li>
+    <li><a href="#sec-07"><b>Sentence rhythm</b><span>The house cadence</span></a></li>
+    <li><a href="#sec-08"><b>Precision over description</b><span>Words that measure</span></a></li>
+    <li><a href="#sec-09"><b>The human layer</b><span>Polite vs declarative</span></a></li>
+    <li><a href="#sec-10"><b>Phrase bank</b><span>Approved lines</span></a></li>
+    <li><a href="#sec-11"><b>Writing mechanics</b><span>Punctuation &amp; rules</span></a></li>
+    <li><a href="#sec-12"><b>The logo</b><span>Lockups &amp; usage</span></a></li>
+    <li><a href="#sec-13"><b>Colour</b><span>Primary, secondary, signal</span></a></li>
+    <li><a href="#sec-14"><b>The crate scheme</b><span>Material-flow code</span></a></li>
+    <li><a href="#sec-15"><b>Typography</b><span>Three faces</span></a></li>
+    <li><a href="#sec-16"><b>Iconography</b><span>Icon style, locked</span></a></li>
+    <li><a href="#sec-17"><b>The CAD motif</b><span>Line-art fittings</span></a></li>
+    <li><a href="#sec-18"><b>Layout &amp; components</b><span>The card system</span></a></li>
+    <li><a href="#sec-19"><b>Safety documents</b><span>Signage rules</span></a></li>
+    <li><a href="#sec-20"><b>Marketing &amp; outreach</b><span>Standees, posters, social</span></a></li>
+    <li><a href="#sec-21"><b>Stage 2</b><span>Still to define</span></a></li>
+  </ol>
+</div>
+
+<div class="card" id="sec-01">
+  <div class="sec-no">Section 01 · Foundation</div>
+  <h2 class="sec"><em>Purpose</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 01</span>Summary</div><p class="lede">Why MRM exists, where it is going, and what it makes. Everything else in this guide is downstream of these three statements.</p></div>
+
+  <h3><span class="h3num">01.1</span>Mission</h3>
+  <div class="principle">
+    <div class="k">Why we exist</div>
+    <p>We exist to make precision manufacturing easy to buy. Our customers get full traceability, fast answers, and one team that owns their project from enquiry to delivery. In an industry that too often goes quiet, we stay reachable, and we solve the problem in front of us.</p>
+  </div>
+  <p>The mission is a promise about friction, not about quality. Competitors can match a tolerance. Far fewer answer the email, trace the material, and give the client a name to call. That is the gap MRM fills, and the proof of the mission is operational: response time, traceability, and a single point of contact, not the word "easy" on its own.</p>
+
+  <h3><span class="h3num">01.2</span>Vision</h3>
+  <p>MRM's vision holds two ambitions as one discipline. The rigour that earns world-class clients is the same rigour that lets MRM look after its people. Excellence pays for care. Care produces excellence. They are not a trade-off. They are the same job, run in both directions.</p>
+
+  <h4 class="sub">External vision</h4>
+  <div class="box" style="border-left:4px solid var(--tennis)">
+    <div class="cap">Client-facing</div>
+    <p style="font-size:15px;color:#2A2A26;line-height:1.6">To become the manufacturing partner that world-class clients rely on, and to show that operational excellence and the wellbeing of our workforce are not a trade-off but the same commitment. The rigour our customers see in every part is the rigour we bring to every life inside MRM.</p>
+  </div>
+
+  <h4 class="sub">Internal vision</h4>
+  <div class="box" style="border-left:4px solid var(--danger);background:rgba(211,47,47,.03)">
+    <div class="cap" style="color:var(--danger)">Internal only · not for client use</div>
+    <p style="font-size:15px;color:#2A2A26;line-height:1.6">Be undeniable. Run the floor so tightly that world-class clients cannot ignore us, grow the margins that make it real, and put the winnings where they belong: into the health, pay, and futures of the people who make MRM. Being this good and this generous is one job, not two. Excellence pays for care, and care produces excellence.</p>
+  </div>
+  <p class="small">The internal vision names commercial intent plainly and is written for the team, from the CEO to the floor. Keep it in internal documents. Use the external vision in anything a client may read.</p>
+
+  <div class="stage-note" style="border-color:var(--tennis)">
+    <div class="k">Proof, not aspiration</div>
+    <p>The "care" half of the vision is already in motion, which keeps it honest. Projects in the pipeline include full-time schooling for staff and workers' families, all-inclusive medical and healthcare camps, and on-campus recreational space. These are the evidence the vision points to, and they should be cited wherever the vision is stated.</p>
+  </div>
+
+  <h3><span class="h3num">01.3</span>What we do</h3>
+  <p>MRM manufactures precision brass and metal fittings for fluid and gas systems. The range spans a dozen product categories and more than 2,000 SKUs, across lead-free and leaded brass, steel, stainless, and copper, serving plumbing, HVAC, hydraulic, pneumatic, automotive, agriculture, electrical, and energy and gas applications.</p>
+  <p>Every part is made in-house, from raw material through machining, assembly, and quality control. Beyond the catalogue, MRM develops custom components with clients end to end: research, design, testing, and stocking, with a dedicated team as the single point of contact. This turnkey work is still fittings; it is the catalogue extended to a client's specific need. Certified for potable water and built for traceability, MRM supplies distributors and OEMs across the US, UK, and EU.</p>
+  <p class="small">Lead-free and potable-water capability is the most defensible single differentiator, but it is one application among several. Water leads today; automotive, HVAC, energy, and the rest are equal parts of the range.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+<div class="card" id="sec-02">
+  <div class="sec-no">Section 02 · Foundation</div>
+  <h2 class="sec">Brand <em>story</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 02</span>Narrative</div><p class="lede">The story is about who MRM is today, not where it came from. It is a positioning narrative, written in the brand voice, and it models the standard all MRM copy is held to.</p></div>
+
+  <div class="box" style="border-left:4px solid var(--tennis);padding:26px 28px">
+    <p style="font-size:16px;line-height:1.62;color:#1E1E1B;margin-bottom:14px">MRM makes precision brass and metal fittings for systems that cannot afford to fail.</p>
+    <p style="font-size:15px;line-height:1.64;color:#2A2A26;margin-bottom:12px">Manufacturing since 2008 in Jamnagar, MRM supplies OEMs and distributors across the US, UK, and EU with fittings for drinking water, gas, hydraulics, automotive, and industrial systems. More than a dozen product categories, over 2,000 SKUs, across lead-free and leaded brass, steel, stainless, and copper.</p>
+    <p style="font-size:15px;line-height:1.64;color:#2A2A26;margin-bottom:12px">What sets MRM apart is not the catalogue, it is the discipline behind it. Everything is made in-house and traced end to end. Lead-free parts are NSF-certified for potable water, a capability still rare among Indian manufacturers. Custom components are developed with the client from research through stocking. And whatever the order, the customer deals with one dedicated team, not a switchboard.</p>
+    <p style="font-size:15px;line-height:1.62;color:var(--green);font-weight:600;margin:0">Precise where it counts. Accountable at every step. Easy to work with throughout.</p>
+  </div>
+
+  <h3><span class="h3num">02.1</span>How to use the story</h3>
+  <p>This is the master narrative. Shorten it for a website hero, a line-card, or a capability deck, but do not add claims it does not make, and keep the closing three-beat intact wherever length allows. It is the tone reference for every piece of MRM copy: declarative, specific, and free of unproven praise.</p>
+  <p class="small">Note on origin: the company anchors to "manufacturing since 2008". Earlier incorporation dates and ownership history are not part of the brand story and are not used in brand or marketing material.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-03">
+  <div class="sec-no">Section 03 · Foundation</div>
+  <h2 class="sec"><em>Audience</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 03</span>Who we serve</div><p class="lede">MRM sells business to business, never to end users. The customer is a company that buys fittings by the thousand and puts them into its own products or its own distribution.</p></div>
+
+  <h3><span class="h3num">03.1</span>Primary · OEMs and manufacturers</h3>
+  <p>Companies that build MRM's fittings into their own finished products: HVAC units, automotive and air-brake systems, hydraulic and pneumatic assemblies, agricultural machinery, energy and gas equipment. They are the core customer. MRM's part becomes part of their product, so its tolerance, its compliance, and its traceability become their problem too.</p>
+  <div class="box" style="margin:14px 0 6px">
+    <div class="cap">What the primary customer needs, in order</div>
+    <p style="font-size:14px;line-height:1.6;color:#2A2A26"><strong>Compliance they can prove downstream:</strong> NSF for potable water, DOT and SAE for air-brake and fluid systems, ISO-certified manufacturing. <strong>Then traceability:</strong> every part back to its material and inspection record. <strong>Then custom capability:</strong> the ability to co-develop a part that does not exist yet, from research and design through testing and stocking. <strong>Then reliability:</strong> consistent tolerance at volume, and a supply that holds.</p>
+  </div>
+
+  <h3><span class="h3num">03.2</span>Secondary · Distributors and procurement</h3>
+  <p>Distributors in the US, UK, and EU who resell MRM's fittings under their own catalogues to plumbers, contractors, and trade counters. And the procurement teams, at both OEMs and distributors, who actually place the order. Distributors care about consistent supply, correct documentation, and private-label and retail packaging. Procurement cares about quote response time, landed cost, lead-time reliability, and one named contact instead of a call centre.</p>
+
+  <h3><span class="h3num">03.3</span>Sectors served</h3>
+  <p>Plumbing, HVAC, hydraulic, pneumatic, automotive, agriculture equipment, electrical, and energy and gas.</p>
+
+  <div class="stage-note" style="border-color:var(--danger);background:rgba(211,47,47,.03)">
+    <div class="k" style="color:var(--danger)">Who MRM is not for</div>
+    <p>Individual retail buyers, one-off orders, and unregulated commodity work where price is the only question. MRM's advantages, compliance and traceability and responsiveness, are worth nothing to a buyer who only wants the cheapest barb. The right customer is one for whom documentation and reliability are worth paying for.</p>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+<div class="card" id="sec-04">
+  <div class="sec-no">Section 04 · Foundation</div>
+  <h2 class="sec"><em>Archetype</em> &amp; promise</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 04</span>Concept</div><p class="lede">Everything MRM says and makes traces back to one idea: authority built on craftsmanship. Two archetypes hold that idea in tension, and the tension is the point.</p></div>
+
+  <div class="arch">
+    <div class="a ruler">
+      <div class="lbl">Archetype I</div>
+      <h4>Ruler</h4>
+      <p>Control. Order. Stability. Fittings govern the flow of fluid and gas. They hold under pressure. They sit inside systems where failure has consequences.</p>
+      <ul>
+        <li>Authority, not arrogance</li>
+        <li>Assured, matter-of-fact statements</li>
+        <li>Stability the customer can plan around</li>
+      </ul>
+    </div>
+    <div class="a creator">
+      <div class="lbl">Archetype II</div>
+      <h4>Creator</h4>
+      <p>Technical intelligence. Manufacturing pride. MRM engineers custom solutions and works daily in tolerances and precision machining. It solves problems, it does not just supply parts.</p>
+      <ul>
+        <li>Engineering intelligence</li>
+        <li>Problem-solving over order-taking</li>
+        <li>Pride in how the work is made</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="principle">
+    <div class="k">The promise</div>
+    <p>Control, flexibility, and stability, all under pressure.</p>
+  </div>
+  <p class="small">The promise is an internal north star. It is not external copy in this literal form, and the word "flexibility" always arrives with proof beside it (see Section 05).</p>
+
+  <h3><span class="h3num">04.1</span>Personality</h3>
+  <p>MRM differentiates itself from old-school corporates. It speaks like someone who solves problems, the way a technician explains something to a trusted partner, not the way a company advertises to a consumer.</p>
+  <p>The reference point the founders use: MRM is the cool teacher who finds joy in new ways to teach. It sounds wise, it is kind, it is welcoming. It is the opposite of all-jargon-zero-credibility. Talking to MRM should feel worth the person's time. MRM is secular and positive.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-05">
+  <div class="sec-no">Section 05 · Verbal</div>
+  <h2 class="sec"><em>Voice</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 05</span>Core tone</div><p class="lede">MRM makes components for systems where failure has consequences. The writing carries the same properties as the product: measured, unambiguous, built to hold under pressure.</p></div>
+
+  <div class="principle">
+    <div class="k">Core tone</div>
+    <p>Calm authority with human consideration. State facts, do not sell them. Speak like a technician explaining something to a colleague they respect, not like a company advertising to a stranger.</p>
+  </div>
+
+  <div class="cmp">
+    <div class="yes"><h4>The voice is</h4><ul>
+      <li><b>Controlled.</b> "We machine to any tolerance you specify."</li>
+      <li><b>Declarative.</b> "Rated for pressure systems up to 25 bar."</li>
+      <li><b>Precise.</b> "Compression fittings in certified European brass grades."</li>
+      <li><b>Human.</b> "Please share the drawing and we will confirm feasibility."</li>
+    </ul></div>
+    <div class="no"><h4>The voice is not</h4><ul>
+      <li><b>Boastful.</b> "Best-in-class performance."</li>
+      <li><b>Vague.</b> "High-quality solutions for all your needs."</li>
+      <li><b>Cold.</b> "Send the details."</li>
+      <li><b>Corporate.</b> "We would like to take this opportunity to inform you."</li>
+    </ul></div>
+  </div>
+
+  <h3><span class="h3num">05.1</span>Tone by context</h3>
+  <table>
+    <tr><th>Context</th><th>Tone</th><th>Test</th></tr>
+    <tr><td>Client email</td><td>Neutral, clear, helpful</td><td>Would a busy person get the action in one read?</td></tr>
+    <tr><td>Internal ops</td><td>Direct, structured</td><td>Is the instruction unambiguous under time pressure?</td></tr>
+    <tr><td>HR policy</td><td>Firm, fair</td><td>Is the rule clear and the consequence stated?</td></tr>
+    <tr><td>Marketing</td><td>Controlled, capability-led</td><td>Is every claim backed by something on the page?</td></tr>
+    <tr><td>Technical &amp; spec</td><td>Declarative, unhedged</td><td>Could an engineer act on this without asking a question?</td></tr>
+    <tr><td>Safety &amp; SOP</td><td>Imperative, minimal</td><td>Would this work for someone who is frightened?</td></tr>
+  </table>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-06">
+  <div class="sec-no">Section 06 · Verbal</div>
+  <h2 class="sec">The <em>proof</em> rule</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 06</span>The rule</div><p class="lede">This is the rule the whole vocabulary hangs from. It replaces a blanket ban on evaluative words, which failed because it could not tell a hollow claim from a caption on a wall of evidence.</p></div>
+  <div class="principle">
+    <div class="k">The rule</div>
+    <p>An evaluative word is permitted only when its proof is in the same field of view. No proof visible, no adjective.</p>
+  </div>
+  <p>"Trusted partner" on a homepage is unsupported. Nothing on the screen earns it, so the reader is asked to take it on faith. That is exactly the move MRM does not make. But "Trusted components for critical systems" set above four certification marks is a different act: the certificates are the proof, and the phrase becomes a caption to evidence rather than a claim floating in air.</p>
+  <p>Some words can never clear the bar, because nothing can prove them. <strong>Premium. World-class. Leading. Cutting-edge.</strong> Delete on sight. Others are conditional. <strong>Trusted, reliable, proven, certified, precise</strong> become available the moment the evidence is adjacent, and unavailable the moment it is not.</p>
+  <table>
+    <tr><th>Word</th><th>Status</th><th>Condition</th></tr>
+    <tr><td>Certified</td><td>Conditional</td><td>Name the certificate. "NSF-certified", not "certified quality".</td></tr>
+    <tr><td>Precise</td><td>Conditional</td><td>Give the number. "±0.005 mm" beats "precise" every time.</td></tr>
+    <tr><td>Reliable</td><td>Conditional</td><td>Show the mechanism: traceability, inspection rate, retention period.</td></tr>
+    <tr><td>Trusted</td><td>Conditional</td><td>Only with client marks or certifications in the same view.</td></tr>
+    <tr><td>Flexible</td><td>Conditional</td><td>Define it at once: multi-alloy capability, three-month inventory holds, pivoting to a changed spec mid-run.</td></tr>
+    <tr><td>Premium</td><td>Never</td><td>Unprovable. Remove.</td></tr>
+    <tr><td>World-class</td><td>Never</td><td>Unprovable. Remove.</td></tr>
+    <tr><td>Innovative</td><td>Near-never</td><td>Only with the specific innovation named. Otherwise remove.</td></tr>
+  </table>
+  <p class="small"><strong>Why this beats a word list:</strong> a ban teaches people to avoid words. This rule teaches them to look for evidence, which is the habit MRM actually wants. If the proof is not there, the problem was never the adjective. The problem is that there is nothing to say.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-07">
+  <div class="sec-no">Section 07 · Verbal</div>
+  <h2 class="sec"><em>Sentence</em> rhythm</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 07</span>Cadence</div><p class="lede">Rhythm is what makes writing from four different people sound like one company. It is the most transferable part of this guide and the easiest to get wrong.</p></div>
+  <h4 class="sub">Rule 1 · One idea per sentence</h4>
+  <div class="rw"><div class="r b"><label>Stacked</label>Designed for water systems and industrial use and high-pressure applications.</div><div class="r g"><label>Broken</label>Designed for potable water systems. Suitable for high-pressure applications.</div></div>
+  <h4 class="sub">Rule 2 · Short to medium, never long</h4>
+  <div class="rw"><div class="r b"><label>Before</label>MRM is a leading manufacturer that provides high-quality solutions across a wide variety of industries and applications.</div><div class="r g"><label>After</label>MRM manufactures precision brass components for fluid systems.</div></div>
+  <h4 class="sub">Rule 3 · The three-beat pattern</h4>
+  <p>The house cadence: statement, supporting detail, specification. It moves from what a thing is, to what it is for, to what can be verified, which is the order a technical reader wants.</p>
+  <div class="rw"><div class="r g" style="border-bottom:1px solid var(--line)"><label>Statement</label>Designed for potable water systems.</div><div class="r g" style="border-bottom:1px solid var(--line)"><label>Detail</label>Manufactured in lead-free brass.</div><div class="r g"><label>Spec</label>NSF-certified.</div></div>
+  <h4 class="sub">Rule 4 · Cut the runway</h4>
+  <p>Filler openings delay the only sentence that matters. Delete them and start at the fact.</p>
+  <div class="rw"><div class="r b"><label>Before</label>It is important to note that we would like to inform you that the shipment may be subject to a slight delay.</div><div class="r g"><label>After</label>The shipment is delayed by 3 days.</div></div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-08">
+  <div class="sec-no">Section 08 · Verbal</div>
+  <h2 class="sec"><em>Precision</em> over description</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 08</span>Principle</div><p class="lede">Where a measurable word exists, it replaces a descriptive one. This is the difference between a specification and an advertisement.</p></div>
+  <table>
+    <tr><th>Weak</th><th>Replace with</th><th>Example</th></tr>
+    <tr><td>High quality</td><td>The material or tolerance</td><td><code>CW510L, machined to ±0.005 mm</code></td></tr>
+    <tr><td>Fast</td><td>The duration</td><td><code>Quotes in 2 working days for brass</code></td></tr>
+    <tr><td>Soon / ASAP</td><td>The date</td><td><code>By 12 March</code></td></tr>
+    <tr><td>A few days</td><td>The number</td><td><code>3 days</code></td></tr>
+    <tr><td>Large capacity</td><td>The figure</td><td><code>38 million units annually</code></td></tr>
+    <tr><td>Thoroughly checked</td><td>The method</td><td><code>100% visual inspection before dispatch</code></td></tr>
+  </table>
+  <h3><span class="h3num">08.1</span>Consistency of terms</h3>
+  <p>The same thing gets the same name every time. Switching vocabulary to avoid repetition reads as literary in an essay and as sloppy in a specification, and in a technical business it introduces real ambiguity about whether two words mean two things.</p>
+  <div class="cmp">
+    <div class="yes"><h4>Always</h4><ul><li>compression fittings</li><li>components</li><li>tolerance</li><li>lead-free brass</li></ul></div>
+    <div class="no"><h4>Never drift into</h4><ul><li>fittings / connectors / units / items</li><li>solutions / products / offerings</li><li>accuracy / exactness / precision level</li><li>eco brass / green brass / safe brass</li></ul></div>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-09">
+  <div class="sec-no">Section 09 · Verbal</div>
+  <h2 class="sec">The <em>human</em> layer</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 09</span>Register</div><p class="lede">Declarative is not the same as blunt. The two live in different places, and confusing them is the most likely way this guide gets misapplied.</p></div>
+  <div class="principle">
+    <div class="k">The split</div>
+    <p>When addressing a person, be considerate. When describing a product, be declarative. A spec sheet never says "please". An email always does.</p>
+  </div>
+  <table>
+    <tr><th>Surface</th><th>Register</th><th>Example</th></tr>
+    <tr><td>Email, chat, calls</td><td>Considerate</td><td>"Please share the drawing so we can review the tolerance."</td></tr>
+    <tr><td>Quotes &amp; proposals</td><td>Considerate</td><td>"Let us know if the lead time works and we will confirm the slot."</td></tr>
+    <tr><td>HR &amp; policy</td><td>Firm, fair</td><td>"Safety shoes are required on the shop floor at all times."</td></tr>
+    <tr><td>Spec sheets</td><td>Declarative</td><td>"Rated to 25 bar. Tested at 1.5x working pressure."</td></tr>
+    <tr><td>Website &amp; marketing</td><td>Declarative</td><td>"Machined in lead-free brass. NSF-certified for potable water."</td></tr>
+    <tr><td>Safety &amp; SOP</td><td>Imperative</td><td>"Pull the safety pin. Aim at the base of the fire."</td></tr>
+  </table>
+  <h3><span class="h3num">09.1</span>Respect without softness</h3>
+  <p>Consideration is not hedging. "Please share the remaining information" is respectful and direct. It names the gap and asks for the fix.</p>
+  <div class="rw"><div class="r b"><label>Cold</label>Data incomplete.</div><div class="r g"><label>Right</label>The data is incomplete. Please share the remaining information.</div></div>
+  <div class="rw"><div class="r b"><label>Soft</label>Sorry to bother you, but whenever you get a chance, would it be possible to maybe look at the drawing?</div><div class="r g"><label>Right</label>Please review the drawing and let us know by Thursday.</div></div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-10">
+  <div class="sec-no">Section 10 · Verbal</div>
+  <h2 class="sec"><em>Phrase</em> bank</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 10</span>Approved lines</div><p class="lede">Every phrase is graded against the proof rule. A phrase that describes <strong>method</strong> travels anywhere. A phrase that makes an <strong>evaluation</strong> is conditional: it may only appear where the proof appears with it.</p></div>
+  <div class="bank">
+    <div class="ph"><span class="tag t-any">Any use</span><div class="txt">We don't guess, we measure.<i>Method. Self-evidencing. The strongest line in the bank.</i></div></div>
+    <div class="ph"><span class="tag t-any">Any use</span><div class="txt">A brass fitting is only as good as its tolerance.<i>Method. States a principle, claims nothing about MRM directly.</i></div></div>
+    <div class="ph"><span class="tag t-any">Any use</span><div class="txt">Measured, tested, and quality-checked.<i>Method. Describes process, not outcome.</i></div></div>
+    <div class="ph"><span class="tag t-any">Any use</span><div class="txt">Engineered for the perfect connection.<i>Method. "Engineered" describes activity, not a boast.</i></div></div>
+    <div class="ph"><span class="tag t-any">Any use</span><div class="txt">Connections that hold.<i>Plain, physical, unpretentious. Works as a sign-off.</i></div></div>
+    <div class="ph"><span class="tag t-cond">Proof required</span><div class="txt">Trusted components for critical systems.<i>Only above certification marks or client logos. Never a standalone headline.</i></div></div>
+    <div class="ph"><span class="tag t-cond">Proof required</span><div class="txt">Components you can rely on.<i>Requires visible evidence: inspection rate, retention policy, certification.</i></div></div>
+    <div class="ph"><span class="tag t-cut">Cut</span><div class="txt">Precision. Performance. Proven.<i>Three evaluations, no proof possible. Rhythm without substance.</i></div></div>
+    <div class="ph"><span class="tag t-cut">Cut</span><div class="txt">Trusted partner.<i>Unprovable and universal. Everyone says it, which is why it means nothing.</i></div></div>
+  </div>
+  <h3><span class="h3num">10.1</span>Descriptors &amp; taglines</h3>
+  <table>
+    <tr><th>Element</th><th>Text</th><th>Use</th></tr>
+    <tr><td>Full tagline</td><td><code>Precision Brass Fittings &amp; Metal Components</code></td><td>External, wide formats.</td></tr>
+    <tr><td>Short tagline</td><td><code>Precision Brass Fittings</code></td><td>External, constrained width.</td></tr>
+    <tr><td>No tagline</td><td>&ndash;</td><td>All internal use, without exception.</td></tr>
+  </table>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-11">
+  <div class="sec-no">Section 11 · Verbal</div>
+  <h2 class="sec">Writing <em>mechanics</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 11</span>Mechanics</div><p class="lede">Small rules that keep every document looking like it came from the same hand.</p></div>
+  <div class="principle">
+    <div class="k">Punctuation · the em-dash rule</div>
+    <p>Write without em-dashes. As a rule, MRM copy does not use them. Where a break is needed, use a full stop, a comma, or a colon. The em-dash is reserved for rare, deliberate impact and appears very occasionally, if at all.</p>
+  </div>
+  <div class="cmp">
+    <div class="yes"><h4>Do</h4><ul>
+      <li>Full stop for two independent clauses. "The data is incomplete. Please resend it."</li>
+      <li>Comma for a tight aside. "Machined in lead-free brass, tested to 25 bar."</li>
+      <li>Colon to introduce a list or an explanation.</li>
+      <li>En-dash for numeric ranges only. "45–75 characters", "2–3 metres".</li>
+    </ul></div>
+    <div class="no"><h4>Don't</h4><ul>
+      <li>No em-dash as a default connector.</li>
+      <li>No underlines, anywhere, including the company name.</li>
+      <li>No italics for emphasis. Use weight.</li>
+      <li>No exclamation marks in technical or client copy.</li>
+    </ul></div>
+  </div>
+  <h3><span class="h3num">11.1</span>Structure</h3>
+  <div class="two">
+    <div class="box"><div class="cap">Email</div><p>Subject (specific), context (one line), message, action (who does what, by when).</p></div>
+    <div class="box"><div class="cap">Policy</div><p>Title, purpose, scope, rules, consequences.</p></div>
+    <div class="box"><div class="cap">Marketing</div><p>Headline, supporting line, short body blocks, proof points.</p></div>
+    <div class="box"><div class="cap">Bilingual</div><p>On the floor, Gujarati or Hindi leads and English supports. Never mix scripts in one heading.</p></div>
+  </div>
+  <h3><span class="h3num">11.2</span>Five-point check before sending</h3>
+  <table>
+    <tr><th>#</th><th>Question</th></tr>
+    <tr><td>1</td><td>Is anything vague? Replace it with a number, a date, or a material.</td></tr>
+    <tr><td>2</td><td>Is there a claim without proof nearby? Bring the evidence in, or cut the claim.</td></tr>
+    <tr><td>3</td><td>Can any sentence be shorter?</td></tr>
+    <tr><td>4</td><td>Does it use two words for one thing? Pick one.</td></tr>
+    <tr><td>5</td><td>If a person is being asked for something, is it respectful?</td></tr>
+  </table>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-12">
+  <div class="sec-no">Section 12 · Visual</div>
+  <h2 class="sec">The <em>logo</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 12</span>Lockups</div><p class="lede">Five lockups. The choice is governed by two questions, in order: is this internal or external? Then, how much width is available?</p></div>
+  <div class="principle"><div class="k">The rule</div><p>Internal documents never carry the tagline. External documents always do, at the longest length the space allows.</p></div>
+  <p>The tagline is a descriptor. It tells someone who does not know MRM what MRM makes. Internally, everyone already knows, so it is noise. An SOP or shop-floor notice uses the bare block. A client-facing cover uses the full lockup.</p>
+
+  <div class="lock">
+    <div class="lk"><div class="stage" style="background:var(--green)"><div style="width:46px;color:var(--white)">
+<svg data-logo="mrm-block" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lb-Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112.66 112.67">
+  <defs>
+    <style>
+      .lb-cls-1 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lb-Layer_1-2" data-name="Layer 1">
+    <g>
+      <path class="lb-cls-1" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/>
+      <path class="lb-cls-1" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Block</b><span class="d">Symbol alone. Tight or square spaces, or where the name is set in text beside it: SOP headers, signage, app icons, stamps.</span><span class="tag t-int">Internal</span></div></div>
+    <div class="lk"><div class="stage" style="background:var(--green)"><div style="width:78%;color:var(--white)">
+<svg data-logo="mrm-full" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lf-Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 483.41 28.74">
+  <defs>
+    <style>
+      .lf-cls-1 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lf-Layer_2-2" data-name="Layer 2">
+    <g>
+      <path class="lf-cls-1" d="M71.87,0v28.66h-7.69v-10.03c0-2.25.16-5.24.36-7.08l-.2-.09c-.74,1.51-1.96,3.48-3.48,5.57l-4.46,6.06h-1.35l-4.46-6.06c-1.56-2.09-2.82-4.06-3.56-5.57l-.2.09c.25,1.85.45,4.83.45,7.08v10.03h-7.66V0h7.12l9.09,12.56L64.76,0h7.12-.01Z"/>
+      <path class="lf-cls-1" d="M99.15,23.83h-11.75l-1.92,4.83h-8.11L89.41,0h8.07l11.95,28.66h-8.39s-1.89-4.83-1.89-4.83ZM91.62,11.63l-2.01,5.81h7.33l-2.05-6.02c-.77-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M126.47,17.07v11.59h-7.78v-11.5L107.92,0h9l3.36,5.98c.9,1.64,1.85,3.44,2.25,4.75h.16c.33-.94,1.35-2.86,2.41-4.67l3.52-6.06h9l-11.18,17.07h.02Z"/>
+      <path class="lf-cls-1" d="M157.88,23.83h-11.75l-1.92,4.83h-8.11L148.14,0h8.07l11.95,28.66h-8.39l-1.89-4.83ZM150.35,11.63l-2.01,5.81h7.33l-2.05-6.02c-.78-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M173.62,0h7.04l8.23,11.63c1.47,2.09,2.7,3.85,3.81,5.48l.2-.12c-.54-2.3-.7-5.53-.7-9.83V0h7.53v28.66h-7.04l-8.27-11.63c-1.67-2.37-2.86-4.1-3.72-5.41l-.2.09c.45,1.85.65,5.48.65,9.78v7.17h-7.53V0Z"/>
+      <path class="lf-cls-1" d="M234.89,28.66h-10.03l-5.07-6.06c-1.67-2.01-3.11-3.97-4.01-5.48l-.2.09c.25,1.85.45,4.83.45,7.49v3.97h-7.66V0h7.66v3.81c0,2.66-.2,5.65-.45,7.49l.2.09c.94-1.47,2.5-3.48,4.13-5.57L224.48,0h9.29l-11.7,14.04,12.81,14.61h.01Z"/>
+      <path class="lf-cls-1" d="M262.23,19.41h-1.92v9.25h-7.78V0h13.14C271.86,0,276.28,3.97,276.28,9.7c0,4.22-2.25,7.33-6.14,8.84l7.9,10.11h-9.13l-6.67-9.25h0ZM264.66,6.22h-4.42v7.45h4.42c2.57,0,3.97-1.27,3.97-3.6,0-2.5-1.39-3.85-3.97-3.85h0Z"/>
+      <path class="lf-cls-1" d="M303.01,23.83h-11.75l-1.92,4.83h-8.11L293.27,0h8.07l11.95,28.66h-8.39l-1.89-4.83h0ZM295.48,11.63l-2.01,5.81h7.33l-2.05-6.02c-.77-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M312.39,0h8.35l3.23,10.77c.57,1.96,1.11,4.01,1.64,7.08h.2c.7-2.95,1.06-4.17,2.25-7.45L331.83.01h5.07l3.81,10.19c1.22,3.32,1.76,5.36,2.3,7.66h.2c.41-2.01,1.15-4.87,1.89-7.49L347.96.02h8.23l-9.7,28.66h-6.34l-3.36-9.49c-.94-2.7-1.96-6.06-2.37-7.53h-.16c-.36,1.47-1.31,4.62-2.37,7.66l-3.27,9.38h-6.22L312.41.03,312.39,0Z"/>
+      <path class="lf-cls-1" d="M405.19,0v28.66h-7.69v-10.03c0-2.25.16-5.24.36-7.08l-.2-.09c-.74,1.51-1.96,3.48-3.48,5.57l-4.46,6.06h-1.35l-4.46-6.06c-1.56-2.09-2.82-4.06-3.56-5.57l-.2.09c.25,1.85.45,4.83.45,7.08v10.03h-7.66V0h7.12l9.09,12.56L398.07,0h7.12Z"/>
+      <path class="lf-cls-1" d="M412.81,0h7.78v28.66h-7.78V0Z"/>
+      <path class="lf-cls-1" d="M428.09,0h7.04l8.23,11.63c1.47,2.09,2.7,3.85,3.81,5.48l.2-.12c-.54-2.3-.7-5.53-.7-9.83V0h7.53v28.66h-7.04l-8.27-11.63c-1.67-2.37-2.86-4.1-3.72-5.41l-.2.09c.45,1.85.65,5.48.65,9.78v7.17h-7.53V0Z"/>
+      <path class="lf-cls-1" d="M483.41,6.43h-8.39v22.23h-7.78V6.43h-8.31V0h24.48v6.43Z"/>
+    </g>
+    <g>
+      <path class="lf-cls-1" d="M25.81.05H2.87C1.28.05,0,1.46,0,3.21v14.35h28.68V3.21c0-1.75-1.28-3.16-2.87-3.16Z"/>
+      <path class="lf-cls-1" d="M0,25.8c0,1.62,1.28,2.93,2.87,2.93h22.95c1.58,0,2.87-1.31,2.87-2.93v-2.81H0v2.81Z"/>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Full, horizontal</b><span class="d">Block and full name on one line. Default for internal letterheads, reports, and wide formats not facing a client.</span><span class="tag t-int">Internal</span></div></div>
+    <div class="lk"><div class="stage" style="background:var(--green);min-height:132px"><div style="width:74%;color:var(--white)">
+<svg data-logo="mrm-full-tagline" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lft-Layer_2" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 483.4 56.7">
+  
+  <defs>
+    <style>
+      .lft-st0 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lft-Layer_1-2">
+    <g>
+      <g>
+        <path class="lft-st0" d="M49.1,0H5.5C2.4,0,0,2.7,0,6v27.3h54.6V6C54.6,2.7,52.1,0,49.1,0Z"/>
+        <path class="lft-st0" d="M0,49c0,3.1,2.4,5.6,5.5,5.6h43.7c3,0,5.5-2.5,5.5-5.6v-5.3H0v5.3Z"/>
+      </g>
+      <g>
+        <g>
+          <path class="lft-st0" d="M99.8,0v26.7h-7.2v-9.4c0-2.1.2-4.9.3-6.6h-.2c-.7,1.3-1.8,3.2-3.2,5.1l-4.2,5.6h-1.3l-4.2-5.6c-1.4-1.9-2.6-3.8-3.3-5.2h-.2c.2,1.8.4,4.6.4,6.7v9.4h-7.1V0h6.6l8.5,11.7L93.2,0h6.6,0Z"/>
+          <path class="lft-st0" d="M125.2,22.2h-10.9l-1.8,4.5h-7.6L116.2,0h7.5l11.1,26.7h-7.8s-1.8-4.5-1.8-4.5ZM118.2,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.2c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M150.7,15.9v10.8h-7.2v-10.7l-10-16h8.4l3.1,5.6c.8,1.5,1.7,3.2,2.1,4.4h.1c.3-.9,1.3-2.7,2.2-4.3l3.3-5.7h8.4l-10.4,15.9h0Z"/>
+          <path class="lft-st0" d="M180,22.2h-10.9l-1.8,4.5h-7.6L170.9,0h7.5l11.1,26.7h-7.8l-1.8-4.5ZM173,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.1c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M194.6,0h6.6l7.7,10.8c1.4,1.9,2.5,3.6,3.6,5.1h.2c-.5-2.2-.6-5.3-.6-9.3V0h7v26.7h-6.6l-7.7-10.8c-1.6-2.2-2.7-3.8-3.5-5h-.2c.4,1.8.6,5.2.6,9.2v6.7h-7V0Z"/>
+          <path class="lft-st0" d="M251.8,26.7h-9.4l-4.7-5.6c-1.6-1.9-2.9-3.7-3.7-5.1h-.2c.2,1.8.4,4.6.4,7.1v3.7h-7.1V0h7.1v3.5c0,2.5-.2,5.3-.4,7h.2c.9-1.3,2.3-3.2,3.9-5.1L242.1,0h8.7l-10.9,13.1,11.9,13.6h0Z"/>
+          <path class="lft-st0" d="M277.2,18.1h-1.8v8.6h-7.2V0h12.2C286.2,0,290.3,3.7,290.3,9s-2.1,6.8-5.7,8.2l7.4,9.4h-8.5l-6.2-8.6h0ZM279.5,5.8h-4.1v6.9h4.1c2.4,0,3.7-1.2,3.7-3.4s-1.3-3.6-3.7-3.6h0Z"/>
+          <path class="lft-st0" d="M315.3,22.2h-11l-1.8,4.5h-7.6L306.2,0h7.5l11.1,26.7h-7.8l-1.8-4.5h0ZM308.2,10.8l-1.9,5.4h6.8l-1.9-5.6c-.7-2.1-1.1-3.4-1.4-4.3h-.1c-.3.9-.7,2.1-1.5,4.5Z"/>
+          <path class="lft-st0" d="M324,0h7.8l3,10c.5,1.8,1,3.7,1.5,6.6h.2c.6-2.8,1-3.9,2.1-6.9L342.1,0h4.7l3.5,9.5c1.1,3.1,1.6,5,2.1,7.1h.2c.4-1.9,1.1-4.5,1.8-7L357.2,0h7.7l-9,26.7h-5.9l-3.1-8.9c-.9-2.5-1.8-5.6-2.2-7h-.1c-.3,1.4-1.2,4.3-2.2,7.1l-3,8.7h-5.8L324,0h0Z"/>
+          <path class="lft-st0" d="M410.5,0v26.7h-7.2v-9.4c0-2.1.1-4.9.3-6.6h-.2c-.7,1.3-1.8,3.2-3.2,5.1l-4.2,5.6h-1.3l-4.2-5.6c-1.5-1.9-2.6-3.8-3.3-5.2h-.2c.2,1.8.4,4.6.4,6.7v9.4h-7.1V0h6.6l8.5,11.7L403.9,0h6.6Z"/>
+          <path class="lft-st0" d="M417.6,0h7.2v26.7h-7.2V0Z"/>
+          <path class="lft-st0" d="M431.9,0h6.6l7.7,10.8c1.4,1.9,2.5,3.6,3.5,5.1h.2c-.5-2.2-.6-5.3-.6-9.3V0h7v26.7h-6.6l-7.7-10.8c-1.6-2.2-2.7-3.8-3.5-5h-.2c.4,1.8.6,5.2.6,9.2v6.7h-7V0Z"/>
+          <path class="lft-st0" d="M483.4,6h-7.8v20.7h-7.2V6h-7.8V0h22.8v6Z"/>
+        </g>
+        <g>
+          <path class="lft-st0" d="M69.8,52.3v-14.6h2v14.6h-2ZM71.1,46.6v-1.7h4c.6,0,1-.1,1.5-.3s.8-.5,1-.9c.2-.4.4-.9.4-1.5s-.1-1-.4-1.5c-.2-.4-.6-.7-1-.9s-.9-.3-1.5-.3h-4v-1.7h4.1c.9,0,1.7.2,2.4.5s1.3.9,1.7,1.5.6,1.5.6,2.4-.2,1.7-.6,2.3-1,1.2-1.7,1.5-1.5.5-2.4.5c0,0-4.1,0-4.1,0Z"/>
+          <path class="lft-st0" d="M82.1,52.3v-10h1.9v10h-1.9ZM84,46.6l-.7-.3c0-1.3.3-2.3.9-3s1.4-1.1,2.5-1.1,1,0,1.4.3.8.5,1.1.9l-1.2,1.3c-.2-.2-.4-.4-.7-.5s-.6-.2-.9-.2c-.7,0-1.3.2-1.7.7s-.7,1.1-.7,2.1h0Z"/>
+          <path class="lft-st0" d="M94.8,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.8-1.9.8-.5,1.7-.7,2.6-.7s1.7.2,2.4.6,1.3,1,1.7,1.7.6,1.6.6,2.5,0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8c.3.5.7.9,1.2,1.2s1.1.4,1.8.4,1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M106,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.4-.8-.7-1.7-.7-2.6s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9s1.7-.7,2.7-.7,1.5.1,2.1.4,1.2.7,1.7,1.2l-1.3,1.3c-.3-.4-.7-.6-1.1-.8-.4-.2-.9-.3-1.4-.3s-1.2.1-1.7.4-.9.7-1.2,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.7.7.9,1.2,1.2c.5.3,1.1.4,1.7.4s1,0,1.5-.3.8-.5,1.1-.8l1.2,1.3c-.5.5-1,.9-1.7,1.2s-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M112.7,40.3c-.3,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM111.7,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M119.6,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4c-.4-.1-.9-.3-1.3-.5-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4c.6.3,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M126.4,40.3c-.3,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM125.4,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M134.6,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9c-.5-.8-.7-1.7-.7-2.7s.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM134.6,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7-.7-.9-1.1-1.2c-.5-.3-1.1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4Z"/>
+          <path class="lft-st0" d="M141.9,52.3v-10h1.9v10h-1.9ZM149,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-.9.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M158.1,52.3v-14.6h2v14.6h-2ZM159.4,52.3v-1.7h4.4c.8,0,1.5-.2,2-.7.5-.5.7-1.1.7-1.8s-.1-.9-.3-1.3-.5-.7-.9-.9c-.4-.2-.9-.3-1.4-.3h-4.4v-1.7h4.1c.7,0,1.3-.2,1.7-.6.4-.4.6-.9.6-1.6s-.2-1.2-.6-1.6c-.4-.4-1-.5-1.7-.5h-4.1v-1.7h4.1c.9,0,1.8.2,2.4.5.6.3,1.1.8,1.4,1.3.3.6.5,1.2.5,1.8s-.2,1.5-.6,2.1-1.1,1-1.9,1.4l.2-.6c.9.3,1.7.8,2.2,1.5s.8,1.5.8,2.4-.2,1.5-.6,2.1-.9,1.1-1.6,1.5-1.6.6-2.6.6h-4.3,0Z"/>
+          <path class="lft-st0" d="M170.9,52.3v-10h1.9v10h-1.9ZM172.8,46.6l-.7-.3c0-1.3.3-2.3.9-3s1.4-1.1,2.5-1.1,1,0,1.4.3.8.5,1.1.9l-1.2,1.3c-.2-.2-.4-.4-.7-.5s-.6-.2-.9-.2c-.7,0-1.3.2-1.7.7s-.7,1.1-.7,2.1h0Z"/>
+          <path class="lft-st0" d="M183.2,52.5c-.9,0-1.8-.2-2.5-.7-.7-.5-1.3-1.1-1.7-1.9-.4-.8-.6-1.7-.6-2.6s.2-1.9.6-2.7c.4-.8,1-1.4,1.7-1.9.7-.5,1.6-.7,2.5-.7s1.4.2,2,.5c.6.3,1.1.8,1.4,1.3.4.5.6,1.2.6,1.9v3c0,.7-.2,1.3-.6,1.9s-.8,1-1.4,1.3c-.6.3-1.3.5-2,.5h0ZM183.5,50.7c.9,0,1.7-.3,2.3-1,.6-.6.9-1.5.9-2.4s-.1-1.3-.4-1.8c-.3-.5-.6-.9-1.1-1.2s-1-.4-1.6-.4-1.2.2-1.7.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8.6.9,1.1,1.2c.5.3,1.1.4,1.7.4h0ZM186.5,52.3v-2.7l.4-2.4-.4-2.4v-2.4h1.9v10s-1.9,0-1.9,0Z"/>
+          <path class="lft-st0" d="M194.3,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6c-.4-.3-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M203.3,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6c-.4-.3-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3.5-.5.5-.8-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1.1-.8s-.9-.3-1.4-.3-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8Z"/>
+          <path class="lft-st0" d="M213.8,52.3v-14.6h2v14.6h-2ZM215.1,39.6v-1.8h7.9v1.8h-7.9ZM215.1,45.9v-1.8h7.6v1.8h-7.6Z"/>
+          <path class="lft-st0" d="M226.3,40.3c-.4,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM225.3,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M229.1,44.1v-1.7h12.7v1.7h-12.7ZM231.5,52.3v-14.1h1.9v14.1h-1.9ZM237.5,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M244.6,40.3c-.4,0-.6-.1-.9-.3s-.3-.5-.3-.9.1-.6.3-.8.5-.3.9-.3.6.1.9.3.3.5.3.8-.1.6-.3.9-.5.3-.9.3ZM243.7,52.3v-10h1.9v10h-1.9Z"/>
+          <path class="lft-st0" d="M248.4,52.3v-10h1.9v10h-1.9ZM255.4,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-.9.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5c.3.6.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M264,52.1c-.9,0-1.7-.2-2.5-.7s-1.3-1-1.7-1.8c-.4-.8-.6-1.6-.6-2.6s.2-1.8.6-2.5,1-1.3,1.7-1.8,1.5-.7,2.4-.7,1.5.2,2.1.5,1.1.7,1.4,1.3.5,1.2.6,1.9v2.6c0,.7-.2,1.4-.6,1.9-.4.5-.8,1-1.4,1.3s-1.3.5-2.1.5h0ZM264,56.7c-1,0-1.9-.2-2.7-.6-.8-.4-1.4-.9-1.9-1.6l1.2-1.2c.4.5.9.9,1.5,1.2s1.2.4,2,.4,1.8-.3,2.4-.8.9-1.3.9-2.2v-2.5l.3-2.2-.3-2.2v-2.6h1.9v9.6c0,1-.2,1.8-.7,2.5s-1.1,1.3-1.9,1.7-1.7.6-2.7.6h0ZM264.4,50.4c.6,0,1.2-.1,1.6-.4.5-.3.8-.6,1.1-1.1.3-.5.4-1,.4-1.7s-.1-1.2-.4-1.7-.6-.9-1.1-1.1-1-.4-1.6-.4-1.2.1-1.7.4-.9.7-1.1,1.1-.4,1-.4,1.7.1,1.2.4,1.7.6.9,1.1,1.1,1,.4,1.6.4Z"/>
+          <path class="lft-st0" d="M275.2,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3c.3-.2.5-.5.5-.8s-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1-.8-.4-.2-.9-.3-1.4-.3s-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8h0Z"/>
+          <path class="lft-st0" d="M290,52.5c-1,0-1.8-.2-2.5-.6s-1.3-.9-1.7-1.6-.6-1.4-.6-2.3.2-1.7.7-2.4,1.2-1.3,2.1-1.7l.9,1.2c-.6.3-1,.7-1.3,1.1s-.5,1.1-.5,1.7.1,1,.4,1.4c.2.4.6.7,1.1.9s1,.3,1.6.3,1.4-.2,1.9-.5c.5-.3.9-.7,1.2-1.2l1.2,1.5c-.3.4-.6.7-1.1,1-.5.3-1,.5-1.5.7-.5.2-1.1.2-1.8.2h0ZM295.2,52.3l-7-7.5c-.5-.6-.9-1.2-1.2-1.7-.3-.5-.4-1.1-.4-1.8s.2-1.4.5-2,.8-1,1.5-1.4c.6-.3,1.3-.5,2.1-.5s1.1,0,1.6.3c.5.2.9.4,1.3.7.4.3.7.7.9,1l-1.4,1.2c-.3-.5-.7-.8-1.1-1.1s-.9-.4-1.4-.4-1.1.2-1.6.6-.6.9-.6,1.5.1.9.3,1.3.5.8.9,1.2l7.7,8.4h-2.3,0Z"/>
+          <path class="lft-st0" d="M303,52.3v-14.6h1.4l6.2,10.1h-.9l6.2-10.1h1.4v14.6h-2v-11.1h.4c0,.1-4.9,8.1-4.9,8.1h-1.4l-4.9-8h.4c0-.1,0,11,0,11h-2,0Z"/>
+          <path class="lft-st0" d="M324.9,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.6-.7,2.6-.7s1.7.2,2.4.6c.7.4,1.3,1,1.7,1.7.4.7.6,1.6.6,2.5s0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4c-.5.3-.9.7-1.1,1.2s-.4,1.1-.4,1.8.1,1.3.4,1.8c.3.5.7.9,1.2,1.2.5.3,1.1.4,1.8.4s1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M330.3,44.1v-1.7h6.8v1.7h-6.8ZM332.8,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M342.9,52.5c-.9,0-1.8-.2-2.5-.7-.7-.5-1.3-1.1-1.7-1.9s-.6-1.7-.6-2.6.2-1.9.6-2.7c.4-.8,1-1.4,1.7-1.9.7-.5,1.6-.7,2.5-.7s1.4.2,2,.5c.6.3,1.1.8,1.4,1.3.4.5.6,1.2.6,1.9v3c0,.7-.2,1.3-.6,1.9-.4.6-.8,1-1.4,1.3-.6.3-1.3.5-2,.5h0ZM343.2,50.7c.9,0,1.7-.3,2.3-1,.6-.6.9-1.5.9-2.4s-.1-1.3-.4-1.8c-.3-.5-.6-.9-1.1-1.2s-1-.4-1.6-.4-1.2.2-1.7.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.3.4,1.8.6.9,1.1,1.2c.5.3,1,.4,1.7.4h0ZM346.2,52.3v-2.7l.4-2.4-.4-2.4v-2.4h1.9v10s-1.9,0-1.9,0Z"/>
+          <path class="lft-st0" d="M350.9,52.3v-15h1.9v15h-1.9Z"/>
+          <path class="lft-st0" d="M366.8,52.5c-1,0-2-.2-2.9-.6s-1.7-.9-2.3-1.6-1.2-1.5-1.5-2.4c-.4-.9-.5-1.9-.5-2.9s.2-2,.5-2.9c.4-.9.9-1.7,1.5-2.4s1.4-1.2,2.3-1.6c.9-.4,1.9-.6,2.9-.6s2.2.2,3,.6,1.6.9,2.3,1.6l-1.4,1.4c-.5-.5-1-.9-1.7-1.2s-1.4-.4-2.3-.4-1.5.1-2.1.4-1.2.7-1.7,1.2c-.5.5-.8,1.1-1.1,1.8-.3.7-.4,1.4-.4,2.2s.1,1.6.4,2.2c.3.7.6,1.3,1.1,1.8.5.5,1,.9,1.7,1.2.6.3,1.4.4,2.1.4s1.7-.2,2.4-.5c.7-.3,1.2-.7,1.7-1.2l1.4,1.4c-.7.7-1.5,1.2-2.4,1.6-.9.4-1.9.6-3,.6h0Z"/>
+          <path class="lft-st0" d="M378.5,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9-.7-1.7-.7-2.7.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM378.5,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7c-.3-.5-.7-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4h0Z"/>
+          <path class="lft-st0" d="M385.8,52.3v-10h1.9v10h-1.9ZM392.5,52.3v-6c0-.7-.2-1.3-.7-1.8-.5-.4-1-.6-1.7-.6s-.9,0-1.2.3c-.4.2-.7.5-.9.8-.2.3-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2s.8-1,1.4-1.3c.6-.3,1.2-.5,1.9-.5s1.3.2,1.9.5,1,.7,1.3,1.3c.3.6.5,1.2.5,2v6.4h-1.9,0ZM399.3,52.3v-6c0-.7-.2-1.3-.7-1.8-.5-.4-1-.6-1.7-.6s-.9,0-1.2.3c-.4.2-.7.5-.9.8s-.3.8-.3,1.3l-1.1-.4c0-.8.2-1.4.6-2s.9-1,1.4-1.3c.6-.3,1.2-.5,1.9-.5s1.4.2,2,.5,1,.7,1.4,1.3c.3.6.5,1.2.5,2v6.4h-1.9,0Z"/>
+          <path class="lft-st0" d="M403.7,56.5v-14.1h1.9v2.6l-.4,2.4.4,2.4v6.7s-1.9,0-1.9,0ZM409,52.5c-.8,0-1.4-.2-2-.5s-1.1-.8-1.5-1.3c-.4-.6-.6-1.2-.6-1.9v-3c0-.7.2-1.4.6-1.9s.9-1,1.5-1.3c.6-.3,1.3-.5,2-.5s1.7.2,2.5.7c.7.5,1.3,1.1,1.7,1.9.4.8.6,1.7.6,2.7s-.2,1.9-.6,2.6-1,1.4-1.7,1.9c-.7.5-1.6.7-2.5.7h0ZM408.7,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.8c-.3-.5-.6-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.2-1.6.4c-.5.3-.9.7-1.1,1.2-.3.5-.4,1.1-.4,1.8s.1,1.2.4,1.8.6.9,1.1,1.2,1,.4,1.6.4Z"/>
+          <path class="lft-st0" d="M420.5,52.5c-1,0-1.8-.2-2.6-.7s-1.4-1.1-1.9-1.9-.7-1.7-.7-2.7.2-1.8.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.7-.7,2.6-.7s1.9.2,2.7.7c.8.5,1.4,1.1,1.9,1.9.5.8.7,1.7.7,2.6s-.2,1.9-.7,2.7c-.5.8-1.1,1.4-1.9,1.9-.8.5-1.7.7-2.7.7ZM420.5,50.7c.6,0,1.2-.2,1.7-.4.5-.3.9-.7,1.1-1.2s.4-1.1.4-1.8-.1-1.2-.4-1.7c-.3-.5-.7-.9-1.1-1.2-.5-.3-1-.4-1.7-.4s-1.2.1-1.7.4-.9.7-1.1,1.2c-.3.5-.4,1.1-.4,1.7s.1,1.2.4,1.8.7.9,1.1,1.2c.5.3,1,.4,1.7.4h0Z"/>
+          <path class="lft-st0" d="M427.8,52.3v-10h1.9v10h-1.9ZM434.8,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-1,.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M443.9,52.5c-1,0-1.9-.2-2.7-.7-.8-.5-1.4-1.1-1.9-1.9-.5-.8-.7-1.7-.7-2.7s.2-1.9.7-2.6c.5-.8,1.1-1.4,1.9-1.9.8-.5,1.6-.7,2.6-.7s1.7.2,2.4.6c.7.4,1.3,1,1.7,1.7.4.7.6,1.6.6,2.5s0,.3,0,.5,0,.3,0,.5h-8.4v-1.6h7.4l-.7.6c0-.7-.1-1.2-.4-1.7-.2-.5-.6-.8-1-1.1-.4-.3-1-.4-1.6-.4s-1.2.1-1.7.4c-.5.3-.9.7-1.1,1.2s-.4,1.1-.4,1.8.1,1.3.4,1.8c.3.5.7.9,1.2,1.2.5.3,1.1.4,1.8.4s1.1,0,1.5-.3c.5-.2.9-.5,1.2-.9l1.2,1.2c-.5.6-1.1,1-1.8,1.3-.7.3-1.4.4-2.2.4h0Z"/>
+          <path class="lft-st0" d="M450.5,52.3v-10h1.9v10h-1.9ZM457.6,52.3v-5.8c0-.8-.2-1.4-.7-1.9-.5-.5-1.1-.7-1.8-.7s-1,.1-1.3.3-.7.5-.9.9c-.2.4-.3.8-.3,1.3l-.8-.4c0-.8.2-1.4.5-2,.3-.6.8-1,1.4-1.4.6-.3,1.3-.5,2-.5s1.4.2,2,.6,1,.9,1.4,1.5.5,1.3.5,1.9v6.2h-1.9,0Z"/>
+          <path class="lft-st0" d="M461,44.1v-1.7h6.8v1.7h-6.8ZM463.5,52.3v-14.1h1.9v14.1h-1.9Z"/>
+          <path class="lft-st0" d="M472.6,52.5c-.6,0-1.1,0-1.6-.2s-1-.4-1.4-.6-.8-.6-1.1-1l1.2-1.2c.4.5.8.8,1.3,1,.5.2,1,.3,1.6.3s1,0,1.4-.3c.3-.2.5-.5.5-.8s-.1-.7-.4-.8c-.3-.2-.6-.4-1-.5s-.8-.3-1.3-.4-.9-.3-1.3-.5c-.4-.2-.7-.5-1-.9s-.4-.9-.4-1.5.1-1.1.4-1.6c.3-.4.7-.8,1.2-1,.5-.2,1.2-.4,1.9-.4s1.5.1,2.1.4,1.1.7,1.5,1.2l-1.2,1.2c-.3-.4-.6-.6-1-.8-.4-.2-.9-.3-1.4-.3s-1,0-1.2.3c-.3.2-.4.5-.4.8s.1.6.4.8c.2.2.6.3,1,.5.4.1.8.2,1.3.4s.9.3,1.3.5c.4.2.7.5,1,.9s.4.9.4,1.5c0,.9-.3,1.7-1,2.2-.7.5-1.6.8-2.7.8h0Z"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Full and tagline</b><span class="d">The external default. Covers, banners, letterheads, trade stands. Anywhere a stranger meets the brand.</span><span class="tag t-ext">External</span></div></div>
+    <div class="lk"><div class="stage" style="background:var(--green);min-height:150px"><div style="width:44%;color:var(--white)">
+<svg data-logo="mrm-short" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="ls-Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 792.32 176.26">
+  <defs>
+    <style>
+      .ls-cls-1 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="ls-Edits">
+    <g>
+      <g>
+        <path class="ls-cls-1" d="M158.62,0H17.62C7.89,0,0,8.69,0,19.41v88.16h176.25V19.41c0-10.72-7.89-19.41-17.62-19.41Z"/>
+        <path class="ls-cls-1" d="M0,158.25c0,9.95,7.89,18.01,17.62,18.01h141c9.73,0,17.62-8.06,17.62-18.01v-17.24H0v17.24Z"/>
+      </g>
+      <g>
+        <g>
+          <path class="ls-cls-1" d="M269.55,7.28h13.63v64.92h-15.12V31.58l-19.1,23.37h-2.97l-19.29-23.46v40.71h-15.12V7.28h13.63l22.16,27.64,22.16-27.64Z"/>
+          <path class="ls-cls-1" d="M356.72,72.2l-4.82-11.69h-32l-4.82,11.69h-16.23l29.12-64.92h16.23l28.93,64.92h-16.41ZM336.04,21.84l-10.67,25.6h21.14l-10.48-25.6Z"/>
+          <path class="ls-cls-1" d="M440.93,7.28l-26.43,39.51v25.41h-15.12v-25.41l-25.5-39.51h17.81l15.39,25.23,15.77-25.23h18.08Z"/>
+          <path class="ls-cls-1" d="M499.45,72.2l-4.82-11.69h-32l-4.82,11.69h-16.23l29.12-64.92h16.23l28.93,64.92h-16.41ZM478.77,21.84l-10.67,25.6h21.14l-10.48-25.6Z"/>
+          <path class="ls-cls-1" d="M574.38,7.28h15.12v64.92h-13.63l-29.4-40.16.19,17.53v22.63h-15.12V7.28h13.63l29.4,40.34-.19-17.34V7.28Z"/>
+          <path class="ls-cls-1" d="M670.55,72.2h-19.75l-22.81-25.78v25.78h-15.12V7.28h15.12v25.41l21.33-25.41h18.73l-27.36,31.81,29.86,33.11Z"/>
+        </g>
+        <g>
+          <path class="ls-cls-1" d="M235.6,150.66h-8.81v21.42h-15.21v-64.92h31.62c4.7,0,8.81.91,12.33,2.74,3.52,1.82,6.24,4.41,8.16,7.74,1.92,3.34,2.88,7.17,2.88,11.5,0,4.95-1.28,9.18-3.85,12.71-2.57,3.52-6.2,6.03-10.9,7.51l18.36,22.72h-18.08l-16.51-21.42ZM248.91,122.56c-1.76-1.61-4.25-2.41-7.47-2.41h-14.75v18.27h14.75c3.28,0,5.78-.79,7.51-2.37,1.73-1.58,2.6-3.82,2.6-6.72s-.88-5.16-2.64-6.77Z"/>
+          <path class="ls-cls-1" d="M338.17,172.08l-4.82-11.69h-32l-4.82,11.69h-16.23l29.12-64.92h16.23l28.93,64.92h-16.41ZM317.49,121.72l-10.67,25.6h21.14l-10.48-25.6Z"/>
+          <path class="ls-cls-1" d="M441.58,107.16h16.6l-22.72,64.92h-14.37l-6.12-18.08-7.42-21.79-7.23,21.79-6.21,18.08h-14.1l-22.81-64.92h16.6l8.16,25.87,5.29,18.46,14.75-44.33h10.94l15.12,44.61,5.66-18.73,7.88-25.87Z"/>
+          <path class="ls-cls-1" d="M561.49,107.16h13.63v64.92h-15.12v-40.62l-19.1,23.37h-2.97l-19.29-23.46v40.71h-15.12v-64.92h13.63l22.16,27.64,22.16-27.64Z"/>
+          <path class="ls-cls-1" d="M598.49,107.16h15.21v64.92h-15.21v-64.92Z"/>
+          <path class="ls-cls-1" d="M680.01,107.16h15.12v64.92h-13.63l-29.4-40.16.19,17.53v22.63h-15.12v-64.92h13.63l29.4,40.34-.19-17.34v-23Z"/>
+          <path class="ls-cls-1" d="M767.74,107.16v13.26h-19.85v51.66h-15.21v-51.66h-19.75v-13.26h54.81Z"/>
+          <path class="ls-cls-1" d="M777.9,170.78c-1.58-1.48-2.36-3.37-2.36-5.66s.79-4.17,2.36-5.66c1.58-1.48,3.6-2.23,6.07-2.23s4.41.74,5.98,2.23c1.58,1.48,2.37,3.37,2.37,5.66s-.79,4.17-2.37,5.66c-1.58,1.48-3.57,2.23-5.98,2.23s-4.5-.74-6.07-2.23Z"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Short</b><span class="d">Layered name, no tagline. Narrow or square spaces where the horizontal lockup would set too small.</span><span class="tag t-int">Internal</span></div></div>
+    <div class="lk"><div class="stage" style="background:var(--green);min-height:168px"><div style="width:42%;color:var(--white)">
+<svg data-logo="mrm-short-tagline" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lst-Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 678.6 229.58">
+  <defs>
+    <style>
+      .lst-cls-1 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lst-Layer_1-2" data-name="Layer 1">
+    <g>
+      <g>
+        <path class="lst-cls-1" d="M127.56,0H14.17C6.35,0,0,6.87,0,15.34v69.7h141.73V15.34c0-8.47-6.35-15.34-14.17-15.34Z"/>
+        <path class="lst-cls-1" d="M0,127.25C0,135.25,6.35,141.73,14.17,141.73h113.39c7.83,0,14.17-6.48,14.17-14.48v-13.86H0v13.86Z"/>
+      </g>
+      <g>
+        <path class="lst-cls-1" d="M220.7,0h11.91v56.69h-13.2V21.22l-16.68,20.41h-2.59l-16.85-20.49v35.55h-13.2V0h11.91l19.36,24.13L220.7,0Z"/>
+        <path class="lst-cls-1" d="M296.83,56.69l-4.21-10.2h-27.94l-4.21,10.2h-14.17L271.72,0h14.17l25.27,56.69h-14.34ZM278.77,12.72l-9.31,22.35h18.47l-9.15-22.35Z"/>
+        <path class="lst-cls-1" d="M370.37,0l-23.08,34.5v22.19h-13.2v-22.19L311.81,0h15.55l13.44,22.03,13.77-22.03h15.79Z"/>
+        <path class="lst-cls-1" d="M421.47,56.69l-4.21-10.2h-27.94l-4.21,10.2h-14.17L396.36,0h14.17l25.27,56.69h-14.34ZM403.41,12.72l-9.31,22.35h18.47l-9.15-22.35Z"/>
+        <path class="lst-cls-1" d="M486.91,0h13.2v56.69h-11.91l-25.67-35.07.16,15.31v19.76h-13.2V0h11.91l25.67,35.23-.16-15.15V0Z"/>
+        <path class="lst-cls-1" d="M570.9,56.69h-17.25l-19.92-22.52v22.52h-13.2V0h13.2v22.19l18.63-22.19h16.36l-23.89,27.78,26.08,28.91Z"/>
+      </g>
+      <g>
+        <path class="lst-cls-1" d="M191.05,123.02h-7.69v18.71h-13.28v-56.69h27.62c4.1,0,7.69.8,10.77,2.39,3.08,1.59,5.45,3.85,7.13,6.76,1.67,2.92,2.51,6.26,2.51,10.04,0,4.32-1.12,8.02-3.36,11.1-2.24,3.08-5.41,5.26-9.52,6.56l16.04,19.84h-15.79l-14.42-18.71ZM202.68,98.48c-1.54-1.4-3.71-2.11-6.52-2.11h-12.88v15.96h12.88c2.86,0,5.05-.69,6.56-2.07,1.51-1.38,2.27-3.33,2.27-5.87s-.77-4.51-2.31-5.91Z"/>
+        <path class="lst-cls-1" d="M280.63,141.73l-4.21-10.2h-27.94l-4.21,10.2h-14.17l25.43-56.69h14.17l25.27,56.69h-14.34ZM262.57,97.75l-9.31,22.35h18.47l-9.15-22.35Z"/>
+        <path class="lst-cls-1" d="M369.68,85.04h14.5l-19.84,56.69h-12.55l-5.35-15.79-6.48-19.03-6.32,19.03-5.43,15.79h-12.31l-19.92-56.69h14.5l7.13,22.6,4.62,16.12,12.88-38.71h9.56l13.2,38.96,4.94-16.36,6.88-22.6Z"/>
+        <path class="lst-cls-1" d="M475.65,85.04h11.91v56.69h-13.2v-35.47l-16.68,20.41h-2.59l-16.85-20.49v35.55h-13.2v-56.69h11.91l19.36,24.13,19.36-24.13Z"/>
+        <path class="lst-cls-1" d="M507.97,85.04h13.28v56.69h-13.28v-56.69Z"/>
+        <path class="lst-cls-1" d="M579.16,85.04h13.2v56.69h-11.91l-25.67-35.07.16,15.31v19.76h-13.2v-56.69h11.91l25.67,35.23-.16-15.15v-20.09Z"/>
+        <path class="lst-cls-1" d="M655.77,85.04v11.58h-17.33v45.11h-13.28v-45.11h-17.25v-11.58h47.87Z"/>
+        <path class="lst-cls-1" d="M664.64,139.79c-1.38-1.3-2.06-2.94-2.06-4.94s.69-3.64,2.06-4.94c1.38-1.3,3.14-1.94,5.31-1.94s3.85.65,5.22,1.94c1.38,1.3,2.07,2.94,2.07,4.94s-.69,3.64-2.07,4.94c-1.38,1.3-3.12,1.94-5.22,1.94s-3.93-.65-5.31-1.94Z"/>
+      </g>
+      <g>
+        <path class="lst-cls-1" d="M0,216.3v-44.1h5.97v44.1H0ZM4,199.14v-5.21h12.01c1.65,0,3.12-.34,4.42-1.02,1.29-.68,2.31-1.63,3.05-2.86.74-1.23,1.11-2.69,1.11-4.38s-.37-3.15-1.11-4.38c-.74-1.23-1.76-2.18-3.05-2.86-1.29-.68-2.76-1.02-4.42-1.02H4v-5.21h12.33c2.71,0,5.15.55,7.31,1.65,2.16,1.1,3.87,2.66,5.11,4.67,1.25,2.01,1.87,4.4,1.87,7.15s-.63,5.08-1.87,7.12c-1.25,2.03-2.95,3.6-5.11,4.7-2.16,1.1-4.6,1.65-7.31,1.65H4Z"/>
+        <path class="lst-cls-1" d="M39.08,216.3v-30.18h5.72v30.18h-5.72ZM44.79,199.14l-2.16-1.02c0-3.85.89-6.93,2.67-9.21s4.34-3.43,7.69-3.43c1.52,0,2.9.27,4.13.79,1.23.53,2.37,1.41,3.43,2.64l-3.75,3.88c-.64-.68-1.33-1.16-2.1-1.46-.76-.3-1.65-.45-2.67-.45-2.12,0-3.85.68-5.21,2.03-1.36,1.36-2.03,3.43-2.03,6.23Z"/>
+        <path class="lst-cls-1" d="M79.17,216.93c-3.05,0-5.77-.69-8.17-2.07-2.39-1.38-4.29-3.25-5.69-5.62-1.4-2.37-2.1-5.06-2.1-8.07s.69-5.63,2.07-8.01c1.38-2.37,3.24-4.25,5.59-5.62,2.35-1.38,4.99-2.07,7.91-2.07,2.75,0,5.21.64,7.37,1.91,2.16,1.27,3.84,3.03,5.05,5.27,1.21,2.25,1.81,4.81,1.81,7.69,0,.42-.02.88-.06,1.37-.04.49-.13,1.03-.25,1.62h-25.48v-4.77h22.43l-2.1,1.84c0-2.03-.36-3.76-1.08-5.18-.72-1.42-1.74-2.52-3.05-3.3-1.31-.78-2.9-1.18-4.77-1.18s-3.66.42-5.15,1.27c-1.48.85-2.63,2.03-3.43,3.56-.81,1.52-1.21,3.33-1.21,5.4s.42,3.97,1.27,5.56c.85,1.59,2.05,2.82,3.62,3.69,1.57.87,3.37,1.3,5.4,1.3,1.69,0,3.25-.3,4.67-.89,1.42-.59,2.64-1.48,3.65-2.67l3.69,3.75c-1.48,1.7-3.26,2.99-5.34,3.88-2.08.89-4.3,1.33-6.67,1.33Z"/>
+        <path class="lst-cls-1" d="M114.63,216.93c-2.97,0-5.65-.7-8.04-2.1-2.39-1.4-4.28-3.29-5.66-5.69-1.38-2.39-2.07-5.05-2.07-7.97s.69-5.63,2.07-8.01c1.38-2.37,3.26-4.25,5.66-5.62,2.39-1.38,5.07-2.07,8.04-2.07,2.33,0,4.49.44,6.48,1.3,1.99.87,3.71,2.13,5.15,3.78l-3.81,3.81c-.93-1.1-2.08-1.94-3.43-2.51-1.36-.57-2.82-.86-4.38-.86-1.91,0-3.6.43-5.08,1.3-1.48.87-2.65,2.07-3.49,3.59-.85,1.53-1.27,3.28-1.27,5.27s.42,3.75,1.27,5.27c.85,1.53,2.01,2.73,3.49,3.62,1.48.89,3.18,1.33,5.08,1.33,1.61,0,3.08-.29,4.42-.86,1.33-.57,2.49-1.41,3.46-2.51l3.75,3.81c-1.4,1.61-3.1,2.86-5.11,3.75-2.01.89-4.18,1.33-6.51,1.33Z"/>
+        <path class="lst-cls-1" d="M136.42,180.08c-1.06,0-1.93-.35-2.61-1.05-.68-.7-1.02-1.58-1.02-2.64s.34-1.87,1.02-2.57c.68-.7,1.55-1.05,2.61-1.05s1.93.35,2.6,1.05c.68.7,1.02,1.56,1.02,2.57s-.34,1.94-1.02,2.64c-.68.7-1.55,1.05-2.6,1.05ZM133.5,216.3v-30.18h5.78v30.18h-5.78Z"/>
+        <path class="lst-cls-1" d="M158.91,216.93c-1.69,0-3.3-.22-4.83-.67-1.53-.45-2.91-1.08-4.16-1.91-1.25-.83-2.34-1.81-3.27-2.95l3.69-3.69c1.1,1.36,2.37,2.36,3.81,3.02,1.44.66,3.05.99,4.83.99s3.16-.31,4.13-.92c.97-.61,1.46-1.47,1.46-2.57s-.39-1.96-1.18-2.57c-.78-.61-1.79-1.12-3.02-1.53-1.23-.4-2.53-.79-3.91-1.18-1.38-.38-2.68-.89-3.91-1.52-1.23-.64-2.23-1.51-3.02-2.64-.78-1.12-1.18-2.59-1.18-4.42s.43-3.4,1.3-4.73c.87-1.33,2.11-2.36,3.72-3.08,1.61-.72,3.54-1.08,5.78-1.08,2.37,0,4.48.41,6.32,1.24,1.84.83,3.36,2.07,4.54,3.72l-3.69,3.69c-.89-1.1-1.95-1.95-3.18-2.54-1.23-.59-2.63-.89-4.19-.89-1.65,0-2.91.3-3.78.89-.87.59-1.3,1.38-1.3,2.35s.38,1.8,1.14,2.35c.76.55,1.77,1.02,3.02,1.4,1.25.38,2.55.77,3.91,1.17,1.36.4,2.65.94,3.88,1.62,1.23.68,2.23,1.59,3.02,2.73.78,1.14,1.18,2.65,1.18,4.51,0,2.84-1.01,5.08-3.02,6.74-2.01,1.65-4.71,2.48-8.1,2.48Z"/>
+        <path class="lst-cls-1" d="M180.96,180.08c-1.06,0-1.93-.35-2.6-1.05-.68-.7-1.02-1.58-1.02-2.64s.34-1.87,1.02-2.57c.68-.7,1.55-1.05,2.6-1.05s1.93.35,2.61,1.05c.68.7,1.02,1.56,1.02,2.57s-.34,1.94-1.02,2.64c-.68.7-1.55,1.05-2.61,1.05ZM178.04,216.3v-30.18h5.78v30.18h-5.78Z"/>
+        <path class="lst-cls-1" d="M207.58,216.93c-2.92,0-5.57-.7-7.94-2.1-2.37-1.4-4.26-3.29-5.66-5.69-1.4-2.39-2.1-5.07-2.1-8.04s.7-5.56,2.1-7.91c1.4-2.35,3.28-4.23,5.66-5.62,2.37-1.4,5.02-2.1,7.94-2.1s5.64.69,8.04,2.07c2.39,1.38,4.29,3.25,5.69,5.62,1.4,2.37,2.1,5.02,2.1,7.94s-.7,5.65-2.1,8.04c-1.4,2.39-3.29,4.29-5.69,5.69s-5.07,2.1-8.04,2.1ZM207.58,211.41c1.95,0,3.66-.44,5.15-1.33,1.48-.89,2.65-2.11,3.49-3.65.85-1.55,1.27-3.31,1.27-5.31s-.44-3.69-1.3-5.21c-.87-1.52-2.03-2.72-3.49-3.59-1.46-.87-3.17-1.3-5.11-1.3s-3.54.43-5.02,1.3c-1.48.87-2.65,2.07-3.49,3.59-.85,1.53-1.27,3.26-1.27,5.21s.42,3.76,1.27,5.31c.85,1.55,2.01,2.76,3.49,3.65,1.48.89,3.16,1.33,5.02,1.33Z"/>
+        <path class="lst-cls-1" d="M231.35,216.3v-30.18h5.72v30.18h-5.72ZM252.63,216.3v-17.6c0-2.29-.71-4.17-2.13-5.66-1.42-1.48-3.27-2.22-5.56-2.22-1.53,0-2.88.34-4.07,1.02-1.19.68-2.12,1.61-2.8,2.8-.68,1.19-1.02,2.54-1.02,4.07l-2.35-1.33c0-2.29.51-4.32,1.52-6.1,1.02-1.78,2.44-3.19,4.26-4.23,1.82-1.04,3.88-1.56,6.16-1.56s4.31.57,6.07,1.72c1.76,1.14,3.15,2.64,4.16,4.48,1.02,1.84,1.53,3.8,1.53,5.88v18.74h-5.78Z"/>
+        <path class="lst-cls-1" d="M283.51,216.3v-44.1h4.19l18.68,30.69h-2.86l18.68-30.69h4.19v44.1h-5.97v-33.61l1.33.38-14.68,24.21h-4.26l-14.68-24.21,1.33-.38v33.61h-5.97Z"/>
+        <path class="lst-cls-1" d="M351.37,216.93c-3.05,0-5.77-.69-8.16-2.07-2.39-1.38-4.29-3.25-5.69-5.62-1.4-2.37-2.1-5.06-2.1-8.07s.69-5.63,2.06-8.01c1.38-2.37,3.24-4.25,5.59-5.62,2.35-1.38,4.99-2.07,7.91-2.07,2.75,0,5.21.64,7.37,1.91,2.16,1.27,3.84,3.03,5.05,5.27,1.21,2.25,1.81,4.81,1.81,7.69,0,.42-.02.88-.06,1.37-.04.49-.13,1.03-.25,1.62h-25.48v-4.77h22.43l-2.1,1.84c0-2.03-.36-3.76-1.08-5.18-.72-1.42-1.74-2.52-3.05-3.3s-2.9-1.18-4.77-1.18-3.66.42-5.15,1.27c-1.48.85-2.63,2.03-3.43,3.56-.8,1.52-1.21,3.33-1.21,5.4s.42,3.97,1.27,5.56c.85,1.59,2.05,2.82,3.62,3.69,1.57.87,3.37,1.3,5.4,1.3,1.69,0,3.25-.3,4.67-.89,1.42-.59,2.64-1.48,3.65-2.67l3.69,3.75c-1.48,1.7-3.26,2.99-5.34,3.88-2.08.89-4.3,1.33-6.67,1.33Z"/>
+        <path class="lst-cls-1" d="M369.35,191.33v-5.21h20.59v5.21h-20.59ZM376.79,216.3v-42.83h5.72v42.83h-5.72Z"/>
+        <path class="lst-cls-1" d="M409,216.93c-2.79,0-5.31-.69-7.53-2.07-2.22-1.38-3.98-3.25-5.27-5.62-1.29-2.37-1.94-5.04-1.94-8.01s.65-5.63,1.94-8.01c1.29-2.37,3.05-4.26,5.27-5.66,2.22-1.4,4.73-2.1,7.53-2.1,2.29,0,4.33.48,6.13,1.43,1.8.95,3.25,2.27,4.35,3.94,1.1,1.67,1.72,3.61,1.84,5.81v9.09c-.13,2.16-.73,4.09-1.81,5.78-1.08,1.7-2.53,3.02-4.35,3.97-1.82.95-3.88,1.43-6.16,1.43ZM409.95,211.53c2.84,0,5.12-.96,6.86-2.89,1.74-1.93,2.61-4.39,2.61-7.4,0-2.03-.4-3.83-1.21-5.4-.81-1.57-1.92-2.79-3.34-3.65-1.42-.87-3.08-1.3-4.99-1.3s-3.59.45-5.05,1.33-2.61,2.11-3.43,3.65c-.83,1.55-1.24,3.32-1.24,5.31s.41,3.82,1.24,5.37c.83,1.55,1.98,2.76,3.46,3.65,1.48.89,3.18,1.33,5.08,1.33ZM419.04,216.3v-8.13l1.08-7.37-1.08-7.31v-7.37h5.78v30.18h-5.78Z"/>
+        <path class="lst-cls-1" d="M434.73,216.3v-45.37h5.72v45.37h-5.72Z"/>
+        <path class="lst-cls-1" d="M466.18,216.3v-44.1h5.97v44.1h-5.97ZM470.25,177.67v-5.46h24.08v5.46h-24.08ZM470.25,196.92v-5.46h23v5.46h-23Z"/>
+        <path class="lst-cls-1" d="M505.64,180.08c-1.06,0-1.93-.35-2.6-1.05-.68-.7-1.02-1.58-1.02-2.64s.34-1.87,1.02-2.57c.68-.7,1.55-1.05,2.6-1.05s1.93.35,2.61,1.05c.68.7,1.02,1.56,1.02,2.57s-.34,1.94-1.02,2.64c-.68.7-1.55,1.05-2.61,1.05ZM502.72,216.3v-30.18h5.78v30.18h-5.78Z"/>
+        <path class="lst-cls-1" d="M515.75,191.33v-5.21h20.59v5.21h-20.59ZM523.18,216.3v-42.83h5.72v42.83h-5.72Z"/>
+        <path class="lst-cls-1" d="M539.57,191.33v-5.21h20.59v5.21h-20.59ZM547.01,216.3v-42.83h5.72v42.83h-5.72Z"/>
+        <path class="lst-cls-1" d="M570.26,180.08c-1.06,0-1.93-.35-2.6-1.05-.68-.7-1.02-1.58-1.02-2.64s.34-1.87,1.02-2.57c.68-.7,1.55-1.05,2.6-1.05s1.93.35,2.61,1.05c.68.7,1.02,1.56,1.02,2.57s-.34,1.94-1.02,2.64c-.68.7-1.55,1.05-2.61,1.05ZM567.34,216.3v-30.18h5.78v30.18h-5.78Z"/>
+        <path class="lst-cls-1" d="M583.16,216.3v-30.18h5.72v30.18h-5.72ZM604.45,216.3v-17.6c0-2.29-.71-4.17-2.13-5.66-1.42-1.48-3.27-2.22-5.56-2.22-1.53,0-2.88.34-4.07,1.02-1.19.68-2.12,1.61-2.8,2.8-.68,1.19-1.02,2.54-1.02,4.07l-2.35-1.33c0-2.29.51-4.32,1.52-6.1,1.02-1.78,2.44-3.19,4.26-4.23,1.82-1.04,3.88-1.56,6.16-1.56s4.31.57,6.07,1.72c1.76,1.14,3.15,2.64,4.16,4.48,1.02,1.84,1.53,3.8,1.53,5.88v18.74h-5.78Z"/>
+        <path class="lst-cls-1" d="M632.09,215.79c-2.75,0-5.22-.66-7.4-1.97-2.18-1.31-3.91-3.12-5.18-5.43-1.27-2.31-1.91-4.9-1.91-7.78s.62-5.45,1.87-7.72c1.25-2.27,2.98-4.07,5.18-5.4,2.2-1.33,4.66-2,7.37-2,2.37,0,4.48.47,6.32,1.4,1.84.93,3.29,2.24,4.35,3.91,1.06,1.67,1.65,3.63,1.78,5.88v8.01c-.13,2.2-.73,4.14-1.81,5.81-1.08,1.67-2.53,2.98-4.35,3.91-1.82.93-3.9,1.4-6.23,1.4ZM632.09,229.58c-3.14,0-5.89-.57-8.26-1.71-2.37-1.14-4.3-2.75-5.78-4.83l3.75-3.75c1.23,1.57,2.69,2.76,4.38,3.59,1.69.83,3.71,1.24,6.04,1.24,3.05,0,5.49-.82,7.31-2.45,1.82-1.63,2.73-3.82,2.73-6.58v-7.5l1.02-6.8-1.02-6.74v-7.94h5.72v28.97c0,2.88-.67,5.41-2,7.59-1.33,2.18-3.2,3.88-5.59,5.08-2.39,1.21-5.16,1.81-8.29,1.81ZM633.17,210.39c1.91,0,3.56-.4,4.96-1.21s2.49-1.94,3.27-3.4c.78-1.46,1.18-3.17,1.18-5.11s-.39-3.65-1.18-5.11c-.78-1.46-1.88-2.6-3.3-3.43-1.42-.83-3.06-1.24-4.92-1.24s-3.58.41-5.02,1.24-2.57,1.97-3.4,3.43c-.83,1.46-1.24,3.15-1.24,5.05s.41,3.6,1.24,5.08,1.97,2.64,3.43,3.46c1.46.83,3.12,1.24,4.99,1.24Z"/>
+        <path class="lst-cls-1" d="M667.48,216.93c-1.69,0-3.3-.22-4.83-.67-1.53-.45-2.91-1.08-4.16-1.91-1.25-.83-2.34-1.81-3.27-2.95l3.69-3.69c1.1,1.36,2.37,2.36,3.81,3.02,1.44.66,3.05.99,4.83.99s3.16-.31,4.13-.92c.97-.61,1.46-1.47,1.46-2.57s-.39-1.96-1.17-2.57c-.78-.61-1.79-1.12-3.02-1.53-1.23-.4-2.53-.79-3.91-1.18-1.38-.38-2.68-.89-3.91-1.52-1.23-.64-2.24-1.51-3.02-2.64-.78-1.12-1.18-2.59-1.18-4.42s.43-3.4,1.3-4.73c.87-1.33,2.11-2.36,3.72-3.08,1.61-.72,3.54-1.08,5.78-1.08,2.37,0,4.48.41,6.32,1.24,1.84.83,3.36,2.07,4.54,3.72l-3.69,3.69c-.89-1.1-1.95-1.95-3.18-2.54-1.23-.59-2.63-.89-4.19-.89-1.65,0-2.91.3-3.78.89-.87.59-1.3,1.38-1.3,2.35s.38,1.8,1.14,2.35,1.77,1.02,3.02,1.4c1.25.38,2.55.77,3.91,1.17,1.36.4,2.65.94,3.88,1.62,1.23.68,2.23,1.59,3.02,2.73.78,1.14,1.18,2.65,1.18,4.51,0,2.84-1.01,5.08-3.02,6.74-2.01,1.65-4.71,2.48-8.1,2.48Z"/>
+      </g>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Short and tagline</b><span class="d">Layered name with the short tagline. Narrow external formats: roll-ups, portrait ads, product cards.</span><span class="tag t-ext">External</span></div></div>
+    <div class="lk"><div class="stage" style="background:var(--white);border:1px solid var(--line)"><div style="width:78%;color:var(--green)">
+<svg data-logo="mrm-full" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" id="lf-Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 483.41 28.74">
+  <defs>
+    <style>
+      .lf-cls-1 {
+        fill: currentColor;
+      }
+    </style>
+  </defs>
+  <g id="lf-Layer_2-2" data-name="Layer 2">
+    <g>
+      <path class="lf-cls-1" d="M71.87,0v28.66h-7.69v-10.03c0-2.25.16-5.24.36-7.08l-.2-.09c-.74,1.51-1.96,3.48-3.48,5.57l-4.46,6.06h-1.35l-4.46-6.06c-1.56-2.09-2.82-4.06-3.56-5.57l-.2.09c.25,1.85.45,4.83.45,7.08v10.03h-7.66V0h7.12l9.09,12.56L64.76,0h7.12-.01Z"/>
+      <path class="lf-cls-1" d="M99.15,23.83h-11.75l-1.92,4.83h-8.11L89.41,0h8.07l11.95,28.66h-8.39s-1.89-4.83-1.89-4.83ZM91.62,11.63l-2.01,5.81h7.33l-2.05-6.02c-.77-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M126.47,17.07v11.59h-7.78v-11.5L107.92,0h9l3.36,5.98c.9,1.64,1.85,3.44,2.25,4.75h.16c.33-.94,1.35-2.86,2.41-4.67l3.52-6.06h9l-11.18,17.07h.02Z"/>
+      <path class="lf-cls-1" d="M157.88,23.83h-11.75l-1.92,4.83h-8.11L148.14,0h8.07l11.95,28.66h-8.39l-1.89-4.83ZM150.35,11.63l-2.01,5.81h7.33l-2.05-6.02c-.78-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M173.62,0h7.04l8.23,11.63c1.47,2.09,2.7,3.85,3.81,5.48l.2-.12c-.54-2.3-.7-5.53-.7-9.83V0h7.53v28.66h-7.04l-8.27-11.63c-1.67-2.37-2.86-4.1-3.72-5.41l-.2.09c.45,1.85.65,5.48.65,9.78v7.17h-7.53V0Z"/>
+      <path class="lf-cls-1" d="M234.89,28.66h-10.03l-5.07-6.06c-1.67-2.01-3.11-3.97-4.01-5.48l-.2.09c.25,1.85.45,4.83.45,7.49v3.97h-7.66V0h7.66v3.81c0,2.66-.2,5.65-.45,7.49l.2.09c.94-1.47,2.5-3.48,4.13-5.57L224.48,0h9.29l-11.7,14.04,12.81,14.61h.01Z"/>
+      <path class="lf-cls-1" d="M262.23,19.41h-1.92v9.25h-7.78V0h13.14C271.86,0,276.28,3.97,276.28,9.7c0,4.22-2.25,7.33-6.14,8.84l7.9,10.11h-9.13l-6.67-9.25h0ZM264.66,6.22h-4.42v7.45h4.42c2.57,0,3.97-1.27,3.97-3.6,0-2.5-1.39-3.85-3.97-3.85h0Z"/>
+      <path class="lf-cls-1" d="M303.01,23.83h-11.75l-1.92,4.83h-8.11L293.27,0h8.07l11.95,28.66h-8.39l-1.89-4.83h0ZM295.48,11.63l-2.01,5.81h7.33l-2.05-6.02c-.77-2.3-1.22-3.68-1.51-4.58h-.16c-.33,1.02-.74,2.25-1.6,4.78Z"/>
+      <path class="lf-cls-1" d="M312.39,0h8.35l3.23,10.77c.57,1.96,1.11,4.01,1.64,7.08h.2c.7-2.95,1.06-4.17,2.25-7.45L331.83.01h5.07l3.81,10.19c1.22,3.32,1.76,5.36,2.3,7.66h.2c.41-2.01,1.15-4.87,1.89-7.49L347.96.02h8.23l-9.7,28.66h-6.34l-3.36-9.49c-.94-2.7-1.96-6.06-2.37-7.53h-.16c-.36,1.47-1.31,4.62-2.37,7.66l-3.27,9.38h-6.22L312.41.03,312.39,0Z"/>
+      <path class="lf-cls-1" d="M405.19,0v28.66h-7.69v-10.03c0-2.25.16-5.24.36-7.08l-.2-.09c-.74,1.51-1.96,3.48-3.48,5.57l-4.46,6.06h-1.35l-4.46-6.06c-1.56-2.09-2.82-4.06-3.56-5.57l-.2.09c.25,1.85.45,4.83.45,7.08v10.03h-7.66V0h7.12l9.09,12.56L398.07,0h7.12Z"/>
+      <path class="lf-cls-1" d="M412.81,0h7.78v28.66h-7.78V0Z"/>
+      <path class="lf-cls-1" d="M428.09,0h7.04l8.23,11.63c1.47,2.09,2.7,3.85,3.81,5.48l.2-.12c-.54-2.3-.7-5.53-.7-9.83V0h7.53v28.66h-7.04l-8.27-11.63c-1.67-2.37-2.86-4.1-3.72-5.41l-.2.09c.45,1.85.65,5.48.65,9.78v7.17h-7.53V0Z"/>
+      <path class="lf-cls-1" d="M483.41,6.43h-8.39v22.23h-7.78V6.43h-8.31V0h24.48v6.43Z"/>
+    </g>
+    <g>
+      <path class="lf-cls-1" d="M25.81.05H2.87C1.28.05,0,1.46,0,3.21v14.35h28.68V3.21c0-1.75-1.28-3.16-2.87-3.16Z"/>
+      <path class="lf-cls-1" d="M0,25.8c0,1.62,1.28,2.93,2.87,2.93h22.95c1.58,0,2.87-1.31,2.87-2.93v-2.81H0v2.81Z"/>
+    </g>
+  </g>
+</svg></div></div><div class="m"><b>Reversal</b><span class="d">Any lockup runs Green on White or White on Green. One flat colour only. The currentColor artwork takes whichever the surface needs.</span><span class="tag t-int">Internal</span> <span class="tag t-ext">External</span></div></div>
+  </div>
+
+  <h3><span class="h3num">12.1</span>Clear space &amp; minimum size</h3>
+  <p>Clear space on all four sides equals the height of the block's lower bar. Nothing enters it: no type, no rule, no image edge.</p>
+  <table>
+    <tr><th>Lockup</th><th>Minimum width</th><th>Note</th></tr>
+    <tr><td>Block</td><td>16 px / 6 mm</td><td>Below this the bar gap closes in print.</td></tr>
+    <tr><td>Full</td><td>120 px / 40 mm</td><td>Name becomes illegible below this.</td></tr>
+    <tr><td>Full &amp; tagline</td><td>180 px / 60 mm</td><td>Governed by the tagline, not the name.</td></tr>
+    <tr><td>Short &amp; tagline</td><td>90 px / 30 mm</td><td>&ndash;</td></tr>
+  </table>
+  <div class="cmp">
+    <div class="yes"><h4>Do</h4><ul><li>Set the logo in one flat colour: Green, White, or Black.</li><li>White on Green, Green on White. The two default pairings.</li><li>Black only where colour is unavailable: fax, stamp, single-colour print.</li></ul></div>
+    <div class="no"><h4>Don't</h4><ul><li>Never colour the logo Tennis, Lime, or any signal colour.</li><li>Never add shadow, outline, gradient, or bevel.</li><li>Never rebuild the wordmark by typing it. It is drawn, not set.</li><li>Never stretch, rotate, or re-space the lockup.</li></ul></div>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-13">
+  <div class="sec-no">Section 13 · Visual</div>
+  <h2 class="sec"><em>Colour</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 13</span>Palette tiers</div><p class="lede">Three tiers with different permissions. Primary is the brand. Secondary is the accent. Signal colours carry meaning and are never decoration.</p></div>
+  <h3><span class="h3num">13.1</span>Primary</h3>
+  <div class="sw-grid c3">
+    <div class="sw"><div class="chip" style="background:#006A49"><span style="color:#fff">Primary</span></div><div class="i"><div class="n">MRM Green</div><div class="h">#006A49</div><div class="u">The brand. Backgrounds, headings, rules, icons. The default state of everything.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#F7F7F2;border-bottom:1px solid var(--line)"><span style="color:#8E8E88">Surface</span></div><div class="i"><div class="n">MRM White</div><div class="h">#F7F7F2</div><div class="u">The working surface. The floating card. Reversed-out type on green.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#050505"><span style="color:#fff">Contrast</span></div><div class="i"><div class="n">MRM Black</div><div class="h">#050505</div><div class="u">Body copy and the contrast word in two-tone headings. Not a background.</div></div></div>
+  </div>
+  <h3><span class="h3num">13.2</span>Secondary</h3>
+  <div class="sw-grid c3">
+    <div class="sw"><div class="chip" style="background:#8BC341"><span style="color:#103C1E">Accent</span></div><div class="i"><div class="n">Tennis Green</div><div class="h">#8BC341</div><div class="u">Preferred accent. One job per layout: the thing that is active, next, or moving.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#B8D446"><span style="color:#103C1E">Variation</span></div><div class="i"><div class="n">Lime Green</div><div class="h">#B8D446</div><div class="u">Second option. Where a layout needs two accent steps, or for variation across a set.</div></div></div>
+    <div class="sw"><div class="chip" style="background:#103C1E"><span style="color:#fff">Depth</span></div><div class="i"><div class="n">Jungle Green</div><div class="h">#103C1E</div><div class="u">Depth and outline. Pill borders, the darkest step in a sequence, type on Tennis or Lime.</div></div></div>
+  </div>
+  <h3><span class="h3num">13.3</span>Signal</h3>
+  <p>These follow ISO 3864, the international safety-colour standard. A worker, auditor, or visiting client already reads red as prohibition and blue as mandatory. Do not invent a private system when a universal one exists.</p>
+  <div class="sig">
+    <div class="sigbox s-danger"><div class="lb">Danger</div><div class="ex">#D32F2F</div></div>
+    <div class="sigbox s-caution"><div class="lb">Caution</div><div class="ex">#FFDE59</div></div>
+    <div class="sigbox s-safe"><div class="lb">Safe</div><div class="ex">#3C9244</div></div>
+    <div class="sigbox s-mand"><div class="lb">Mandatory</div><div class="ex">#4970AD</div></div>
+  </div>
+  <table>
+    <tr><th>Signal</th><th>Meaning</th><th>Use</th></tr>
+    <tr><td>Danger</td><td>Stop. Prohibition. Hazard.</td><td>Fire equipment, "do not" rules, hazard bars, emergency instruction.</td></tr>
+    <tr><td>Caution</td><td>Warning. Attention.</td><td>Preventive rules, "check this". Black type on the yellow field only, never white.</td></tr>
+    <tr><td>Safe</td><td>Safe condition. Correct action.</td><td>Exits, first aid, assembly points.</td></tr>
+    <tr><td>Mandatory</td><td>Required. Informational.</td><td>PPE requirements, instructions that must be followed, reference notes.</td></tr>
+  </table>
+  <div class="principle"><div class="k">Why Danger is not Crate Red</div><p>Crate Red (#FF3131) is a bin colour. It already means something physical on the floor. If red bins and red hazard strips shared a hex, red would stop signalling. Signal Danger is a separate, deeper red that also holds white type at full contrast.</p></div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-14">
+  <div class="sec-no">Section 14 · Visual</div>
+  <h2 class="sec">The <em>crate</em> scheme</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 14</span>Process code</div><p class="lede">The crate colours are not a palette. They are a material-flow code. Each colour is locked to one production stage, so a worker sorts and routes material at a glance without reading a label.</p></div>
+  <p>The order below is the order on the floor. It matches the wall chart exactly. These colours are operational only and never appear in brand material.</p>
+  <div class="crate">
+    <div class="cr"><div class="sw-bar" style="background:#050505;color:#fff"><span class="st">01</span><span class="lb">WIP, CNC Production</span></div><div class="hx">Crate Black · #050505</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#4970AD;color:#fff"><span class="st">02</span><span class="lb">WIP, Conventional Production</span></div><div class="hx">Crate Blue · #4970AD</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#81492A;color:#fff"><span class="st">03</span><span class="lb">Semi-Finished, Forged / Casted</span></div><div class="hx">Crate Brown · #81492A</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#3C9244;color:#fff"><span class="st">04</span><span class="lb">Finished, Anti-Rust Applied</span></div><div class="hx">Crate Green · #3C9244</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#FB7800;color:#fff"><span class="st">05</span><span class="lb">Finished, Before Treatment</span></div><div class="hx">Crate Orange · #FB7800</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#8F8E8F;color:#fff"><span class="st">06</span><span class="lb">Finished, After Treatment</span></div><div class="hx">Crate Grey · #8F8E8F</div></div>
+    <div class="cr"><div class="sw-bar" style="background:#F3C839;color:#050505"><span class="st">07</span><span class="lb">Approved, Post-Check Assembly</span></div><div class="hx">Crate Yellow · #F3C839</div></div>
+  </div>
+  <div class="principle" style="margin-top:26px"><div class="k">Shared values, deliberate not accidental</div><p>Three crate colours are reused from other tiers. This is safe because the meanings reinforce rather than clash, and because context (a bin versus a sign) tells them apart.</p></div>
+  <table>
+    <tr><th>Hex</th><th>Crate role</th><th>Also used as</th></tr>
+    <tr><td>#050505</td><td>CNC WIP</td><td>MRM Black, body type</td></tr>
+    <tr><td>#4970AD</td><td>Conventional WIP</td><td>Mandatory signal</td></tr>
+    <tr><td>#3C9244</td><td>Anti-rust finished</td><td>Safe signal</td></tr>
+  </table>
+  <p class="small">Brown (#81492A), Orange (#FB7800), Grey (#8F8E8F), and Yellow (#F3C839) are crate-exclusive and appear nowhere else in the system.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-15">
+  <div class="sec-no">Section 15 · Visual</div>
+  <h2 class="sec"><em>Typography</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 15</span>Typefaces</div><p class="lede">Three faces, each with one job. Nexa Heavy is the wordmark and appears nowhere else. Outfit carries everything in English. Hind Vadodara and Hind carry Gujarati and Hindi.</p></div>
+  <table>
+    <tr><th>Face</th><th>Role</th><th>Rule</th></tr>
+    <tr><td>Nexa Heavy</td><td>Wordmark only</td><td>Never set as live text. Typing the name in Nexa is not the logo.</td></tr>
+    <tr><td>Outfit</td><td>All English</td><td>Headings, body, data, captions. Weights 400 to 800.</td></tr>
+    <tr><td>Hind Vadodara</td><td>Gujarati</td><td>Weight-matched to Outfit.</td></tr>
+    <tr><td>Hind</td><td>Hindi (Devanagari)</td><td>Same superfamily as Hind Vadodara. Use for all Hindi.</td></tr>
+  </table>
+  <h3><span class="h3num">15.1</span>Type scale</h3>
+  <p>Named parameters for every role. Sizes are the desktop baseline; scale proportionally for print and large-format signage. Leading is expressed as a multiple of type size.</p>
+  <div class="tscroll"><table>
+    <tr><th>Role</th><th>Face</th><th>Weight</th><th>Size</th><th>Leading</th><th>Tracking</th></tr>
+    <tr><td>Display</td><td>Outfit</td><td>800</td><td>40 px</td><td>1.10</td><td>-0.01em</td></tr>
+    <tr><td>Section</td><td>Outfit</td><td>800</td><td>27 px</td><td>1.10</td><td>-0.01em</td></tr>
+    <tr><td>Subsection</td><td>Outfit</td><td>600</td><td>16 px</td><td>1.30</td><td>0</td></tr>
+    <tr><td>Lede</td><td>Outfit</td><td>400</td><td>17 px</td><td>1.60</td><td>0</td></tr>
+    <tr><td>Body</td><td>Outfit</td><td>400</td><td>15 px</td><td>1.68</td><td>0</td></tr>
+    <tr><td>Caption</td><td>Outfit</td><td>500</td><td>13 px</td><td>1.60</td><td>0</td></tr>
+    <tr><td>Eyebrow</td><td>Outfit</td><td>600</td><td>12 px</td><td>1.30</td><td>0.16em</td></tr>
+    <tr><td>Gujarati heading</td><td>Hind Vadodara</td><td>700</td><td>23 px</td><td>1.35</td><td>0</td></tr>
+    <tr><td>Gujarati body</td><td>Hind Vadodara</td><td>400</td><td>15 px</td><td>1.60</td><td>0</td></tr>
+    <tr><td>Hindi heading</td><td>Hind</td><td>700</td><td>23 px</td><td>1.35</td><td>0</td></tr>
+    <tr><td>Hindi body</td><td>Hind</td><td>400</td><td>15 px</td><td>1.60</td><td>0</td></tr>
+  </table></div>
+
+  <div class="spec"><div class="l">Display, Outfit 800</div><div style="font-size:40px;font-weight:800;line-height:1.1;letter-spacing:-.01em"><em style="font-style:normal;color:var(--green)">Precision</em> Brass Fittings</div><div class="nn">Two-tone: colour the subject word Green, keep the rest Black. Never colour more than half the line.</div></div>
+  <div class="spec"><div class="l">Section, Outfit 800</div><div style="font-size:27px;font-weight:800"><em style="font-style:normal;color:var(--green)">Quality</em> Assurance</div></div>
+  <div class="spec"><div class="l">Body, Outfit 400 / 1.68</div><div style="font-size:15px;line-height:1.68;color:#2A2A26;max-width:60ch">Internal POs are issued to each production unit for planning and traceability. Records are retained for a minimum of two years.</div></div>
+  <div class="spec"><div class="l">Gujarati, Hind Vadodara 700 / 400</div><div class="guj" style="font-size:23px;font-weight:700;color:var(--green)">સેફ્ટી પિન ખેંચી કાઢો</div><div class="guj" style="font-size:15px;line-height:1.6;color:#2A2A26;margin-top:5px">એક્સટીંગ્યુશરને સીધું ઊભું પકડો.</div></div>
+  <div class="spec"><div class="l">Hindi, Hind 700 / 400</div><div class="hin" style="font-size:23px;font-weight:700;color:var(--green)">सेफ्टी पिन बाहर खींचें</div><div class="hin" style="font-size:15px;line-height:1.6;color:#2A2A26;margin-top:5px">एक्सटिंग्विशर को सीधा खड़ा पकड़ें।</div></div>
+  <div class="cmp">
+    <div class="yes"><h4>Do</h4><ul><li>Sentence case for headings. Uppercase for eyebrows only.</li><li>Let weight carry hierarchy. 800 beside 400 is enough.</li><li>A rule below a heading where separation is needed.</li></ul></div>
+    <div class="no"><h4>Don't</h4><ul><li>No underlines, not on headings, not on the company name.</li><li>No italics, no letterspaced body, no all-caps paragraphs.</li><li>Never orphan a single word onto its own line in a heading.</li></ul></div>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-16">
+  <div class="sec-no">Section 16 · Visual</div>
+  <h2 class="sec"><em>Iconography</em></h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 16</span>Icon style</div><p class="lede">One icon style, locked. Icons are line-drawn, single-weight, single-colour, and geometric. They read as instruments, not illustrations, which suits a company that works in tolerances.</p></div>
+  <div class="icons">
+    <div class="ic"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="2.4"/><circle cx="24" cy="24" r="6" stroke="currentColor" stroke-width="2.4"/><line x1="24" y1="3" x2="24" y2="11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><line x1="24" y1="37" x2="24" y2="45" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><div class="t">Tolerance</div></div>
+    <div class="ic"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 8v4M24 36v4M8 24h4M36 24h4M13 13l3 3M32 32l3 3M35 13l-3 3M16 32l-3 3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="2.4"/><circle cx="24" cy="24" r="3.5" fill="currentColor"/></svg><div class="t">Machining</div></div>
+    <div class="ic"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 5l16 6v10c0 10-7 17-16 22-9-5-16-12-16-22V11l16-6z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M17 24l5 5 9-10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="t">Quality</div></div>
+    <div class="ic"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 28l3 9h26l3-9H8z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M14 28V14h12l6 6v8" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><line x1="20" y1="18" x2="26" y2="18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><div class="t">Dispatch</div></div>
+  </div>
+  <div class="principle"><div class="k">Locked specification</div><p>Stroke weight 2.4 at a 48px artboard, proportional at other sizes. Round caps and round joins. No fills except a single small accent dot where a focal point is needed. One colour per icon, drawn in MRM Green on light surfaces and White on green.</p></div>
+  <div class="cmp">
+    <div class="yes"><h4>Do</h4><ul><li>Keep every icon on the same 48px grid with consistent optical weight.</li><li>Use currentColor so an icon inherits Green or White from its surface.</li><li>Match the corner radius and cap style across the whole set.</li></ul></div>
+    <div class="no"><h4>Don't</h4><ul><li>No filled or duotone icons mixed with the line set.</li><li>No drop shadows, gradients, or skeuomorphism.</li><li>No signal or crate colours on icons. Icons are brand, not code.</li><li>No emoji or third-party icon packs that break the weight.</li></ul></div>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-17">
+  <div class="sec-no">Section 17 · Visual</div>
+  <h2 class="sec">The <em>CAD</em> motif</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 17</span>Motif</div><p class="lede">The recurring line-art of a fitting, drawn in the style of a CAD or engineering drawing, is a deliberate brand motif. It signals precisely what MRM does and how it thinks, and it is retained.</p></div>
+  <div class="motif">
+    <div class="art"><svg viewBox="0 0 200 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g stroke="currentColor" stroke-width="1.4">
+<rect x="40" y="55" width="120" height="40" rx="3"/>
+<path d="M40 62h120M40 88h120"/>
+<path d="M55 55v40M70 55v40M130 55v40M145 55v40"/>
+<path d="M160 60l16-8v46l-16-8" />
+<path d="M40 60L24 52v46l16-8"/>
+<circle cx="100" cy="75" r="9"/>
+<path d="M100 40v8M100 102v8" stroke-dasharray="3 3"/>
+<path d="M20 120h160" stroke-dasharray="2 4"/>
+<path d="M24 116v8M176 116v8"/>
+<text x="92" y="128" font-family="Outfit" font-size="7" fill="currentColor" stroke="none">Ø 25.0</text>
+</g></svg></div>
+    <div>
+      <p>The motif works because it is honest. It shows the product as the people who make it see it: as geometry with dimensions and tolerances, not as a glamour shot. It carries the Creator archetype directly.</p>
+      <p>Use it as a light background element, a section divider, or a hero on technical pages. Keep it line-only, single-colour, and never let it compete with live content.</p>
+    </div>
+  </div>
+  <div class="cmp">
+    <div class="yes"><h4>Do</h4><ul><li>Draw it single-weight in MRM Green, or ghosted at low opacity behind content.</li><li>Include dimension lines and callouts. The engineering language is the point.</li><li>Keep it accurate to a real fitting geometry.</li></ul></div>
+    <div class="no"><h4>Don't</h4><ul><li>No photoreal rendering mixed with the line motif.</li><li>No signal or crate colours on the linework.</li><li>Never place it so densely that it reduces legibility of text over it.</li></ul></div>
+  </div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-18">
+  <div class="sec-no">Section 18 · Visual</div>
+  <h2 class="sec"><em>Layout</em> &amp; components</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 18</span>Structure</div><p class="lede">One structural idea runs through everything MRM makes: a white card, floating on green, holding a single complete thought.</p></div>
+  <div class="two">
+    <div class="box"><div class="cap">The card</div><div style="background:var(--green);border-radius:14px;padding:16px"><div style="background:var(--white);border-radius:18px;padding:18px;font-size:13px;line-height:1.55;color:#2A2A26"><strong style="color:var(--green);display:block;margin-bottom:5px">White on Green</strong>28 to 34px radius at full-page scale. Green margin visible on all four sides. The card floats, it never bleeds.</div></div></div>
+    <div class="box"><div class="cap">Structure carries meaning</div><p>Numbers appear only where there is a sequence. Rules appear only where there is a division. An arrow appears only where something moves. If a device is not encoding something true, remove it. Decoration is the one thing the brand cannot afford, because it makes the reader doubt everything else on the page.</p></div>
+  </div>
+  <h3><span class="h3num">18.1</span>Spacing</h3>
+  <p>Base unit 4px. Card padding 46px desktop, 24px mobile. Grid gap 20 to 24px. Heading to rule 16px. Rule to content 30px.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-19">
+  <div class="sec-no">Section 19 · Visual</div>
+  <h2 class="sec"><em>Safety</em> &amp; operational documents</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 19</span>Register 1</div><p class="lede">SOPs, hazard notices, and shop-floor signage are read under stress, in bad light, by someone who may be frightened. They use a stricter subset of the system, and they follow a fixed anatomy so any two posters in the plant look like one family.</p></div>
+
+  <div class="principle" style="border-color:var(--tennis)">
+    <div class="k">Art direction runs in registers</div>
+    <p>Different surfaces do different jobs, so the brand carries more than one art direction. A shop-floor safety poster is calm and sparse. A recruitment standee is bold and energetic. Both are correct, and both are unmistakably MRM, because they share one foundation: the palette, the logo, flat fills, Tennis restraint, and the proof rule. What changes between registers is mood and layout, never the core. This section is <strong>Register 1 · Safety &amp; operational</strong>. The next section is <strong>Register 2 · Marketing &amp; outreach</strong>. More registers will be added as MRM expands into internal notices, awareness, and public-facing work.</p>
+  </div>
+
+  
+
+  <h3><span class="h3num">19.1</span>Anatomy of a safety poster</h3>
+  <p>Every safety poster is built from the same five parts, top to bottom. Build in this order.</p>
+  <table>
+    <tr><th>Part</th><th>Spec</th></tr>
+    <tr><td>1 · Header</td><td>MRM block (left) + title in Outfit 800 uppercase (right), on the White surface. Document number top-right, small, in Outfit. A hazard poster may add a status badge (Emergency / Caution) beside the title. No tagline, ever.</td></tr>
+    <tr><td>2 · Title block</td><td>The instruction, bilingual, in a solid Green rounded panel: Gujarati in Hind Vadodara, Hindi in Hind, both at heading weight. Colour the key noun Tennis or leave it White. This is the one place the two scripts stack rather than sit side by side.</td></tr>
+    <tr><td>3 · Step cards</td><td>The core. One rounded card per step, on a light surface with a thin border. Each card holds an icon, then Gujarati, then Hindi. Two-up grid on wide formats, single column on narrow. See card rules below.</td></tr>
+    <tr><td>4 · Signal strips</td><td>Danger and Caution guidance, each in its own coloured strip. Red for act-now, Yellow for know-beforehand. See the signal rules below.</td></tr>
+    <tr><td>5 · Numbers / footer</td><td>Emergency numbers in a Danger-red panel with large Outfit numerals, or a Green sign-off line. Document number repeated bottom-right.</td></tr>
+  </table>
+
+  <h3><span class="h3num">19.2</span>The step card</h3>
+  <div class="two">
+    <div class="box">
+      <div class="cap">Structure</div>
+      <p style="font-size:13.5px;line-height:1.6;color:#444">Rounded card, light background, 1px border. Inside: a pictogram, then the Gujarati line, then the Hindi line. A "do not" step turns its card and icon Danger-red and uses a prohibition pictogram. A normal step uses Green.</p>
+    </div>
+    <div class="box">
+      <div class="cap">Bilingual rule for signage</div>
+      <p style="font-size:13.5px;line-height:1.6;color:#444">On life-safety signage, Gujarati and Hindi carry <strong>equal visual weight</strong>. This overrides the general "local language leads" rule used elsewhere, because in an emergency a reader must find their language instantly, not hunt for a secondary line. English is optional here and, if present, is a small reference label only.</p>
+    </div>
+  </div>
+
+  <div class="principle">
+    <div class="k">Iconography exception</div>
+    <p>Safety signage uses standard ISO 3864 / ISO 7010 pictograms, not the brand line-icon set. A recognised prohibition circle or exit runner is read faster under panic than an elegant custom stroke. Recolour pictograms to the MRM signal palette where possible, but never redraw them into something unfamiliar. Recognition beats style here.</p>
+  </div>
+
+  <h3><span class="h3num">19.3</span>Signal strips</h3>
+  <table>
+    <tr><th>Strip</th><th>Holds</th><th>Style</th></tr>
+    <tr><td>Danger</td><td>Act-now instruction: sound the alarm, get out, cut the power. Emergency phone numbers.</td><td>Danger red (#D32F2F) bar, white text, warning triangle. Red border on the panel.</td></tr>
+    <tr><td>Caution</td><td>Know-beforehand: keep an exit behind you, stay low in smoke, check the gauge monthly.</td><td>Caution yellow (#FFDE59) bar, <strong>black</strong> text and black-stroked icon. Never white on yellow.</td></tr>
+  </table>
+  <p class="small">The split is the whole point. If the monthly gauge check and a burning building share one red strip, the reader cannot tell what is urgent. Preventive guidance is yellow; live emergency is red.</p>
+
+  <h3><span class="h3num">19.4</span>Fixed rules</h3>
+  <table>
+    <tr><th>Rule</th><th>Reason</th></tr>
+    <tr><td>Block only, no tagline</td><td>Internal document. Everyone reading it already knows what MRM makes.</td></tr>
+    <tr><td>Gujarati and Hindi, equal weight</td><td>The floor reads both. On safety signage neither is secondary.</td></tr>
+    <tr><td>Cap the step count</td><td>Around six steps. Nobody reads step ten while something is burning. If content runs long, split into two posters.</td></tr>
+    <tr><td>Danger red for danger only</td><td>Red must stay rare enough to still mean "now".</td></tr>
+    <tr><td>ISO pictograms, recoloured</td><td>Recognition under panic beats brand consistency. This is the one place the line-icon set steps aside.</td></tr>
+    <tr><td>Document number top-right and bottom-right</td><td>QA-controlled documents must trace to a revision, visibly.</td></tr>
+    <tr><td>Proofread before print</td><td>A safety document with a typo in the header fails its own standard. Check every heading, every number, and every emergency label against the source.</td></tr>
+  </table>
+  <h3><span class="h3num">19.5</span>Art direction</h3>
+  <p>The rules above make a poster correct. These make it look like MRM. They are measured from the reference builds, not invented, and they are what separate a calm, authoritative poster from a cluttered one.</p>
+
+  <div class="principle">
+    <div class="k">The one rule that matters most</div>
+    <p>Roughly two-thirds of a safety poster is empty background. Space is the design. If a layout feels full, it is wrong, remove content or split it across two posters before you tighten the spacing.</p>
+  </div>
+
+  <h4 class="sub">Colour budget</h4>
+  <p>Measured across the reference builds, the ink budget is strict. Green carries structure. Signal colours are used in single-digit percentages, never as decoration. Keep to these proportions and a poster stays calm; exceed them and it starts to shout.</p>
+  <div class="budget">
+    <div class="brow"><span class="bl">Cream background</span><div class="bbar"><i style="width:68%;background:#F7F7F2;border:1px solid var(--line)"></i></div><span class="bp">~68%</span></div>
+    <div class="brow"><span class="bl">MRM Green</span><div class="bbar"><i style="width:10%;background:#006A49"></i></div><span class="bp">~10%</span></div>
+    <div class="brow"><span class="bl">Danger red</span><div class="bbar"><i style="width:5%;background:#D32F2F"></i></div><span class="bp">3&ndash;5%</span></div>
+    <div class="brow"><span class="bl">Tennis / accent</span><div class="bbar"><i style="width:3%;background:#8BC341"></i></div><span class="bp">2&ndash;3%</span></div>
+    <div class="brow"><span class="bl">Caution yellow</span><div class="bbar"><i style="width:2%;background:#FFDE59"></i></div><span class="bp">1&ndash;3%</span></div>
+  </div>
+
+  <h4 class="sub">Proportion &amp; spacing</h4>
+  <table>
+    <tr><th>Element</th><th>Direction</th></tr>
+    <tr><td>Format</td><td>Portrait, near A-series (roughly 1:1.4). Print target is A-size for wall mounting.</td></tr>
+    <tr><td>Outer margin</td><td>Keep a visible cream margin on all four sides. The green frame or content floats; it never bleeds to the edge. Aim for 4 to 6 percent of width.</td></tr>
+    <tr><td>Card padding</td><td>Generous. Interior padding on a step card is larger than the gap between cards, so each card reads as a calm, self-contained unit rather than a crammed cell.</td></tr>
+    <tr><td>Title block</td><td>Large and confident. The bilingual instruction is the loudest text on the page after the header, set in a solid green panel with real breathing room around the words.</td></tr>
+    <tr><td>One idea per card</td><td>A card holds one step and its pictogram. Never two instructions in a card, never a paragraph. If it needs a paragraph, it is not signage.</td></tr>
+  </table>
+
+  <h4 class="sub">Tone of the layout</h4>
+  <div class="two">
+    <div class="box"><div class="cap">Aim for</div><p style="font-size:13.5px;line-height:1.6;color:#444">Calm authority. Even spacing, few colours, large legible type, one clear reading path top to bottom. It should look like it was made by the same company that machines to five microns.</p></div>
+    <div class="box"><div class="cap">Avoid</div><p style="font-size:13.5px;line-height:1.6;color:#444">Clip-art icons, more than three signal colours in view, drop shadows and bevels, full-bleed colour, text that fills its container edge to edge, and any element that does not carry information.</p></div>
+  </div>
+
+  <p class="small">Reference builds: MRM-QA-015-75 (Fire Extinguisher Use) and MRM-QA-015-86 (Fire Safety Tips) are the canonical examples of this anatomy. New safety posters should match their structure.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-20">
+  <div class="sec-no">Section 20 · Visual</div>
+  <h2 class="sec"><em>Marketing</em> &amp; outreach</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 20</span>Register 2</div><p class="lede">Register 2. Front-facing marketing: standees, posters, flyers, social, backdrops, brochures, recruitment. Where safety signage is calm and sparse, marketing is allowed to be bold, figure-driven, and energetic. It stays MRM through the shared foundation, but it carries its own component set. This register is locked from the approved Campus Placement standee and poster.</p></div>
+
+  <h3><span class="h3num">20.1</span>Two base modes</h3>
+  <p>Every marketing layout uses one of two modes. Never mix them within a single artboard. Both carry the same components; only the ground flips.</p>
+  <div class="two">
+    <div class="box" style="background:var(--green);border:none">
+      <div class="cap" style="color:var(--tennis)">Mode A · Green base</div>
+      <p style="color:var(--white);font-size:13.5px;line-height:1.6">Full MRM Green field. Cream type and shapes float on it. For standees, backdrops, social, anything that must dominate at distance.</p>
+    </div>
+    <div class="box" style="border:2px solid var(--green)">
+      <div class="cap" style="color:var(--green)">Mode B · Cream base</div>
+      <p style="font-size:13.5px;line-height:1.6;color:#2A2A26">Cream field inside a Green border frame, with a rounded cream card holding the content. For posters, flyers, notices, anything read up close or on paper.</p>
+    </div>
+  </div>
+
+  <h3><span class="h3num">20.2</span>Component set</h3>
+  <table>
+    <tr><th>Component</th><th>Rule</th></tr>
+    <tr><td>Logo lockup</td><td>Block + wordmark, top-left or top-centre. Descriptor line beneath is mandatory wherever the audience may not know MRM. Cream in Mode A, Green in Mode B.</td></tr>
+    <tr><td>Dotted rule</td><td>A fine dotted horizontal rule directly under the logo, full content width. A signature device, on every piece. Dotted, never solid. May repeat once to divide detail blocks.</td></tr>
+    <tr><td>Short Tennis dash</td><td>One short thick Tennis dash above a supporting line, marking the start of the message block. Once per layout.</td></tr>
+    <tr><td>The curve</td><td>A large sweeping cream curve rising from the lower artboard, thin Tennis band on its leading edge. Divides an upper information zone from a lower human zone. Mode B replaces it with a Tennis-outlined card at the foot, doing the same job.</td></tr>
+    <tr><td>Cards</td><td>Rounded, thin Tennis stroke, transparent fill. Two-part: big uppercase token, then small light label. Three in a row is standard. May swap the token for a row of certification badges. One idea per card.</td></tr>
+    <tr><td>Diagonal label</td><td>A short phrase at roughly -15°, Tennis, weight 700, riding the curve edge. Carries the occasion. The one dynamic element in an orthogonal system, so only one per layout.</td></tr>
+    <tr><td>CTA band</td><td>Mode A: solid Jungle Green band across the foot. Mode B: Tennis-outlined card at the foot. Copy in short beats, two-tone: instruction beats in cream, payoff phrase in Tennis. Contact line beneath.</td></tr>
+    <tr><td>CAD motif</td><td>Two treatments, both technical, never decorative. Blueprint outline ghosted behind figures (standee), or dimensional wireframe ghosted in a corner (poster). Never filled, coloured, or rotated to an arbitrary angle.</td></tr>
+    <tr><td>Figures</td><td>Flat vector, no outlines, geometric. Young Indian professionals mid-stride, carrying working objects. Drawn only in Cream, Tennis, Green, Jungle. Always in the lower human zone, never over text.</td></tr>
+    <tr><td>Particles</td><td>Small Tennis dots and thin four-point sparkles, scattered sparsely around figures. Never more than about eight in view.</td></tr>
+    <tr><td>QR</td><td>Green modules on cream, MRM in the centre. Inside the human zone or CTA card, never floating on plain green.</td></tr>
+  </table>
+
+  <h3><span class="h3num">20.3</span>Marketing colour budget</h3>
+  <p>Looser than safety, but still disciplined. Green or cream dominates as the base; Tennis is a single accent with one job per zone and never becomes a second base; Jungle is depth only. No third accent colour ever enters.</p>
+  <div class="budget">
+    <div class="brow"><span class="bl">Base (Green or Cream)</span><div class="bbar"><i style="width:70%;background:#006A49"></i></div><span class="bp">dominant</span></div>
+    <div class="brow"><span class="bl">Cream / Green counter</span><div class="bbar"><i style="width:22%;background:#F7F7F2;border:1px solid var(--line)"></i></div><span class="bp">structure</span></div>
+    <div class="brow"><span class="bl">Tennis accent</span><div class="bbar"><i style="width:6%;background:#8BC341"></i></div><span class="bp">one job</span></div>
+    <div class="brow"><span class="bl">Jungle depth</span><div class="bbar"><i style="width:4%;background:#103C1E"></i></div><span class="bp">CTA only</span></div>
+  </div>
+
+  <h3><span class="h3num">20.4</span>Do not</h3>
+  <div class="cmp">
+    <div class="no"><h4>Marketing don'ts</h4><ul>
+      <li>Mix Mode A and Mode B grounds in one artboard.</li>
+      <li>Use Tennis as a background, or add a third accent colour.</li>
+      <li>Fill, colour, or arbitrarily rotate the CAD motif.</li>
+      <li>Put text over the figures.</li>
+      <li>Use a solid rule where the dotted rule belongs.</li>
+      <li>Exceed two lines on a headline, or add gradients, shadows, or bevels.</li>
+    </ul></div>
+    <div class="yes"><h4>Marketing do's</h4><ul>
+      <li>Pick one mode and commit the whole artboard to it.</li>
+      <li>Give Tennis exactly one job per zone.</li>
+      <li>Keep the descriptor line on anything a stranger sees.</li>
+      <li>Lead with the dotted rule and the short Tennis dash as signatures.</li>
+      <li>Keep figures in the human zone, CAD ghosted and technical.</li>
+      <li>Run CTA copy as short two-tone beats.</li>
+    </ul></div>
+  </div>
+  <p class="small">Reference builds: the Campus Placement standee (Mode A) and poster (Mode B). New marketing pieces match their construction. This register is locked; layouts flex within it, the rules do not.</p>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+
+<div class="card" id="sec-21">
+  <div class="sec-no">Section 21 · Roadmap</div>
+  <h2 class="sec"><em>Stage 2</em>, still to define</h2>
+  <div class="hrule"></div>
+  <div class="leadgrid"><div class="llabel"><span>Section 21</span>Roadmap</div><p class="lede">These sections are deliberately left open. They will be built one at a time, with real input, rather than invented here.</p></div>
+  <div class="stage-note"><div class="k">Placeholder</div><p><strong>Photography, co-branding, and applications.</strong> Photography do's and don'ts, rules for placing the logo beside client logos, and merch and signage standards. Note: the AI moss-factory hero currently in the profile deck is a placeholder image, not a brand asset, and will be replaced.</p></div>
+
+  <a class="backtop" href="#contents" aria-label="Back to contents"><svg viewBox="0 0 112.66 112.67" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M101.39,0H11.27C5.04,0,0,5.01,0,11.18v50.79h112.66V11.18c0-6.17-5.04-11.18-11.27-11.18Z"/><path fill="currentColor" d="M0,101.16c0,6.36,5.04,11.51,11.27,11.51h90.13c6.22,0,11.27-5.16,11.27-11.51v-11.02H0v11.02Z"/></svg></a>
+</div>
+<div class="ftr">Mayank Raw Mint Pvt. Ltd. · Brand Guide v1.0 · Internal · This document supersedes the separate Writing and Visual guides.</div>
+</div>
+<script>
+(function(){
+  var bar=document.getElementById('runhead');
+  var num=document.getElementById('rh-num'), pill=document.getElementById('rh-pill');
+  var part=document.getElementById('rh-part'), prog=document.getElementById('rh-prog');
+  var cards=[].slice.call(document.querySelectorAll('.card[id^="sec-"]'));
+  var toc=document.getElementById('contents');
+  var meta=cards.map(function(c){
+    var sn=c.querySelector('.sec-no');
+    var h2=c.querySelector('h2.sec');
+    var t=sn?sn.textContent.trim():'';
+    var m=t.match(/Section\s+(\d+)\s*·\s*(.+)/);
+    return {el:c, num:m?m[1]:'', part:m?m[2]:'', title:h2?h2.textContent.trim():''};
+  });
+  var total=meta.length;
+  function update(){
+    var y=window.scrollY||window.pageYOffset;
+    // hide while the contents block is still in view
+    var showFrom = toc ? (toc.offsetTop + toc.offsetHeight - 120) : 0;
+    if(y < showFrom){ bar.classList.remove('show'); return; }
+    bar.classList.add('show');
+    var atBottom = (y + window.innerHeight) >= (document.documentElement.scrollHeight - 4);
+    var probe = atBottom ? (y + window.innerHeight - 1) : (y + 140);
+    var cur=meta[0];
+    for(var i=0;i<meta.length;i++){ if(meta[i].el.offsetTop<=probe) cur=meta[i]; }
+    if(num.textContent!==cur.num){
+      num.textContent=cur.num; pill.textContent=cur.title;
+      part.textContent=cur.part; prog.textContent=cur.num+' / '+String(total).padStart(2,'0');
+    }
+  }
+  window.addEventListener('scroll',update,{passive:true});
+  window.addEventListener('resize',update);
+  update();
+})();
+</script>
+</body></html>

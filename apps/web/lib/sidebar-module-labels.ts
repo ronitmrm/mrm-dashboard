@@ -2,6 +2,7 @@ import { productionFloors } from "@workspace/db/production-floors"
 
 export const sidebarModuleLabels = {
   branding: "Document Templates",
+  brandKit: "Branding",
   qualityControl: "Quality Control",
   accessAdministration: "Access Administration",
   costing: "Costing",

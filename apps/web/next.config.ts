@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/hr/**": ["./lib/hr/assets/**/*", "./lib/pricing/assets/Outfit-*.ttf"],
     "/commercial/**": ["./lib/pricing/assets/**/*"],
+    "/brand-kit/**": ["./lib/brand-kit/**/*"],
   },
   turbopack: {
     root: workspaceRoot,

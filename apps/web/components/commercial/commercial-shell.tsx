@@ -32,6 +32,7 @@ import {
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
+  brandKitNavigation,
   brandingNavigation,
   qualityControlNavigation,
   publishedRegisterNavigation,
@@ -132,6 +133,7 @@ export function CommercialShell({
       ...hrMasterNavigation,
       ...hrNavigation,
       ...administrationNavigation,
+      ...brandKitNavigation,
       ...brandingNavigation,
       ...qualityControlNavigation,
       ...publishedRegisterNavigation,
