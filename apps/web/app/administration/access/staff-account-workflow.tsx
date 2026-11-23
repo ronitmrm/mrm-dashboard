@@ -498,7 +498,7 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
             ) : null}
             {user && !props.canAssignRoles ? (
               <FieldDescription>
-                Your account does not have Assign Staff Role access.
+                Your account does not have Save Direct Roles access.
               </FieldDescription>
             ) : null}
             {user ? (
