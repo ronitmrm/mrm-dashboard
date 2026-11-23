@@ -1,6 +1,7 @@
 export const sidebarSectionIds = [
   "dashboard",
   "branding",
+  "brandKit",
   "costing",
   "hr",
   "masterData",
