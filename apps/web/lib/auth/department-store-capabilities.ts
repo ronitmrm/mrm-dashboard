@@ -33,6 +33,9 @@ export function accountableStoreHref(storeCode: string) {
   return departmentStoreHref(floor.code)
 }
 
+export const departmentStoreWriteButtons =
+  "Transfer consumable stock / Set storage location / Transfer Unit ID responsibility / Record use / Record Unit ID loss / Make Repair PO / Upload Locations CSV"
+
 export const departmentStorePageAccess = productionFloors.map((floor) => ({
   href: departmentStoreHref(floor.code),
   id: `production.${floor.code}.store`,
@@ -41,6 +44,7 @@ export const departmentStorePageAccess = productionFloors.map((floor) => ({
   navigation: true,
   readPermissionKey: departmentStoreCapability(floor.code, "read"),
   writePermissionKey: departmentStoreCapability(floor.code, "write"),
+  writeActionLabel: departmentStoreWriteButtons,
   screens: productionStoreNavigation.map(({ label }) => label),
   // One permission opens all three store menu items.
   submodule: productionStoreNavigation.map(({ label }) => label).join(" / "),

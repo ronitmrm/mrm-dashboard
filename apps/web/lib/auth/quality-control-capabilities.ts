@@ -1,3 +1,4 @@
+import { departmentStoreWriteButtons } from "./department-store-capabilities"
 import type { PageAccessDefinition } from "./page-access-types"
 
 export const qualityControlPageAccess = [
@@ -10,6 +11,7 @@ export const qualityControlPageAccess = [
     navigation: true,
     readPermissionKey: "quality.control.read",
     writePermissionKey: "quality.control.write",
+    writeActionLabel: "Save Rejection / Upload CSV",
   },
   {
     href: "/quality-control/calibration",
@@ -20,6 +22,8 @@ export const qualityControlPageAccess = [
     navigation: true,
     readPermissionKey: "quality.control.calibration.read",
     writePermissionKey: "quality.control.calibration.write",
+    writeActionLabel:
+      "Assign calibration timetable / Calibrate In House / Start Supplier Calibration / Record dispatch / Record return / Sign off calibration",
   },
   {
     href: "/quality-control/store",
@@ -31,6 +35,7 @@ export const qualityControlPageAccess = [
     navigation: true,
     readPermissionKey: "quality.store.read",
     writePermissionKey: "quality.store.write",
+    writeActionLabel: departmentStoreWriteButtons,
   },
   {
     href: "/iso-document/rejections",

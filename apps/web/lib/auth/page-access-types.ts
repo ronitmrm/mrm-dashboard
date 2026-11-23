@@ -9,4 +9,6 @@ export type PageAccessDefinition = {
   screens?: readonly string[]
   submodule?: string
   writePermissionKey?: string
+  /** Buttons the write permission controls, when not just "Change {label}". */
+  writeActionLabel?: string
 }
