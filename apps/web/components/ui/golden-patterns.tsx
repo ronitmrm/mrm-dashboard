@@ -48,12 +48,12 @@ function MetricSummary({
     <section
       aria-label={scope}
       className={cn(
-        "sticky top-[var(--header-height,0px)] z-20 grid w-full min-w-0 shrink-0 gap-2 self-start bg-background py-2",
+        "top-[var(--header-height,0px)] z-20 grid w-full min-w-0 shrink-0 gap-2 self-start bg-background py-2 sm:sticky",
         className
       )}
       data-slot="metric-summary"
     >
-      <div className="grid max-h-[40dvh] min-w-0 auto-cols-[min(100%,16rem)] grid-flow-col gap-3 overflow-auto sm:auto-cols-auto sm:grid-flow-row sm:grid-cols-[repeat(auto-fill,min(100%,16rem))]">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:max-h-[40dvh] sm:grid-cols-[repeat(auto-fill,min(100%,16rem))] sm:overflow-auto">
         {items.map((item) => (
           <MetricCard
             {...item}

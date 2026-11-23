@@ -448,14 +448,25 @@
     display: block;
   }
 
+  /* Separate borders: iPhone Safari cuts the card's right border when
+     table borders collapse. */
   [data-phone-cards][data-phone-cards] {
     width: 100%;
     min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  /* Cards scroll with the page, not inside a small box of their own. */
+  [data-slot="table-container"]:has(> [data-phone-cards]) {
+    max-height: none;
+    overflow: visible;
   }
 
   /* The heading row becomes a swipeable strip of filter and sort buttons
-     that stays above the cards while they scroll. */
+     above the cards. */
   [data-phone-cards][data-phone-cards] > thead {
+    position: static;
     background: var(--card);
   }
 
@@ -467,6 +478,8 @@
   [data-phone-cards][data-phone-cards] > thead > tr {
     display: flex;
     gap: 0.5rem;
+    align-items: flex-start;
+    height: auto;
     overflow-x: auto;
     padding-bottom: 0.5rem;
     border: 0;
