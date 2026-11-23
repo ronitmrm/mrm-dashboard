@@ -1,5 +1,6 @@
 import { expect, it } from "vitest"
 
+import { brandKitPageAccess } from "../../../lib/auth/brand-kit-capabilities"
 import { productionFloorScreenHref } from "../../../lib/auth/production-capabilities"
 
 import {
@@ -8,6 +9,25 @@ import {
   permissionAccessRows,
   permissionKeysForPreset,
 } from "./permission-access"
+
+it("offers separate view permissions for Signature and Brand Guide", () => {
+  const rows = permissionAccessRows(
+    brandKitPageAccess.map(({ label, readPermissionKey }) => ({
+      key: readPermissionKey,
+      module: "brand-kit",
+      name: label,
+    }))
+  )
+
+  expect(rows).toHaveLength(2)
+  for (const page of brandKitPageAccess) {
+    const row = rows.find(({ readPermissionKeys }) =>
+      readPermissionKeys.includes(page.readPermissionKey)
+    )
+    expect(row?.module).toBe("Branding")
+    expect(row?.fullPermissionKeys).toEqual([page.readPermissionKey])
+  }
+})
 
 it("keeps CNC machinist access when Conventional-01 machinist access is removed", () => {
   const cnc = "operations.floors.cnc.machinist_tasks.machinist_progress.write"

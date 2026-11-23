@@ -1,4 +1,5 @@
 import { cache } from "react"
+import { brandKitPageAccess } from "./brand-kit-capabilities"
 import { brandingPageAccess } from "./branding-capabilities"
 import { documentControlCapabilities } from "./document-control-capabilities"
 import { qualityControlPageAccess } from "./quality-control-capabilities"
@@ -35,6 +36,7 @@ export type UnifiedNavigationAccess = {
   qualityControlHrefs?: string[]
   isoCalibrationPlan?: boolean
   productionStoreFloorCodes?: ProductionFloorCode[]
+  brandKitHrefs?: string[]
   brandingHrefs?: string[]
   masterReadKeys?: string[]
   operationalEntryReadKeys?: string[]
@@ -57,6 +59,7 @@ async function readUnifiedNavigationAccess(
     "store.receipts.receive", "store.purchase_register.write", "store.manage",
     ...qualityControlPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     isoCalibrationPlanPageAccess.readPermissionKey,
+    ...brandKitPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...brandingPageAccess.map(({ readPermissionKey }) => readPermissionKey),
     ...Object.values(documentControlCapabilities),
     ...masterPermissionOptions
@@ -127,6 +130,9 @@ async function readUnifiedNavigationAccess(
       grantedCapabilities.has("store.stock.read") ||
       grantedCapabilities.has("quality.control.calibration.read"),
     productionStoreFloorCodes,
+    brandKitHrefs: brandKitPageAccess
+      .filter(({ readPermissionKey }) => grantedCapabilities.has(readPermissionKey))
+      .map(({ href }) => href),
     brandingHrefs: brandingPageAccess
       .filter(({ readPermissionKey }) =>
         grantedCapabilities.has(readPermissionKey) || Object.values(documentControlCapabilities).some((key) => grantedCapabilities.has(key))

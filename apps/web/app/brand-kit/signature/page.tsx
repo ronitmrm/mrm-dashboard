@@ -1,10 +1,14 @@
 import { SignatureGenerator } from "@/components/brand-kit/signature-generator"
 import { PageHeader } from "@/components/ui/golden-patterns"
-import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
+import { signaturePageAccess } from "@/lib/auth/brand-kit-capabilities"
+import { requireCapability } from "@/lib/auth/require-capability"
 import { brand } from "@/lib/brand-kit/signature"
 
 export default async function SignaturePage() {
-  const session = await requireAuthenticatedSession("/brand-kit/signature")
+  const session = await requireCapability(
+    signaturePageAccess.readPermissionKey,
+    signaturePageAccess.href
+  )
 
   return (
     <div className="grid gap-6">
