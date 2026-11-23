@@ -192,8 +192,10 @@ another non-completion close reason to Awaiting material and release the matchin
 active setup in the same transaction. Actual output, a correction reason and the
 current saved session version are required. A later session on that machine or a
 changed assignment blocks the release. Item Complete must use Reopen Setup first.
-Corrections may retain Awaiting material to correct output or timing, but cannot
-undo the recorded release.
+Corrections may retain Awaiting material to correct output or timing. If Awaiting
+material was chosen by mistake for a finished item, the correction may change it to
+Item Complete, which completes the released setup; later sessions of that same setup
+block this. No other change away from Awaiting material is allowed.
 Shop Floor does not perform a second Item Finished or Setup Completion action.
 The other close reasons end only the current session so the setup can continue in
 a later session.
