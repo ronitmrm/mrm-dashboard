@@ -110,20 +110,21 @@ export type TaskCapability =
 export const taskCapabilityLabels = {
   [administrationTaskCapabilities.accessPage]: "Access Administration",
   [administrationTaskCapabilities.assignPostAccess]: "Assign Role To A Post",
-  [administrationTaskCapabilities.assignStaffRole]: "Assign Staff Role",
+  [administrationTaskCapabilities.assignStaffRole]: "Save Direct Roles",
   [administrationTaskCapabilities.createRole]: "Create Role",
-  [administrationTaskCapabilities.deleteRole]: "Delete Role",
+  [administrationTaskCapabilities.deleteRole]: "Delete Role Everywhere",
   [administrationTaskCapabilities.linkStaffAccount]: "Link Login To Employee",
-  [administrationTaskCapabilities.manageDevices]: "Approve Devices",
+  [administrationTaskCapabilities.manageDevices]: "Approve Device / Reject / Revoke",
   [administrationTaskCapabilities.managePermissionOverrides]:
-    "Change Individual Permissions",
+    "Save Individual Permissions",
   [administrationTaskCapabilities.printScreen]: "Allow Printing And Print Screen",
-  [administrationTaskCapabilities.provisionStaff]: "Create Staff Login",
+  [administrationTaskCapabilities.provisionStaff]:
+    "Create Account & Continue / Save Login ID",
   [administrationTaskCapabilities.screenWithoutWatermark]: "Hide Screen Watermark",
   [administrationTaskCapabilities.unfocusedScreenView]:
     "Keep Content Visible When Unfocused",
   [administrationTaskCapabilities.updateRolePermissions]:
-    "Change Role Permissions",
+    "Save Role Access",
   [administrationTaskCapabilities.useAnyDevice]: "Use Any Device",
   [commercialTaskCapabilities.addBomLine]: "Add Assembly Part",
   [commercialTaskCapabilities.addEnquiryItem]: "Add Line",
