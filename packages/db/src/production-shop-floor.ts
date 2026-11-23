@@ -1249,7 +1249,8 @@ async function assertSetupMaterialWait(client: PoolClient, organizationId: strin
   const applicableWaits = machineWaits.length ? machineWaits : waits.rows
   const [material] = await readJobCardMaterialBalances(client, organizationId, undefined, workOrderId)
   const upstream = await upstreamGoodForSetup(client, workOrderId, setupId)
-  if (applicableWaits.every(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0)))) {
+  if (applicableWaits.every(row => materialWaitPending(row.source_payload, material?.usableKg ?? 0, Number(upstream?.good ?? 0),
+    Boolean(material?.receiptSufficient || material?.shortAccepted)))) {
     throw new ShopFloorConflictError("This setup was released awaiting material. Record more RM or upstream good output before starting it again.")
   }
 }

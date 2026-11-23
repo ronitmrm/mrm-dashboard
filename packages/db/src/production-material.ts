@@ -35,7 +35,7 @@ export async function readJobCardMaterialBalances(
     const rejectedKg = Number(row.rejectedKg)
     const usableKg = Math.max(receivedKg - rejectedKg, 0)
     const pendingKg = requiredKg === null ? null : Math.max(requiredKg - usableKg, 0)
-    const receiptSufficient = requiredKg !== null && usableKg + 0.000001 >= requiredKg * 0.95
+    const receiptSufficient = rmReceiptSufficient(usableKg, requiredKg)
     const acceptance = row.sourcePayload?.rmShortAcceptance
     const accepted = typeof acceptance === "object" && acceptance !== null && !Array.isArray(acceptance)
       ? acceptance as Record<string, unknown> : null
@@ -47,11 +47,17 @@ export async function readJobCardMaterialBalances(
   })
 }
 
-export function materialWaitPending(status: Record<string, unknown>, receivedKg: number, upstreamGood: number) {
+export function rmReceiptSufficient(usableKg: number, requiredKg: number | null) {
+  return requiredKg !== null && usableKg + 0.000001 >= requiredKg * 0.95
+}
+
+// rmSettled: RM is within the 5% allowance or the planner accepted the short RM,
+// so no more RM is coming and an RM wait must not hold the setup.
+export function materialWaitPending(status: Record<string, unknown>, receivedKg: number, upstreamGood: number, rmSettled = false) {
   const value = status.awaitingMaterial
   if (status.stage !== "planned" || !value || typeof value !== "object" || Array.isArray(value)) return false
   const wait = value as Record<string, unknown>
-  return wait.kind === "rm" ? receivedKg <= Number(wait.availableAtRelease)
+  return wait.kind === "rm" ? !rmSettled && receivedKg <= Number(wait.availableAtRelease)
     : wait.kind === "wip" && upstreamGood <= Number(wait.availableAtRelease)
 }
 

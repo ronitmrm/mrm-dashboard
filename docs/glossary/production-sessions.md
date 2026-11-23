@@ -187,7 +187,7 @@ are required; Weight Pending cannot use this close reason. The first rework setu
 cannot wait for fresh RM. The close reason is offered only when there is something
 to wait for: on the first setup the Job Card's RM must be received less (usable RM
 below 95% of Required RM, and the Planner has not accepted the short RM); on later setups the earlier setup must still be
-unfinished. The Planner's Release machine action is not limited this way. A closed-session correction may change Shift Ends or
+unfinished. The Planner's Release machine action is not limited this way. An RM wait ends once usable RM reaches 95% of Required RM or the Planner accepts the short RM, so a setup released by mistake can restart. A closed-session correction may change Shift Ends or
 another non-completion close reason to Awaiting material and release the matching
 active setup in the same transaction. Actual output, a correction reason and the
 current saved session version are required. A later session on that machine or a
