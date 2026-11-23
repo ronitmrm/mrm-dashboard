@@ -45,6 +45,7 @@ import {
   type PermissionAccessRow,
   type PermissionOption,
   configuredPermissionCount,
+  hiddenPermissionKeys,
   normalizePermissionKeys,
   permissionAccessLevelForKeys,
   permissionAccessPageLabels,
@@ -90,8 +91,12 @@ export function PermissionSelector({
       })),
     [permissions]
   )
-  const assignableKeys = useMemo(
-    () => new Set(rows.flatMap((row) => row.fullPermissionKeys)),
+  const editableOrHiddenKeys = useMemo(
+    () =>
+      new Set([
+        ...rows.flatMap((row) => row.fullPermissionKeys),
+        ...hiddenPermissionKeys,
+      ]),
     [rows]
   )
   const modules = useMemo(
@@ -100,7 +105,7 @@ export function PermissionSelector({
     [rows]
   )
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
-    initialPermissionKeys.filter((key) => assignableKeys.has(key)).sort()
+    initialPermissionKeys.filter((key) => editableOrHiddenKeys.has(key)).sort()
   )
   const normalizedQuery = query.trim().toLowerCase()
   const retainedPermissionKeys = initialPermissionKeys.filter((key) =>
@@ -203,7 +208,7 @@ export function PermissionSelector({
                 if (role) {
                   setPermissionKeys(
                     role.permissionKeys
-                      .filter((key) => assignableKeys.has(key))
+                      .filter((key) => editableOrHiddenKeys.has(key))
                       .sort()
                   )
                 }

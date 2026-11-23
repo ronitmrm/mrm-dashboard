@@ -72,11 +72,13 @@ function formatSalary(value: number | null) {
 export function InterviewScheduleBoard({
   appointmentApplicationId,
   canSchedule,
+  canWithdraw = false,
   canWrite,
   interviews,
 }: {
   appointmentApplicationId?: string
   canSchedule: boolean
+  canWithdraw?: boolean
   canWrite: boolean
   interviews: RecruitmentInterviewRow[]
 }) {
@@ -84,6 +86,7 @@ export function InterviewScheduleBoard({
   const [dismissedAppointmentId, setDismissedAppointmentId] = useState<
     string | null
   >(null)
+  const showActions = canWrite || canSchedule || canWithdraw
   const appointmentInterview = appointmentApplicationId
     ? interviews.find(
         (row) =>
@@ -162,7 +165,7 @@ export function InterviewScheduleBoard({
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
                 <TableHead>Round</TableHead>
-                {canWrite || canSchedule ? (
+                {showActions ? (
                   <TableHead className="text-right">Action</TableHead>
                 ) : null}
               </TableRow>
@@ -187,7 +190,7 @@ export function InterviewScheduleBoard({
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
                     <TableCell>{formatTime(row.interviewAt)}</TableCell>
                     <TableCell>{row.scoreableRound}</TableCell>
-                    {canWrite || canSchedule ? (
+                    {showActions ? (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {canSchedule && row.scoreableRound ? (
@@ -199,21 +202,21 @@ export function InterviewScheduleBoard({
                             />
                           ) : null}
                           {canWrite ? (
-                            <>
-                              <Button asChild size="sm">
-                                <Link href={`/hr/jobs/${row.jobId}/interview?application=${encodeURIComponent(row.applicationId)}&source=interviews`}>
-                                  Record Outcome
-                                </Link>
-                              </Button>
-                              <CandidateApplicationActions
-                                applicationId={row.applicationId}
-                                candidateName={row.candidateName}
-                                canCompleteAppointment={false}
-                                canWithdraw
-                                defaultJoiningDate={row.joiningDate}
-                                panelId="interviewsPanel"
-                              />
-                            </>
+                            <Button asChild size="sm">
+                              <Link href={`/hr/jobs/${row.jobId}/interview?application=${encodeURIComponent(row.applicationId)}&source=interviews`}>
+                                Record Outcome
+                              </Link>
+                            </Button>
+                          ) : null}
+                          {canWithdraw ? (
+                            <CandidateApplicationActions
+                              applicationId={row.applicationId}
+                              candidateName={row.candidateName}
+                              canCompleteAppointment={false}
+                              canWithdraw
+                              defaultJoiningDate={row.joiningDate}
+                              panelId="interviewsPanel"
+                            />
                           ) : null}
                         </div>
                       </TableCell>
@@ -224,7 +227,7 @@ export function InterviewScheduleBoard({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite || canSchedule ? 7 : 6}
+                    colSpan={showActions ? 7 : 6}
                   >
                     No Interviews Are Scheduled For This Date.
                   </TableCell>

@@ -4,7 +4,10 @@ import type { RecruitmentInterviewRow } from "@workspace/db"
 
 vi.mock("@/app/hr/actions", () => ({ scheduleInterviewAction: vi.fn() }))
 vi.mock("@/components/hr/candidate-appointment-dialog", () => ({ CandidateAppointmentDialog: () => null }))
-vi.mock("@/components/hr/candidate-application-actions", () => ({ CandidateApplicationActions: () => null }))
+vi.mock("@/components/hr/candidate-application-actions", () => ({
+  CandidateApplicationActions: ({ canWithdraw }: { canWithdraw: boolean }) =>
+    canWithdraw ? <button>Candidate Withdrew</button> : null,
+}))
 vi.mock("@/components/hr/job-template-preview", () => ({ JobTemplatePreviewLink: () => null }))
 vi.mock("@/components/hr/interview-reschedule-dialog", () => import("./interview-reschedule-dialog"))
 vi.mock("@/components/ui/golden-patterns", () => ({ MetricSummary: () => null, StandardDialogContent: () => null }))
@@ -36,6 +39,13 @@ test("hides rescheduling without scheduling permission even when other HR action
   const html = renderToStaticMarkup(<InterviewScheduleBoard canSchedule={false} canWrite interviews={[scheduled]} />)
   expect(html).toContain("Record Outcome")
   expect(html).not.toContain("Reschedule")
+  expect(html).not.toContain("Candidate Withdrew")
+})
+
+test("shows Candidate Withdrew for a user with the withdrawal permission", () => {
+  const html = renderToStaticMarkup(<InterviewScheduleBoard canSchedule={false} canWithdraw canWrite={false} interviews={[scheduled]} />)
+  expect(html).toContain("Candidate Withdrew")
+  expect(html).not.toContain("Record Outcome")
 })
 
 test("explains when every candidate already has an interview scheduled", () => {

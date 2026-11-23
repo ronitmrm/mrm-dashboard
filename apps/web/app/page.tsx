@@ -138,6 +138,8 @@ export default async function Page({
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
       "operations.corrections.write",
+      "maintenance.schedules.manage",
+      "maintenance.tasks.write",
       "store.masters.read",
       "store.masters.write",
       ...masterPermissionOptions.map(({ key }) => key),
@@ -325,6 +327,8 @@ export default async function Page({
         initialDataEntryType={requestedEntry}
         initialProductionFloor={requestedFloor}
         navigationAccess={navigationAccess}
+        canAssignMaintenanceSchedules={capabilities.has("maintenance.schedules.manage")}
+        canRecordMaintenanceWork={capabilities.has("maintenance.tasks.write")}
         canDeleteMasters={
           isMasterPage &&
           Boolean(

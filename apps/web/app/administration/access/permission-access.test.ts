@@ -2,13 +2,30 @@ import { expect, it } from "vitest"
 
 import { brandKitPageAccess } from "../../../lib/auth/brand-kit-capabilities"
 import { productionFloorScreenHref } from "../../../lib/auth/production-capabilities"
+import { productionFloorTaskCapabilities } from "../../../lib/auth/production-floor-task-capabilities"
 
 import {
   normalizePermissionKeys,
   permissionAccessLevelForKeys,
   permissionAccessRows,
   permissionKeysForPreset,
+  staffOverrideChanges,
 } from "./permission-access"
+
+it("omits actions without a screen from roles and individual override edits", () => {
+  const visibleKey = "operations.floors.cnc.machinist_tasks.machinist_progress.write"
+  const permissions = [
+    visibleKey,
+    productionFloorTaskCapabilities.cnc.job_card_completion,
+    "administration.post_access.assign",
+    "operations.attendance.write",
+    "operations.training.write",
+  ].map((key) => ({ key, module: "operations", name: key }))
+
+  expect(permissionAccessRows(permissions).flatMap((row) => row.fullPermissionKeys))
+    .toEqual([visibleKey])
+  expect(staffOverrideChanges(permissions, [], []).scopeKeys).toEqual([visibleKey])
+})
 
 it("offers separate view permissions for Signature and Brand Guide", () => {
   const rows = permissionAccessRows(
