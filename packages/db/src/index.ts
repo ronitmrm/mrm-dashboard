@@ -129,6 +129,11 @@ export {
   type MaintenanceRequestRow,
 } from "./maintenance-requests"
 export {
+  createEmailSignatureRepository,
+  type EmailSignatureFields,
+  type SavedEmailSignature,
+} from "./email-signatures"
+export {
   buildLegacyDrawingBaselinePlan,
   createLegacyDrawingBaselineRepository,
   type LegacyDrawingBaseline,
