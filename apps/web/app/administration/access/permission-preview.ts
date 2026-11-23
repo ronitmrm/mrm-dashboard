@@ -14,6 +14,7 @@ const taskHrefs: Record<string, string> = {
   "administration.staff_roles.assign": "/administration/access?section=staff",
   "administration.roles.create": "/administration/access?section=create",
   "administration.roles.delete": "/administration/access?section=roles",
+  "administration.devices.manage": "/administration/access?section=devices",
   "administration.staff.link": "/administration/access?section=staff",
   "administration.staff.provision": "/administration/access?section=staff",
   "administration.permission_overrides.manage":

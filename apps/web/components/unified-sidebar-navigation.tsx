@@ -10,7 +10,6 @@ import {
 } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
-  ArrowRightLeft,
   BriefcaseBusiness,
   Palette,
   Boxes,
@@ -76,6 +75,7 @@ import {
   operationalEntryNavigation,
   personalDashboardNavigation,
   productionFloorNavigation,
+  productionStoreNavigation,
   storeNavigation,
   isoDocumentNavigation,
   universalProductionNavigation,
@@ -865,11 +865,10 @@ export function UnifiedSidebarNavigation({
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
-            {showStore ? ([
-              { href: storeHref, icon: Boxes, label: "Store Stock" },
-              { href: `${storeHref}/movement`, icon: ArrowRightLeft, label: "Store Movement" },
-              { href: `${storeHref}/repairs`, icon: Wrench, label: "Store Repairs" },
-            ] as const).map((storeItem) => (
+            {showStore ? productionStoreNavigation.map(({ path, ...item }) => ({
+              ...item,
+              href: `${storeHref}${path}`,
+            })).map((storeItem) => (
               <SidebarMenuSubItem key={`${floor.code}:${storeItem.href}`}>
                 <SidebarMenuSubButton
                   asChild

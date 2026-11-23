@@ -265,6 +265,16 @@ export function createAccessAdministrationService({
       return access.setPermissionOverride(input)
     },
 
+    async replacePermissionOverrides(
+      input: Parameters<typeof access.replacePermissionOverrides>[0]
+    ) {
+      await requireActorCapability(
+        input.actorUserId,
+        administrationTaskCapabilities.managePermissionOverrides
+      )
+      return access.replacePermissionOverrides(input)
+    },
+
     async getSnapshot({ actorUserId }: { actorUserId: string }) {
       await requireActorCapability(
         actorUserId,

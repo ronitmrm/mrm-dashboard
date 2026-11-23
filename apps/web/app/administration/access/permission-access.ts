@@ -16,11 +16,15 @@ import {
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
 import {
+  productionFloorMenuItem,
   productionPageCapabilities,
   productionPageLabels,
 } from "../../../lib/auth/production-capabilities"
 import { productionFloorPageCapabilities } from "../../../lib/auth/production-floor-capabilities"
-import { taskCapabilityLabel } from "../../../lib/auth/task-capabilities"
+import {
+  administrationTaskCapabilities,
+  taskCapabilityLabel,
+} from "../../../lib/auth/task-capabilities"
 import {
   qualityParameterControlKey,
   qualityParameterControlLabels,
@@ -71,7 +75,8 @@ export type PermissionAccessRow = {
 
 /** Page context for display and filtering; never changes the granted keys. */
 export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
-  if (row.kind === "page") return row.screens ?? [row.label]
+  if (row.screens) return row.screens
+  if (row.kind === "page") return [row.label]
   if (row.fullPermissionKeys.every((key) => apiOnlyPermissionKeys.has(key))) {
     return ["API only"]
   }
@@ -106,6 +111,16 @@ export function permissionAccessPageLabels(row: PermissionAccessRow): string[] {
     ["iso.documents.", ["Document Control"]],
     ["operations.attendance.", ["Attendance"]],
     ["operations.training.", ["Training"]],
+    ["pricing.corrections.", ["Corrections"]],
+    // Access Administration tasks live on its tabs.
+    ["administration.roles.create", ["Create Role"]],
+    ["administration.roles.delete", ["Application Roles"]],
+    ["administration.role_permissions.", ["Application Roles"]],
+    ["administration.staff", ["Staff Accounts"]],
+    ["administration.permission_overrides.", ["Staff Accounts"]],
+    ["administration.devices.manage", ["Devices"]],
+    ["administration.devices.bypass", ["Sign In"]],
+    ["administration.screen.", ["Every Screen"]],
   ]
   const labels = row.fullPermissionKeys.flatMap(
     (key) => pageMappings.find(([prefix]) => key.startsWith(prefix))?.[1] ?? []
@@ -250,6 +265,8 @@ export function permissionAccessRows(
     ]
   })
   const pageRowsByKeys = new Map<string, PermissionAccessRow>()
+  // Change applies only to screens that share the write key, not view-only joiners.
+  const writeScreensByRow = new Map<PermissionAccessRow, string[]>()
   const pageRows = pageAccessCatalog.flatMap((page) => {
     const hasRead = permissionKeys.has(page.readPermissionKey)
     const hasWrite = page.writePermissionKey
@@ -268,13 +285,22 @@ export function permissionAccessRows(
       ...(hasWrite && page.writePermissionKey ? [page.writePermissionKey] : []),
     ]
     // Screens sharing one permission are one switch, so show them as one row.
+    // A view-only screen joins the row that already holds its View key.
     const keysId = fullPermissionKeys.join(" ")
-    const sharedRow = pageRowsByKeys.get(keysId)
+    const sharedRow =
+      pageRowsByKeys.get(keysId) ??
+      (hasWrite
+        ? undefined
+        : pageRowsByKeys.get(`read:${page.readPermissionKey}`))
     if (sharedRow) {
       sharedRow.screens = [...(sharedRow.screens ?? []), ...pageScreens(page)]
+      if (hasWrite) writeScreensByRow.get(sharedRow)!.push(...pageScreens(page))
       const submodule = page.submodule ?? page.label
       if (!sharedRow.submodule.split(" / ").includes(submodule)) {
         sharedRow.submodule = `${sharedRow.submodule} / ${submodule}`
+      }
+      if (!sharedRow.module.split(" / ").includes(page.module)) {
+        sharedRow.module = `${sharedRow.module} / ${page.module}`
       }
       return []
     }
@@ -313,14 +339,19 @@ export function permissionAccessRows(
       supportedLevels,
     }
     pageRowsByKeys.set(keysId, row)
+    writeScreensByRow.set(row, pageScreens(page))
+    if (hasRead) pageRowsByKeys.set(`read:${page.readPermissionKey}`, row)
     return [row]
   })
   for (const row of pageRows) {
     if ((row.screens?.length ?? 0) < 2) continue
     const screens = row.screens!.join(" / ")
+    const writeScreens = writeScreensByRow.get(row)!.join(" / ")
     row.actions = row.actions.map((action) => ({
       ...action,
-      label: action.label.replace(row.label, screens),
+      label: row.readPermissionKeys.includes(action.permissionKeys[0]!)
+        ? `Open ${screens}`
+        : action.label.replace(row.label, writeScreens),
     }))
     row.label = screens
   }
@@ -358,7 +389,8 @@ export function permissionAccessRows(
           label: definition.label,
           module: floor.label,
           readPermissionKeys: [],
-          submodule: productionPageLabels[definition.tab],
+          screens: [productionPageLabels[definition.tab]],
+          submodule: productionFloorMenuItem(definition.tab),
           supportedLevels: [
             "none",
             "full",
@@ -615,4 +647,57 @@ export function permissionKeysForActionToggle(
     for (const key of action.permissionKeys) next.add(key)
   }
   return [...next].sort()
+}
+
+// Screen protection has its own per-person form in Staff Accounts.
+const screenProtectionKeys: ReadonlySet<string> = new Set([
+  administrationTaskCapabilities.printScreen,
+  administrationTaskCapabilities.screenWithoutWatermark,
+  administrationTaskCapabilities.unfocusedScreenView,
+])
+
+/** Rows a person's individual allow/block exceptions can be set on. */
+export function staffOverrideRows(permissions: readonly PermissionOption[]) {
+  return permissionAccessRows(permissions).filter(
+    (row) =>
+      !row.fullPermissionKeys.some((key) => screenProtectionKeys.has(key))
+  )
+}
+
+/**
+ * Turns submitted allow/block keys into the person's full override set.
+ * Allows carry the same hidden companion keys roles get; `scopeKeys` limits
+ * what a save may add or remove, so unrelated overrides stay untouched.
+ */
+export function staffOverrideChanges(
+  permissions: readonly PermissionOption[],
+  allowKeys: readonly string[],
+  denyKeys: readonly string[]
+) {
+  const registered = new Set(permissions.map(({ key }) => key))
+  const rowKeys = staffOverrideRows(permissions).flatMap(
+    (row) => row.fullPermissionKeys
+  )
+  const editable = new Set(rowKeys)
+  if ([...allowKeys, ...denyKeys].some((key) => !editable.has(key))) {
+    throw new Error("A selected permission is not available")
+  }
+  if (allowKeys.some((key) => denyKeys.includes(key))) {
+    throw new Error("A permission cannot be both allowed and blocked")
+  }
+  const withCompanions = (keys: readonly string[]) =>
+    normalizePermissionKeys(keys).filter((key) => registered.has(key))
+  return {
+    overrides: [
+      ...withCompanions(allowKeys).map((permissionKey) => ({
+        effect: "allow" as const,
+        permissionKey,
+      })),
+      ...[...new Set(denyKeys)].map((permissionKey) => ({
+        effect: "deny" as const,
+        permissionKey,
+      })),
+    ],
+    scopeKeys: withCompanions(rowKeys),
+  }
 }

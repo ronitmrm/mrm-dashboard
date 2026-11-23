@@ -23,6 +23,7 @@ type StaffAccessUser = {
   name: string
   overrides: {
     effect: "allow" | "deny"
+    label: string
     permissionKey: string
   }[]
   roleKeys: string[]
@@ -59,7 +60,7 @@ export function StaffAccessRegister({
           <TableHead className="w-[15%]">Designation</TableHead>
           <TableHead className="w-[15%]">Department</TableHead>
           <TableHead className="w-[18%]">Roles</TableHead>
-          <TableHead className="w-[14%]">Overrides</TableHead>
+          <TableHead className="w-[14%]">Individual Permissions</TableHead>
           <TableHead className="w-[10%]">
             <span className="sr-only">Actions</span>
           </TableHead>
@@ -139,12 +140,13 @@ export function StaffAccessRegister({
                         override.effect === "deny" ? "destructive" : "outline"
                       }
                     >
-                      {override.effect}: {override.permissionKey}
+                      {override.effect === "deny" ? "Block" : "Allow"}:{" "}
+                      {override.label}
                     </Badge>
                   ))
                 ) : (
                   <span className="text-sm text-muted-foreground">
-                    No Overrides
+                    Follows Roles
                   </span>
                 )}
               </div>
