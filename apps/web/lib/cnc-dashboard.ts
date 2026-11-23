@@ -38,6 +38,21 @@ export const cncDashboardCards = {
     "Maintenance",
     "Average recorded duration of completed breakdown jobs.",
   ],
+  "cnc-finished-goods": [
+    "Finished goods produced",
+    "Production",
+    "Good pieces from each job card's final setup in closed sessions. Earlier setups are work in progress.",
+  ],
+  "cnc-finished-goods-daily": [
+    "Finished goods by day",
+    "Production",
+    "Final-setup good and rejected pieces by production date.",
+  ],
+  "cnc-finished-goods-jobs": [
+    "Finished goods by job card",
+    "Production",
+    "Final-setup output in the selection and to date, with dispatched and ready-to-dispatch pieces.",
+  ],
   "cnc-good-pieces": [
     "Good pieces",
     "Production",

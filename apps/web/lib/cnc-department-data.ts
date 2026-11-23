@@ -3,6 +3,7 @@ import "server-only"
 import {
   createDashboardReadModelRepository,
   createMaintenanceRepository,
+  readFinishedGoods,
   repositoryPool,
 } from "@workspace/db"
 import {
@@ -26,7 +27,7 @@ import {
   qualityWorkloadCards,
   setupWorkloadCards,
 } from "./cnc-quality-data"
-import { formatIstDateTime, istDateValue } from "./date-time"
+import { formatIstDate, formatIstDateTime, istDateValue } from "./date-time"
 import {
   nextShopFloorStageId,
   shopFloorRowIsExplicitlyStopped,
@@ -721,6 +722,102 @@ async function loadMaintenance(
   }
 }
 
+const finishedGoodsCards = [
+  "cnc-finished-goods",
+  "cnc-finished-goods-daily",
+  "cnc-finished-goods-jobs",
+] as const
+
+/** Final-setup output only; earlier setups are work in progress. */
+async function loadFinishedGoods(
+  filters: Filter,
+  floors: readonly ProductionFloorCode[]
+): Promise<CardData> {
+  const options = { connectionString: readAuthEnvironment().connectionString }
+  const publication = createDashboardReadModelRepository(options)
+  const { pool, close } = repositoryPool(options)
+  try {
+    const rows = floors.length
+      ? await readFinishedGoods(pool, {
+          organizationId: await publication.organizationIdForCode("MRMPL"),
+          productionFloorCodes: floors,
+          from: filters.from,
+          to: filters.to,
+        })
+      : []
+    const days = new Map<string, { good: number; rejected: number }>()
+    const jobs = new Map<
+      string,
+      { row: (typeof rows)[number]; inRange: number; toDate: number; selected: boolean }
+    >()
+    for (const row of rows) {
+      const key = `${row.productionFloorCode}|${row.jobCardNumber}`
+      const job = jobs.get(key) ?? { row, inRange: 0, toDate: 0, selected: false }
+      job.toDate += row.goodPieces
+      if (
+        row.productionDate >= filters.from &&
+        row.productionDate <= filters.to &&
+        (filters.shift === "all" || row.shift === filters.shift)
+      ) {
+        job.inRange += row.goodPieces
+        job.selected = true
+        const day = days.get(row.productionDate) ?? { good: 0, rejected: 0 }
+        day.good += row.goodPieces
+        day.rejected += row.rejectedPieces
+        days.set(row.productionDate, day)
+      }
+      jobs.set(key, job)
+    }
+    const selected = [...jobs.values()].filter((job) => job.selected)
+    return {
+      values: {
+        "cnc-finished-goods": selected.reduce((sum, job) => sum + job.inRange, 0),
+      },
+      charts: {},
+      tables: {
+        "cnc-finished-goods-daily": {
+          columns: ["Production date", "Finished pcs", "Rejected pcs"],
+          rows: [...days]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, day]) => [formatIstDate(date), day.good, day.rejected]),
+        },
+        "cnc-finished-goods-jobs": {
+          columns: [
+            "Job card",
+            "Part code",
+            "Description",
+            "Final setup",
+            "Ordered pcs",
+            "Finished in selection",
+            "Finished to date",
+            "Dispatched pcs",
+            "Ready to dispatch",
+          ],
+          rows: selected
+            .sort((a, b) =>
+              a.row.jobCardNumber.localeCompare(b.row.jobCardNumber, "en-IN", {
+                numeric: true,
+              })
+            )
+            .map(({ row, inRange, toDate }) => [
+              row.jobCardNumber,
+              row.partCode,
+              row.description ?? "—",
+              row.finalSetupNumber,
+              row.orderedQuantity,
+              inRange,
+              toDate,
+              row.dispatchedPieces,
+              Math.max(toDate - row.dispatchedPieces, 0),
+            ]),
+        },
+      },
+    }
+  } finally {
+    await Promise.all([publication.close(), close()])
+  }
+}
+
 export async function loadCncDashboard(
   filters: Filter,
   cards: readonly CncDashboardCardId[],
@@ -728,7 +825,7 @@ export async function loadCncDashboard(
   includeWorkloadDetails = false
 ): Promise<CncDashboardData> {
   const sources = new Set(cards.map(cncDashboardCardSource))
-  const [session, workflow, maintenance, qualityWorkload, setupWorkload] =
+  const [session, workflow, maintenance, qualityWorkload, setupWorkload, finished] =
     await Promise.all([
       sources.has("productionSessionsTab")
         ? loadCncSessionDashboard(
@@ -749,6 +846,9 @@ export async function loadCncDashboard(
       sources.has("machinistTasksTab")
         ? loadCncSetupWorkload(filters, scope.machinistTasksTab ?? [])
         : undefined,
+      finishedGoodsCards.some((id) => cards.includes(id))
+        ? loadFinishedGoods(filters, scope.productionSessionsTab ?? [])
+        : null,
     ])
   const quality = qualityWorkload && qualityWorkloadCards(qualityWorkload)
   const setup = setupWorkload && setupWorkloadCards(setupWorkload)
@@ -771,6 +871,7 @@ export async function loadCncDashboard(
       ...maintenance?.values,
       ...quality?.values,
       ...setup?.values,
+      ...finished?.values,
     }),
     charts: picked({
       ...session?.charts,
@@ -778,6 +879,7 @@ export async function loadCncDashboard(
       ...maintenance?.charts,
       ...quality?.charts,
       ...setup?.charts,
+      ...finished?.charts,
     }),
     tables: picked({
       ...session?.tables,
@@ -785,6 +887,7 @@ export async function loadCncDashboard(
       ...maintenance?.tables,
       ...quality?.tables,
       ...setup?.tables,
+      ...finished?.tables,
     }),
   }
 }
