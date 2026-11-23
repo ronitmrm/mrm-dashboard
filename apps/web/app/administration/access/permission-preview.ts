@@ -91,7 +91,7 @@ const taskHrefs: Record<string, string> = {
   "store.new_item_requests.submit": "/store/new-item-requests",
   "store.receipts.receive": "/store/orders",
   "store.requests.submit": "/store/requests/new",
-  "quality.store.request": "/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=QUALITY",
+  "quality.store.request": "/store/requests/new",
   "store.requests.issue": "/store/requests",
   "store.asset_maintenance.write": "/store/assets/RBAC-DEMO-001",
   "store.asset_repair.write": "/store/assets/RBAC-DEMO-001",
@@ -121,9 +121,9 @@ function screenshotName(href: string) {
 
 function previewHref(row: PermissionAccessRow, action: PermissionAccessAction) {
   const permissionKey = action.permissionKeys[0] ?? ""
-  const storeRequestFloor = permissionKey.match(/^operations\.floors\.([^.]+)\.store\.request$/)?.[1]
-  if (storeRequestFloor) {
-    return `/store/requests/new?fulfillmentKind=STORE_TRANSFER&storeCode=${encodeURIComponent(storeRequestFloor)}`
+  // Store transfers start on the same Request Item screen; the Store is picked after the item.
+  if (/^operations\.floors\.[^.]+\.store\.request$/.test(permissionKey)) {
+    return "/store/requests/new"
   }
   if (row.id.startsWith("master:")) {
     const [, unit, master] = row.id.split(":")
