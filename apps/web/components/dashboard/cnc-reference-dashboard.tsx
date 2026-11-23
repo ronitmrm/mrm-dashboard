@@ -351,6 +351,7 @@ const kpis: Record<
   production: [
     "cnc-pieces-produced",
     "cnc-good-pieces",
+    "cnc-finished-goods",
     "cnc-pieces-rejected",
     "cnc-logged-downtime",
     "cnc-operator-efficiency",
@@ -394,6 +395,7 @@ const percentCards = new Set([
 const pieceCards = new Set([
   "cnc-pieces-produced",
   "cnc-good-pieces",
+  "cnc-finished-goods",
   "cnc-pieces-rejected",
 ])
 
@@ -495,6 +497,12 @@ export function CncReferenceDashboard({
   const metricDetails: Partial<
     Record<CncDashboardCardId, { title: string; records: ReferenceTableData }>
   > = {
+    "cnc-finished-goods": allowed("cnc-finished-goods-jobs")
+      ? {
+          title: "Finished goods by job card",
+          records: table("cnc-finished-goods-jobs"),
+        }
+      : undefined,
     "cnc-machinist-downtime": allowed("cnc-machinist-downtime-log")
       ? {
           title: "Machinist-entered production downtime",
@@ -540,6 +548,10 @@ export function CncReferenceDashboard({
   const totalActual = capacityGroups.reduce((sum, row) => sum + row.actual, 0)
   const totalCapacity = capacityGroups.reduce(
     (sum, row) => sum + (row.capacity ?? 0),
+    0
+  )
+  const finishedRejected = table("cnc-finished-goods-daily")?.rows.reduce(
+    (sum, row) => sum + Number(row[2]),
     0
   )
   const shiftSummary = `${shift} · ${data?.sessionCount ?? 0} recorded sessions`
@@ -620,7 +632,9 @@ export function CncReferenceDashboard({
                   ? "lg:grid-cols-3"
                   : department === "maintenance"
                     ? "lg:grid-cols-4"
-                    : "lg:grid-cols-5"
+                    : department === "production"
+                      ? "lg:grid-cols-3 xl:grid-cols-6"
+                      : "lg:grid-cols-5"
               )}
             >
               {kpis[department].filter(allowed).map((id, index) => {
@@ -648,7 +662,9 @@ export function CncReferenceDashboard({
                   id === "cnc-good-pieces" &&
                   Number(values?.["cnc-pieces-produced"]) > 0
                     ? `${((Number(values?.[id]) / Number(values?.["cnc-pieces-produced"])) * 100).toFixed(2)}% recorded good ratio`
-                    : cncDashboardCards[id][2]
+                    : id === "cnc-finished-goods" && finishedRejected != null
+                      ? `${number(finishedRejected)} rejected at final setup. Earlier setups are work in progress.`
+                      : cncDashboardCards[id][2]
                 const detail = metricDetails[id]
                 return detail ? (
                   <ReferenceMetricDetail
@@ -683,6 +699,26 @@ export function CncReferenceDashboard({
           ) : null}
           {department === "production" ? (
             <>
+              {allowed("cnc-finished-goods-daily") ||
+              allowed("cnc-finished-goods-jobs") ? (
+                <Panel
+                  title="Finished goods produced"
+                  subtitle={`${shift} · good pieces from each job card's final setup in closed sessions`}
+                  action={pin("cnc-finished-goods")}
+                >
+                  <Counts
+                    values={[
+                      [value("cnc-finished-goods"), "finished pieces"],
+                      [
+                        finishedRejected == null ? "—" : number(finishedRejected),
+                        "rejected at final setup",
+                      ],
+                    ]}
+                  />
+                  {tableDetails("cnc-finished-goods-daily")}
+                  {tableDetails("cnc-finished-goods-jobs")}
+                </Panel>
+              ) : null}
               {allowed("cnc-shift-comparison") ? (
                 <Panel>
                   <ReferenceDetails

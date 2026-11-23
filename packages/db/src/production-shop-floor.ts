@@ -54,6 +54,7 @@ import {
   normalizePlannerMovementActionType,
 } from "./job-card-workspace"
 import { calculateCasting } from "./pricing-calculation"
+import { finalSetupJoinSql } from "./finished-goods"
 import { weightBatchCycleTimeSeconds } from "./production-cycle"
 
 const firstReworkReleaseBlockedReason = "The first rework setup cannot wait for fresh RM. Use Move Setup to change machines, or Rework Rejected if the batch cannot be reworked."
@@ -3911,7 +3912,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             route_change.to_route_option_id AS "changedRouteOptionId",
             selection.route_option_id AS "selectedRouteOptionId",
             selection.selected_at AS "routeSelectedAt",
-            selection.reason AS "routeSelectionReason"
+            selection.reason AS "routeSelectionReason",
+            current_route.id AS "currentRouteOptionId",
+            final_setup.setup_number::text AS "finalSetupNumber"
           FROM manufacturing.work_orders work_order
           JOIN catalog.items item ON item.id = work_order.item_id
           LEFT JOIN catalog.material_grades material ON material.id = item.material_grade_id
@@ -3928,11 +3931,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             WHERE work_order_id = work_order.id AND reversed_at IS NULL
             ORDER BY selected_at DESC LIMIT 1
           ) selection ON true
+          ${finalSetupJoinSql("work_order", "$3")}
           WHERE work_order.organization_id = $1
             AND lower(work_order.job_card_number) = lower($2)
           LIMIT 1
         `,
-        [input.organizationId, jobCardNumber]
+        [input.organizationId, jobCardNumber, floorCode]
       )
       const jobCard = workOrderResult.rows[0]
       if (!jobCard) throw new Error("Job card was not found.")
@@ -3956,11 +3960,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         `,
         [input.organizationId, jobCard.itemId, floorCode, jobCard.id]
       )
-      const activeRoutes = routesResult.rows.filter((route) => route.active === true)
       const changedRouteId = String(jobCard.changedRouteOptionId ?? "")
       const explicitRouteId = changedRouteId || String(jobCard.selectedRouteOptionId ?? "")
-      const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
-        ?? (objectRecord(jobCard.workOrderSource).isRevision !== true && activeRoutes.length === 1 ? activeRoutes[0] : undefined)
+      const selectedRoute = routesResult.rows.find((route) => route.id === jobCard.currentRouteOptionId)
 
       const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult, qualityRecordsResult, materialMovementWaits] = await Promise.all([
         pool.query<Record<string, unknown>>(
@@ -4598,9 +4600,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             reasonName: String(row.reasonName ?? ""),
             setupNumber: String(row.setupNumber ?? ""),
           })),
-        finalSetupNumber: setupsResult.rows.length
-          ? String(setupsResult.rows.at(-1)?.setupNumber ?? "") || null
-          : null,
+        finalSetupNumber: typeof jobCard.finalSetupNumber === "string" ? jobCard.finalSetupNumber : null,
         firstSetupNumber: setupsResult.rows.length
           ? String(setupsResult.rows[0]?.setupNumber ?? "") || null
           : null,
