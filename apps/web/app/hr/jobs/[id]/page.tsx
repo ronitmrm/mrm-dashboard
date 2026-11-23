@@ -381,13 +381,15 @@ export default async function JobWorkspacePage({
                               )
                             }
                             canCompleteAppointment={
+                              grants.includes(hrTaskCapabilities.completeCandidateAppointment) &&
                               application.status === "Approved" &&
                               application.allRoundsApproved &&
                               application.willingToJoin === null
                             }
-                            canWithdraw={isActiveRecruitmentApplicationStatus(
-                              application.status
-                            )}
+                            canWithdraw={
+                              grants.includes(hrTaskCapabilities.withdrawCandidateApplication) &&
+                              isActiveRecruitmentApplicationStatus(application.status)
+                            }
                             defaultJoiningDate={application.joiningDate}
                             returnJobId={job.id}
                           />

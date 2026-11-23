@@ -1137,6 +1137,8 @@ async function savePostgresDashboardEntry(
 }
 
 export function MrmplDashboard({
+  canAssignMaintenanceSchedules = false,
+  canRecordMaintenanceWork = false,
   canDeleteMasters = false,
   canManageStoreMasters = false,
   initialDashboardTab = "productionControlTab",
@@ -1146,6 +1148,8 @@ export function MrmplDashboard({
   storeMasterData,
   user,
 }: {
+  canAssignMaintenanceSchedules?: boolean
+  canRecordMaintenanceWork?: boolean
   canDeleteMasters?: boolean
   canManageStoreMasters?: boolean
   initialDashboardTab?: DashboardTabId
@@ -1158,6 +1162,8 @@ export function MrmplDashboard({
   return (
     <DashboardShell
       key={`${initialDashboardTab}|${initialDataEntryType ?? ""}|${initialProductionFloor}`}
+      canAssignMaintenanceSchedules={canAssignMaintenanceSchedules}
+      canRecordMaintenanceWork={canRecordMaintenanceWork}
       canDeleteMasters={canDeleteMasters}
       canManageStoreMasters={canManageStoreMasters}
       initialDashboardTab={initialDashboardTab}
@@ -2643,6 +2649,8 @@ function SetupChecklistShell({
 }
 
 function DashboardShell({
+  canAssignMaintenanceSchedules,
+  canRecordMaintenanceWork,
   canDeleteMasters,
   canManageStoreMasters,
   initialDashboardTab,
@@ -2652,6 +2660,8 @@ function DashboardShell({
   storeMasterData,
   user,
 }: {
+  canAssignMaintenanceSchedules: boolean
+  canRecordMaintenanceWork: boolean
   canDeleteMasters: boolean
   canManageStoreMasters: boolean
   initialDashboardTab: DashboardTabId
@@ -3205,6 +3215,8 @@ function DashboardShell({
               >
                 <DashboardContent
                   activeTab={activeTab}
+                  canAssignMaintenanceSchedules={canAssignMaintenanceSchedules}
+                  canRecordMaintenanceWork={canRecordMaintenanceWork}
                   canDeleteMasters={canDeleteMasters}
                   canManageStoreMasters={canManageStoreMasters}
                   payload={payload}
@@ -3405,6 +3417,8 @@ function HeaderActions({
 
 function DashboardContent({
   activeTab,
+  canAssignMaintenanceSchedules,
+  canRecordMaintenanceWork,
   canDeleteMasters,
   canManageStoreMasters,
   payload,
@@ -3424,6 +3438,8 @@ function DashboardContent({
   onProductionFloorChange,
 }: {
   activeTab: DashboardTabId
+  canAssignMaintenanceSchedules: boolean
+  canRecordMaintenanceWork: boolean
   canDeleteMasters: boolean
   canManageStoreMasters: boolean
   payload: DashboardPayload
@@ -3466,6 +3482,7 @@ function DashboardContent({
   if (activeTab === "machineMasterTab") {
     return (
       <CentralMachineMasterWorkspace
+        canAssignMaintenanceSchedules={canAssignMaintenanceSchedules}
         payload={payload}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -3638,6 +3655,7 @@ function DashboardContent({
   if (activeTab === "maintenanceTab") {
     return (
       <UniversalMaintenanceWorkspace
+        canRecordMaintenanceWork={canRecordMaintenanceWork}
         payload={payload}
         submitAction={submitAction}
       />
@@ -3724,9 +3742,11 @@ function DashboardContent({
 }
 
 function UniversalMaintenanceWorkspace({
+  canRecordMaintenanceWork,
   payload,
   submitAction,
 }: {
+  canRecordMaintenanceWork: boolean
   payload: DashboardPayload
   submitAction: (
     path: string,
@@ -3785,6 +3805,7 @@ function UniversalMaintenanceWorkspace({
 
   return (
     <MaintenancePanel
+      canRecordMaintenanceWork={canRecordMaintenanceWork}
       productionControl={productionControl}
       submitAction={saveAndReload}
     />
@@ -12139,10 +12160,12 @@ function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
 }
 
 function CentralMachineMasterWorkspace({
+  canAssignMaintenanceSchedules,
   payload,
   submitAction,
   openDataEntry,
 }: {
+  canAssignMaintenanceSchedules: boolean
   payload: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
@@ -12197,6 +12220,7 @@ function CentralMachineMasterWorkspace({
 
   return (
     <MachineMasterPanel
+      canAssignMaintenanceSchedules={canAssignMaintenanceSchedules}
       productionControl={productionControl}
       submitAction={saveAndReload}
       openDataEntry={openDataEntry}
@@ -12205,10 +12229,12 @@ function CentralMachineMasterWorkspace({
 }
 
 function MachineMasterPanel({
+  canAssignMaintenanceSchedules,
   productionControl,
   submitAction,
   openDataEntry,
 }: {
+  canAssignMaintenanceSchedules: boolean
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
@@ -12597,20 +12623,22 @@ function MachineMasterPanel({
                 : "No Schedules Assigned Yet"}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={isScheduleFormOpen ? "secondary" : "default"}
-              onClick={() => setIsScheduleFormOpen((open) => !open)}
-            >
-              <CalendarDays className="size-4" />
-              {isScheduleFormOpen ? "Close Entry" : "Assign Schedule"}
-            </Button>
-          </div>
+          {canAssignMaintenanceSchedules ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={isScheduleFormOpen ? "secondary" : "default"}
+                onClick={() => setIsScheduleFormOpen((open) => !open)}
+              >
+                <CalendarDays className="size-4" />
+                {isScheduleFormOpen ? "Close Entry" : "Assign Schedule"}
+              </Button>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent className="grid gap-4">
-          {isScheduleFormOpen ? (
+          {canAssignMaintenanceSchedules && isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
               {!maintenanceMasterRows.length ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] p-3 text-sm text-[var(--color-warning-text)]">
@@ -12943,9 +12971,11 @@ function MachineMasterPanel({
 }
 
 function MaintenancePanel({
+  canRecordMaintenanceWork,
   productionControl,
   submitAction,
 }: {
+  canRecordMaintenanceWork: boolean
   productionControl: DashboardPayload
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
@@ -13196,7 +13226,7 @@ function MaintenancePanel({
     setStartedAt(
       draft?.startedAt
         ? istDateTimeInputValue(str(draft.startedAt))
-        : istDateTimeInputValue()
+        : canRecordMaintenanceWork ? istDateTimeInputValue() : ""
     )
     setEndedAt(draft?.endedAt ? istDateTimeInputValue(str(draft.endedAt)) : "")
     setPlannedChangedItems(
@@ -13237,7 +13267,7 @@ function MaintenancePanel({
 
   async function saveMaintenanceChecklist(complete: boolean) {
     const row = selectedSchedule
-    if (!row || isSavingChecklist) return
+    if (!canRecordMaintenanceWork || !row || isSavingChecklist) return
     const performer = signedInPerformer
     if (!performer) {
       setChecklistStatus({
@@ -13525,6 +13555,7 @@ function MaintenancePanel({
   }
 
   if (selectedSchedule) {
+    const checklistFieldsDisabled = !canRecordMaintenanceWork || isSavingChecklist
     const answeredCount = checklistSteps.filter((step) =>
       step.value.trim()
     ).length
@@ -13558,8 +13589,8 @@ function MaintenancePanel({
               {displayValue(selectedSchedule.maintenanceCode)} -{" "}
               {displayValue(selectedSchedule.maintenanceTitle)}
               <br />
-              {answeredCount} of {checklistSteps.length} points answered. Save
-              progress to finish later.
+              {answeredCount} of {checklistSteps.length} points answered.
+              {canRecordMaintenanceWork ? " Save progress to finish later." : null}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -13592,7 +13623,7 @@ function MaintenancePanel({
                           <SearchableSelect
                             aria-label={`Step ${step.sequence} entry`}
                             className="h-9 min-w-32 rounded-md border bg-background px-2 text-sm"
-                            disabled={isSavingChecklist}
+                            disabled={checklistFieldsDisabled}
                             value={step.value}
                             onChange={(event) =>
                               updateChecklistStep(
@@ -13610,7 +13641,7 @@ function MaintenancePanel({
                           <Input
                             aria-label={`Step ${step.sequence} entry`}
                             className="h-9 min-w-32"
-                            disabled={isSavingChecklist}
+                            disabled={checklistFieldsDisabled}
                             type={
                               step.inputType === "number" ? "number" : "text"
                             }
@@ -13629,7 +13660,7 @@ function MaintenancePanel({
                         <Input
                           aria-label={`Step ${step.sequence} remark`}
                           className="h-9 min-w-44"
-                          disabled={isSavingChecklist}
+                          disabled={checklistFieldsDisabled}
                           value={step.remark}
                           onChange={(event) =>
                             updateChecklistStep(
@@ -13651,22 +13682,24 @@ function MaintenancePanel({
               </EmptyRowsMessage>
             )}
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="maintenance-completed-by">
-                  Performed by
-                </Label>
-                <Input
-                  id="maintenance-completed-by"
-                  readOnly
-                  value={performerDisplay}
-                />
-              </div>
+              {canRecordMaintenanceWork ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="maintenance-completed-by">
+                    Performed by
+                  </Label>
+                  <Input
+                    id="maintenance-completed-by"
+                    readOnly
+                    value={performerDisplay}
+                  />
+                </div>
+              ) : null}
               <div className="grid gap-1.5">
                 <Label htmlFor="maintenance-started-at">Start date and time</Label>
                 <Input
                   id="maintenance-started-at"
                   type="datetime-local"
-                  disabled={isSavingChecklist}
+                  disabled={checklistFieldsDisabled}
                   value={startedAt}
                   onChange={(event) => setStartedAt(event.target.value)}
                 />
@@ -13676,7 +13709,7 @@ function MaintenancePanel({
                 <Input
                   id="maintenance-ended-at"
                   type="datetime-local"
-                  disabled={isSavingChecklist}
+                  disabled={checklistFieldsDisabled}
                   value={endedAt}
                   onChange={(event) => setEndedAt(event.target.value)}
                 />
@@ -13695,7 +13728,7 @@ function MaintenancePanel({
                   <div className="flex gap-2" key={index}>
                     <Input
                       aria-label={`Changed part ${index + 1}`}
-                      disabled={isSavingChecklist}
+                      disabled={checklistFieldsDisabled}
                       value={item}
                       onChange={(event) =>
                         setPlannedChangedItems((current) =>
@@ -13705,7 +13738,7 @@ function MaintenancePanel({
                         )
                       }
                     />
-                    {plannedChangedItems.length > 1 ? (
+                    {canRecordMaintenanceWork && plannedChangedItems.length > 1 ? (
                       <Button
                         aria-label={`Remove changed part ${index + 1}`}
                         disabled={isSavingChecklist}
@@ -13723,18 +13756,20 @@ function MaintenancePanel({
                     ) : null}
                   </div>
                 ))}
-                <Button
-                  className="w-fit"
-                  disabled={isSavingChecklist}
-                  onClick={() =>
-                    setPlannedChangedItems((current) => [...current, ""])
-                  }
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <Plus className="size-4" /> Add part
-                </Button>
+                {canRecordMaintenanceWork ? (
+                  <Button
+                    className="w-fit"
+                    disabled={isSavingChecklist}
+                    onClick={() =>
+                      setPlannedChangedItems((current) => [...current, ""])
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Plus className="size-4" /> Add part
+                  </Button>
+                ) : null}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="maintenance-work-done">
@@ -13742,7 +13777,7 @@ function MaintenancePanel({
                 </Label>
                 <Input
                   id="maintenance-work-done"
-                  disabled={isSavingChecklist}
+                  disabled={checklistFieldsDisabled}
                   value={workDone}
                   onChange={(event) => setWorkDone(event.target.value)}
                 />
@@ -13751,7 +13786,7 @@ function MaintenancePanel({
               </TabsContent>
               <TabsContent className="data-[state=inactive]:hidden" forceMount value="photos">
                 <MaintenanceWorkPhotos
-                  disabled={isSavingChecklist}
+                  disabled={checklistFieldsDisabled}
                   key={taskKeyForSchedule(selectedSchedule)}
                   ref={workPhotosRef}
                   target={photoTargetForSchedule(selectedSchedule)}
@@ -13763,23 +13798,25 @@ function MaintenancePanel({
                 {checklistStatus.message}
               </AlertMessage>
             ) : null}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSavingChecklist || !signedInPerformer}
-                onClick={() => void saveMaintenanceChecklist(false)}
-              >
-                Save Progress
-              </Button>
-              <Button
-                type="button"
-                disabled={isSavingChecklist || !signedInPerformer || (!selectedSchedule.assetScheduleId && !checklistSteps.length)}
-                onClick={() => void saveMaintenanceChecklist(true)}
-              >
-                <CheckCircle2 className="size-4" /> Complete Maintenance
-              </Button>
-            </div>
+            {canRecordMaintenanceWork ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingChecklist || !signedInPerformer}
+                  onClick={() => void saveMaintenanceChecklist(false)}
+                >
+                  Save Progress
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isSavingChecklist || !signedInPerformer || (!selectedSchedule.assetScheduleId && !checklistSteps.length)}
+                  onClick={() => void saveMaintenanceChecklist(true)}
+                >
+                  <CheckCircle2 className="size-4" /> Complete Maintenance
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </SectionCard>
       </section>
@@ -13988,11 +14025,13 @@ function MaintenancePanel({
                               }
                             >
                               <ListChecks className="size-4" />
-                              {str(taskState?.status) === "Completed"
-                                ? "Completed"
-                                : str(taskState?.status) === "In Progress"
-                                  ? "Resume Checklist"
-                                  : "Open Checklist"}
+                              {!canRecordMaintenanceWork
+                                ? "View Checklist"
+                                : str(taskState?.status) === "Completed"
+                                  ? "Completed"
+                                  : str(taskState?.status) === "In Progress"
+                                    ? "Resume Checklist"
+                                    : "Open Checklist"}
                             </Button>
                           ) : work.workType === "Request" &&
                             (work.status === "Approved" ||
@@ -14046,7 +14085,7 @@ function MaintenancePanel({
                   <TableHead>Started</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
+                  {canRecordMaintenanceWork ? <TableHead>Action</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -14062,20 +14101,22 @@ function MaintenancePanel({
                     <TableCell>
                       <StatusBadge value="In Progress" />
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        onClick={() => {
-                          setSelectedBreakdownTaskKey(str(row.taskId))
-                          setSelectedAssetBreakdownId("")
-                          setBreakdownCompletionStatus(null)
-                          setChangedItems([""])
-                        }}
-                        size="sm"
-                        type="button"
-                      >
-                        Complete
-                      </Button>
-                    </TableCell>
+                    {canRecordMaintenanceWork ? (
+                      <TableCell>
+                        <Button
+                          onClick={() => {
+                            setSelectedBreakdownTaskKey(str(row.taskId))
+                            setSelectedAssetBreakdownId("")
+                            setBreakdownCompletionStatus(null)
+                            setChangedItems([""])
+                          }}
+                          size="sm"
+                          type="button"
+                        >
+                          Complete
+                        </Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
                 {assetBreakdownData.breakdowns.map((row) => (
@@ -14087,9 +14128,11 @@ function MaintenancePanel({
                     <TableCell>{formatIstDateTime(row.startedAt)}</TableCell>
                     <TableCell>{row.reasonName}</TableCell>
                     <TableCell><StatusBadge value="In Progress" /></TableCell>
-                    <TableCell>
-                      <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setBreakdownCompletionStatus(null); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
-                    </TableCell>
+                    {canRecordMaintenanceWork ? (
+                      <TableCell>
+                        <Button onClick={() => { setSelectedAssetBreakdownId(row.id); setSelectedBreakdownTaskKey(""); setBreakdownCompletionStatus(null); setChangedItems([""]) }} size="sm" type="button">Complete</Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -14099,92 +14142,94 @@ function MaintenancePanel({
           )}
         </CardContent>
       </SectionCard>
-      <SectionCard width="wide">
-        <CardHeader>
-          <CardTitle>Start Breakdown</CardTitle>
-          <CardDescription>
-            Machine breakdowns start Production Session downtime when running.
-            Asset breakdowns track the selected physical Unit ID.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3" onSubmit={startBreakdownMaintenance}>
-            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-              <Field label="Select Machine or Asset">
-                <SearchableSelect
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  onChange={(event) => setBreakdownTarget(event.target.value as "machine" | "asset")}
-                  value={breakdownTarget}
-                >
-                  <option value="machine">Machine</option>
-                  <option value="asset">Asset</option>
-                </SearchableSelect>
-              </Field>
-              {breakdownTarget === "machine" ? <Field label="Machine No.">
-                <SearchableSelect
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  name="machineNo"
-                  required
-                >
-                  <option value="">Select Machine</option>
-                  {machineRows.map((row) => (
-                    <option
-                      key={displayValue(row.machineNo)}
-                      value={displayValue(row.machineNo)}
-                    >
-                      {displayValue(row.machineNo)}
-                    </option>
-                  ))}
-                </SearchableSelect>
-              </Field> : <Field label="Asset Unit ID">
-                <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="assetCode" required>
-                  <option value="">Select Asset Unit ID</option>
-                  {assetBreakdownData.assets.filter((asset) => !assetBreakdownData.breakdowns.some((breakdown) => breakdown.assetCode === asset.assetCode)).map((asset) => (
-                    <option key={asset.assetCode} value={asset.assetCode}>
-                      {asset.assetCode} · {asset.assetName}{asset.holderName ? ` · ${asset.holderName}` : ""}
-                    </option>
-                  ))}
-                </SearchableSelect>
-              </Field>}
-              <Field label="Breakdown Started At">
-                <Input
-                  name="startedAt"
-                  type="datetime-local"
-                  defaultValue={istDateTimeInputValue()}
-                  required
-                />
-              </Field>
-              <Field label="Defect / Downtime Reason">
-                <SearchableSelect
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  name="downtimeReasonCode"
-                  required
-                >
-                  <option value="">Select reason</option>
-                  {downtimeReasons.map((reason) => (
-                    <option key={reason.code} value={reason.code}>
-                      {reason.code} · {reason.name}
-                    </option>
-                  ))}
-                </SearchableSelect>
-              </Field>
-              <Field label="Remark">
-                <Input name="remark" />
-              </Field>
-            </div>
-            <Button
-              type="submit"
-              className="w-fit"
-              disabled={breakdownTarget === "machine" ? !machineRows.length : !assetBreakdownData.assets.length}
-            >
-              <Wrench className="size-4" />
-              Start Breakdown
-            </Button>
-          </form>
-          {assetBreakdownStatus ? <div className="mt-3"><AlertMessage tone={assetBreakdownStatus.tone}>{assetBreakdownStatus.message}</AlertMessage></div> : null}
-        </CardContent>
-      </SectionCard>
-      {selectedBreakdown ? (
+      {canRecordMaintenanceWork ? (
+        <SectionCard width="wide">
+          <CardHeader>
+            <CardTitle>Start Breakdown</CardTitle>
+            <CardDescription>
+              Machine breakdowns start Production Session downtime when running.
+              Asset breakdowns track the selected physical Unit ID.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-3" onSubmit={startBreakdownMaintenance}>
+              <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+                <Field label="Select Machine or Asset">
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    onChange={(event) => setBreakdownTarget(event.target.value as "machine" | "asset")}
+                    value={breakdownTarget}
+                  >
+                    <option value="machine">Machine</option>
+                    <option value="asset">Asset</option>
+                  </SearchableSelect>
+                </Field>
+                {breakdownTarget === "machine" ? <Field label="Machine No.">
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    name="machineNo"
+                    required
+                  >
+                    <option value="">Select Machine</option>
+                    {machineRows.map((row) => (
+                      <option
+                        key={displayValue(row.machineNo)}
+                        value={displayValue(row.machineNo)}
+                      >
+                        {displayValue(row.machineNo)}
+                      </option>
+                    ))}
+                  </SearchableSelect>
+                </Field> : <Field label="Asset Unit ID">
+                  <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="assetCode" required>
+                    <option value="">Select Asset Unit ID</option>
+                    {assetBreakdownData.assets.filter((asset) => !assetBreakdownData.breakdowns.some((breakdown) => breakdown.assetCode === asset.assetCode)).map((asset) => (
+                      <option key={asset.assetCode} value={asset.assetCode}>
+                        {asset.assetCode} · {asset.assetName}{asset.holderName ? ` · ${asset.holderName}` : ""}
+                      </option>
+                    ))}
+                  </SearchableSelect>
+                </Field>}
+                <Field label="Breakdown Started At">
+                  <Input
+                    name="startedAt"
+                    type="datetime-local"
+                    defaultValue={istDateTimeInputValue()}
+                    required
+                  />
+                </Field>
+                <Field label="Defect / Downtime Reason">
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    name="downtimeReasonCode"
+                    required
+                  >
+                    <option value="">Select reason</option>
+                    {downtimeReasons.map((reason) => (
+                      <option key={reason.code} value={reason.code}>
+                        {reason.code} · {reason.name}
+                      </option>
+                    ))}
+                  </SearchableSelect>
+                </Field>
+                <Field label="Remark">
+                  <Input name="remark" />
+                </Field>
+              </div>
+              <Button
+                type="submit"
+                className="w-fit"
+                disabled={breakdownTarget === "machine" ? !machineRows.length : !assetBreakdownData.assets.length}
+              >
+                <Wrench className="size-4" />
+                Start Breakdown
+              </Button>
+            </form>
+            {assetBreakdownStatus ? <div className="mt-3"><AlertMessage tone={assetBreakdownStatus.tone}>{assetBreakdownStatus.message}</AlertMessage></div> : null}
+          </CardContent>
+        </SectionCard>
+      ) : null}
+      {canRecordMaintenanceWork && selectedBreakdown ? (
         <SectionCard width="wide">
           <CardHeader>
             <CardTitle>
@@ -14309,7 +14354,7 @@ function MaintenancePanel({
           </CardContent>
         </SectionCard>
       ) : null}
-      {selectedAssetBreakdown ? (
+      {canRecordMaintenanceWork && selectedAssetBreakdown ? (
         <SectionCard width="wide">
           <CardHeader>
             <CardTitle>Complete Asset Breakdown · {selectedAssetBreakdown.assetCode}</CardTitle>

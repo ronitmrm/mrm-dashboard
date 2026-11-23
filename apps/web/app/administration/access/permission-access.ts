@@ -284,9 +284,19 @@ function entryActionLabel(
   )
 }
 
+export const hiddenPermissionKeys = new Set([
+  ...apiOnlyPermissionKeys,
+  ...Object.values(productionFloorTaskCapabilities).map(
+    ({ job_card_completion }) => job_card_completion
+  ),
+])
+
 export function permissionAccessRows(
-  permissions: readonly PermissionOption[]
+  registeredPermissions: readonly PermissionOption[]
 ): PermissionAccessRow[] {
+  const permissions = registeredPermissions.filter(
+    ({ key }) => !hiddenPermissionKeys.has(key)
+  )
   const permissionKeys = new Set(permissions.map(({ key }) => key))
   const pagePermissionKeys = new Set<string>()
   const entryRows: PermissionAccessRow[] = scopedOperationalEntries.flatMap(
