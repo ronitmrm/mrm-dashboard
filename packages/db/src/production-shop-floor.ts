@@ -1227,11 +1227,12 @@ async function readMaterialReleaseBlocks(
     ),
     readJobCardMaterialBalances(client, organizationId, undefined, [...new Set(setups.map(setup => setup.workOrderId))]),
   ])
-  const rmShort = new Set(materials.filter(row => row.requiredKg !== null && !row.receiptSufficient).map(row => row.id))
+  // Planner-accepted short RM means no more RM is coming.
+  const rmShort = new Set(materials.filter(row => row.requiredKg !== null && !row.receiptSufficient && !row.shortAccepted).map(row => row.id))
   for (const row of upstream.rows) {
     blocks.set(`${row.workOrderId}|${row.setupId}`, row.hasUpstream
       ? row.upstreamComplete ? "The earlier setup is complete, so there is no WIP to wait for." : null
-      : rmShort.has(row.workOrderId) ? null : "RM is not received less for this Job Card, so there is no material to wait for.")
+      : rmShort.has(row.workOrderId) ? null : "RM is not received less for this Job Card, or the planner accepted the short RM, so there is no material to wait for.")
   }
   return blocks
 }
