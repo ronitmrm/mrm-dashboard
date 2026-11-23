@@ -1335,6 +1335,8 @@ async function completeProductionSessionSetup(
     organizationId: string
     sessionId: string
     sourcePayload: Record<string, unknown>
+    // Fixing a mistaken Awaiting material close: complete the released setup.
+    fromMaterialWait?: boolean
   }
 ) {
   const session = await client.query<{ work_order_id: string }>("SELECT work_order_id FROM manufacturing.production_sessions WHERE id = $1 AND organization_id = $2", [input.sessionId, input.organizationId])
@@ -1353,6 +1355,9 @@ async function completeProductionSessionSetup(
        EXISTS (
          SELECT 1 FROM manufacturing.production_sessions later
          WHERE later.machine_id = session.machine_id AND later.reversed_at IS NULL
+           -- A released machine may run other jobs; only this setup's later sessions matter.
+           AND (NOT $3 OR (later.work_order_id = session.work_order_id
+             AND later.operation_setup_id = session.operation_setup_id))
            AND (later.started_at, later.created_at, later.id)
              > (session.started_at, session.created_at, session.id)
        ) AS superseded
@@ -1361,12 +1366,17 @@ async function completeProductionSessionSetup(
        ON state.work_order_id = session.work_order_id
        AND state.route_option_id = session.route_option_id
        AND state.operation_setup_id = session.operation_setup_id
-       AND state.machine_id = session.machine_id AND state.active
+       AND state.machine_id = session.machine_id
+       AND (state.active OR ($3 AND state.stage = 'planned' AND state.source_payload ? 'awaitingMaterial'))
      WHERE session.id = $1 AND session.organization_id = $2
+     ORDER BY state.active DESC LIMIT 1
      FOR UPDATE OF state`,
-    [input.sessionId, input.organizationId]
+    [input.sessionId, input.organizationId, input.fromMaterialWait ?? false]
   )
   const state = result.rows[0]
+  if (input.fromMaterialWait && !state) {
+    throw new ShopFloorConflictError("Setup changed. Refresh and check its current machine assignment.")
+  }
   if (input.correctionReason && state?.superseded) {
     throw new Error("This setup has later activity. Complete its latest production session instead.")
   }
@@ -3426,13 +3436,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           throw new Error("Only a closed production session can be corrected.")
         }
         const releasesMachine = endReason === "awaiting_material" && current.end_reason !== "awaiting_material"
-        if (current.end_reason === "awaiting_material" && endReason !== current.end_reason) {
-          throw new ShopFloorConflictError("Awaiting material cannot be removed through a closed-session correction.")
+        const fixesMaterialWait = current.end_reason === "awaiting_material" && endReason === "item_complete"
+        if (current.end_reason === "awaiting_material" && endReason !== current.end_reason && !fixesMaterialWait) {
+          throw new ShopFloorConflictError("Awaiting material can only be corrected to Item Complete.")
         }
         if (releasesMachine && current.end_reason === "item_complete") {
           throw new ShopFloorConflictError("Use Reopen Setup before releasing a setup marked Item Complete.")
         }
-        if ((input.downtimeCorrection || releasesMachine) && input.expectedRowVersion !== Number(current.row_version)) {
+        if ((input.downtimeCorrection || releasesMachine || fixesMaterialWait) && input.expectedRowVersion !== Number(current.row_version)) {
           throw new ShopFloorConflictError("Production session changed. Refresh it before saving the correction.")
         }
         if (endedAt < current.started_at) {
@@ -3712,7 +3723,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         if (endReason === "item_complete") {
           await completeProductionSessionSetup(client, {
-            ...input, correctionReason, endedAt, sourcePayload,
+            ...input, correctionReason, endedAt, sourcePayload, fromMaterialWait: fixesMaterialWait,
           })
         } else if (releasesMachine) {
           const setup = await client.query<{ id: string; superseded: boolean }>(
