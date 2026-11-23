@@ -316,6 +316,7 @@ export default async function HrRecruitmentPage({
         canManageEmployees={canManageEmployees}
         canRecordDidNotJoin={rawGrants.includes(hrTaskCapabilities.completeCandidateAppointment)}
         canScheduleInterview={grants.includes(hrTaskCapabilities.scheduleInterview)}
+        canWithdrawCandidate={grants.includes(hrTaskCapabilities.withdrawCandidateApplication)}
         canWrite={canWrite}
         candidates={candidates}
         candidateEvents={candidateEvents}
@@ -339,7 +340,11 @@ export default async function HrRecruitmentPage({
         panelId={activeItem.panelId}
         posts={posts}
         returnJobId={feedback.returnJob}
-        selectedAppointmentApplicationId={feedback.appointment}
+        selectedAppointmentApplicationId={
+          grants.includes(hrTaskCapabilities.completeCandidateAppointment)
+            ? feedback.appointment
+            : undefined
+        }
         selectedProbationAppointmentAssignmentId={feedback.probationAppointment}
         selectedJobId={feedback.job}
         selectedTemplateCode={feedback.template}
