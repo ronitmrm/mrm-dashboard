@@ -11,7 +11,7 @@ export default async function BrandKitLayout({
 }: {
   children: ReactNode
 }) {
-  const session = await requireAuthenticatedSession("/brand-kit/signature")
+  const session = await requireAuthenticatedSession("/brand-kit")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
 
   return (

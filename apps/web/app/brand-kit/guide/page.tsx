@@ -2,8 +2,15 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import { PageHeader } from "@/components/ui/golden-patterns"
+import { brandGuidePageAccess } from "@/lib/auth/brand-kit-capabilities"
+import { requireCapability } from "@/lib/auth/require-capability"
 
 export default async function BrandGuidePage() {
+  await requireCapability(
+    brandGuidePageAccess.readPermissionKey,
+    brandGuidePageAccess.href
+  )
+
   // Replace this file to publish a new guide version.
   const guide = await readFile(
     path.join(process.cwd(), "lib/brand-kit/brand-guide.html"),

@@ -1,4 +1,5 @@
 import { administrationPageAccess } from "./administration-capabilities"
+import { brandKitPageAccess } from "./brand-kit-capabilities"
 import { brandingPageAccess } from "./branding-capabilities"
 import { qualityControlPageAccess } from "./quality-control-capabilities"
 import { departmentStorePageAccess } from "./department-store-capabilities"
@@ -42,6 +43,7 @@ const isoSharedPageAccess = (
 )
 
 export const pageAccessCatalog: readonly PageAccessDefinition[] = [
+  ...brandKitPageAccess,
   ...brandingPageAccess,
   ...qualityControlPageAccess,
   ...departmentStorePageAccess,

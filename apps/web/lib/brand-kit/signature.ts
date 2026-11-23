@@ -2,7 +2,7 @@
 export const brand = {
   company: "Mayank Raw Mint Pvt. Ltd.",
   website: "www.mayankrawmint.com",
-  green: "#006B3F",
+  green: "#006A49",
   emailFont: "Verdana, Arial, sans-serif",
   assets: {
     logo: "/brand/logo.png",

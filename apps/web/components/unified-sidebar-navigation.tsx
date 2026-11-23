@@ -269,7 +269,9 @@ export function UnifiedSidebarNavigation({
     "branding sop notice policy documents"
   )
   const filteredBrandKitNavigation = filterNavigationItems(
-    brandKitNavigation,
+    brandKitNavigation.filter((item) =>
+      navigationAccess.brandKitHrefs?.includes(item.href)
+    ),
     normalizedMenuSearch,
     "branding brand signature email guide logo colours"
   )
