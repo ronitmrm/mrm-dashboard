@@ -115,6 +115,16 @@ export default async function AccessAdministrationPage({
     .getSnapshot({ actorUserId: session.user.id })
     .finally(() => access.close())
   const permissionRows = permissionAccessRows(snapshot.permissions)
+  // Readable name for each assignable key; hidden companion keys have none.
+  const permissionActionLabels = new Map(
+    permissionRows.flatMap((row) =>
+      row.actions.flatMap((action) =>
+        action.permissionKeys.map(
+          (key) => [key, `${action.label} · ${row.module} / ${row.submodule}`] as const
+        )
+      )
+    )
+  )
   const unlinkedEmployees = snapshot.employees.filter(
     (employee) => !employee.linkedUserId
   )
@@ -308,8 +318,22 @@ export default async function AccessAdministrationPage({
               email: user.email,
               roleKeys: user.roleKeys,
               inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
+              overrides: user.overrides.map(
+                ({ effect, expiresAt, permissionKey }) => ({
+                  effect,
+                  expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+                  permissionKey,
+                })
+              ),
               screenProtection: screenProtectionFor(user),
             }))}
+            permissions={snapshot.permissions}
+            rolePermissionKeys={Object.fromEntries(
+              snapshot.roles.map(({ key, permissionKeys }) => [
+                key,
+                permissionKeys,
+              ])
+            )}
             roles={snapshot.roles
               .filter((role) => !role.isSystem)
               .map(({ key, name }) => ({ key, name }))}
@@ -366,7 +390,16 @@ export default async function AccessAdministrationPage({
                       <Input id="role-description" name="description" />
                     </Field>
                   </div>
-                  <PermissionSelector permissions={snapshot.permissions} />
+                  <PermissionSelector
+                    copyFromRoles={snapshot.roles
+                      .filter((role) => !role.isSystem)
+                      .map(({ key, name, permissionKeys }) => ({
+                        key,
+                        name,
+                        permissionKeys,
+                      }))}
+                    permissions={snapshot.permissions}
+                  />
                   <Button className="w-fit" type="submit">
                     Create Role
                   </Button>
@@ -398,7 +431,10 @@ export default async function AccessAdministrationPage({
                   id: user.id,
                   inheritedRoleKeys: user.employee?.inheritedRoleKeys ?? [],
                   name: user.name,
-                  overrides: user.overrides,
+                  overrides: user.overrides.flatMap(({ effect, permissionKey }) => {
+                    const label = permissionActionLabels.get(permissionKey)
+                    return label ? [{ effect, label, permissionKey }] : []
+                  }),
                   roleKeys: user.roleKeys,
                 }))}
               />

@@ -1,5 +1,6 @@
 import { productionFloors, type ProductionFloorCode } from "@workspace/db/production-floors"
 
+import { productionStoreNavigation } from "../unified-navigation"
 import type { PageAccessDefinition } from "./page-access-types"
 
 export function departmentStoreCapability(
@@ -40,6 +41,7 @@ export const departmentStorePageAccess = productionFloors.map((floor) => ({
   navigation: true,
   readPermissionKey: departmentStoreCapability(floor.code, "read"),
   writePermissionKey: departmentStoreCapability(floor.code, "write"),
-  screens: ["Store Stock", "Store Movement", "Store Repairs"],
-  submodule: "Store",
+  screens: productionStoreNavigation.map(({ label }) => label),
+  // One permission opens all three store menu items.
+  submodule: productionStoreNavigation.map(({ label }) => label).join(" / "),
 })) satisfies PageAccessDefinition[]

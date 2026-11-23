@@ -8,11 +8,17 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
+  Field,
   FieldDescription,
+  FieldLabel,
   FieldLegend,
   FieldSet,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
 import {
   Popover,
   PopoverContent,
@@ -53,14 +59,29 @@ import {
   nonVisualPermissionKeys,
 } from "../../../lib/auth/page-access-catalog"
 
+const bulkLevels = [
+  ["none", "No Access"],
+  ["view", "View Only"],
+  ["full", "Full Access"],
+] as const satisfies readonly (readonly [PermissionAccessLevel, string])[]
+
 export function PermissionSelector({
+  copyFromRoles = [],
   initialPermissionKeys = [],
   permissions,
 }: {
+  /** Existing roles a new role can start from. */
+  copyFromRoles?: readonly {
+    key: string
+    name: string
+    permissionKeys: readonly string[]
+  }[]
   initialPermissionKeys?: readonly string[]
   permissions: readonly PermissionOption[]
 }) {
   const [query, setQuery] = useState("")
+  const [moduleFilter, setModuleFilter] = useState("")
+  const [onlyGranted, setOnlyGranted] = useState(false)
   const rows = useMemo(
     () =>
       permissionAccessRows(permissions).map((row) => ({
@@ -69,17 +90,28 @@ export function PermissionSelector({
       })),
     [permissions]
   )
-  const [permissionKeys, setPermissionKeys] = useState<string[]>(() => {
-    const assignable = new Set(rows.flatMap((row) => row.fullPermissionKeys))
-    return initialPermissionKeys.filter((key) => assignable.has(key)).sort()
-  })
+  const assignableKeys = useMemo(
+    () => new Set(rows.flatMap((row) => row.fullPermissionKeys)),
+    [rows]
+  )
+  const modules = useMemo(
+    () =>
+      [...new Set(rows.flatMap((row) => row.module.split(" / ")))].sort(),
+    [rows]
+  )
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    initialPermissionKeys.filter((key) => assignableKeys.has(key)).sort()
+  )
   const normalizedQuery = query.trim().toLowerCase()
   const retainedPermissionKeys = initialPermissionKeys.filter((key) =>
     nonVisualPermissionKeys.has(key)
   )
   const visibleRows = rows.filter(
     (row) =>
-      !normalizedQuery ||
+      (!moduleFilter || row.module.split(" / ").includes(moduleFilter)) &&
+      (!onlyGranted ||
+        permissionAccessLevelForKeys(row, permissionKeys) !== "none") &&
+      (!normalizedQuery ||
       row.module.toLowerCase().includes(normalizedQuery) ||
       row.submodule.toLowerCase().includes(normalizedQuery) ||
       row.pages.some((page) => page.toLowerCase().includes(normalizedQuery)) ||
@@ -89,8 +121,9 @@ export function PermissionSelector({
       ) ||
       row.fullPermissionKeys.some((key) =>
         key.toLowerCase().includes(normalizedQuery)
-      )
+      ))
   )
+  const narrowed = Boolean(normalizedQuery || moduleFilter)
   const registeredKeys = new Set(permissions.map(({ key }) => key))
   // Normalizing adds legacy companion keys; submit only ones that exist.
   const selectedPermissionKeys = normalizePermissionKeys([
@@ -103,6 +136,28 @@ export function PermissionSelector({
     const row = rows.find((candidate) => candidate.id === id)
     if (!row) return
     setPermissionKeys((current) => permissionKeysForPreset(row, current, level))
+  }
+
+  function setAccessForVisibleRows(level: PermissionAccessLevel) {
+    // Column filters hide rows in the DOM; change only rows still on screen.
+    const shownRows = visibleRows.filter(
+      (row) =>
+        !document.querySelector<HTMLTableRowElement>(
+          `tr[data-permission-row="${CSS.escape(row.id)}"]`
+        )?.hidden
+    )
+    setPermissionKeys((current) =>
+      shownRows.reduce<string[]>(
+        (keys, row) =>
+          // View Only falls back to No Access on rows that have no View.
+          permissionKeysForPreset(
+            row,
+            keys,
+            level === "view" && !row.readPermissionKeys.length ? "none" : level
+          ),
+        current
+      )
+    )
   }
 
   function toggleAction(
@@ -133,7 +188,50 @@ export function PermissionSelector({
           <input key={key} name="permissionKeys" type="hidden" value={key} />
         ))}
 
-        <div className="flex items-center gap-2">
+        {copyFromRoles.length ? (
+          <Field className="max-w-sm">
+            <FieldLabel htmlFor="copy-role-permissions">
+              Start From An Existing Role
+            </FieldLabel>
+            <NativeSelect
+              defaultValue=""
+              id="copy-role-permissions"
+              onChange={(event) => {
+                const role = copyFromRoles.find(
+                  ({ key }) => key === event.target.value
+                )
+                if (role) {
+                  setPermissionKeys(
+                    role.permissionKeys
+                      .filter((key) => assignableKeys.has(key))
+                      .sort()
+                  )
+                }
+              }}
+            >
+              <NativeSelectOption value="">Start empty</NativeSelectOption>
+              {copyFromRoles.map(({ key, name }) => (
+                <NativeSelectOption key={key} value={key}>
+                  {name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <NativeSelect
+            aria-label="Show one module"
+            onChange={(event) => setModuleFilter(event.target.value)}
+            value={moduleFilter}
+          >
+            <NativeSelectOption value="">All modules</NativeSelectOption>
+            {modules.map((module) => (
+              <NativeSelectOption key={module} value={module}>
+                {module}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -153,7 +251,36 @@ export function PermissionSelector({
               <X /> Clear
             </Button>
           ) : null}
+          <Field className="w-auto" orientation="horizontal">
+            <Checkbox
+              checked={onlyGranted}
+              id="only-granted-permissions"
+              onCheckedChange={(checked) => setOnlyGranted(checked === true)}
+            />
+            <FieldLabel htmlFor="only-granted-permissions">
+              Show only given access
+            </FieldLabel>
+          </Field>
         </div>
+
+        {narrowed && visibleRows.length ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">
+              Set every row shown below to:
+            </span>
+            {bulkLevels.map(([level, label]) => (
+              <Button
+                key={level}
+                onClick={() => setAccessForVisibleRows(level)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
 
         <div className="min-w-0 rounded-lg border">
           <OperationalTable
@@ -176,7 +303,7 @@ export function PermissionSelector({
             <TableBody>
               {visibleRows.length ? (
                 visibleRows.map((row) => (
-                  <TableRow key={row.id}>
+                  <TableRow data-permission-row={row.id} key={row.id}>
                     <TableCell className="wrap-anywhere whitespace-normal text-muted-foreground capitalize">
                       {row.module}
                     </TableCell>
@@ -227,7 +354,7 @@ export function PermissionSelector({
   )
 }
 
-function ScreenPreview({
+export function ScreenPreview({
   label,
   location,
   preview,
@@ -260,24 +387,44 @@ function ScreenPreview({
         className="w-[min(52rem,calc(100vw-2rem))] gap-2 p-2"
         side="left"
       >
-        <PreviewImage label={label} location={location} src={preview.src} />
+        <PreviewImage
+          href={preview.href}
+          label={label}
+          location={location}
+          src={preview.src}
+        />
       </PopoverContent>
     </Popover>
   )
 }
 
 function PreviewImage({
+  href,
   label,
   location,
   src,
 }: {
+  href: string
   label: string
   location: string
   src: string
 }) {
+  const [missing, setMissing] = useState(false)
   return (
     <>
+      {missing ? (
+        <div className="grid place-items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+          No picture of this screen yet.
+          <Button asChild size="sm" variant="outline">
+            <a href={href} rel="noreferrer" target="_blank">
+              Open The Screen In A New Tab
+            </a>
+          </Button>
+        </div>
+      ) : null}
       <Image
+        hidden={missing}
+        onError={() => setMissing(true)}
         alt={`${label} in ${location}`}
         className="mx-auto h-auto max-h-[min(70vh,40rem)] w-auto max-w-full rounded-md border object-contain object-top"
         height={900}
@@ -357,7 +504,12 @@ function PermissionPreviewLabel({
         side="left"
         sideOffset={8}
       >
-        <PreviewImage label={label} location={location} src={preview.src} />
+        <PreviewImage
+          href={preview.href}
+          label={label}
+          location={location}
+          src={preview.src}
+        />
       </TooltipContent>
     </Tooltip>
   )

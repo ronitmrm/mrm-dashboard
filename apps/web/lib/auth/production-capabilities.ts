@@ -104,6 +104,15 @@ const universalProductionPageAccess = Object.entries(productionPageCapabilities)
       productionPageLabels[id as keyof typeof productionPageLabels],
   }))
 
+/** Side-menu item a unit screen sits under; First Piece Inspection opens from Quality Control. */
+export function productionFloorMenuItem(
+  tab: keyof typeof productionFloorPageSlugs
+) {
+  return productionPageLabels[
+    tab === "firstPieceInspectionTab" ? "qualityControlTasksTab" : tab
+  ]
+}
+
 const floorProductionPageAccess = productionFloors.flatMap((floor) =>
   (
     Object.keys(productionFloorPageSlugs) as Array<
@@ -116,7 +125,7 @@ const floorProductionPageAccess = productionFloors.flatMap((floor) =>
     module: floor.label,
     navigation: true,
     readPermissionKey: productionFloorPageCapabilities[floor.code][id],
-    submodule: productionPageLabels[id],
+    submodule: productionFloorMenuItem(id),
   }))
 )
 

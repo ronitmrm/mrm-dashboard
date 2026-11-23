@@ -48,6 +48,15 @@ type SetPermissionOverrideInput = {
   userId: string
 }
 
+type ReplacePermissionOverridesInput = {
+  actorUserId: string
+  /** Keys this edit manages; overrides on other keys are left untouched. */
+  scopeKeys: string[]
+  overrides: { effect: "allow" | "deny"; permissionKey: string }[]
+  reason: string
+  userId: string
+}
+
 type UpdateRolePermissionsInput = {
   actorUserId: string
   permissionKeys: string[]
@@ -735,6 +744,107 @@ export function createAccessAdministrationRepository(
           },
         ])
         await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    /** Sets one person's overrides within `scopeKeys` to exactly `overrides`. */
+    async replacePermissionOverrides({
+      actorUserId,
+      overrides,
+      reason,
+      scopeKeys,
+      userId,
+    }: ReplacePermissionOverridesInput) {
+      const desired = new Map(
+        overrides.map(({ effect, permissionKey }) => [permissionKey, effect])
+      )
+      if ([...desired.keys()].some((key) => !scopeKeys.includes(key))) {
+        throw new Error("An override is outside the edited permissions")
+      }
+      const client = await pool.connect()
+
+      try {
+        await client.query("BEGIN")
+        const current = await client.query<{
+          effect: "allow" | "deny"
+          key: string
+        }>(
+          `SELECT permissions.key, overrides.effect
+           FROM identity.user_permission_overrides AS overrides
+           JOIN identity.permissions AS permissions
+             ON permissions.id = overrides.permission_id
+           WHERE overrides.user_id = $1
+             AND permissions.key = ANY($2::text[])
+           FOR UPDATE OF overrides`,
+          [userId, scopeKeys]
+        )
+        const currentEffects = new Map(
+          current.rows.map(({ effect, key }) => [key, effect])
+        )
+        const removed = [...currentEffects.keys()].filter(
+          (key) => !desired.has(key)
+        )
+        const changed = [...desired].filter(
+          ([key, effect]) => currentEffects.get(key) !== effect
+        )
+
+        if (removed.length) {
+          await client.query(
+            `DELETE FROM identity.user_permission_overrides AS overrides
+             USING identity.permissions AS permissions
+             WHERE permissions.id = overrides.permission_id
+               AND overrides.user_id = $1
+               AND permissions.key = ANY($2::text[])`,
+            [userId, removed]
+          )
+        }
+        for (const [permissionKey, effect] of changed) {
+          const result = await client.query(
+            `INSERT INTO identity.user_permission_overrides (
+               user_id, permission_id, effect, reason, assigned_by_user_id
+             )
+             SELECT users.id, permissions.id, $1, $2, $3
+             FROM identity.users AS users
+             CROSS JOIN identity.permissions AS permissions
+             WHERE users.id = $4
+               AND permissions.key = $5
+             ON CONFLICT (user_id, permission_id) DO UPDATE
+             SET effect = EXCLUDED.effect,
+                 reason = EXCLUDED.reason,
+                 assigned_by_user_id = EXCLUDED.assigned_by_user_id,
+                 assigned_at = now(),
+                 expires_at = NULL`,
+            [effect, reason, actorUserId, userId, permissionKey]
+          )
+          if (result.rowCount !== 1) {
+            throw new Error("The selected user or capability does not exist")
+          }
+        }
+        await appendAccessAuditChanges(client, [
+          ...removed.map((permissionKey) => ({
+            actorUserId,
+            eventType: "access.permission.override_removed",
+            metadata: { permissionKey },
+            reason,
+            targetId: userId,
+            targetTable: "users",
+          })),
+          ...changed.map(([permissionKey, effect]) => ({
+            actorUserId,
+            eventType: "access.permission.override_set",
+            metadata: { effect, permissionKey },
+            reason,
+            targetId: userId,
+            targetTable: "users",
+          })),
+        ])
+        await client.query("COMMIT")
+        return { changed: changed.length + removed.length }
       } catch (error) {
         await client.query("ROLLBACK")
         throw error

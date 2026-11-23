@@ -12,6 +12,8 @@ import { administrationTaskCapabilities } from "@/lib/auth/task-capabilities"
 import { optionalText, requiredText } from "@/lib/form-data"
 import { getWebPostgresPool } from "@/lib/postgres-runtime"
 
+import { staffOverrideChanges } from "./permission-access"
+
 const accessPath = "/administration/access"
 
 function employeeReference(formData: FormData) {
@@ -77,6 +79,9 @@ function staffActionError(error: unknown): StaffActionState {
     "password is required",
     "employee is required",
     "userId is required",
+    "A selected permission is not available",
+    "A permission cannot be both allowed and blocked",
+    "The selected user or capability does not exist",
   ]
   if (expected.includes(message)) return { error: message }
   if (/user already exists|email already exists/i.test(message)) {
@@ -342,6 +347,49 @@ export async function setScreenProtectionAction(
         })
       }
       return { success: "Screen protection saved. It applies on the person's next page load." }
+    }
+  )
+  revalidatePath(accessPath)
+  return result
+}
+
+function formKeys(formData: FormData, name: string) {
+  return formData
+    .getAll(name)
+    .filter((value): value is string => typeof value === "string")
+}
+
+/** Saves one person's allow/block exceptions; unlisted actions follow their roles. */
+export async function setStaffPermissionOverridesAction(
+  _previousState: StaffActionState,
+  formData: FormData
+): Promise<StaffActionState> {
+  const result = await withAccessService(
+    administrationTaskCapabilities.managePermissionOverrides,
+    async (access, actorUserId) => {
+      try {
+        const userId = requiredText(formData, "userId")
+        const { permissions } = await access.getSnapshot({ actorUserId })
+        const { overrides, scopeKeys } = staffOverrideChanges(
+          permissions,
+          formKeys(formData, "allow"),
+          formKeys(formData, "deny")
+        )
+        const { changed } = await access.replacePermissionOverrides({
+          actorUserId,
+          overrides,
+          reason: "Individual permissions set in Staff Accounts",
+          scopeKeys,
+          userId,
+        })
+        return {
+          success: changed
+            ? "Individual permissions saved. They apply on the person's next page load."
+            : "No changes to save.",
+        }
+      } catch (error) {
+        return staffActionError(error)
+      }
     }
   )
   revalidatePath(accessPath)

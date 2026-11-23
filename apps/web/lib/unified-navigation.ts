@@ -132,6 +132,13 @@ export const qualityControlNavigation = [
   { href: "/quality-control/store/repairs", icon: Wrench, label: "Store Repairs" },
 ] as const
 
+/** Menu items under each production unit's store, relative to its store href. */
+export const productionStoreNavigation = [
+  { path: "", icon: Boxes, label: "Store Stock" },
+  { path: "/movement", icon: ArrowRightLeft, label: "Store Movement" },
+  { path: "/repairs", icon: Wrench, label: "Store Repairs" },
+] as const
+
 export function dashboardTabHref(
   tab: DashboardTabId,
   productionFloorCode?: ProductionFloorCode

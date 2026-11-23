@@ -36,6 +36,11 @@ import {
   updateStaffLoginIdAction,
   type StaffActionState,
 } from "./actions"
+import type { PermissionOption } from "./permission-access"
+import {
+  StaffPermissionOverridesForm,
+  type StaffPermissionOverride,
+} from "./staff-permission-overrides"
 
 type StaffAccount = {
   departments: string[]
@@ -46,6 +51,7 @@ type StaffAccount = {
   email: string
   roleKeys: string[]
   inheritedRoleKeys: string[]
+  overrides: StaffPermissionOverride[]
   screenProtection: ScreenProtectionState
 }
 
@@ -74,6 +80,9 @@ const screenProtectionOptions = [
 ] as const satisfies readonly { key: keyof ScreenProtectionState; description: string; label: string }[]
 
 type StaffWorkflowProps = {
+  /** Every key each role grants, for showing what a person gets from roles. */
+  rolePermissionKeys: Record<string, string[]>
+  permissions: readonly PermissionOption[]
   canManageOverrides: boolean
   canProvision: boolean
   canAssignRoles: boolean
@@ -417,6 +426,17 @@ function StaffScreenProtectionForm({ user }: { user: StaffAccount }) {
   )
 }
 
+// Mirrors authorization: Administrative holds every registered permission.
+function roleGrantedKeys(props: StaffWorkflowProps, user: StaffAccount) {
+  const roleKeys = [...user.roleKeys, ...user.inheritedRoleKeys]
+  if (roleKeys.includes("administrative")) {
+    return new Set(props.permissions.map(({ key }) => key))
+  }
+  return new Set(
+    roleKeys.flatMap((roleKey) => props.rolePermissionKeys[roleKey] ?? [])
+  )
+}
+
 export function StaffAccountWorkflow(props: StaffWorkflowProps) {
   const [search, setSearch] = useState(() => {
     const selected = props.users.find((user) => user.id === props.selectedUserId)
@@ -466,6 +486,15 @@ export function StaffAccountWorkflow(props: StaffWorkflowProps) {
             ) : null}
             {user && props.canManageOverrides ? (
               <StaffScreenProtectionForm key={user.id} user={user} />
+            ) : null}
+            {user && props.canManageOverrides ? (
+              <StaffPermissionOverridesForm
+                key={`overrides:${user.id}`}
+                overrides={user.overrides}
+                permissions={props.permissions}
+                roleGrantedKeys={roleGrantedKeys(props, user)}
+                userId={user.id}
+              />
             ) : null}
             {user && !props.canAssignRoles ? (
               <FieldDescription>

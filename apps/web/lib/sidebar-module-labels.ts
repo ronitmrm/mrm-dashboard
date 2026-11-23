@@ -49,6 +49,8 @@ export function sidebarModuleForPermission(
   permissionKey: string,
   storedModule: string
 ) {
+  // Store transfers to a unit or Quality store are raised on Store > Request Item.
+  if (isStoreTransferRequest(permissionKey)) return sidebarModuleLabels.store
   if (permissionKey.startsWith("iso.documents."))
     return sidebarModuleLabels.branding
   if (permissionKey.startsWith("iso.calibration_plan."))
@@ -94,10 +96,21 @@ export function sidebarModuleForPermission(
   }
 }
 
+function isStoreTransferRequest(permissionKey: string) {
+  return /^(quality\.store|operations\.floors\.[^.]+\.store)\.request$/.test(
+    permissionKey
+  )
+}
+
 export function sidebarSubmoduleForPermission(
   permissionKey: string,
   fallbackLabel: string
 ) {
+  if (isStoreTransferRequest(permissionKey)) return "Request Item"
+  // Candidate assignment sits on the HR master, next to its master rows.
+  if (["hr.candidates.assign", "hr.candidates.save"].includes(permissionKey)) {
+    return "Universal / HR"
+  }
   if (startsWithAny(permissionKey, masterDataPermissionPrefixes)) {
     return "Data Entry"
   }

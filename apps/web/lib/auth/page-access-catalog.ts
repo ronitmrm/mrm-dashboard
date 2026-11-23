@@ -12,6 +12,34 @@ import {
 } from "./production-capabilities"
 import { productionFloorPageSlugs } from "./production-floor-capabilities"
 import type { PageAccessDefinition } from "./page-access-types"
+import {
+  calibrationPlan,
+  machineMaintenancePlan,
+  machineMaintenanceRegister,
+  measuringInstrumentRegister,
+} from "../iso-documents"
+import { sidebarModuleLabels } from "../sidebar-module-labels"
+
+// ISO registers open with another screen's View permission. Listing them here
+// shows admins that granting that permission also opens these registers.
+const isoSharedPageAccess = (
+  [
+    [measuringInstrumentRegister, "store.stock.read"],
+    [calibrationPlan, "store.stock.read"],
+    [calibrationPlan, "quality.control.calibration.read"],
+    [machineMaintenanceRegister, "maintenance.workspace.read"],
+    [machineMaintenancePlan, "maintenance.workspace.read"],
+  ] as const
+).map(
+  ([document, readPermissionKey]): PageAccessDefinition => ({
+    href: document.href,
+    id: `iso.${document.href}.${readPermissionKey}`,
+    label: document.title,
+    module: sidebarModuleLabels.isoDocument,
+    navigation: true,
+    readPermissionKey,
+  })
+)
 
 export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   ...brandingPageAccess,
@@ -23,6 +51,7 @@ export const pageAccessCatalog: readonly PageAccessDefinition[] = [
   ...storePageAccess,
   ...hrPageAccess,
   ...productionPageAccess,
+  ...isoSharedPageAccess,
 ] as const
 
 export const nonVisualPermissionKeys = new Set([
