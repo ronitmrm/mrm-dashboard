@@ -322,19 +322,31 @@ export function ProductionSessionsWorkspace({
   }, [floor, fromDate, sessions, view])
   const initialLoading = loading || sessionDelivery.loading
 
+  // Register search looks across every date, not just the loaded window.
+  const [searchResults, setSearchResults] = useState<{ query: string; rows: Row[] } | null>(null)
+  const searchQuery = view === "register" ? query.trim() : ""
+  useEffect(() => {
+    if (!searchQuery) return
+    let current = true
+    const timer = window.setTimeout(() => {
+      api(`/api/production-sessions?floor=${encodeURIComponent(floor)}&search=${encodeURIComponent(searchQuery)}&limit=500`)
+        .then((body) => { if (current) setSearchResults({ query: searchQuery, rows: rows(body.rows) }) })
+        .catch((reason) => { if (current) setError(reason instanceof Error ? reason.message : "Sessions could not be searched.") })
+    }, 300)
+    return () => { current = false; window.clearTimeout(timer) }
+  }, [floor, searchQuery, sessions])
+  const registerRows = searchQuery
+    ? searchResults?.query === searchQuery ? searchResults.rows : null
+    : sessions
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
     return () => window.clearInterval(timer)
   }, [])
 
-  const visibleSessions = useMemo(() => {
-    const needle = query.toLowerCase()
-    return sessions.filter((row) => {
-      const matchesQuery = !needle || [row.sessionReference, row.machineNumber, row.jobCardNumber, row.partCode, row.operatorCode, row.operatorName].some((value) => text(value).toLowerCase().includes(needle))
-      const matchesStatus = statusFilter === "all" || sessionOperationalStatus(row, floor, now) === statusFilter
-      return matchesQuery && matchesStatus
-    })
-  }, [floor, now, query, sessions, statusFilter])
+  const visibleSessions = useMemo(() => registerRows?.filter((row) =>
+    statusFilter === "all" || sessionOperationalStatus(row, floor, now) === statusFilter
+  ) ?? null, [floor, now, registerRows, statusFilter])
   const closingRequiredSessions = useMemo(
     () => sessions.filter((row) => sessionOperationalStatus(row, floor, now) === "closing_required"),
     [floor, now, sessions]
@@ -385,7 +397,7 @@ export function ProductionSessionsWorkspace({
   }
 
   function exportCsv() {
-    const source = view === "events" ? eventRows : visibleSessions
+    const source = view === "events" ? eventRows : visibleSessions ?? []
     if (!source.length) return
     const keys = Object.keys(source[0]!)
     const csv = [keys.join(","), ...source.map((row) => keys.map((key) => `"${text(row[key]).replaceAll('"', '""')}"`).join(","))].join("\n")
@@ -427,7 +439,7 @@ export function ProductionSessionsWorkspace({
           <CardContent>
             {error || sessionDelivery.error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error || sessionDelivery.error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading sessions…" description="Pick an earlier date to see older sessions." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} breakSchedule={breakSchedule} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {(initialLoading && !sessionDelivery.error) ? <StandardState variant="loading" title="Loading sessions…" description="Pick an earlier date to see older sessions." /> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} breakSchedule={breakSchedule} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : view === "register" ? visibleSessions === null ? <StandardState variant="loading" title="Searching all sessions…" description="Looking through every date, not just the loaded ones." /> : <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
  </SectionCard>
       {!initialLoading && view === "start" ? <CarriedDowntimeTable rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /> : null}
