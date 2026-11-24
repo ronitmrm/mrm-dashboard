@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { buildLegacyDashboardSnapshot, buildLegacyDashboardSnapshotWithPlanning } from "./legacy-dashboard-analysis"
+import { buildLegacyDashboardSnapshot, buildLegacyDashboardSnapshotWithPlanning, directDashboardPlannerActionLog } from "./legacy-dashboard-analysis"
 import { calculateParallelMachineReview, validateParallelMachineReview } from "./parallel-machine-planning"
 
 test("changed-route parallel setup uses carried stock without reclaiming old machines or reusing consumed pieces", () => {
@@ -899,4 +899,14 @@ test("new work goes to an idle machine before one holding a running setup", () =
   // A previously published queue slot behind the running job does not hold the new work there.
   const previous = rows.map(row => row.jcNo === "P-NEW" ? { ...row, machine: "T42-1" } : row)
   expect(machineFor(build({ ...input, previousMachinePlanDetailRows: previous }), "P-NEW")).toBe("T42-2")
+})
+
+test("planner machine releases appear in decision history; session-close releases do not", () => {
+  const status = (payload: Record<string, unknown>) => ({ entryType: "shop_floor_status", payload, createdAt: "2026-11-24T10:00:00Z" })
+  const log = directDashboardPlannerActionLog([
+    status({ jcNo: "P1", actionType: "Release machine", releasedAt: "2026-11-24T10:00:00Z", reason: "Awaiting RM" }),
+    status({ jcNo: "P2", actionType: "Release machine", reason: "Production session ended awaiting material" }),
+    status({ jcNo: "P3", actionType: "Session closed awaiting material", reason: "Production session ended awaiting material" }),
+  ], {})
+  expect(log).toEqual([expect.objectContaining({ jcNo: "P1", actionType: "Release machine", createdAt: "2026-11-24T10:00:00Z" })])
 })

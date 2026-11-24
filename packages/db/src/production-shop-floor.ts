@@ -1308,7 +1308,7 @@ async function releaseSetupAwaitingMaterialInTransaction(
   }
   const [material] = await readJobCardMaterialBalances(client, input.organizationId, undefined, state.work_order_id)
   const payload = { ...state.source_payload, ...state.context, stage: "planned", active: false, status: "stopped",
-    actionType: "Release machine", releasedAt: new Date().toISOString(), reason: input.reason,
+    actionType: input.sessionClose ? "Session closed awaiting material" : "Release machine", releasedAt: new Date().toISOString(), reason: input.reason,
     // A finished upstream setup will never add WIP, so waiting for more would block the setup forever.
     awaitingMaterial: upstream?.complete ? undefined
       : { kind: upstream ? "wip" : "rm", availableAtRelease: upstream ? Number(upstream.good) : material?.usableKg ?? 0 } }
