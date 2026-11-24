@@ -66,7 +66,7 @@ export async function importStoreMasterCsvAction(formData: FormData) {
           resolveReferences(master, row, references),
           rowNumber
         )
-        if (result?.error) throw new Error(result.error)
+        if (result && "error" in result) throw new Error(result.error)
       }
     })
   } catch (error) {

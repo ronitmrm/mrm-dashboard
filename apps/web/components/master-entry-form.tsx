@@ -9,16 +9,21 @@ import {
 import type { RetainedUploadRegistration } from "@/lib/pending-retained-upload-client"
 
 /** Keep entered values on a rejected save, and show server validation inline. */
-export function MasterEntryForm({
+type SaveSuccess<Action extends (formData: FormData) => Promise<unknown>> =
+  Exclude<Awaited<ReturnType<Action>>, { error: string }>
+
+export function MasterEntryForm<
+  Action extends (formData: FormData) => Promise<unknown>,
+>({
   action,
   children,
   uploads = [],
   onSuccess,
   ...props
 }: Omit<ComponentProps<"form">, "action" | "onSubmit"> & {
-  action: (formData: FormData) => Promise<unknown>
+  action: Action
   uploads?: readonly RetainedUploadRegistration[]
-  onSuccess?: () => void
+  onSuccess?: (result: SaveSuccess<Action>) => void
 }) {
   const upload = usePendingRetainedUploads()
   const busy = useRef(false)
@@ -58,7 +63,7 @@ export function MasterEntryForm({
             } else {
               form.reset()
               upload.client.abandonUnused()
-              onSuccess?.()
+              onSuccess?.(result as SaveSuccess<Action>)
             }
           } finally {
             busy.current = false
