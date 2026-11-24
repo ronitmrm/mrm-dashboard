@@ -336,14 +336,14 @@ function plannerActionSources(input: PlannerActionSources) {
 }
 
 function plannerActionLogRows({
-  setupReopenRows,
+  plannerSetupActionRows,
   plannerPriorities,
   machineConstraints,
   planOverrides,
   routeChanges,
   rawMaterialRejections,
 }: {
-  setupReopenRows: ActionRow[];
+  plannerSetupActionRows: ActionRow[];
   plannerPriorities: ActionRow[];
   machineConstraints: ActionRow[];
   planOverrides: ActionRow[];
@@ -351,7 +351,7 @@ function plannerActionLogRows({
   rawMaterialRejections: ActionRow[];
 }) {
   return [
-    ...setupReopenRows.map(row => ({ ...row, createdAt: row.reopenedAt, actionType: "Reopen Setup" })),
+    ...plannerSetupActionRows.map(row => ({ ...row, createdAt: row.reopenedAt ?? row.releasedAt })),
     ...plannerPriorities.map(row => ({ ...row, actionType: "Priority" })),
     ...machineConstraints.map(row => ({ ...row, actionType: "Machine Unavailable" })),
     ...planOverrides.map(row => ({ ...row,
@@ -363,12 +363,16 @@ function plannerActionLogRows({
   ].sort((a, b) => rowText(b, "createdAt", "loggedOn").localeCompare(rowText(a, "createdAt", "loggedOn")));
 }
 
+const plannerSetupActionTypes = new Set(["Reopen Setup", "Release machine"]);
+// Session closes used to share the "Release machine" label; only planner releases belong in history.
+const isPlannerSetupAction = (row: ActionRow) => plannerSetupActionTypes.has(rowText(row, "actionType")) &&
+  rowText(row, "reason") !== "Production session ended awaiting material";
+
 export function directDashboardPlannerActionLog(dataEntries: DataEntry[], input: PlannerActionSources) {
-  const setupReopenRows = entryRows(bucketDataEntries(dataEntries), "shop_floor_status")
-    .filter(row => rowText(row, "actionType") === "Reopen Setup");
+  const plannerSetupActionRows = entryRows(bucketDataEntries(dataEntries), "shop_floor_status").filter(isPlannerSetupAction);
   return plannerActionLogRows({
     ...plannerActionSources(input),
-    setupReopenRows,
+    plannerSetupActionRows,
     rawMaterialRejections: input.rawMaterialRejections ?? [],
   });
 }
@@ -479,7 +483,7 @@ function prepareLegacyProductionInput(input: LegacyDashboardInput) {
     input.currentShopFloorStatusRows ?? latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
-  const setupReopenRows = entryRows(byType, "shop_floor_status").filter(row => rowText(row, "actionType") === "Reopen Setup");
+  const plannerSetupActionRows = entryRows(byType, "shop_floor_status").filter(isPlannerSetupAction);
   const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
@@ -517,7 +521,7 @@ function prepareLegacyProductionInput(input: LegacyDashboardInput) {
     maintenanceScheduleRows,
     maintenanceTaskRows,
     shopFloorStatusRows,
-    setupReopenRows,
+    plannerSetupActionRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
     routeRows,
@@ -609,7 +613,7 @@ function buildProductionAnalysis({
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
-  setupReopenRows,
+  plannerSetupActionRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
   routeRows,
@@ -663,7 +667,7 @@ function buildProductionAnalysis({
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
-  setupReopenRows: Record<string, unknown>[];
+  plannerSetupActionRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
@@ -997,7 +1001,7 @@ function buildProductionAnalysis({
     maintenanceScheduleRows,
     maintenanceTaskRows,
     shopFloorStatusRows,
-    setupReopenRows,
+    plannerSetupActionRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
     routeSelections,
@@ -1192,7 +1196,7 @@ function buildProductionControl({
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
-  setupReopenRows,
+  plannerSetupActionRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
   routeSelections,
@@ -1237,7 +1241,7 @@ function buildProductionControl({
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
-  setupReopenRows: Record<string, unknown>[];
+  plannerSetupActionRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
   routeSelections: ActionRow[];
@@ -1673,7 +1677,7 @@ function buildProductionControl({
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
   const plannerActionLog = plannerActionLogRows({
-    setupReopenRows, plannerPriorities, machineConstraints, planOverrides, routeChanges, rawMaterialRejections,
+    plannerSetupActionRows, plannerPriorities, machineConstraints, planOverrides, routeChanges, rawMaterialRejections,
   });
 
   return {
