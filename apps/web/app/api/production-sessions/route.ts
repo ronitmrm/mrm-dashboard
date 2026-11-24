@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
             : undefined,
           efficiencyFlagsOnly: params.get("efficiencyFlagsOnly") === "1",
           unfinished: params.get("unfinished") === "1",
+          search: params.get("search") || undefined,
         }
         try {
           if (params.get("conditional") === "1")

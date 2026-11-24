@@ -4819,6 +4819,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       status?: "closed" | "open"
       // With startDate: also keep older sessions the floor still acts on.
       unfinished?: boolean
+      // Matches reference, machine, job card, part or operator.
+      search?: string
     }, queryClient?: PoolClient) {
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
       const limit = Math.min(Math.max(Math.trunc(input.limit ?? 500), 1), 500)
@@ -4997,6 +4999,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               AND target.pieces > 0 AND session.total_pieces > target.pieces
               AND NULLIF(btrim(session.source_payload->'efficiencyFlagReview'->>'comment'), '') IS NULL
             ))
+            AND ($11::text IS NULL OR concat_ws(' ', session.session_reference,
+              session.machine_number_snapshot, session.job_card_number_snapshot, item.uid,
+              session.operator_code_snapshot, session.operator_name_snapshot) ILIKE '%' || $11 || '%')
           ORDER BY session.started_at DESC, machine.machine_number, session.id
           LIMIT $7 OFFSET $8
         `,
@@ -5011,6 +5016,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           offset,
           input.efficiencyFlagsOnly ?? false,
           input.unfinished ?? false,
+          input.search?.trim() || null,
         ]
       )
       const numericKeys = [
