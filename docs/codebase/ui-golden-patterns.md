@@ -98,7 +98,8 @@ entry. It displays and accepts `DD/MM/YYYY` (plus `HH:mm` for date/time), preser
 required/range/step validation, and supplies ISO values to forms and change
 handlers. Slashes stay visible in the shared date field; typing two day digits
 advances to month, then two month digits advance to year. Deletion keeps the
-separators and paste fills the same day/month/year slots.
+separators and paste fills the same day/month/year slots. A calendar button
+inside the field opens the browser date picker as an alternative to typing.
 Format dates with `formatIstDate` / `formatIstDateTime`, or
 `formatCalendarDate` for existing calendar-only values. Keep ISO dates and
 timestamps in storage and calculation. CSV uploads and downloads use DD-MM-YYYY;

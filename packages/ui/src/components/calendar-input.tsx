@@ -1,9 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { CalendarDays } from "lucide-react"
 
 import { calendarInputDisplay, parseCalendarInput } from "@workspace/ui/lib/calendar-date"
 import { calendarInputTemplate, editCalendarInput, maskCalendarInput } from "@workspace/ui/lib/calendar-input"
+import { cn } from "@workspace/ui/lib/utils"
 
 /** Text entry has a fixed day/month/year presentation; submitted values stay ISO. */
 function CalendarInput({
@@ -20,6 +22,7 @@ function CalendarInput({
   min,
   max,
   step,
+  className,
   ...props
 }: React.ComponentProps<"input"> & { type: "date" | "datetime-local" }) {
   const withTime = type === "datetime-local"
@@ -32,6 +35,7 @@ function CalendarInput({
   const template = calendarInputTemplate(withTime, source === entry.source ? entry.draft : calendarInputDisplay(source, withTime), step)
   const display = (source: string) => maskCalendarInput(calendarInputDisplay(source, withTime), template)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const pickerRef = React.useRef<HTMLInputElement>(null)
   const selectionRef = React.useRef<number | null>(null)
   if (source !== entry.source) setEntry({ source, draft: display(source) })
   const draft = source === entry.source ? entry.draft : display(source)
@@ -87,9 +91,10 @@ function CalendarInput({
     return () => parent?.removeEventListener("reset", reset)
   }, [defaultValue, step, value, withTime])
 
-  return <>
+  return <span className="relative block min-w-0">
     <input
       {...props}
+      className={cn(className, "pr-9")}
       ref={(input) => {
         inputRef.current = input
         if (typeof ref === "function") return ref(input)
@@ -135,8 +140,40 @@ function CalendarInput({
         event.currentTarget.value = text
       }}
     />
+    {/* Native picker sits behind the field so the browser calendar opens beneath it. */}
+    <input
+      ref={pickerRef}
+      type={type}
+      aria-hidden
+      tabIndex={-1}
+      className="pointer-events-none absolute inset-0 size-full opacity-0"
+      min={min}
+      max={max}
+      step={step}
+      value={canonical}
+      onChange={(event) => {
+        const next = event.currentTarget.value
+        setEntry({ source: next, draft: display(next) })
+        onChange?.(event)
+      }}
+    />
+    {props.disabled || props.readOnly ? null : <button
+      type="button"
+      aria-label="Open calendar"
+      title="Open calendar"
+      className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
+      onClick={() => {
+        try {
+          pickerRef.current?.showPicker()
+        } catch {
+          inputRef.current?.focus()
+        }
+      }}
+    >
+      <CalendarDays className="size-4" aria-hidden />
+    </button>}
     <input type="hidden" name={name} form={form} value={canonical} disabled={props.disabled} />
-  </>
+  </span>
 }
 
 export { CalendarInput }
