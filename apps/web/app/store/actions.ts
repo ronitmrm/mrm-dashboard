@@ -555,7 +555,8 @@ export async function createStoreMakeModelAction(formData: FormData) {
 }
 
 export async function createStoreItemTypeAction(formData: FormData) {
-  return withMasterSaveFeedback(async () => {
+  let createdTypeCode: string | undefined
+  const feedback = await withMasterSaveFeedback(async () => {
     await requireCapability(masterCapability("ITEM_TYPE", "save"), storePath)
     const drawingUploadId = pendingUploadId(formData, "asset_drawing")
     const masterId = optionalText(formData, "master_id")
@@ -605,10 +606,12 @@ export async function createStoreItemTypeAction(formData: FormData) {
         }
         const item = masterId
           ? await repository.updateItemType({ ...input, id: masterId })
-          : await repository.createItemType({
-              ...input,
-              rejectDuplicates: true,
-            })
+          : await repository
+              .createItemType({ ...input, rejectDuplicates: true })
+              .then((created) => {
+                createdTypeCode = created.typeCode
+                return created
+              })
         if (drawingUploadId && pendingAuthorization) {
           await consumePendingArtifactUpload({
             authorization: pendingAuthorization,
@@ -641,6 +644,7 @@ export async function createStoreItemTypeAction(formData: FormData) {
     )
     revalidateStore()
   })
+  return feedback ?? { typeCode: createdTypeCode }
 }
 
 async function storeItemDrawingArtifact(input: {

@@ -1081,7 +1081,7 @@ function StoreItemTypeForm({
   const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
   const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
   const [makeModelId, setMakeModelId] = useState(initialMakeModelId)
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved] = useState<{ typeCode?: string } | null>(null)
   const selectedUnit = defaults.unit ?? ""
   const unitOptions = !selectedUnit || STORE_UNIT_OPTIONS.some(
     (option) => option.value === selectedUnit
@@ -1120,7 +1120,7 @@ function StoreItemTypeForm({
   return (
     <MasterEntryForm
       action={createStoreItemTypeAction}
-      onSuccess={() => {
+      onSuccess={(result) => {
         if (!editing) {
           setAssetType("")
           setCategoryId("")
@@ -1128,9 +1128,9 @@ function StoreItemTypeForm({
           setAssetNameId("")
           setMakeModelId("")
         }
-        setSaved(true)
+        setSaved(result)
       }}
-      onChange={() => setSaved(false)}
+      onChange={() => setSaved(null)}
       uploads={[
         {
           field: "asset_drawing",
@@ -1264,15 +1264,12 @@ function StoreItemTypeForm({
           />
         </Field>
       </FieldGroup>
-      {!editing ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Select a different Make/Model to generate a separate Asset Code for the same Asset Name.
-          Record each Non Consumable unit’s actual Make when it is received.
-        </p>
-      ) : null}
       {saved ? (
-        <p className="mt-5" role="status">
-          <StatusBadge value="Asset saved" tone="positive" />
+        <p className="mt-5 flex flex-wrap items-center gap-2 text-sm" role="status">
+          <StatusBadge value="Saved" tone="positive" />
+          {editing
+            ? "Changes saved."
+            : `Asset Code ${saved.typeCode} created. Fill the form again to add another item.`}
         </p>
       ) : null}
       {!editing && existingItem ? (
