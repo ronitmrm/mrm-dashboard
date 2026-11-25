@@ -41,18 +41,23 @@ export async function assertToolingTransferAvailable(client: PoolClient, organiz
 
 // Physical Store units are the quantity source. A unit assigned to a machine
 // belongs to that machine's production department, not to every department.
+// A unit in a production unit's own store (e.g. PPAC Forging Store) is
+// allocated to that unit.
 export async function readToolingAllocations(client: Pick<PoolClient, "query">, organizationId: string) {
   const result = await client.query<{
     assetCode: string; holderType: string; holderReference: string | null;
     holderName: string | null; floorCode: ProductionFloorCode | null;
+    storeFloorCode: ProductionFloorCode | null;
   }>(`
     SELECT item.type_code AS "assetCode", asset.current_holder_type AS "holderType",
       asset.current_holder_reference AS "holderReference", asset.current_holder_name AS "holderName",
-      floor.code AS "floorCode"
+      floor.code AS "floorCode", accountable.production_floor_code AS "storeFloorCode"
     FROM store.assets asset
     JOIN store.item_types item ON item.id = asset.item_type_id AND item.active
     LEFT JOIN catalog.machines machine ON machine.id = asset.current_machine_id
     LEFT JOIN manufacturing.production_floors floor ON floor.id = machine.production_floor_id
+    LEFT JOIN store.accountable_stores accountable ON accountable.id = asset.accountable_store_id
+      AND accountable.kind = 'PRODUCTION'
     WHERE asset.organization_id = $1 AND asset.status IN ('AVAILABLE', 'ASSIGNED')
       AND item.tracking_mode = 'SERIALIZED'
   `, [organizationId])
@@ -61,8 +66,9 @@ export async function readToolingAllocations(client: Pick<PoolClient, "query">, 
     const assetCode = asset.assetCode.trim().toUpperCase()
     const total = totals.get(assetCode) ?? { assetCode, totalQuantity: 0, storeQuantity: 0, floors: new Map() }
     total.totalQuantity++
-    if (asset.holderType === "STORE") total.storeQuantity++
+    if (asset.holderType === "STORE" && !asset.storeFloorCode) total.storeQuantity++
     const floor = asset.holderType === "MACHINE" ? asset.floorCode
+      : asset.holderType === "STORE" ? asset.storeFloorCode
       : asset.holderType === "DEPARTMENT" || asset.holderType === "UNIT"
         ? productionFloorFromDepartment(asset.holderName, asset.holderReference)
           ?? productionFloorFromDepartment(asset.holderReference, asset.holderReference)
