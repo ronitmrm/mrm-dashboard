@@ -91,10 +91,10 @@ export function csvImportRowSourceId(entryType: string, row: ImportRow) {
 export async function importAutoCodedMasterRows(
   entryType: string,
   rows: ImportRow[],
-  save: (row: ImportRow) => Promise<unknown>
+  save: (row: ImportRow, index: number) => Promise<unknown>
 ) {
   if (!autoCodedEntryType(entryType)) {
-    for (const row of rows) await save(row)
+    for (const [index, row] of rows.entries()) await save(row, index)
     return rows.length
   }
 
@@ -107,7 +107,7 @@ export async function importAutoCodedMasterRows(
       ? checklistGroupKey(row, codeField)
       : `row:${index}`
     const generatedCode = generatedCodes.get(groupKey) ?? ""
-    const saved = await save({ ...row, [codeField]: generatedCode })
+    const saved = await save({ ...row, [codeField]: generatedCode }, index)
     const savedCode = savedMasterCode(saved)
     if (!generatedCode) {
       if (!savedCode) {

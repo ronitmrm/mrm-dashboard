@@ -854,7 +854,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     )
     if (!reference.rows[0])
       throw new Error(
-        "Select an active Parameter from the Universal Parameter Master."
+        `Parameter "${input.name}" is not an active Parameter in the Universal Parameter Master.`
       )
     const instrumentName = String(input.payload.instrumentUsed ?? "").trim()
     const instrument = instrumentName
@@ -866,7 +866,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
       : null
     if (instrumentName && !instrument?.rows[0]) {
       throw new Error(
-        "Select an active Measuring Instrument from the Universal Measuring Instrument Master."
+        `Measuring Instrument "${instrumentName}" is not active in the Universal Measuring Instrument Master.`
       )
     }
     if (!skipDuplicateCheck && (input.active ?? true)) {
