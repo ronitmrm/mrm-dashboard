@@ -284,6 +284,10 @@ function savedBreaks(payload: Record<string, unknown>) {
   }))
 }
 
+function eventTimeMs(value: unknown) {
+  return (value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""))) || 0
+}
+
 function downtimeIntervals(events: unknown, now: Date): TimeInterval[] {
   if (!Array.isArray(events)) return []
   return events.flatMap((event) => {
@@ -4687,7 +4691,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         ...workflowResult.rows,
         ...plannerMovementEvents,
       ].sort((left, right) =>
-        String(right.eventTime ?? "").localeCompare(String(left.eventTime ?? ""))
+        eventTimeMs(right.eventTime) - eventTimeMs(left.eventTime)
       )
 
       return {
