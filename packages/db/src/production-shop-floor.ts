@@ -5510,7 +5510,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           const openSession = await client.query<{ id: string }>(
             `
               SELECT id FROM manufacturing.production_sessions
-              WHERE work_order_id = $1 AND operation_setup_id = $2
+              WHERE work_order_id = $1 AND (operation_setup_id = $2 OR operation_setup_id IS NULL)
                 AND machine_id = $3 AND status = 'open'
                 AND reversed_at IS NULL
               LIMIT 1
@@ -5588,6 +5588,22 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         }
         const stateToUpdate = existingOnMachine
           ?? (assignmentMode === "move" ? otherMachineState : undefined)
+        // A task left behind on a machine the setup moved away from must not
+        // reopen the setup there after it finished elsewhere.
+        if (claimingMachine && !stateToUpdate && current.rows.some((row) => row.stage === "item_complete")) {
+          const plannedHere = await client.query(
+            `SELECT 1 FROM manufacturing.plan_override_events
+             WHERE work_order_id = $1 AND (operation_setup_id = $2 OR operation_setup_id IS NULL)
+               AND target_machine_id = $3 AND reversed_at IS NULL
+             LIMIT 1`,
+            [workOrder.work_order_id, setupId, machineId]
+          )
+          if (!plannedHere.rows[0]) {
+            throw new ShopFloorConflictError(
+              `This setup is already Item Complete on another machine, so it cannot restart on ${input.machineNumber}. Refresh the tasks.`
+            )
+          }
+        }
         if (claimingMachine) {
           const occupied = await client.query<{
             id: string
@@ -6189,7 +6205,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           const openSession = await client.query<{ id: string }>(
             `
               SELECT id FROM manufacturing.production_sessions
-              WHERE work_order_id = $1 AND operation_setup_id = $2
+              WHERE work_order_id = $1 AND (operation_setup_id = $2 OR operation_setup_id IS NULL)
                 AND machine_id = $3 AND status = 'open'
                 AND reversed_at IS NULL
               LIMIT 1
