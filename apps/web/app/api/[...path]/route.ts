@@ -177,9 +177,8 @@ function json(payload: unknown, status = 200) {
   })
 }
 
-function dashboardRouteError(err: unknown) {
-  const status =
-    err instanceof DuplicateMasterError
+function routeErrorStatus(err: unknown) {
+  return err instanceof DuplicateMasterError
       ? 409
       : err instanceof RouteError ||
           err instanceof ShopFloorConflictError ||
@@ -191,6 +190,10 @@ function dashboardRouteError(err: unknown) {
           err instanceof TemplateUploadError
         ? err.status
         : 500
+}
+
+function dashboardRouteError(err: unknown) {
+  const status = routeErrorStatus(err)
   if (status >= 500) console.error("Dashboard API request failed", err)
   const response = dashboardErrorResponse(err, status)
   return json({ error: response.error }, response.status)
@@ -2542,9 +2545,14 @@ async function post(request: NextRequest, context: RouteContext) {
           if (capability) await authorizedDashboardSession(request, capability)
         }
         await withCsvImportTransaction(() =>
-          importAutoCodedMasterRows(entryType, importedRows, (payload) =>
-            executePostgresOperationalEntry(request, entryType, payload, "import")
-          )
+          importAutoCodedMasterRows(entryType, importedRows, async (payload, index) => {
+            try {
+              return await executePostgresOperationalEntry(request, entryType, payload, "import")
+            } catch (error) {
+              if (routeErrorStatus(error) < 500) throw error
+              throw new RouteError(400, planningImportRowError(entryType, index, payload, error))
+            }
+          })
         )
         return json(
           await withPlanningRefresh(request, path, body, {
