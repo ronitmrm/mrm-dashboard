@@ -4022,6 +4022,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         ),
         pool.query<Record<string, unknown>>(
           `SELECT summary.*, item.uid AS part_code, session.source_payload AS "sessionPayload",
+             session.closed_recorded_at AS "closeRecordedAt",
              COALESCE(downtime.intervals, '[]'::jsonb) AS "downtimeIntervals"
            FROM reporting.production_session_summary summary
            JOIN manufacturing.production_sessions session ON session.id = summary.id
@@ -4326,7 +4327,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               quantity_kg AS "quantityKg", remaining_quantity_kg AS "remainingQuantityKg",
               heat_number AS "heatNumber", supplier_name AS "supplierName",
               source_payload->>'rmLocation' AS "rmLocation",
-              source_payload AS "sourcePayload"
+              source_payload AS "sourcePayload", created_at AS "recordedAt"
            FROM manufacturing.raw_material_receipts
            WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
              AND reversed_at IS NULL
@@ -4414,7 +4415,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               inspection.inspected_at AS "checkedAt", inspection.status,
               setup.setup_number::text AS "setupNumber", route.route_code AS "routeCode",
               machine.machine_number AS "machineNumber",
-              COALESCE(inspector.name, inspection.legacy_inspector) AS "checkedBy"
+              COALESCE(inspector.name, inspection.legacy_inspector) AS "checkedBy",
+              COALESCE(inspection.recorded_at, inspection.inspected_at) AS "recordedAt"
            FROM quality.first_piece_inspections inspection
            JOIN manufacturing.operation_setups setup ON setup.id = inspection.operation_setup_id
            JOIN manufacturing.route_options route ON route.id = setup.route_option_id
@@ -4427,7 +4429,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
            SELECT 'hourly', check_row.id::text, check_row.check_key,
               check_row.checked_at, check_row.status, setup.setup_number::text,
               route.route_code, machine.machine_number,
-              COALESCE(checker.name, check_row.legacy_checker)
+              COALESCE(checker.name, check_row.legacy_checker),
+              COALESCE(check_row.recorded_at, check_row.checked_at)
            FROM quality.hourly_checks check_row
            JOIN manufacturing.operation_setups setup ON setup.id = check_row.operation_setup_id
            JOIN manufacturing.route_options route ON route.id = setup.route_option_id

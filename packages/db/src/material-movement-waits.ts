@@ -112,7 +112,7 @@ export async function readMaterialMovementWaits(client: QueryClient, organizatio
   const result = await client.query<{
     id: string; jobCardNumber: string; partCode: string; setupNumber: number; optionNumber: string
     machineNumber: string; readyAt: Date; endedAt: Date | null; outcome: string | null
-    recordedBy: string | null; reason: string | null; calendar: MovementCalendar
+    recordedBy: string | null; reason: string | null; recordedAt: Date | null; calendar: MovementCalendar
   }>(`SELECT wait.id, work_order.job_card_number AS "jobCardNumber", item.uid AS "partCode",
       setup.setup_number AS "setupNumber", route.route_code AS "optionNumber",
       machine.machine_number AS "machineNumber", wait.ready_at AS "readyAt",
@@ -125,6 +125,7 @@ export async function readMaterialMovementWaits(client: QueryClient, organizatio
           WHERE state.machine_id = wait.machine_id AND state.active AND state.stage <> 'planned') THEN 'unrecorded'
         WHEN event.id IS NOT NULL OR wait.ended_at IS NOT NULL THEN 'blocked' END AS outcome,
       COALESCE(NULLIF(event.legacy_actor, ''), actor.name) AS "recordedBy", event.reason,
+      COALESCE(event.recorded_at, event.occurred_at) AS "recordedAt",
       wait.calendar
     FROM manufacturing.material_movement_waits wait
     JOIN manufacturing.work_orders work_order ON work_order.id = wait.work_order_id
@@ -148,8 +149,9 @@ export async function readMaterialMovementWaits(client: QueryClient, organizatio
       AND lower(work_order.job_card_number) = lower($3)
     ORDER BY wait.ready_at DESC`, [organizationId, floor, jobCardNumber])
   const now = new Date()
-  return result.rows.map(({ calendar, readyAt, endedAt, ...row }) => ({ ...row,
+  return result.rows.map(({ calendar, readyAt, endedAt, recordedAt, ...row }) => ({ ...row,
     readyAt: readyAt.toISOString(), endedAt: endedAt?.toISOString() ?? null,
+    recordedAt: recordedAt?.toISOString() ?? null,
     workingMinutes: row.outcome === "corrected" || row.outcome === "unrecorded" || (endedAt && endedAt < readyAt) ? null
       : materialMovementWorkingMinutes(readyAt, endedAt ?? now, floor, calendar) }))
 }

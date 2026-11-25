@@ -39,11 +39,12 @@ export function JobCardQualityRecords({ rows, floor }: { rows: Row[]; floor: Pro
     return <SectionCard key={kind}>
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
       <CardContent><OperationalTable containerClassName="max-h-[32rem] rounded-md border" filterStorageKey={`job-card-quality-${kind}`}>
-        <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Setup</TableHead><TableHead>Route</TableHead><TableHead>Machine</TableHead><TableHead>Checked By</TableHead><TableHead>Status</TableHead><TableHead>Report</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Setup</TableHead><TableHead>Route</TableHead><TableHead>Machine</TableHead><TableHead>Checked By</TableHead><TableHead>Status</TableHead><TableHead>Report</TableHead><TableHead>Timestamp</TableHead></TableRow></TableHeader>
         <TableBody>{records.length ? records.map((row) => <TableRow key={text(row.id)}>
           <TableCell>{formatIstDateTime(text(row.checkedAt))}</TableCell><TableCell>{text(row.setupNumber)}</TableCell><TableCell>{text(row.routeCode)}</TableCell><TableCell>{text(row.machineNumber) || "-"}</TableCell><TableCell>{text(row.checkedBy) || "-"}</TableCell><TableCell><StatusBadge value={text(row.status)} /></TableCell>
           <TableCell>{row.reportKey ? <Link className="font-medium text-primary underline underline-offset-4" href={`${path}?${new URLSearchParams({ floor, [parameter]: text(row.reportKey) })}`}>Open report</Link> : "Unavailable"}</TableCell>
-        </TableRow>) : <TableRow><TableCell colSpan={7}>No saved records for this Job Card.</TableCell></TableRow>}</TableBody>
+          <TableCell className="whitespace-nowrap text-muted-foreground">{formatIstDateTime(text(row.recordedAt))}</TableCell>
+        </TableRow>) : <TableRow><TableCell colSpan={8}>No saved records for this Job Card.</TableCell></TableRow>}</TableBody>
       </OperationalTable></CardContent>
     </SectionCard>
   })}</>

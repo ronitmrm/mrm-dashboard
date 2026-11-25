@@ -16,6 +16,7 @@ export async function readJobCardRevisions(client: QueryClient, input: {
     ) SELECT work_order.id, work_order.job_card_number AS "jobCardNumber",
       root.job_card_number AS "rootJobCardNumber", work_order.ordered_quantity::text AS quantity,
       COALESCE(work_order.source_payload, '{}'::jsonb) AS "sourcePayload", work_order.status,
+      work_order.created_at::text AS "createdAt",
       COALESCE((SELECT sum(quantity_kg) FROM manufacturing.raw_material_receipts receipt
         WHERE receipt.organization_id = $1 AND lower(receipt.job_card_number) = lower(work_order.job_card_number)
           AND receipt.reversed_at IS NULL), 0)::text AS "receivedKg",
@@ -75,7 +76,8 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     UNION ALL
     SELECT work_order.job_card_number, inspection.inspected_at, 'first_piece_inspection',
       setup.setup_number::text, machine.machine_number, inspector.name, NULL,
-      concat_ws(' · ', inspection.check_key, inspection.status), NULL, NULL, NULL::timestamptz
+      concat_ws(' · ', inspection.check_key, inspection.status), NULL, NULL,
+      COALESCE(inspection.recorded_at, inspection.inspected_at)
     FROM quality.first_piece_inspections inspection
     JOIN manufacturing.work_orders work_order ON work_order.id = inspection.work_order_id
     JOIN manufacturing.operation_setups setup ON setup.id = inspection.operation_setup_id
@@ -85,7 +87,8 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     UNION ALL
     SELECT work_order.job_card_number, check_row.checked_at, 'in_process_inspection',
       setup.setup_number::text, machine.machine_number, checker.name, NULL,
-      concat_ws(' · ', check_row.check_key, check_row.status), NULL, NULL, NULL::timestamptz
+      concat_ws(' · ', check_row.check_key, check_row.status), NULL, NULL,
+      COALESCE(check_row.recorded_at, check_row.checked_at)
     FROM quality.hourly_checks check_row
     JOIN manufacturing.work_orders work_order ON work_order.id = check_row.work_order_id
     JOIN manufacturing.operation_setups setup ON setup.id = check_row.operation_setup_id
