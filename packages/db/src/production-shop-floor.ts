@@ -3101,6 +3101,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               total_pieces = $8, quantity_good = $9,
               quantity_rejected = $10, closed_by_user_id = $11,
               closed_by_role = $12, source_payload = $13, updated_at = now(),
+              closed_recorded_at = now(),
               row_version = row_version + 1
             WHERE id = $14
           `,
@@ -4083,7 +4084,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               entered_role AS "enteredRole", setup_number AS "setupNumber",
               machine_number AS "machineNumber", operator_code AS "operatorCode",
               NULL::text AS "rejectionTypeName", NULL::text AS "rejectionReasonName",
-              NULL::text AS "defectName"
+              NULL::text AS "defectName", recorded_at AS "recordedAt"
            FROM reporting.production_event_log
            WHERE organization_id = $1 AND production_floor_code = $2
              AND lower(job_card_number) = lower($3)
@@ -4096,7 +4097,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
              rejection.quantity, actor.name, rejection.entered_role,
              session.setup_number_snapshot, session.machine_number_snapshot,
              session.operator_code_snapshot,
-             rejection.type_name, rejection.remark_name, rejection.reason_name
+             rejection.type_name, rejection.remark_name, rejection.reason_name,
+             rejection.recorded_at
            FROM manufacturing.production_session_rejection_events rejection
            JOIN manufacturing.production_sessions session ON session.id = rejection.production_session_id
            JOIN catalog.machines machine ON machine.id = session.machine_id
@@ -4111,10 +4113,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         pool.query<Record<string, unknown>>(
           `
             SELECT event_type AS "eventType", event_time AS "eventTime",
+              recorded_at AS "recordedAt",
               "setupNumber", "machineNumber", "enteredByName", detail
             FROM (
               SELECT 'shop_floor_stage'::text AS event_type,
-                event.occurred_at AS event_time,
+                event.occurred_at AS event_time, event.recorded_at,
                 setup.setup_number::text AS "setupNumber",
                 machine.machine_number AS "machineNumber",
                 actor.name AS "enteredByName",
@@ -4128,7 +4131,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
               WHERE state.work_order_id = $1 AND event.reversed_at IS NULL
               UNION ALL
-              SELECT 'setup_completed', event.completed_at,
+              SELECT 'setup_completed', event.completed_at, event.completed_at,
                 setup.setup_number::text, machine.machine_number,
                 actor.name, COALESCE(event.notes, 'Setup completed')
               FROM manufacturing.setup_completion_events event
@@ -4137,7 +4140,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
               WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
               UNION ALL
-              SELECT 'dispatch_' || event.decision, event.occurred_at,
+              SELECT 'dispatch_' || event.decision, event.occurred_at, event.occurred_at,
                 NULL::text, NULL::text, actor.name,
                 CASE WHEN event.quantity IS NULL
                   THEN COALESCE(event.reason, 'Dispatch decision')
@@ -4149,7 +4152,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
               WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
               UNION ALL
-              SELECT 'production_card_' || event.event_type, event.event_at,
+              SELECT 'production_card_' || event.event_type, event.event_at, event.event_at,
                 setup.setup_number::text, machine.machine_number,
                 actor.name,
                 COALESCE(
@@ -4659,6 +4662,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         detail: `Production entry · ${Number(row.rejectedPieces ?? 0)} rejected`,
         enteredByName: row.enteredByName,
         eventTime: row.endedAt ?? row.recordedAt,
+        recordedAt: row.recordedAt,
         eventType: "production_entry",
         machineNumber: row.machineNumber,
         operatorCode: row.operatorCode,
@@ -4680,6 +4684,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         ].filter(Boolean).join(" · "),
         enteredByName: movement.recordedByName,
         eventTime: movement.eventTime,
+        recordedAt: movement.eventTime,
         eventType: `planner_${movement.actionType}`,
         machineNumber: movement.toMachineNumber ?? movement.fromMachineNumber,
         quantity: movement.settledGoodPieces || null,

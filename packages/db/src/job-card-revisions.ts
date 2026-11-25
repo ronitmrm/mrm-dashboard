@@ -57,13 +57,13 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
       log.event_type AS "eventType", log.setup_number AS "setupNumber", log.machine_number AS "machineNumber",
       log.entered_by_name AS "enteredByName", log.entered_role AS "enteredRole",
       concat_ws(' · ', log.session_reference, log.reason_name) AS detail,
-      log.quantity, log.duration_minutes AS "durationMinutes"
+      log.quantity, log.duration_minutes AS "durationMinutes", log.recorded_at AS "recordedAt"
     FROM reporting.production_event_log log WHERE log.organization_id = $1
       AND log.production_floor_code = $2 AND log.job_card_number = ANY($3::text[])
     UNION ALL
     SELECT work_order.job_card_number, entry.recorded_at, 'production_entry',
       setup.setup_number::text, machine.machine_number, actor.name, NULL,
-      entry.quantity_rejected::text || ' rejected', entry.quantity_good, NULL
+      entry.quantity_rejected::text || ' rejected', entry.quantity_good, NULL, entry.recorded_at
     FROM manufacturing.production_entries entry
     JOIN manufacturing.work_orders work_order ON work_order.id = entry.work_order_id
     LEFT JOIN manufacturing.operation_setups setup ON setup.id = entry.operation_setup_id
@@ -75,7 +75,7 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     UNION ALL
     SELECT work_order.job_card_number, inspection.inspected_at, 'first_piece_inspection',
       setup.setup_number::text, machine.machine_number, inspector.name, NULL,
-      concat_ws(' · ', inspection.check_key, inspection.status), NULL, NULL
+      concat_ws(' · ', inspection.check_key, inspection.status), NULL, NULL, NULL::timestamptz
     FROM quality.first_piece_inspections inspection
     JOIN manufacturing.work_orders work_order ON work_order.id = inspection.work_order_id
     JOIN manufacturing.operation_setups setup ON setup.id = inspection.operation_setup_id
@@ -85,7 +85,7 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     UNION ALL
     SELECT work_order.job_card_number, check_row.checked_at, 'in_process_inspection',
       setup.setup_number::text, machine.machine_number, checker.name, NULL,
-      concat_ws(' · ', check_row.check_key, check_row.status), NULL, NULL
+      concat_ws(' · ', check_row.check_key, check_row.status), NULL, NULL, NULL::timestamptz
     FROM quality.hourly_checks check_row
     JOIN manufacturing.work_orders work_order ON work_order.id = check_row.work_order_id
     JOIN manufacturing.operation_setups setup ON setup.id = check_row.operation_setup_id
@@ -94,12 +94,12 @@ export async function readJobCardRevisionHistory(client: QueryClient, organizati
     WHERE check_row.organization_id = $1 AND check_row.work_order_id = ANY($4::uuid[]) AND check_row.reversed_at IS NULL
     UNION ALL
     SELECT receipt.job_card_number, receipt.created_at, 'raw_material_received', NULL, NULL, NULL, NULL,
-      concat_ws(' · ', receipt.receipt_number, receipt.quantity_kg::text || ' kg'), NULL, NULL
+      concat_ws(' · ', receipt.receipt_number, receipt.quantity_kg::text || ' kg'), NULL, NULL, receipt.created_at
     FROM manufacturing.raw_material_receipts receipt WHERE receipt.organization_id = $1
       AND receipt.job_card_number = ANY($3::text[]) AND receipt.reversed_at IS NULL
     UNION ALL
     SELECT work_order.job_card_number, dispatch.occurred_at, 'dispatch', NULL, NULL, actor.name, NULL,
-      dispatch.reason, dispatch.quantity, NULL
+      dispatch.reason, dispatch.quantity, NULL, dispatch.occurred_at
     FROM manufacturing.dispatch_approval_events dispatch
     JOIN manufacturing.work_orders work_order ON work_order.id = dispatch.work_order_id
     LEFT JOIN identity.users actor ON actor.id = dispatch.actor_user_id
