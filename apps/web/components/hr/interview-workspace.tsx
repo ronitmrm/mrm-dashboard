@@ -160,6 +160,7 @@ export function InterviewScheduleBoard({
             <TableHeader>
               <TableRow>
                 <TableHead>Candidate</TableHead>
+                <TableHead>Contact</TableHead>
                 <TableHead>Job</TableHead>
                 <TableHead>Job Description Template</TableHead>
                 <TableHead>Date</TableHead>
@@ -177,11 +178,17 @@ export function InterviewScheduleBoard({
                     <TableCell>
                       <Link
                         className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
-                        href={`/hr/candidates/${row.candidateId}`}
+                        href={`/hr/candidates/${row.candidateId}?source=interviews`}
                         title="Open candidate profile and conversation log"
                       >
                         {row.candidateName}
                       </Link>
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      <div>{row.candidatePhone}</div>
+                      {row.candidateEmail ? (
+                        <div className="text-muted-foreground">{row.candidateEmail}</div>
+                      ) : null}
                     </TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
                     <TableCell className="font-mono" data-filter-value={row.requirementTemplateCode ?? "—"}>
@@ -227,7 +234,7 @@ export function InterviewScheduleBoard({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={showActions ? 7 : 6}
+                    colSpan={showActions ? 8 : 7}
                   >
                     No Interviews Are Scheduled For This Date.
                   </TableCell>
