@@ -1,7 +1,19 @@
 ALTER TABLE manufacturing.production_sessions
   ADD COLUMN closed_recorded_at timestamptz;
 
--- Older closes keep NULL: updated_at moves on later edits, so it is not the entry time.
+-- Best estimate for older closes: updated_at, unless a later session edit moved it,
+-- then the first edit after the close time. Never earlier than the close time itself.
+UPDATE manufacturing.production_sessions session
+SET closed_recorded_at = GREATEST(session.ended_at, LEAST(session.updated_at, COALESCE((
+  SELECT min(edit.occurred_at) FROM audit.events edit
+  WHERE edit.organization_id = session.organization_id
+    AND edit.occurred_at >= session.ended_at
+    AND ((edit.target_table = 'production_sessions' AND edit.target_id = session.id)
+      OR (edit.target_table = 'production_session_downtime_events' AND edit.target_id IN (
+        SELECT downtime.id FROM manufacturing.production_session_downtime_events downtime
+        WHERE downtime.production_session_id = session.id)))
+), session.updated_at)))
+WHERE session.status = 'closed' AND session.ended_at IS NOT NULL;
 
 CREATE OR REPLACE VIEW reporting.production_event_log AS
 SELECT session.organization_id,
