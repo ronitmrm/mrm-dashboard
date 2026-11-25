@@ -83,12 +83,14 @@ export function ConversationLogsTable({
   canWrite = false,
   events,
   returnCandidateId,
+  returnSource,
   showCandidate = true,
   title = "Conversation logs",
 }: {
   canWrite?: boolean
   events: RecruitmentCandidateEventRow[]
   returnCandidateId?: string
+  returnSource?: "interviews"
   showCandidate?: boolean
   title?: string
 }) {
@@ -244,6 +246,9 @@ export function ConversationLogsTable({
                               value={returnCandidateId}
                             />
                           ) : null}
+                          {returnSource ? (
+                            <input name="return_source" type="hidden" value={returnSource} />
+                          ) : null}
                           <input
                             name="event_id"
                             type="hidden"
@@ -300,6 +305,9 @@ export function ConversationLogsTable({
                 type="hidden"
                 value={returnCandidateId}
               />
+            ) : null}
+            {returnSource ? (
+              <input name="return_source" type="hidden" value={returnSource} />
             ) : null}
             <input name="event_id" type="hidden" value={editingEvent.id} />
             <SheetHeader>

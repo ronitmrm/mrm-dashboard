@@ -51,7 +51,7 @@ export default async function CandidateWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string; success?: string }>
+  searchParams: Promise<{ error?: string; source?: string; success?: string }>
 }) {
   const { id } = await params
   const feedback = await searchParams
@@ -98,6 +98,7 @@ export default async function CandidateWorkspacePage({
   if (!workspace) notFound()
 
   const { applications, candidate, events } = workspace
+  const returnSource = feedback.source === "interviews" ? "interviews" : undefined
   return (
     <div className="grid gap-6">
       {feedback.error || feedback.success ? (
@@ -108,10 +109,17 @@ export default async function CandidateWorkspacePage({
         </Alert>
       ) : null}
       <Button asChild className="w-fit" size="sm" variant="ghost">
-        <Link href="/hr?panel=candidatesPanel&masterView=masterTables">
-          <ArrowLeft data-icon="inline-start" />
-          Back To Candidates
-        </Link>
+        {returnSource ? (
+          <Link href="/hr?panel=interviewsPanel">
+            <ArrowLeft data-icon="inline-start" />
+            Back To Interview Schedule
+          </Link>
+        ) : (
+          <Link href="/hr?panel=candidatesPanel&masterView=masterTables">
+            <ArrowLeft data-icon="inline-start" />
+            Back To Candidates
+          </Link>
+        )}
       </Button>
 
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -186,6 +194,9 @@ export default async function CandidateWorkspacePage({
                 type="hidden"
                 value={candidate.id}
               />
+              {returnSource ? (
+                <input name="return_source" type="hidden" value={returnSource} />
+              ) : null}
               <Field>
                 <FieldLabel htmlFor="edit-candidate-name">Name</FieldLabel>
                 <Input
@@ -378,6 +389,7 @@ export default async function CandidateWorkspacePage({
         canWrite={canWrite}
         events={events}
         returnCandidateId={candidate.id}
+        returnSource={returnSource}
         showCandidate={false}
         title="Candidate Conversation History"
       />

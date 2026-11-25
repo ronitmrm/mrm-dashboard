@@ -5,7 +5,11 @@ const uuidPattern =
 export function hrReturnPath(formData: FormData) {
   const returnCandidateId = formValue(formData, "return_candidate_id")
   if (uuidPattern.test(returnCandidateId)) {
-    return `${hrPath}/candidates/${returnCandidateId}`
+    const source =
+      formValue(formData, "return_source") === "interviews"
+        ? "?source=interviews"
+        : ""
+    return `${hrPath}/candidates/${returnCandidateId}${source}`
   }
 
   const returnJobId = formValue(formData, "return_job_id")

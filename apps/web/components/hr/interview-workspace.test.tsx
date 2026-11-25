@@ -17,7 +17,7 @@ import { InterviewScheduleBoard } from "./interview-workspace"
 import { InterviewScheduleForm } from "./interview-schedule-form"
 
 const scheduled: RecruitmentInterviewRow = {
-  applicationId: "scheduled", candidateId: "candidate", candidateName: "Scheduled Candidate",
+  applicationId: "scheduled", candidateEmail: null, candidateId: "candidate", candidatePhone: "9999999999", candidateName: "Scheduled Candidate",
   interviewAt: "2026-10-21T05:00:00.000Z", jobId: "job", jobNumber: "JOB-1",
   requirementTemplateCode: null, joiningDate: null, jobTitle: "Assistant",
   latestRound: "Screening Round", latestStatus: "Scheduled", nextRound: "Screening Round",
