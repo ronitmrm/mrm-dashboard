@@ -10,7 +10,9 @@ EnvironmentFile=%h/srv/slots/%i/stack.env
 EnvironmentFile=%h/srv/slots/%i/slot.env
 Environment=PATH=%h/.nvm/versions/node/v24.22.2/bin:/usr/local/bin:/usr/bin:/bin
 ExecStartPre=/usr/bin/pg_isready -h 127.0.0.1 -q -t 60
-ExecStart=%h/srv/slots/%i/app/apps/web/node_modules/.bin/next start -p %i -H 127.0.0.1
+# Node's default 16 KB header limit answers bulk selections in the URL (up to 500
+# Unit IDs, e.g. Main Store transfer) with an empty 431, which Cloudflare shows as 520.
+ExecStart=%h/.nvm/versions/node/v24.22.2/bin/node --max-http-header-size=65536 %h/srv/slots/%i/app/apps/web/node_modules/next/dist/bin/next start -p %i -H 127.0.0.1
 SuccessExitStatus=143
 Restart=always
 RestartSec=3
