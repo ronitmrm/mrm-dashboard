@@ -1,6 +1,13 @@
 import { productionBreakIntervals, type ProductionBreak, type TimeInterval } from "./production-breaks"
 
 export type ProductionMeasurementMethod = "counter" | "weight"
+
+// Units whose machines have a piece counter; others record output by weight.
+const machineCounterFloorCodes = new Set(["cnc", "forging"])
+
+export function productionFloorUsesMachineCounter(productionFloorCode: string) {
+  return machineCounterFloorCodes.has(productionFloorCode.trim().toLowerCase())
+}
 export type ProductionDowntimeEndOutcome =
   | "resolved"
   | "shift_end_unresolved"
