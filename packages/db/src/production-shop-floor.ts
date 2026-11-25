@@ -38,6 +38,7 @@ import {
   calculateProductionSessionOutput,
   formatProductionSessionReference,
   productionDowntimeEndOutcome,
+  productionFloorUsesMachineCounter,
   productionSessionEfficiency,
   productionSessionShiftTarget,
   productionShiftAt,
@@ -1752,8 +1753,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const measurementMethod = productionMeasurementMethod(
           input.measurementMethod
         )
-        if (measurementMethod === "counter" && floorCode !== "cnc") {
-          throw new Error("Machine-counter sessions are available only in CNC.")
+        if (measurementMethod === "counter" && !productionFloorUsesMachineCounter(floorCode)) {
+          throw new Error("Machine-counter sessions are available only in CNC and Forging.")
         }
         const startedAt = requiredTimestamp(input.startedAt, "Session start")
         const workOrder = await workOrderContext(
