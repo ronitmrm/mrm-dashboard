@@ -2974,7 +2974,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           throw new Error("Setup number is required to add a parallel machine.")
         }
         if (assignmentMode === "early_downstream" && (input.setupNumber !== 2 || input.fromMachineNumber || input.interruptedSetups?.length)) {
-          throw new Error("Early downstream planning requires Setup 2 without a machine interruption.")
+          throw new ShopFloorConflictError("Early downstream planning requires Setup 2 without a machine interruption.")
         }
         const workOrder = await workOrderFor(
           client,
@@ -3072,7 +3072,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           }
         }
         if (assignmentMode === "early_downstream" && targetLock.rows[0]) {
-          throw new Error("Target machine is not idle. Finish or move its active setup first.")
+          throw new ShopFloorConflictError("Target machine is not idle. Finish or move its active setup first.")
         }
         if (
           targetLock.rows[0] &&
@@ -3113,7 +3113,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           throw new Error("Requested setup is not on the current route. Refresh the plan before continuing.")
         }
         if (assignmentMode === "early_downstream") {
-          if (!operationSetupId) throw new Error("Select a route with Setup 2 before planning it early.")
+          if (!operationSetupId) throw new ShopFloorConflictError("Select a route with Setup 2 before planning it early.")
           const compatibility = await client.query<{
             route_family: string | null
             route_type: string | null
@@ -3137,7 +3137,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           const compatible = compatibility.rows[0]
           if (!compatible?.upstream_setup_id || !machineFamilyMatches(compatible.route_family, compatible.machine_family)
             || (compatible.route_type && compatible.machine_type && compatible.route_type.toLowerCase() !== compatible.machine_type.toLowerCase())) {
-            throw new Error("Choose an active machine compatible with Setup 2 and a route with Setup 1.")
+            throw new ShopFloorConflictError("Choose an active machine compatible with Setup 2 and a route with Setup 1.")
           }
           const existing = await client.query<{ upstream_on_target: boolean; setup_two_started: boolean; already_reserved: boolean }>(
             `SELECT EXISTS (
@@ -3162,9 +3162,9 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
              ) AS already_reserved`,
             [workOrder.id, operationSetupId, compatible.upstream_setup_id, targetMachineId]
           )
-          if (existing.rows[0]?.upstream_on_target) throw new Error("Choose a different machine from Setup 1.")
-          if (existing.rows[0]?.setup_two_started) throw new Error("Setup 2 has already started; use its existing plan.")
-          if (existing.rows[0]?.already_reserved) throw new Error("Setup 2 already has an early reservation. Reverse it before changing machines.")
+          if (existing.rows[0]?.upstream_on_target) throw new ShopFloorConflictError("Choose a different machine from Setup 1.")
+          if (existing.rows[0]?.setup_two_started) throw new ShopFloorConflictError("Setup 2 has already started; use its existing plan.")
+          if (existing.rows[0]?.already_reserved) throw new ShopFloorConflictError("Setup 2 already has an early reservation. Reverse it before changing machines.")
         }
         if (assignmentMode === "add_parallel_machine") {
           const review = await readParallelMachineReview(client, input, {
