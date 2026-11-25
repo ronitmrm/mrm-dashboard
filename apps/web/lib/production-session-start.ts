@@ -56,6 +56,9 @@ export function productionSessionActionDefaults(
   const clock = productionClock(instant)
   const localNow = istDateTimeInputValue(instant)
   const contextualDate = istDateValue(context.productionDate ?? "") || undefined
+  // Closing before shift end defaults to now; the server rejects future end times.
+  const endNoLaterThanNow = (shiftEnd: string) =>
+    shiftEnd < localNow ? shiftEnd : localNow
 
   if (floor === "cnc") {
     const activeShift = context.shift === "A" || context.shift === "B" || context.shift === "C"
@@ -77,7 +80,7 @@ export function productionSessionActionDefaults(
     } as const
     const [startTime, endTime] = times[activeShift]
     return {
-      endAt: `${activeShift === "C" ? moveDate(productionDate, 1) : productionDate}T${endTime}`,
+      endAt: endNoLaterThanNow(`${activeShift === "C" ? moveDate(productionDate, 1) : productionDate}T${endTime}`),
       endReason: "shift_end" as const,
       startAt: context.action === "downtime" ? localNow : `${productionDate}T${startTime}`,
     }
@@ -86,7 +89,7 @@ export function productionSessionActionDefaults(
   const productionDate = contextualDate ?? clock.date
   if (generalFloors.has(floor)) {
     return {
-      endAt: `${productionDate}T20:00`,
+      endAt: endNoLaterThanNow(`${productionDate}T20:00`),
       endReason: "shift_end" as const,
       startAt: context.action === "downtime" ? localNow : `${productionDate}T08:30`,
     }

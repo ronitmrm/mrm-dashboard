@@ -17,14 +17,14 @@ describe("production session action defaults", () => {
     ).toBe("2026-08-16T16:00")
   })
 
-  it("prefills the Conventional shift start, shift end, and close reason", () => {
+  it("prefills the Conventional shift start and close reason, ending now when before shift end", () => {
     expect(
       productionSessionActionDefaults(
         "conventional",
         new Date("2026-08-16T10:30:00.000Z")
       )
     ).toEqual({
-      endAt: "2026-08-16T20:00",
+      endAt: "2026-08-16T16:00",
       endReason: "shift_end",
       startAt: "2026-08-16T08:30",
     })
@@ -37,7 +37,7 @@ describe("production session action defaults", () => {
         new Date("2026-08-16T19:30:00.000Z")
       )
     ).toEqual({
-      endAt: "2026-08-17T06:00",
+      endAt: "2026-08-17T01:00",
       endReason: "shift_end",
       startAt: "2026-08-16T22:00",
     })
