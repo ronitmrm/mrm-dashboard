@@ -108,3 +108,11 @@ ALTER TABLE manufacturing.shop_floor_stage_events
   ADD COLUMN recorded_at timestamptz;
 ALTER TABLE manufacturing.shop_floor_stage_events
   ALTER COLUMN recorded_at SET DEFAULT now();
+
+-- Quality checks can carry a user-entered check time; keep the save time too.
+-- Older rows stay NULL (readers fall back to the check time) to avoid
+-- rewriting every row through the dashboard sync triggers.
+ALTER TABLE quality.first_piece_inspections ADD COLUMN recorded_at timestamptz;
+ALTER TABLE quality.first_piece_inspections ALTER COLUMN recorded_at SET DEFAULT now();
+ALTER TABLE quality.hourly_checks ADD COLUMN recorded_at timestamptz;
+ALTER TABLE quality.hourly_checks ALTER COLUMN recorded_at SET DEFAULT now();
