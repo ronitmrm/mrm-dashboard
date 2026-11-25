@@ -195,6 +195,7 @@ function routeErrorStatus(err: unknown) {
 function dashboardRouteError(err: unknown) {
   const status = routeErrorStatus(err)
   if (status >= 500) console.error("Dashboard API request failed", err)
+  else console.warn("Dashboard API request rejected", status, err instanceof Error ? err.message : err)
   const response = dashboardErrorResponse(err, status)
   return json({ error: response.error }, response.status)
 }
@@ -705,6 +706,13 @@ async function withProductionRepository<T>(
   const context = await authenticatedProductionContext(request, capability)
   try {
     return await operation(context)
+  } catch (error) {
+    // Business-rule failures are plain Errors; show their message instead of
+    // a generic 500. Database/system errors carry a `code` and stay 500.
+    if (routeErrorStatus(error) >= 500 && error instanceof Error && !("code" in error)) {
+      throw new RouteError(400, error.message)
+    }
+    throw error
   } finally {
     await context.repository.close()
   }
