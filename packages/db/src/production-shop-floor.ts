@@ -3292,24 +3292,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const shift = productionShiftAt(current.production_floor_code, startedAt)
         if (!shift) throw new Error("Session start must be within a production shift.")
         if (startedAt.getTime() !== current.started_at.getTime()) {
-          const neighbours = await client.query<{
-            started_at: Date; ended_at: Date | null
-          }>(`(SELECT started_at, ended_at FROM manufacturing.production_sessions
-              WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at <= $3
-              ORDER BY started_at DESC, created_at DESC, id DESC LIMIT 1)
-            UNION ALL
-            (SELECT started_at, ended_at FROM manufacturing.production_sessions
-              WHERE machine_id = $1 AND id <> $2 AND reversed_at IS NULL AND started_at >= $3
-              ORDER BY started_at, created_at, id LIMIT 1)`,
-            [current.machine_id, input.sessionId, current.started_at.toISOString()])
-          for (const neighbour of neighbours.rows) {
-            const overlaps = neighbour.started_at <= current.started_at
-              ? !neighbour.ended_at || startedAt < neighbour.ended_at
-              : startedAt >= neighbour.started_at || !current.ended_at || current.ended_at > neighbour.started_at
-            if (overlaps) throw new ShopFloorConflictError("Corrected start would overlap or change the order of machine sessions.")
-          }
+          // An open session occupies the machine until now.
           await assertProductionSessionDoesNotOverlap(client, {
-            machineId: current.machine_id, startedAt, endedAt: current.ended_at ?? undefined, sessionId: input.sessionId,
+            machineId: current.machine_id, startedAt, endedAt: current.ended_at ?? new Date(), sessionId: input.sessionId,
           })
         }
         const downtime = await client.query<{ started_at: Date; ended_at: Date | null; duration_minutes: number | null }>(`
