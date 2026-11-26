@@ -1500,7 +1500,12 @@ describe("production and shop-floor workflows", () => {
       endedAt: "2026-08-14T08:31:00+05:30", endReason: "manual_stop" })).rejects.toThrow("overlap")
     await repository.closeProductionSession({ sessionId: backdated.id, organizationId, grossWeightKg: 0.154,
       crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-13T09:30:00+05:30", endReason: "manual_stop" })
-    const second = await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
+    const misdated = await repository.startProductionSession({ ...start, startedAt: "2026-08-14T08:00:00+05:30" })
+    await expect(correct(misdated.id, "2026-08-14T09:00:00+05:30")).rejects.toThrow("overlap")
+    await correct(misdated.id, "2026-08-14T10:00:00+05:30")
+    await repository.closeProductionSession({ sessionId: misdated.id, organizationId, grossWeightKg: 0.154,
+      crateCount: 0, crateWeightKg: 0, endedAt: "2026-08-14T10:30:00+05:30", endReason: "manual_stop" })
+    const second =await repository.startProductionSession({ ...start, startedAt: "2026-08-15T08:30:00+05:30" })
     expect((await read(second.id)).sessionReference).toBe(`${machineNumber.toUpperCase()}-20260815-02`)
     await repository.recordProductionSessionDowntime({ sessionId: second.id, organizationId,
       startedAt: "2026-08-15T09:10:00+05:30", endedAt: "2026-08-15T09:10:30+05:30",
