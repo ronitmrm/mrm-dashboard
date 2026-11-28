@@ -7656,7 +7656,8 @@ function assignedPhysicalMachines({
   const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort(compareNumericText);
   const previousMachineList = [...(previousMachines ?? new Set<string>())].filter(Boolean).sort(compareNumericText);
   const delayMachineList = previousMachineList.filter((machine) => machineHasDelayUnavailableWindow(machine, machineUnavailableWindows));
-  if (productionActualMachineList.length) return withAdditionalMachines(productionActualMachineList);
+  // A machine holding RM or a started setup stays planned once a sibling parallel machine records output.
+  if (productionActualMachineList.length) return withAdditionalMachines([...productionActualMachineList, ...lockedMachineList]);
   if (overrideMachine) {
     const exactOverride = assignableCandidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
     if (exactOverride) return withAdditionalMachines([exactOverride.machine]);
