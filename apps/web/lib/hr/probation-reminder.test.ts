@@ -28,8 +28,10 @@ test("closes an incomplete probation task on the employee's actual departure dat
   const assignments = [
     { id: "departed-today", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: "2026-09-27" },
     { id: "still-employed", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null },
+    { id: "left-without-process", appointmentLetterIssuedOn: null, exitType: "Left Without Process", legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null, plannedEndOn: "2026-09-20" },
+    { id: "serving-notice", appointmentLetterIssuedOn: null, exitType: "Resigned", legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null, plannedEndOn: "2026-10-05" },
   ]
   const { open, completed } = splitProbationAssignments(assignments, "2026-09-27", "2026-10-27")
-  expect(open.map(({ id }) => id)).toEqual(["still-employed"])
+  expect(open.map(({ id }) => id)).toEqual(["still-employed", "serving-notice"])
   expect(completed).toEqual([])
 })
