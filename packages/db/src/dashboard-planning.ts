@@ -2971,7 +2971,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (assignmentMode === "add_parallel_machine" && input.parallelReviewFingerprint)
           await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         if (assignmentMode === "add_parallel_machine" && !input.setupNumber) {
-          throw new Error("Setup number is required to add a parallel machine.")
+          throw new ShopFloorConflictError("Setup number is required to add a parallel machine.")
         }
         if (assignmentMode === "early_downstream" && (input.setupNumber !== 2 || input.fromMachineNumber || input.interruptedSetups?.length)) {
           throw new ShopFloorConflictError("Early downstream planning requires Setup 2 without a machine interruption.")
@@ -3050,7 +3050,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         if (assignmentMode === "add_parallel_machine") {
           const activeTarget = targetLock.rows[0]
           if (activeTarget?.work_order_id === workOrder.id && activeTarget.setup_number === input.setupNumber) {
-            throw new Error("This setup already owns the target machine. Choose another machine.")
+            throw new ShopFloorConflictError(`${input.toMachineNumber} already has this setup at the shop floor, so it is already one of its machines. Choose another machine.`)
           }
           if (requestedInterruptions.some((interruption) =>
             !activeTarget || !interruptionMatches(interruption, {
@@ -3059,7 +3059,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               setupNumber: activeTarget.setup_number,
             })
           )) {
-            throw new Error("Only the active target machine setup can be stopped. Refresh the plan and review it again.")
+            throw new ShopFloorConflictError("Only the active target machine setup can be stopped. Refresh the plan and review it again.")
           }
           if (activeTarget && !queuedAssignment && !interruptedSetups.some((interruption) =>
             interruptionMatches(interruption, {
@@ -3068,7 +3068,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               setupNumber: activeTarget.setup_number,
             })
           )) {
-            throw new Error("Target machine has an active setup. Approve its stop and close its Production Session first.")
+            throw new ShopFloorConflictError("Target machine has an active setup. Approve its stop and close its Production Session first.")
           }
         }
         if (assignmentMode === "early_downstream" && targetLock.rows[0]) {
@@ -3110,7 +3110,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           operationSetupId = setup.rows[0]?.id ?? null
         }
         if (input.setupNumber && !operationSetupId && assignmentMode !== "early_downstream") {
-          throw new Error("Requested setup is not on the current route. Refresh the plan before continuing.")
+          throw new ShopFloorConflictError("Requested setup is not on the current route. Refresh the plan before continuing.")
         }
         if (assignmentMode === "early_downstream") {
           if (!operationSetupId) throw new ShopFloorConflictError("Select a route with Setup 2 before planning it early.")
