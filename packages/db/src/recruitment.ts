@@ -5845,11 +5845,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               'mrm-dashboard', 'interview-schedules', $6)
             ON CONFLICT (application_id, round_name) DO UPDATE SET
               scheduled_at = EXCLUDED.scheduled_at,
-              status = CASE
-                WHEN recruitment.interviews.status = 'Scheduled'
-                  THEN 'Scheduled'
-                ELSE recruitment.interviews.status
-              END,
+              -- Rescheduling a held round reopens it; otherwise it hides from the schedule.
+              status = 'Scheduled',
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
               row_version = recruitment.interviews.row_version + 1
