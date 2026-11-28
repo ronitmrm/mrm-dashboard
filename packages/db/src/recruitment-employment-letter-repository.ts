@@ -719,13 +719,23 @@ export function createRecruitmentEmploymentLetterRepository(
             last_working_date: string | null
             status: string
           }>(
+            // Recording a departure clears the post's joining date; the assignment keeps it.
             `SELECT post.employee_name, post.employee_code, post.status,
-               post.joining_date::text, post.last_working_date::text,
+               coalesce(post.joining_date, assignment.joined_on)::text AS joining_date,
+               post.last_working_date::text,
                designation.name AS designation,
                coalesce(department.name, '') AS department
              FROM recruitment.posts post
              LEFT JOIN recruitment.departments department ON department.id = post.department_id
              JOIN recruitment.designations designation ON designation.id = post.designation_id
+             LEFT JOIN LATERAL (
+               SELECT joined_on FROM recruitment.employee_post_assignments assignment
+               WHERE assignment.organization_id = post.organization_id
+                 AND assignment.post_id = post.id
+                 AND assignment.employee_code = post.employee_code
+                 AND assignment.ended_on IS NULL
+               ORDER BY assignment.created_at DESC LIMIT 1
+             ) assignment ON true
              WHERE post.id = $1 AND post.organization_id = $2
              FOR UPDATE OF post`,
             [required(input.postId, "Approved post"), input.organizationId]
