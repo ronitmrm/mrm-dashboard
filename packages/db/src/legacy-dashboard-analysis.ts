@@ -4138,7 +4138,9 @@ function initializeMachinePlanDetails(
           enumerable: false,
           value: {
             readyDate: baseSetupDate,
-            baseReadyDate: earlyDownstream || moveDecisionDate ? readyDateForAssignment : staticBaseReadyDate,
+            // A move only sets a not-before date; recorded upstream WIP still
+            // pulls the moved setup forward in the dependency refresh.
+            baseReadyDate: earlyDownstream ? readyDateForAssignment : maxDateValue(staticBaseReadyDate, moveDecisionDate),
             earlyProductionReadyDate: earlyDownstream ? earlyReadyDate : "",
             canPullForward: operationReadyCanPullForward,
             orderPcs: machineOrderPcs,
