@@ -94,6 +94,24 @@ describe("employment letter PDF", () => {
         type: "experience" as const,
       },
     ],
+    [
+      "relieving",
+      1,
+      {
+        details: {
+          probationEndedOn: "2026-01-25",
+          signatoryDesignation: "Director",
+          signatoryName: "Ankit Khattar",
+          title: "Ms.",
+        },
+        identity,
+        issuedOn: "2026-02-16",
+        ordinal: 9,
+        postStatus: "Resigned",
+        reference: "MRMPL-HR-202526-RL-9",
+        type: "relieving" as const,
+      },
+    ],
   ]
 
   it.each(letters)(
