@@ -226,7 +226,7 @@ Preparation may proceed, but machine start requires positive recorded Setup 1 go
 
 ### Queue order
 
-Initial work-order ordering considers planner priority first, then delivery date, RM date, and Job Card number. Named priorities score Urgent/Top/Critical highest, then High, Medium/Normal, and Low. No saved priority is distinct from an explicit priority decision.
+Initial work-order ordering considers planner priority first, then delivery date, FG PO date (older first), RM date, and Job Card number. A blank PO date sorts after dated orders. Named priorities score Urgent/Top/Critical highest, then High, Medium/Normal, and Low. No saved priority is distinct from an explicit priority decision.
 
 The final machine queue also respects actual execution, reviewed planner placements, material/WIP readiness, and unavailable windows. It is not a simple sort by one date.
 
