@@ -162,6 +162,7 @@ export {
   employeePersonalFields,
   employeeTermFields,
   type EmployeeDataRecord,
+  type EmployeeIncrement,
   type EmployeePersonalDetails,
   type EmployeeTermDetails,
 } from "./employee-data"

@@ -3,15 +3,19 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 
-import { createEmployeeDataRepository, createRecruitmentRepository, type EmployeeDataRecord } from "@workspace/db"
+import { createEmployeeDataRepository, createRecruitmentRepository, type EmployeeDataRecord, type EmployeeIncrement } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { Trash2 } from "lucide-react"
 
-import { saveEmployeeDataAction } from "@/app/hr/employees/actions"
-import { FormGrid, FormSection, PageHeader } from "@/components/ui/golden-patterns"
+import { addEmployeeIncrementAction, deleteEmployeeIncrementAction, saveEmployeeDataAction } from "@/app/hr/employees/actions"
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button"
+import { FormGrid, FormSection, PageHeader, StandardState } from "@/components/ui/golden-patterns"
+import { istDateValue } from "@/lib/date-time"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { masterCapability } from "@/lib/auth/master-capabilities"
@@ -80,9 +84,11 @@ export default async function EmployeeDataPage({ params, searchParams }: {
   const recruitment = createRecruitmentRepository({ connectionString })
   const employeeData = createEmployeeDataRepository({ connectionString })
   let record: EmployeeDataRecord | null
+  let increments: EmployeeIncrement[] = []
   try {
     const organizationId = await recruitment.organizationIdForCode("MRMPL")
     record = await employeeData.get(organizationId, id)
+    if (record) increments = await employeeData.listIncrements(organizationId, record.employeeCode)
   } finally {
     await Promise.all([recruitment.close(), employeeData.close()])
   }
@@ -111,5 +117,58 @@ export default async function EmployeeDataPage({ params, searchParams }: {
       </FormSection>
       <Button className="w-fit" type="submit">Save Employee Data</Button>
     </form>
+    <IncrementsSection assignmentId={record.assignmentId} increments={increments} />
   </main>
+}
+
+function nextAprilFirst() {
+  const today = istDateValue()
+  const year = Number(today.slice(0, 4))
+  return `${today >= `${year}-04-01` ? year + 1 : year}-04-01`
+}
+
+function IncrementsSection({ assignmentId, increments }: { assignmentId: string; increments: EmployeeIncrement[] }) {
+  return <FormSection title="Salary Increments" description="Record an increment once it is confirmed with the employee. Increments stay with this Employee ID across role or department changes.">
+    <div className="grid min-w-0 gap-5" id="increments">
+      <form action={addEmployeeIncrementAction} className="grid min-w-0 gap-4">
+        <input name="assignment_id" type="hidden" value={assignmentId} />
+        <FormGrid>
+          <Field>
+            <FieldLabel htmlFor="increment_percent">Increment (%)</FieldLabel>
+            <Input id="increment_percent" inputMode="decimal" max="500" min="0" name="increment_percent" required step="0.01" type="number" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="effective_on">Effective From</FieldLabel>
+            <Input defaultValue={nextAprilFirst()} id="effective_on" name="effective_on" required type="date" />
+          </Field>
+          <Field className="sm:col-span-2">
+            <FieldLabel htmlFor="increment_note">Note</FieldLabel>
+            <Textarea id="increment_note" maxLength={1000} name="note" placeholder="Anything agreed with the employee" rows={2} />
+          </Field>
+        </FormGrid>
+        <Button className="w-fit" type="submit">Add Increment</Button>
+      </form>
+      {increments.length ? <OperationalTable filterStorageKey="hr-employee-increments" containerClassName="rounded-md border">
+        <TableHeader><TableRow>
+          <TableHead>Effective From</TableHead><TableHead>Increment</TableHead><TableHead>Note</TableHead>
+          <TableHead>Recorded</TableHead><TableHead className="text-right">Action</TableHead>
+        </TableRow></TableHeader>
+        <TableBody>{increments.map((increment) => <TableRow key={increment.id}>
+          <TableCell>{formatCalendarDate(increment.effectiveOn)}</TableCell>
+          <TableCell className="font-medium">{increment.incrementPercent}%</TableCell>
+          <TableCell className="whitespace-pre-wrap">{increment.note || "—"}</TableCell>
+          <TableCell>{formatCalendarDate(increment.recordedOn)}{increment.recordedBy ? ` · ${increment.recordedBy}` : ""}</TableCell>
+          <TableCell className="text-right">
+            <form action={deleteEmployeeIncrementAction}>
+              <input name="assignment_id" type="hidden" value={assignmentId} />
+              <input name="increment_id" type="hidden" value={increment.id} />
+              <ConfirmSubmitButton confirmDescription="Use this only to remove a wrong entry." confirmLabel="Remove" confirmTitle={`Remove the ${increment.incrementPercent}% increment?`} size="sm" variant="destructive">
+                <Trash2 data-icon="inline-start" /> Remove
+              </ConfirmSubmitButton>
+            </form>
+          </TableCell>
+        </TableRow>)}</TableBody>
+      </OperationalTable> : <StandardState title="No Increments Recorded" description="Add one above when an increment is confirmed." />}
+    </div>
+  </FormSection>
 }

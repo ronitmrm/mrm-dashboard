@@ -33,6 +33,15 @@ export type EmployeeDataRecord = {
   termSaved: boolean
 }
 
+export type EmployeeIncrement = {
+  id: string
+  effectiveOn: string
+  incrementPercent: number
+  note: string
+  recordedBy: string | null
+  recordedOn: string
+}
+
 type EmployeeDataSaveInput = {
   actorUserId: string | null
   organizationId: string
@@ -221,6 +230,73 @@ export function createEmployeeDataRepository(options: RepositoryPoolOptions) {
     },
     async save(input: EmployeeDataSaveInput) {
       await saveMany([input])
+    },
+    async listIncrements(organizationId: string, employeeCode: string) {
+      const result = await pool.query<EmployeeIncrement>(
+        `SELECT increment.id, increment.effective_on::text AS "effectiveOn",
+           increment.increment_percent::float8 AS "incrementPercent", increment.note,
+           COALESCE(users.name, users.email) AS "recordedBy",
+           to_char(increment.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS "recordedOn"
+         FROM recruitment.employee_increments increment
+         LEFT JOIN identity.users users ON users.id = increment.created_by
+         WHERE increment.organization_id = $1 AND increment.employee_code = btrim($2)
+         ORDER BY increment.effective_on DESC, increment.created_at DESC`,
+        [organizationId, employeeCode]
+      )
+      return result.rows
+    },
+    async addIncrement(input: {
+      actorUserId: string | null; organizationId: string; assignmentId: string
+      effectiveOn: string; incrementPercent: string; note: string
+    }) {
+      const percent = input.incrementPercent.trim()
+      if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(percent) || Number(percent) > 500) {
+        throw new Error("Enter the increment as a percentage between 0 and 500, with at most two decimals.")
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveOn)) throw new Error("Enter the date the increment applies from.")
+      const note = input.note.trim()
+      if (note.length > 1000) throw new Error("Note must be within 1,000 characters.")
+      await withTransaction(pool, async (client) => {
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO recruitment.employee_increments
+             (organization_id, employee_code, effective_on, increment_percent, note, created_by)
+           SELECT $1, btrim(employee_code), $3::date, $4::numeric, $5, $6
+           FROM recruitment.employee_post_assignments
+           WHERE organization_id = $1 AND id = $2 AND btrim(coalesce(employee_code, '')) <> ''
+           RETURNING id`,
+          [input.organizationId, input.assignmentId, input.effectiveOn, percent, note, input.actorUserId]
+        )
+        const id = inserted.rows[0]?.id
+        if (!id) throw new Error("A joined employee with an Employee ID is required.")
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, metadata, source_system, source_table, source_id
+           ) VALUES ($1, 'recruitment.employee.increment_added', 'recruitment',
+             'employee_increments', $2::uuid, $3, $4::jsonb, 'mrm-dashboard', 'employee_increments', gen_random_uuid()::text)`,
+          [input.organizationId, id, input.actorUserId,
+            JSON.stringify({ effectiveOn: input.effectiveOn, incrementPercent: percent, note })]
+        )
+      })
+    },
+    async deleteIncrement(input: { actorUserId: string | null; organizationId: string; incrementId: string }) {
+      if (!/^[0-9a-f-]{36}$/i.test(input.incrementId)) throw new Error("Increment was not found.")
+      await withTransaction(pool, async (client) => {
+        const deleted = await client.query(
+          `DELETE FROM recruitment.employee_increments WHERE organization_id = $1 AND id = $2
+           RETURNING employee_code, effective_on::text, increment_percent::text, note`,
+          [input.organizationId, input.incrementId]
+        )
+        if (!deleted.rows[0]) throw new Error("Increment was not found.")
+        await client.query(
+          `INSERT INTO audit.events (
+             organization_id, event_type, target_schema, target_table, target_id,
+             actor_user_id, metadata, source_system, source_table, source_id
+           ) VALUES ($1, 'recruitment.employee.increment_deleted', 'recruitment',
+             'employee_increments', $2::uuid, $3, $4::jsonb, 'mrm-dashboard', 'employee_increments', gen_random_uuid()::text)`,
+          [input.organizationId, input.incrementId, input.actorUserId, JSON.stringify(deleted.rows[0])]
+        )
+      })
     },
     saveMany,
     async close() {

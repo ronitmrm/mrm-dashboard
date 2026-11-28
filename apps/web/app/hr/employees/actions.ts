@@ -87,3 +87,46 @@ export async function importEmployeeDataCsvAction(formData: FormData) {
     redirect(`${returnPath}&success=${encodeURIComponent(`${inputs.length} employee data row${inputs.length === 1 ? "" : "s"} imported.`)}`)
   }, "Employee Data CSV was not imported.")
 }
+
+async function withIncrementFeedback(
+  formData: FormData,
+  run: (input: { actorUserId: string; organizationId: string; assignmentId: string }, employeeData: ReturnType<typeof createEmployeeDataRepository>) => Promise<string>
+) {
+  const assignmentId = formData.get("assignment_id")?.toString() ?? ""
+  if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) redirect("/hr?panel=employeeDataPanel")
+  const returnPath = `/hr/employees/${assignmentId}`
+  const session = await requireCapability(masterCapability("employee_assignments", "save"), returnPath)
+  const connectionString = readAuthEnvironment().connectionString
+  const recruitment = createRecruitmentRepository({ connectionString })
+  const employeeData = createEmployeeDataRepository({ connectionString })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    outcome = { success: await run({ actorUserId: session.user.id, organizationId, assignmentId }, employeeData) }
+  } catch (error) {
+    outcome = { error: error instanceof Error ? error.message : "Increment was not saved." }
+  } finally {
+    await Promise.all([recruitment.close(), employeeData.close()])
+  }
+  revalidatePath(returnPath)
+  redirect(`${returnPath}?${new URLSearchParams(outcome)}#increments`)
+}
+
+export async function addEmployeeIncrementAction(formData: FormData) {
+  await withIncrementFeedback(formData, async (input, employeeData) => {
+    await employeeData.addIncrement({
+      ...input,
+      effectiveOn: formData.get("effective_on")?.toString() ?? "",
+      incrementPercent: formData.get("increment_percent")?.toString() ?? "",
+      note: formData.get("note")?.toString() ?? "",
+    })
+    return "Increment saved."
+  })
+}
+
+export async function deleteEmployeeIncrementAction(formData: FormData) {
+  await withIncrementFeedback(formData, async (input, employeeData) => {
+    await employeeData.deleteIncrement({ ...input, incrementId: formData.get("increment_id")?.toString() ?? "" })
+    return "Increment removed."
+  })
+}
