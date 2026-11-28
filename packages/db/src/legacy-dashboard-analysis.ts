@@ -3362,6 +3362,7 @@ function calculatePriorityApprovalMode(row: Record<string, unknown>) {
 export function workOrderPlanningSort(a: Record<string, unknown>, b: Record<string, unknown>) {
   return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))
     || compareDateValues(rowText(a, "deliveryDate"), rowText(b, "deliveryDate"))
+    || compareDateValues(rowText(a, "poDate"), rowText(b, "poDate"))
     || compareDateValues(rowText(a, "rmInwardDate"), rowText(b, "rmInwardDate"))
     || compareNumericText(rowText(a, "jcNo"), rowText(b, "jcNo"));
 }
