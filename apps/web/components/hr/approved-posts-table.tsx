@@ -654,7 +654,9 @@ export function ApprovedPostsTable({
                         <FileText data-icon="inline-start" />
                         {letter.letterType === "offer"
                           ? "Offer"
-                          : "Experience"}
+                          : letter.letterType === "relieving"
+                            ? "Relieving"
+                            : "Experience"}
                       </AttachmentViewerLink>
                     </Button>
                   ))}

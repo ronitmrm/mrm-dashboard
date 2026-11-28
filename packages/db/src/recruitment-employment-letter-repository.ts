@@ -8,6 +8,7 @@ import {
   type EmploymentLetterType,
   type ExperienceLetterDetails,
   type OfferLetterDetails,
+  type RelievingLetterDetails,
   type PreparedEmploymentLetter,
 } from "./recruitment-employment-letters"
 import {
@@ -222,6 +223,12 @@ export type IssueEmploymentLetterInput =
       issuedOn: string
       postId: string
       type: "experience"
+    })
+  | (Context & {
+      details: Omit<RelievingLetterDetails, "probationEndedOn">
+      issuedOn: string
+      postId: string
+      type: "relieving"
     })
 
 export type PreparedEmploymentLetterRecord = {
@@ -755,10 +762,35 @@ export function createRecruitmentEmploymentLetterRepository(
               : await nextOrdinal(client),
             postStatus: row.status,
           }
-          request =
-            input.type === "appointment"
-              ? { ...common, details: input.details, type: "appointment" }
-              : { ...common, details: input.details, type: "experience" }
+          if (input.type === "relieving") {
+            // Only an employee relieved for unconfirmed probation gets this letter.
+            const relieved = await client.query<{ probation_due_on: string | null }>(
+              `SELECT probation_due_on::text FROM recruitment.employee_post_assignments
+               WHERE organization_id = $1 AND post_id = $2 AND employee_code = $3
+                 AND ended_on IS NULL AND exit_type = 'Probation Not Confirmed'
+               ORDER BY created_at DESC LIMIT 1`,
+              [input.organizationId, postId, row.employee_code]
+            )
+            const relievedAssignment = relieved.rows[0]
+            if (!relievedAssignment) {
+              throw new Error(
+                "Relieve the employee for unconfirmed probation before issuing a Relieving Letter."
+              )
+            }
+            request = {
+              ...common,
+              details: {
+                ...input.details,
+                probationEndedOn: relievedAssignment.probation_due_on ?? "",
+              },
+              type: "relieving",
+            }
+          } else {
+            request =
+              input.type === "appointment"
+                ? { ...common, details: input.details, type: "appointment" }
+                : { ...common, details: input.details, type: "experience" }
+          }
         }
 
         const letter = prepareEmploymentLetter(request)

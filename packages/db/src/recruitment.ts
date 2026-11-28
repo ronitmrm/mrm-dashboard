@@ -239,7 +239,7 @@ export type RecruitmentEmployeeAssignmentRow = {
   exitNote: string | null
   appointmentLetterIssuedOn: string | null
   resignationHistory?: Array<{
-    type: "Resigned" | "Resignation Withdrawn"
+    type: "Resigned" | "Resignation Withdrawn" | "Probation Not Confirmed"
     recordedAt: string
     lastWorkingDate: string | null
     note: string | null
@@ -730,6 +730,13 @@ type EmployeeAssignmentInput = MutationContext & {
   probationDueOn?: string | null
 }
 
+const departureEvents = new Set(["Resigned", "Resigned Without Process", "Probation Not Confirmed"])
+
+function departureExitType(event: string) {
+  return event === "Resigned Without Process" ? "Left Without Process"
+    : event === "Probation Not Confirmed" ? event : "Resigned"
+}
+
 async function setEmployeeLifecycleContext(
   client: PoolClient,
   input: EmployeeAssignmentInput,
@@ -789,7 +796,7 @@ function assertEmployeeAssignmentTransition(
   if (event === "Removed" && (post.status === "Occupied" || post.status === "Resigned")) {
     throw new Error("Use Resigned or Resigned Without Process with a last working date to end this assignment.")
   }
-  if ((event === "Resigned" || event === "Resigned Without Process") &&
+  if (departureEvents.has(event) &&
       post.status !== "Occupied" && post.status !== "Resigned") {
     throw new Error("Only a joined employee can resign.")
   }
@@ -957,9 +964,7 @@ async function assignEmployeeInTransaction(
     ))
     return { selectedPost: { id: currentPost.id }, updatedPostCount: result.rows.length }
   }
-  if (
-    input.employeeEvent === "Resigned" || input.employeeEvent === "Resigned Without Process"
-  ) {
+  if (departureEvents.has(input.employeeEvent ?? "")) {
     const endOn = required(input.lastWorkingDate, "Last working date")
     const date = new Date(`${endOn}T00:00:00Z`)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(endOn) || Number.isNaN(date.getTime()) ||
@@ -1133,7 +1138,7 @@ async function assignEmployeeInTransaction(
       `UPDATE recruitment.employee_post_assignments
        SET exit_type = $1, exit_note = $2, updated_at = now()
        WHERE organization_id = $3 AND post_id = ANY($4::uuid[]) AND ended_on IS NULL`,
-      [employeeEvent === "Resigned Without Process" ? "Left Without Process" : "Resigned",
+      [departureExitType(employeeEvent),
         optional(input.exitNote), input.organizationId, targetIds]
     )
   }
@@ -1175,8 +1180,7 @@ async function assignEmployeeInTransaction(
           postId: post.id,
           status: assignment.status,
           lastWorkingDate: assignment.lastWorkingDate,
-          exitType: assignment.status === "Resigned"
-            ? employeeEvent === "Resigned Without Process" ? "Left Without Process" : "Resigned" : null,
+          exitType: assignment.status === "Resigned" ? departureExitType(employeeEvent) : null,
           exitNote: assignment.status === "Resigned" ? optional(input.exitNote) : null,
           roleChangedOn: input.employeeEvent === "Role Changed"
             ? optional(input.lastWorkingDate) : null,
@@ -3786,8 +3790,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
          ) letter ON true
          LEFT JOIN LATERAL (
            SELECT json_agg(json_build_object(
-             'type', CASE WHEN event.event_type = 'recruitment.employee.resigned'
-               THEN 'Resigned' ELSE 'Resignation Withdrawn' END,
+             'type', CASE WHEN event.event_type <> 'recruitment.employee.resigned'
+               THEN 'Resignation Withdrawn'
+               WHEN event.metadata->>'exitType' = 'Probation Not Confirmed'
+               THEN 'Probation Not Confirmed' ELSE 'Resigned' END,
              'recordedAt', event.occurred_at::text,
              'lastWorkingDate', CASE WHEN event.event_type = 'recruitment.employee.resigned'
                THEN event.metadata->>'lastWorkingDate'
@@ -3961,6 +3967,64 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "employee_post_assignments",
         })
         return { id: input.assignmentId }
+      })
+    },
+
+    // Ends an unconfirmed probation like a resignation, so the post frees up after the last day.
+    async relieveEmployeeOnProbation(input: MutationContext & {
+      assignmentId: string
+      lastWorkingDate: string
+      reason: string
+    }) {
+      const commandId = randomUUID()
+      return transaction(pool, async (client) => {
+        const found = await client.query<{
+          post_id: string | null
+          employee_code: string | null
+          exit_type: string | null
+          probation_completed: boolean
+        }>(
+          `SELECT assignment.post_id, assignment.employee_code, assignment.exit_type,
+             EXISTS (
+               SELECT 1 FROM recruitment.employee_post_assignments legacy
+               WHERE legacy.organization_id = assignment.organization_id
+                 AND legacy.legacy_probation_completed
+                 AND (legacy.id = assignment.id OR legacy.employee_code = assignment.employee_code)
+             ) OR EXISTS (
+               SELECT 1 FROM recruitment.employment_letters letter
+               WHERE letter.organization_id = assignment.organization_id
+                 AND letter.employee_code = assignment.employee_code
+                 AND letter.letter_type = 'appointment' AND letter.pdf_bytes IS NOT NULL
+             ) AS probation_completed
+           FROM recruitment.employee_post_assignments assignment
+           WHERE assignment.id = $1 AND assignment.organization_id = $2
+             AND assignment.ended_on IS NULL
+           FOR UPDATE OF assignment`,
+          [required(input.assignmentId, "Employee assignment"), input.organizationId]
+        )
+        const assignment = found.rows[0]
+        if (!assignment?.post_id || !assignment.employee_code) {
+          throw new Error("Only a current employee with an Employee ID can be relieved.")
+        }
+        if (assignment.exit_type === "Probation Not Confirmed") {
+          return { postId: assignment.post_id }
+        }
+        if (assignment.probation_completed) {
+          throw new Error("Probation is already completed for this employee.")
+        }
+        if (assignment.exit_type) {
+          throw new Error("This employee already has a recorded exit.")
+        }
+        const reason = required(input.reason, "Reason for relieving")
+        if (reason.length > 1000) throw new Error("Keep the reason within 1,000 characters.")
+        await assignEmployeeInTransaction(client, {
+          ...input,
+          employeeEvent: "Probation Not Confirmed",
+          exitNote: reason,
+          lastWorkingDate: required(input.lastWorkingDate, "Last working date"),
+          postId: assignment.post_id,
+        }, commandId)
+        return { postId: assignment.post_id }
       })
     },
 

@@ -910,6 +910,56 @@ export async function updateEmployeeProbationAction(formData: FormData) {
   )
 }
 
+export async function relieveEmployeeAction(formData: FormData) {
+  const path = hrReturnPath(formData)
+  const session = await requireCapability(
+    masterCapability("employee_assignments", "save"),
+    path
+  )
+  const connectionString = readAuthEnvironment().connectionString
+  const recruitment = createRecruitmentRepository({ connectionString })
+  const letters = createRecruitmentEmploymentLetterRepository({ connectionString })
+  let outcome: { error?: string; success?: string }
+  let relieved = false
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    const context = { actorUserId: session.user.id, organizationId }
+    const { postId } = await recruitment.relieveEmployeeOnProbation({
+      ...context,
+      assignmentId: value(formData, "assignment_id"),
+      lastWorkingDate: value(formData, "last_working_date"),
+      reason: value(formData, "reason"),
+    })
+    relieved = true
+    const title = value(formData, "title")
+    const record = await letters.issue({
+      ...context,
+      details: {
+        signatoryDesignation: value(formData, "letter_signatory_designation"),
+        signatoryName: value(formData, "letter_signatory_name"),
+        title: title === "Mr." || title === "Mx." ? title : "Ms.",
+      },
+      issuedOn: value(formData, "letter_issued_on"),
+      postId,
+      type: "relieving",
+    })
+    await storeEmploymentLetter(letters, record, context)
+    outcome = { success: "Employee relieved and Relieving Letter generated." }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The employee was not relieved."
+    outcome = {
+      error: relieved
+        ? `Employee relieved, but the Relieving Letter was not generated: ${message} Retry from the Completion Log.`
+        : message,
+    }
+  } finally {
+    await Promise.all([recruitment.close(), letters.close()])
+  }
+  revalidatePath(hrPath)
+  const feedback = new URLSearchParams(outcome)
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
+}
+
 export async function recordCandidateDidNotJoinAction(formData: FormData) {
   await mutate(
     formData,

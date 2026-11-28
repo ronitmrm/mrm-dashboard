@@ -199,6 +199,7 @@ export {
   type ExperienceLetterDetails,
   type OfferLetterDetails,
   type PreparedEmploymentLetter,
+  type RelievingLetterDetails,
 } from "./recruitment-employment-letters"
 export {
   createRecruitmentEmploymentLetterRepository,

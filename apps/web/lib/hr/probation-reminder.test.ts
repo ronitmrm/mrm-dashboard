@@ -5,6 +5,7 @@ import { probationReminderStatus, splitProbationAssignments } from "./probation-
 test("marks an asserted legacy probation complete without treating every past date as complete", () => {
   const assignment = {
     appointmentLetterIssuedOn: null,
+    exitType: null,
     legacyProbationCompleted: true,
     probationDueOn: "2026-09-01",
   }
@@ -14,18 +15,19 @@ test("marks an asserted legacy probation complete without treating every past da
 
 test("keeps completed assignments in the log and out of open tasks", () => {
   const assignments = [
-    { id: "legacy", appointmentLetterIssuedOn: null, legacyProbationCompleted: true, probationDueOn: "2026-09-01", endedOn: "2026-09-20" },
-    { id: "future", appointmentLetterIssuedOn: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null },
+    { id: "legacy", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: true, probationDueOn: "2026-09-01", endedOn: "2026-09-20" },
+    { id: "future", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null },
+    { id: "relieved", appointmentLetterIssuedOn: null, exitType: "Probation Not Confirmed", legacyProbationCompleted: false, probationDueOn: "2026-09-01", endedOn: null },
   ]
   const { open, completed } = splitProbationAssignments(assignments, "2026-09-27", "2026-10-27")
   expect(open.map(({ id }) => id)).toEqual(["future"])
-  expect(completed.map(({ id }) => id)).toEqual(["legacy"])
+  expect(completed.map(({ id }) => id)).toEqual(["legacy", "relieved"])
 })
 
 test("closes an incomplete probation task on the employee's actual departure date", () => {
   const assignments = [
-    { id: "departed-today", appointmentLetterIssuedOn: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: "2026-09-27" },
-    { id: "still-employed", appointmentLetterIssuedOn: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null },
+    { id: "departed-today", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: "2026-09-27" },
+    { id: "still-employed", appointmentLetterIssuedOn: null, exitType: null, legacyProbationCompleted: false, probationDueOn: "2026-10-10", endedOn: null },
   ]
   const { open, completed } = splitProbationAssignments(assignments, "2026-09-27", "2026-10-27")
   expect(open.map(({ id }) => id)).toEqual(["still-employed"])

@@ -12,6 +12,7 @@ import {
 import { Dialog, DialogTrigger } from "@workspace/ui/components/dialog"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import {
   OperationalTable, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@workspace/ui/components/table"
@@ -19,13 +20,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { Textarea } from "@workspace/ui/components/textarea"
 import { useRouter } from "next/navigation"
 
-import { updateEmployeeProbationAction } from "@/app/hr/actions"
+import { relieveEmployeeAction, updateEmployeeProbationAction } from "@/app/hr/actions"
 import { AttachmentViewerLink } from "@/components/attachment-viewer-link"
 import { EmployeeLetterForm } from "@/components/hr/employee-letter-dialog"
 import { EmployeeAppointmentLetters } from "@/components/hr/employee-appointment-letters"
 import { formatIstDateTime } from "@/lib/date-time"
 import { probationReminderStatus, splitProbationAssignments } from "@/lib/hr/probation-reminder"
-import { MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
+import { FormGrid, MetricSummary, StandardDialogContent, StandardState } from "@/components/ui/golden-patterns"
 
 function currentEmployeePost(assignment: RecruitmentEmployeeAssignmentRow, posts: RecruitmentPostRow[]) {
   return posts.find((post) => post.status === "Occupied" &&
@@ -33,21 +34,129 @@ function currentEmployeePost(assignment: RecruitmentEmployeeAssignmentRow, posts
     post.employeeCode === assignment.employeeCode)
 }
 
+const relievedExit = "Probation Not Confirmed"
+
+// letterOnly retries the letter for an employee who is already relieved.
+function RelieveEmployeeForm({ assignment, letterOnly = false, onBack }: {
+  assignment: RecruitmentEmployeeAssignmentRow
+  letterOnly?: boolean
+  onBack?: () => void
+}) {
+  const id = `relieve-${assignment.id}`
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+  return (
+    <form action={relieveEmployeeAction}>
+      <FieldGroup>
+        <input name="panel" type="hidden" value="probationRemindersPanel" />
+        <input name="assignment_id" type="hidden" value={assignment.id} />
+        {letterOnly ? null : (
+          <>
+            <FieldDescription>
+              Probation is not confirmed. The employee stays until the last working day, then the post becomes vacant for a replacement.
+            </FieldDescription>
+            <Field>
+              <FieldLabel htmlFor={`${id}-last-day`}>Last Working Day</FieldLabel>
+              <Input
+                defaultValue={assignment.probationDueOn ?? ""}
+                id={`${id}-last-day`}
+                min={assignment.joinedOn ?? undefined}
+                name="last_working_date"
+                required
+                type="date"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-reason`}>Reason</FieldLabel>
+              <Textarea id={`${id}-reason`} maxLength={1000} name="reason" required rows={3} />
+              <FieldDescription>Saved in Employee Assignment History. Not printed on the letter.</FieldDescription>
+            </Field>
+          </>
+        )}
+        <FormGrid className="xl:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor={`${id}-title`}>Title</FieldLabel>
+            <NativeSelect id={`${id}-title`} name="title" required>
+              <NativeSelectOption value="Mr.">Mr.</NativeSelectOption>
+              <NativeSelectOption value="Ms.">Ms.</NativeSelectOption>
+              <NativeSelectOption value="Mx.">Mx.</NativeSelectOption>
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-letter-date`}>Letter Date</FieldLabel>
+            <Input defaultValue={today} id={`${id}-letter-date`} name="letter_issued_on" required type="date" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-signatory`}>Signatory Name</FieldLabel>
+            <Input defaultValue="Ankit Khattar" id={`${id}-signatory`} name="letter_signatory_name" required />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-signatory-designation`}>Signatory Designation</FieldLabel>
+            <Input id={`${id}-signatory-designation`} name="letter_signatory_designation" required />
+          </Field>
+        </FormGrid>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant={letterOnly ? "default" : "destructive"}>
+            {letterOnly ? "Generate Relieving Letter" : "Relieve & Generate Letter"}
+          </Button>
+          {onBack ? <Button onClick={onBack} type="button" variant="outline">Back</Button> : null}
+        </div>
+      </FieldGroup>
+    </form>
+  )
+}
+
+function RelievingLetterCell({ assignment, canManageEmployees, letters }: {
+  assignment: RecruitmentEmployeeAssignmentRow
+  canManageEmployees: boolean
+  letters: RecruitmentEmploymentLetterRow[]
+}) {
+  const letter = letters.find((item) => item.letterType === "relieving" && item.fileAvailable &&
+    item.employeeCode === assignment.employeeCode)
+  if (letter) {
+    return (
+      <Button asChild size="sm" variant="outline">
+        <AttachmentViewerLink
+          fileName={`${letter.referenceNumber}-relieving-letter.pdf`}
+          href={`/hr/employment-letters/${letter.id}/download`}
+          mediaType="application/pdf"
+        >{letter.referenceNumber}</AttachmentViewerLink>
+      </Button>
+    )
+  }
+  if (!canManageEmployees || assignment.endedOn) return "—"
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button size="sm" type="button" variant="outline">Generate Relieving Letter</Button>
+      </DialogTrigger>
+      <StandardDialogContent
+        className="max-h-[90vh] overflow-y-auto"
+        title={`Relieving Letter · ${assignment.employeeName}`}
+        description={`${assignment.postCode} · Employee ID ${assignment.employeeCode ?? "not recorded"}`}
+      >
+        <RelieveEmployeeForm assignment={assignment} letterOnly />
+      </StandardDialogContent>
+    </Dialog>
+  )
+}
+
 function ProbationDateEditor({ assignment, canGenerateAppointment }: {
   assignment: RecruitmentEmployeeAssignmentRow
   canGenerateAppointment: boolean
 }) {
   const [extending, setExtending] = useState(false)
+  const [relieving, setRelieving] = useState(false)
   return (
-    <Dialog onOpenChange={() => setExtending(false)}>
+    <Dialog onOpenChange={() => { setExtending(false); setRelieving(false) }}>
       <DialogTrigger asChild>
         <Button size="sm" type="button" variant="outline">Update</Button>
       </DialogTrigger>
       <StandardDialogContent
         className="max-h-[90vh] overflow-y-auto"
-        title={`Probation Review · ${assignment.employeeName}`}
+        title={relieving ? `Relieve Employee · ${assignment.employeeName}` : `Probation Review · ${assignment.employeeName}`}
         description={`${assignment.postCode} · Employee ID ${assignment.employeeCode ?? "not recorded"}`}
       >
+        {relieving ? <RelieveEmployeeForm assignment={assignment} onBack={() => setRelieving(false)} /> : (
         <form action={updateEmployeeProbationAction}>
           <FieldGroup>
             <input name="panel" type="hidden" value="probationRemindersPanel" />
@@ -102,6 +211,9 @@ function ProbationDateEditor({ assignment, canGenerateAppointment }: {
                       <Button disabled={!assignment.probationDueOn} onClick={() => setExtending(true)} type="button" variant="outline">
                         Extend Probation
                       </Button>
+                      <Button disabled={!assignment.employeeCode} onClick={() => setRelieving(true)} type="button" variant="outline">
+                        Relieve Employee
+                      </Button>
                     </>
                   ) : null}
                 </>
@@ -109,6 +221,7 @@ function ProbationDateEditor({ assignment, canGenerateAppointment }: {
             </div>
           </FieldGroup>
         </form>
+        )}
       </StandardDialogContent>
     </Dialog>
   )
@@ -252,7 +365,7 @@ export function ProbationEndReminders({
           <SectionCard>
             <CardHeader>
               <CardTitle>Probation Completion Log ({completed.length})</CardTitle>
-              <CardDescription>Issued Appointment Letters and recorded completions from the former system.</CardDescription>
+              <CardDescription>Issued Appointment Letters, recorded completions from the former system, and employees relieved because probation was not confirmed.</CardDescription>
             </CardHeader>
             <CardContent className="min-w-0">
               <OperationalTable filterStorageKey="hr-probation-completion-log" containerClassName="max-h-[36rem] rounded-md border">
@@ -260,31 +373,35 @@ export function ProbationEndReminders({
                   <TableHead>Employee Code</TableHead><TableHead>Employee Name</TableHead>
                   <TableHead>Department</TableHead><TableHead>Designation</TableHead>
                   <TableHead>Probation Ends</TableHead><TableHead>Recorded On</TableHead><TableHead>Completion Record</TableHead><TableHead>Latest Remark</TableHead>
-                  {canViewOfferLetters || canManageEmployees ? <TableHead>Appointment Letter</TableHead> : null}
+                  {canViewOfferLetters || canManageEmployees ? <TableHead>Letter</TableHead> : null}
                 </TableRow></TableHeader>
                 <TableBody>
-                  {completed.map((assignment) => <TableRow key={assignment.id}>
+                  {completed.map((assignment) => {
+                    const relieved = assignment.exitType === relievedExit
+                    return <TableRow key={assignment.id}>
                     <TableCell className="font-mono">{assignment.employeeCode ?? "—"}</TableCell>
                     <TableCell className="font-medium">{assignment.employeeName}</TableCell>
                     <TableCell>{assignment.department ?? "—"}</TableCell>
                     <TableCell>{assignment.designation ?? "—"}</TableCell>
                     <TableCell>{formatCalendarDate(assignment.probationDueOn ?? "—")}</TableCell>
-                    <TableCell>{formatCalendarDate(assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—")}</TableCell>
-                    <TableCell><StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" /></TableCell>
+                    <TableCell>{formatCalendarDate((relieved ? assignment.plannedEndOn ?? assignment.endedOn : null) ?? assignment.appointmentLetterIssuedOn ?? assignment.legacyProbationRecordedOn ?? "—")}</TableCell>
+                    <TableCell>{relieved
+                      ? <StatusBadge value="Not Confirmed · Relieved" tone="warning" />
+                      : <StatusBadge value={assignment.appointmentLetterIssuedOn ? "Appointment Letter" : "Legacy Completion"} tone="positive" />}</TableCell>
                     <TableCell>{assignment.probationRemark ?? "—"}</TableCell>
                     {canViewOfferLetters || canManageEmployees ? (
                       <TableCell>
-                        <EmployeeAppointmentLetters
+                        {relieved ? <RelievingLetterCell assignment={assignment} canManageEmployees={canManageEmployees} letters={employmentLetters} /> : <EmployeeAppointmentLetters
                           canEdit={canManageEmployees}
                           employeeCode={assignment.employeeCode}
                           emptyLabel="—"
                           joiningDate={assignment.joinedOn}
                           letters={employmentLetters}
                           returnPanel="probationRemindersPanel"
-                        />
+                        />}
                       </TableCell>
                     ) : null}
-                  </TableRow>)}
+                  </TableRow>})}
                   {!completed.length ? <TableRow><TableCell colSpan={canViewOfferLetters || canManageEmployees ? 9 : 8}>
                     <StandardState title="No Completed Probation Records" description="Completed assignments will be logged here." />
                   </TableCell></TableRow> : null}
@@ -310,7 +427,8 @@ export function EmployeeAssignmentHistory({
       id: assignment.id, assignment,
       status: assignment.endedOn
         ? assignment.exitType === "Left Without Process" ? "Resigned Without Process" : assignment.exitType ?? "Unspecified"
-        : assignment.exitType === "Left Without Process" ? "Resigned Without Process" : assignment.exitType === "Resigned" ? "Resignation Planned" : "Current",
+        : assignment.exitType === "Left Without Process" ? "Resigned Without Process" : assignment.exitType === "Resigned" ? "Resignation Planned"
+          : assignment.exitType === relievedExit ? relievedExit : "Current",
       plannedEndOn: assignment.plannedEndOn, endedOn: assignment.endedOn,
       recordedAt: null, note: assignment.exitNote,
       probationChange: null,
@@ -376,7 +494,7 @@ export function EmployeeAssignmentHistory({
                   <TableCell>{formatCalendarDate(row.plannedEndOn ?? "—")}</TableCell>
                   <TableCell>{formatCalendarDate(row.endedOn ?? "—")}</TableCell>
                   <TableCell data-filter-value={status}>
-                    <StatusBadge value={status} tone={status === "Resigned Without Process" ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" || status === "Probation Extended" || status === "Designation Corrected" || status === "Transferred" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
+                    <StatusBadge value={status} tone={status === "Resigned Without Process" || status === relievedExit ? "warning" : status === "Resignation Planned" || status === "Resigned" || status === "Role Changed" || status === "Probation Extended" || status === "Designation Corrected" || status === "Transferred" ? "information" : status === "Current" || status === "Resignation Cancelled" ? "positive" : "neutral"} />
                     {row.probationChange ? <span className="block text-xs text-muted-foreground">Probation: {formatCalendarDate(row.probationChange.previousDueOn ?? "Not recorded")} → {formatCalendarDate(row.probationChange.nextDueOn)}</span> : null}
                     {row.designationChange ? <span className="block text-xs text-muted-foreground">{row.designationChange.previousDesignation} ({row.designationChange.previousPostCode}) → {row.designationChange.designation} ({row.designationChange.postCode})</span> : null}
                     {row.recordedAt ? <span className="block text-xs text-muted-foreground">{formatIstDateTime(row.recordedAt)} IST</span> : null}

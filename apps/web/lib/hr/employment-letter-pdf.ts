@@ -197,11 +197,54 @@ function pronouns(value: "he-him" | "she-her" | "they-them") {
   }
 }
 
+async function buildRelievingLetterPdf(
+  letter: Extract<PreparedEmploymentLetter, { type: "relieving" }>
+) {
+  const pdf = await PDFDocument.create()
+  const regular = await pdf.embedFont(StandardFonts.Helvetica)
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
+  pdf.setTitle(`${letter.identity.employeeName} Relieving Letter`)
+  pdf.setSubject(`${letter.type} employment letter`)
+  pdf.setCreator("MRM Dashboard")
+  pdf.setProducer("MRM Dashboard")
+
+  const { identity, details } = letter
+  const drawing = page(pdf, regular, bold)
+  drawTitle(drawing, "RELIEVING LETTER")
+  line(drawing, `Ref: ${letter.reference}`, { gap: 0 })
+  line(drawing, dateLabel(letter.issuedOn), { gap: 14 })
+  line(drawing, "To,", { gap: 0 })
+  line(drawing, `${details.title} ${identity.employeeName}`, { bold: true, gap: 0 })
+  line(drawing, `Employee Code: ${identity.employeeCode}`, { gap: 0 })
+  line(drawing, `${identity.designation}, ${identity.department}`, { gap: 14 })
+  line(drawing, "Subject: Relieving on non-confirmation of probation", { bold: true, gap: 14 })
+  line(drawing, `Dear ${identity.employeeName},`, { gap: 10 })
+  line(
+    drawing,
+    `You joined Mayank Raw Mint Pvt. Ltd. on ${dateLabel(identity.joiningDate)} as ${identity.designation} in ${identity.department}, on probation until ${dateLabel(details.probationEndedOn)}.`,
+    { gap: 10 }
+  )
+  line(
+    drawing,
+    `After reviewing your performance during the probation period, the management has decided not to confirm your employment. You are therefore relieved from the services of the company with effect from the close of working hours on ${dateLabel(identity.lastWorkingDate!)}.`,
+    { gap: 10 }
+  )
+  line(
+    drawing,
+    "Your full and final settlement, if any, will be processed as per company policy. Please hand over all company property, documents and your ID card to the HR department on or before your last working day.",
+    { gap: 10 }
+  )
+  line(drawing, "We wish you the best in your future endeavours.", { gap: 18 })
+  sign(drawing, details.signatoryName, details.signatoryDesignation)
+  return pdf.save()
+}
+
 export async function buildEmploymentLetterPdf(
   letter: PreparedEmploymentLetter
 ) {
   if (letter.type === "offer") return buildOfferLetterPdf(letter)
   if (letter.type === "appointment") return buildAppointmentLetterPdf(letter)
+  if (letter.type === "relieving") return buildRelievingLetterPdf(letter)
 
   const pdf = await PDFDocument.create()
   const regular = await pdf.embedFont(StandardFonts.Helvetica)

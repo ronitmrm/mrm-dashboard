@@ -343,6 +343,13 @@ for its past-dated rows, those rows receive an explicit completion record.
 Future-dated rows remain pending. A probation-date update may include an
 optional remark retained in the assignment audit history and shown with the
 current reminder.
+During a probation review, HR can choose Relieve Employee when probation is not
+confirmed. HR picks the last working day (starting from the probation end date)
+and a required reason that stays internal. The assignment ends like a resignation
+with exit type Probation Not Confirmed, so the post frees up after that day. A
+Relieving Letter (RL reference) is generated in the same step from the joined
+assignment and its probation end date; the reason is not printed. The record moves
+to the Completion Log, where the letter can be viewed or retried if generation failed.
 During a probation review, HR can choose Extend Probation, enter a later end
 date and a required review comment, then save the extension. Probation stays
 pending until completion. Each extension retains the previous end date, new end
