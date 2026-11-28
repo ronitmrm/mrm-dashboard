@@ -3706,8 +3706,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
            assignment.employee_code, assignment.joined_on::text,
            offer.id AS offer_letter_id, offer.reference_number AS offer_letter_reference,
            assignment.probation_due_on::text, remark_event.reason AS probation_remark,
-           assignment.legacy_probation_completed,
-           legacy_event.recorded_on AS legacy_probation_recorded_on,
+           legacy.id IS NOT NULL AS legacy_probation_completed,
+           legacy.recorded_on AS legacy_probation_recorded_on,
            assignment.planned_end_on::text,
            assignment.ended_on::text, assignment.exit_type, assignment.exit_note,
            letter.issued_on::text AS appointment_letter_issued_on,
@@ -3742,15 +3742,24 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
              AND letter.pdf_bytes IS NOT NULL
            ORDER BY letter.created_at DESC, letter.id DESC LIMIT 1
          ) offer ON true
+         -- Legacy completion belongs to the employee, so later posts (added role,
+         -- department move) inherit it, like the Appointment Letter does.
          LEFT JOIN LATERAL (
-           SELECT event.occurred_at::date::text AS recorded_on
-           FROM audit.events event
-           WHERE event.target_schema = 'recruitment'
-             AND event.target_table = 'employee_post_assignments'
-             AND event.target_id = assignment.id
-             AND event.event_type = 'recruitment.employee.legacy_probation_imported'
-           ORDER BY event.occurred_at DESC LIMIT 1
-         ) legacy_event ON assignment.legacy_probation_completed
+           SELECT legacy.id, (
+             SELECT event.occurred_at::date::text
+             FROM audit.events event
+             WHERE event.target_schema = 'recruitment'
+               AND event.target_table = 'employee_post_assignments'
+               AND event.target_id = legacy.id
+               AND event.event_type = 'recruitment.employee.legacy_probation_imported'
+             ORDER BY event.occurred_at DESC LIMIT 1
+           ) AS recorded_on
+           FROM recruitment.employee_post_assignments legacy
+           WHERE legacy.organization_id = assignment.organization_id
+             AND legacy.legacy_probation_completed
+             AND (legacy.id = assignment.id OR legacy.employee_code = assignment.employee_code)
+           ORDER BY legacy.id = assignment.id DESC, legacy.created_at LIMIT 1
+         ) legacy ON true
          LEFT JOIN LATERAL (
            SELECT event.reason
            FROM audit.events event
@@ -3898,7 +3907,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           has_appointment_letter: boolean
         }>(
           `SELECT assignment.id, assignment.probation_due_on::text,
-             assignment.ended_on::text, assignment.legacy_probation_completed,
+             assignment.ended_on::text,
+             EXISTS (
+               SELECT 1 FROM recruitment.employee_post_assignments legacy
+               WHERE legacy.organization_id = assignment.organization_id
+                 AND legacy.legacy_probation_completed
+                 AND (legacy.id = assignment.id OR legacy.employee_code = assignment.employee_code)
+             ) AS legacy_probation_completed,
              EXISTS (
                SELECT 1 FROM recruitment.employment_letters letter
                WHERE letter.organization_id = assignment.organization_id
