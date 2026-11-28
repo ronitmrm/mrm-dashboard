@@ -141,6 +141,7 @@ const expectedCanonicalTables = [
   "recruitment.combined_roles",
   "recruitment.departments",
   "recruitment.designations",
+  "recruitment.employee_increments",
   "recruitment.employee_post_assignments",
   "recruitment.employee_profiles",
   "recruitment.employee_term_details",

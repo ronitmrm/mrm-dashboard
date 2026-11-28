@@ -288,6 +288,9 @@ ID and Employee ID identify the existing term; uploads edit personal and term
 details only. Personal details must agree across CSV rows for the same Employee
 ID. Blank detail cells clear saved values; identity and employment dates are not
 editable through this CSV. The entire upload is saved together or rejected.
+Salary Increments record only the increments HR confirms with an employee
+(percentage, effective date, note). They follow the Employee ID across terms and
+do not change the saved Salary; a wrong entry is removed, not edited.
 
 HR Tasks shows a separate Phone Number column. It uses the Employee Data
 Contact No when personal details have been saved; otherwise it uses the candidate
