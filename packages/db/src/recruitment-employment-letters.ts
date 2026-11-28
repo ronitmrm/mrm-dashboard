@@ -2,6 +2,7 @@ export const employmentLetterTypes = [
   "offer",
   "appointment",
   "experience",
+  "relieving",
 ] as const
 export type EmploymentLetterType = (typeof employmentLetterTypes)[number]
 
@@ -45,6 +46,10 @@ export type ExperienceLetterDetails = Signatory & {
   title: "Mr." | "Ms." | "Mx."
   workLocation: string
 }
+export type RelievingLetterDetails = Signatory & {
+  probationEndedOn: string
+  title: "Mr." | "Ms." | "Mx."
+}
 
 type BaseRequest = {
   identity: EmploymentLetterIdentity
@@ -69,6 +74,11 @@ export type EmploymentLetterRequest =
       postStatus: string
       type: "experience"
     })
+  | (BaseRequest & {
+      details: RelievingLetterDetails
+      postStatus: string
+      type: "relieving"
+    })
 export type PreparedEmploymentLetter<
   Request extends EmploymentLetterRequest = EmploymentLetterRequest,
 > = Request & { reference: string }
@@ -80,6 +90,10 @@ type AppointmentLetterRequest = Extract<
 type ExperienceLetterRequest = Extract<
   EmploymentLetterRequest,
   { type: "experience" }
+>
+type RelievingLetterRequest = Extract<
+  EmploymentLetterRequest,
+  { type: "relieving" }
 >
 
 function text(value: string, label: string) {
@@ -119,7 +133,7 @@ function reference(
 ) {
   const year = Number(issuedOn.slice(0, 4))
   const start = Number(issuedOn.slice(5, 7)) >= 4 ? year : year - 1
-  const code = type === "offer" ? "OL" : type === "appointment" ? "AL" : "EL"
+  const code = ({ offer: "OL", appointment: "AL", experience: "EL", relieving: "RL" } as const)[type]
   return `MRMPL-HR-${start}${String(start + 1).slice(-2)}-${code}-${ordinal}`
 }
 
@@ -146,6 +160,9 @@ export function prepareEmploymentLetter(
 export function prepareEmploymentLetter(
   request: ExperienceLetterRequest
 ): PreparedEmploymentLetter<ExperienceLetterRequest>
+export function prepareEmploymentLetter(
+  request: RelievingLetterRequest
+): PreparedEmploymentLetter<RelievingLetterRequest>
 export function prepareEmploymentLetter(
   request: EmploymentLetterRequest
 ): PreparedEmploymentLetter
@@ -246,6 +263,26 @@ export function prepareEmploymentLetter(
         ),
         reportsTo: text(request.details.reportsTo, "Reports to"),
         workLocation: text(request.details.workLocation, "Work location"),
+      },
+      identity: person,
+      issuedOn,
+      reference: letterReference,
+    }
+  }
+  if (request.type === "relieving") {
+    if (request.postStatus !== "Resigned" || !person.lastWorkingDate)
+      throw new Error(
+        "A Relieving Letter requires an employee relieved with a last working date."
+      )
+    return {
+      ...request,
+      details: {
+        ...request.details,
+        ...signer,
+        probationEndedOn: date(
+          request.details.probationEndedOn,
+          "Probation end date"
+        ),
       },
       identity: person,
       issuedOn,

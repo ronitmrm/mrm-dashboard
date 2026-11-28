@@ -49,7 +49,10 @@ function initialEmploymentEvent(
   if (status === "Appointed") {
     return allowIdentityCorrection ? "Appointed" : ""
   }
-  if (status === "Resigned") return exitType === "Left Without Process" ? "Resigned Without Process" : "Resigned"
+  if (status === "Resigned") {
+    return exitType === "Left Without Process" ? "Resigned Without Process"
+      : exitType === "Probation Not Confirmed" ? exitType : "Resigned"
+  }
   if (status === "Occupied") {
     return allowIdentityCorrection ? "Joined" : ""
   }
@@ -399,6 +402,9 @@ export function SingleEmployeeAssignmentFields({
               <NativeSelectOption value="Resigned Without Process" disabled={selected?.post.status !== "Occupied" && selected?.post.status !== "Resigned"}>
                 Resigned Without Process
               </NativeSelectOption>
+              {event === "Probation Not Confirmed" ? (
+                <NativeSelectOption value="Probation Not Confirmed">Relieved — Probation Not Confirmed</NativeSelectOption>
+              ) : null}
               {canWithdrawResignation ? (
                 <NativeSelectOption value="Resignation Withdrawn" disabled={Boolean(pendingReplacement)}>
                   Withdraw Resignation — Keep Employee
@@ -453,7 +459,7 @@ export function SingleEmployeeAssignmentFields({
           </FieldDescription>
         </Field>
       ) : null}
-      {event === "Resigned" || event === "Resigned Without Process" ? (
+      {event === "Resigned" || event === "Resigned Without Process" || event === "Probation Not Confirmed" ? (
         <>
         <Field className="w-full min-w-0">
           <FieldLabel htmlFor="last-working-date">Planned Last Working Date</FieldLabel>

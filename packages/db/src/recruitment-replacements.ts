@@ -170,7 +170,8 @@ export async function applyReplacementAssignment(
     return "replacement_cancelled"
   }
 
-  if (pending.rows.length && event !== "Resigned" && event !== "Resigned Without Process") {
+  if (pending.rows.length && event !== "Resigned" && event !== "Resigned Without Process" &&
+      event !== "Probation Not Confirmed") {
     throw new Error(
       "A replacement is already pending. Confirm their joining or cancel the replacement first."
     )

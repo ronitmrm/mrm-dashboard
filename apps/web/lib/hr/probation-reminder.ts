@@ -2,7 +2,7 @@ import type { RecruitmentEmployeeAssignmentRow } from "@workspace/db"
 
 type ReminderAssignment = Pick<
   RecruitmentEmployeeAssignmentRow,
-  "appointmentLetterIssuedOn" | "legacyProbationCompleted" | "probationDueOn"
+  "appointmentLetterIssuedOn" | "exitType" | "legacyProbationCompleted" | "probationDueOn"
 >
 
 export function probationReminderStatus(
@@ -11,6 +11,7 @@ export function probationReminderStatus(
   approachingOn: string
 ) {
   if (assignment.appointmentLetterIssuedOn || assignment.legacyProbationCompleted) return "Completed"
+  if (assignment.exitType === "Probation Not Confirmed") return "Not Confirmed"
   if (!assignment.probationDueOn) return "Date Needed"
   if (assignment.probationDueOn <= today) return "Due"
   if (assignment.probationDueOn <= approachingOn) return "Approaching"
@@ -23,7 +24,8 @@ export function splitProbationAssignments<
   const open: T[] = []
   const completed: T[] = []
   for (const assignment of assignments) {
-    if (probationReminderStatus(assignment, today, approachingOn) === "Completed") {
+    const status = probationReminderStatus(assignment, today, approachingOn)
+    if (status === "Completed" || status === "Not Confirmed") {
       completed.push(assignment)
     } else if (!assignment.endedOn || assignment.endedOn > today) {
       open.push(assignment)
