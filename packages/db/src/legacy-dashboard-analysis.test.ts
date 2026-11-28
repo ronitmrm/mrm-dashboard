@@ -910,3 +910,28 @@ test("planner machine releases appear in decision history; session-close release
   ], {})
   expect(log).toEqual([expect.objectContaining({ jcNo: "P1", actionType: "Release machine", createdAt: "2026-11-24T10:00:00Z" })])
 })
+
+test("planner-added parallel machine output keeps the original RM-locked machine planned", () => {
+  const createdAt = "2026-11-20T10:00:00Z"
+  const entry = (entryType: string, payload: Record<string, unknown>) => ({ entryType, payload, createdAt })
+  const production = (setupNo: string, machine: string, qty: number) => ({ jobCard: "P2344", partCode: "M218", optionNumber: "1", setupNo, machine, machineType: "CNC", operatorId: "OP", prodDate: "2026-11-26", createdAt: "2026-11-26T20:00:00Z", outputQty: qty, actualQty: qty, rejectQty: 0, targetQty: 64000 })
+  const status = (setupNo: string, machine: string, stage: string) => ({ jcNo: "P2344", partCode: "M218", optionNumber: "1", setupNo, machine, stage, active: stage !== "item_complete", hasRecordedStart: true, createdAt })
+  const control = buildLegacyDashboardSnapshotWithPlanning({
+    workbookName: "PostgreSQL", productionFloorCode: "cnc",
+    productionEntries: [production("1", "AC-01", 69359), production("2", "CNC-33", 330)],
+    dataEntries: [
+      entry("work_order", { jcNo: "P2344", partCode: "M218", orderPcs: 64000, rmInwardDate: "2026-10-20", rmInwardKg: 1 }),
+      ...[1, 2].flatMap(setupNo => [
+        entry("route", { partNo: "M218", optionNumber: "1", setupNo, machineType: "CNC", machineFamily: setupNo === 1 ? "AC" : "CNC" }),
+        entry("cycle", { partNo: "M218", optionNumber: "1", setupNo, cycleTime: setupNo === 1 ? 3 : 20 }),
+        entry("tooling", { partNo: "M218", optionNumber: "1", setupNo }),
+      ]),
+      ...["AC-01", "CNC-33", "CNC-34"].map(machineNo => entry("machine_master", { machineNo, machineType: "CNC", machineFamily: machineNo.split("-")[0], status: "Active" })),
+    ],
+    planOverrides: [{ target: "P2344", setupNo: "2", toMachine: "CNC-33", assignmentMode: "add_parallel_machine", createdAt: "2026-11-26T12:34:41Z" }],
+    currentShopFloorStatusRows: [status("1", "AC-01", "item_complete"), status("2", "CNC-34", "raw_material_at_machine"), status("2", "CNC-33", "operator_started")],
+  }, { calculationTime: Date.parse("2026-11-28T06:00:00Z"), forceFullCalculation: true }).snapshot.productionControl
+  const setupTwo = control.machinePlanDetailRows.filter(row => row.jcNo === "P2344" && row.setupNo === "2")
+  expect(setupTwo.map(row => row.machine).sort()).toEqual(["CNC-33", "CNC-34"])
+  expect(setupTwo.find(row => row.machine === "CNC-34")).toMatchObject({ shopFloorStage: "raw_material_at_machine", parallelMachineCount: 2 })
+})
